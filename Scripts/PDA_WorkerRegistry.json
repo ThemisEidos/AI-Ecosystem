@@ -225,6 +225,44 @@
         "Message-only mode must remain dry-run/no-op."
       ],
       "status": "active"
+    },
+    {
+      "worker_name": "fabric-worker",
+      "command": "/fabric",
+      "purpose": "Run Fabric patterns through PDA-controlled orchestration.",
+      "accepted_input_modes": [
+        "message-only-test",
+        "file"
+      ],
+      "required_fields": [
+        "command",
+        "assigned_worker",
+        "pattern",
+        "category",
+        "input_mode"
+      ],
+      "optional_fields": [
+        "message",
+        "source_path",
+        "model",
+        "dry_run"
+      ],
+      "output_locations": [
+        "Obsidian Vault/02_Projects/AI Tool Ecosystem/Agent Findings/Fabric",
+        "PDA-Tasks/results"
+      ],
+      "safety_constraints": [
+        "Category 2 must use local-only model names.",
+        "No destructive execution.",
+        "Secrets and credentials must not be processed."
+      ],
+      "routing_surface": "local-or-litellm",
+      "cloud_capable": true,
+      "category_support": [
+        "category_1",
+        "category_2"
+      ],
+      "status": "experimental"
     }
   ]
 }

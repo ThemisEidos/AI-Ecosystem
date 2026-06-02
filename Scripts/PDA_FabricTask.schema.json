@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PDA Fabric Task",
+  "type": "object",
+  "required": [
+    "task_id",
+    "command",
+    "assigned_worker",
+    "pattern",
+    "category",
+    "input_mode"
+  ],
+  "properties": {
+    "task_id": { "type": "string" },
+    "command": { "type": "string", "const": "/fabric" },
+    "assigned_worker": { "type": "string", "const": "fabric-worker" },
+    "pattern": { "type": "string" },
+    "message": { "type": "string" },
+    "source_path": { "type": "string" },
+    "category": {
+      "type": "string",
+      "enum": ["category_1", "category_2"]
+    },
+    "input_mode": {
+      "type": "string",
+      "enum": ["message-only-test", "file"]
+    },
+    "model": { "type": "string" },
+    "dry_run": { "type": "boolean" },
+    "status": { "type": "string" },
+    "result_path": { "type": "string" },
+    "artifact_path": { "type": "string" },
+    "created_at": { "type": "string" },
+    "completed_at": { "type": "string" }
+  }
+}
