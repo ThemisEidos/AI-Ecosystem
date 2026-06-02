@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PDA Worker Contract",
+  "type": "object",
+  "required": [
+    "task_id",
+    "worker",
+    "status",
+    "classification",
+    "input_summary",
+    "output_type",
+    "output",
+    "confidence",
+    "warnings",
+    "next_worker",
+    "saved_path"
+  ],
+  "properties": {
+    "task_id": { "type": "string" },
+    "worker": { "type": "string" },
+    "status": { "type": "string", "enum": ["success", "failed", "needs_review"] },
+    "classification": { "type": "string", "enum": ["category_1", "category_2"] },
+    "input_summary": { "type": "string" },
+    "output_type": { "type": "string" },
+    "output": { "type": "object" },
+    "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+    "warnings": { "type": "array", "items": { "type": "string" } },
+    "next_worker": { "type": "string" },
+    "saved_path": { "type": "string" }
+  },
+  "additionalProperties": true
+}

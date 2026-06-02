@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PDA Task Request",
+  "type": "object",
+  "required": [
+    "task_id",
+    "created",
+    "command",
+    "route",
+    "project",
+    "classification",
+    "status",
+    "requested_output",
+    "target",
+    "source",
+    "assigned_worker",
+    "next_worker",
+    "retry_count"
+  ],
+  "properties": {
+    "task_id": { "type": "string" },
+    "created": { "type": "string" },
+    "command": { "type": "string" },
+    "route": { "type": "string" },
+    "message": { "type": "string" },
+    "target": { "type": "string" },
+    "source_path": { "type": "string" },
+    "project": { "type": "string" },
+    "classification": { "type": "string", "enum": ["category_1", "category_2"] },
+    "status": { "type": "string" },
+    "requested_output": { "type": "string" },
+    "source": { "type": "string" },
+    "assigned_worker": { "type": "string" },
+    "next_worker": { "type": "string" },
+    "retry_count": { "type": "integer", "minimum": 0 },
+    "category": { "type": "string" },
+    "approved": { "type": "boolean" },
+    "origin": { "type": "string" },
+    "staged_path": { "type": "string" }
+  },
+  "additionalProperties": true
+}

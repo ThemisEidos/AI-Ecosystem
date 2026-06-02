@@ -1,0 +1,121 @@
+# Secrets / credentials
+.env
+.env.*
+*.key
+*.pem
+*.pfx
+*.p12
+*secret*
+*secrets*
+*credential*
+*credentials*
+*token*
+*apikey*
+*api-key*
+
+# Runtime PDA data
+PDA-Tasks/
+PDA-Logs/
+Tasks/
+
+# n8n runtime / credentials
+n8n_data/
+.n8n/
+**/.n8n/
+**/credentials*.json
+**/*credential*.json
+
+# Docker/runtime artifacts
+*.log
+*.pid
+*.tmp
+*.bak
+*.swp
+*.lock
+docker-data/
+volumes/
+
+# Python / cache
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+
+# PowerShell temp
+*.ps1xml
+*.clixml
+
+# Obsidian workspace/cache
+**/.obsidian/workspace.json
+**/.obsidian/workspace-mobile.json
+**/.obsidian/cache/
+**/.trash/
+
+# Category 2 / restricted data
+Class-2-Restricted/
+Class-2-Do-Not-Upload/
+Restricted/
+Sensitive/
+VeraCrypt/
+*.hc
+
+# OS/editor junk
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+
+# Operational artifacts / generated outputs
+Obsidian Vault/02_Projects/AI Tool Ecosystem/Agent Findings/
+Outputs/
+PDA-Outputs/
+PDA-Memory/
+PDA-Workers/
+TestData/
+tmp/
+
+# Runtime queues / logs
+PDA-Tasks/
+PDA-Logs/
+Tasks/
+
+# SQLite / n8n DB backups
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.db
+*.db-wal
+*.db-shm
+
+# API keys / secrets
+n8n-api-key.txt
+insert_api_key.sql
+*.env
+.env
+.env.*
+*secret*
+*secrets*
+*credential*
+*credentials*
+*token*
+*apikey*
+*api-key*
+
+# n8n watch/input data
+n8n Workflow/Watch Folder/
+
+# Obsidian cache
+**/.obsidian/workspace.json
+**/.obsidian/workspace-mobile.json
+**/.obsidian/cache/
+**/.trash/
+
+# Category 2 / restricted
+Class-2-Restricted/
+Class-2-Do-Not-Upload/
+Restricted/
+Sensitive/
+VeraCrypt/
+*.hc

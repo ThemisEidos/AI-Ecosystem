@@ -1,0 +1,285 @@
+{
+  "id": "pda-command-router",
+  "name": "PDA Command Router",
+  "active": true,
+  "nodes": [
+    {
+      "id": "pda-webhook-node",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "pda-command-router",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "name": "PDA Command Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "webhookId": "fa290776-e6b5-437d-9b7d-aa89e3fb5193"
+    },
+    {
+      "id": "pda-parser-node",
+      "parameters": {
+        "jsCode": "const body = $json.body || $json;\nconst command = body.command || '';\nconst message = body.message || '';\nlet route = 'unknown';\nif (command.startsWith('/planner')) route = 'planner';\nelse if (command.startsWith('/reporter')) route = 'reporter';\nelse if (command.startsWith('/timeline')) route = 'timeline';\nelse if (command.startsWith('/research')) route = 'research';\nelse if (command.startsWith('/review')) route = 'review';\nelse if (command.startsWith('/execute')) route = 'execute';\nreturn [{ json: { command, message, route, received_at: new Date().toISOString() } }];"
+      },
+      "name": "Parse PDA Command",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [260, 0]
+    },
+    {
+      "id": "pda-reporter-if-node",
+      "name": "Route Reporter",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [520, 180],
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.route }}",
+              "rightValue": "reporter",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "pda-reporter-prepare-node",
+      "name": "Prepare Reporter Staging",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [760, 180],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "name": "task_file_name",
+              "value": "={{ $now.toFormat('yyyyMMdd_HHmmss') }}-reporter.json",
+              "type": "string"
+            },
+            {
+              "name": "task_json",
+              "value": "={{ JSON.stringify({ command: '/reporter', message: $json.message, target: $json.message, project: 'AI Ecosystem', category: 'category_1', approved: true, source: 'n8n', source_path: $json.message, received_at: $json.received_at }, null, 2) }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "pda-reporter-convert-node",
+      "name": "Convert Reporter Staging",
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [1000, 180],
+      "parameters": {
+        "operation": "toText",
+        "sourceProperty": "task_json",
+        "binaryPropertyName": "data",
+        "options": {}
+      }
+    },
+    {
+      "id": "pda-reporter-write-node",
+      "name": "Write Reporter Staging File",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [1240, 180],
+      "parameters": {
+        "operation": "write",
+        "fileName": "=/files/PDA-Tasks/staging/n8n-reporter/{{$node[\"Prepare Reporter Staging\"].json[\"task_file_name\"]}}",
+        "dataPropertyName": "data",
+        "options": {}
+      }
+    },
+    {
+      "id": "pda-multiagent-classify-node",
+      "name": "Classify Multi-Agent Route",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [760, -180],
+      "parameters": {
+        "jsCode": "const multiAgentRoutes = new Set(['planner', 'research', 'review', 'execute']);\nconst multiAgent = multiAgentRoutes.has($json.route);\nreturn [{ json: { ...$json, multi_agent: multiAgent, route_status: multiAgent ? 'supported' : 'unsupported' } }];"
+      }
+    },
+    {
+      "id": "pda-multiagent-if-node",
+      "name": "Route Multi-Agent",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1000, -180],
+      "parameters": {
+        "conditions": {
+          "combinator": "or",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.route }}",
+              "rightValue": "planner",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "leftValue": "={{ $json.route }}",
+              "rightValue": "research",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "leftValue": "={{ $json.route }}",
+              "rightValue": "review",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "leftValue": "={{ $json.route }}",
+              "rightValue": "execute",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "pda-multiagent-prepare-node",
+      "name": "Prepare Routed Staging",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1240, -180],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "name": "task_file_name",
+              "value": "={{ $now.toFormat('yyyyMMdd_HHmmss') }}-{{$json.route}}.json",
+              "type": "string"
+            },
+            {
+              "name": "task_json",
+              "value": "={{ JSON.stringify({ command: '/' + $json.route, route: $json.route, message: $json.message, target: $json.message, project: 'AI Ecosystem', category: 'category_1', approved: true, source: 'n8n', source_path: $json.message, received_at: $json.received_at }, null, 2) }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "pda-multiagent-convert-node",
+      "name": "Convert Routed Staging",
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [1480, -180],
+      "parameters": {
+        "operation": "toText",
+        "sourceProperty": "task_json",
+        "binaryPropertyName": "data",
+        "options": {}
+      }
+    },
+    {
+      "id": "pda-multiagent-write-node",
+      "name": "Write Routed Staging File",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [1720, -180],
+      "parameters": {
+        "operation": "write",
+        "fileName": "=/files/PDA-Tasks/staging/n8n-router/{{$node[\"Prepare Routed Staging\"].json[\"task_file_name\"]}}",
+        "dataPropertyName": "data",
+        "options": {}
+      }
+    },
+    {
+      "id": "pda-reporter-response-node",
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "name": "Return Reporter Result",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [520, 0]
+    },
+    {
+      "id": "pda-agent-response-node",
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "name": "Return Agent Router Result",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [980, 0]
+    }
+  ],
+  "connections": {
+    "PDA Command Webhook": {
+      "main": [[{ "node": "Parse PDA Command", "type": "main", "index": 0 }]]
+    },
+    "Parse PDA Command": {
+      "main": [[{ "node": "Route Reporter", "type": "main", "index": 0 }]]
+    },
+    "Route Reporter": {
+      "main": [
+        [
+          { "node": "Prepare Reporter Staging", "type": "main", "index": 0 }
+        ],
+        [
+          { "node": "Classify Multi-Agent Route", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Classify Multi-Agent Route": {
+      "main": [[{ "node": "Route Multi-Agent", "type": "main", "index": 0 }]]
+    },
+    "Prepare Routed Staging": {
+      "main": [[{ "node": "Convert Routed Staging", "type": "main", "index": 0 }]]
+    },
+    "Convert Routed Staging": {
+      "main": [[{ "node": "Write Routed Staging File", "type": "main", "index": 0 }]]
+    },
+    "Write Routed Staging File": {
+      "main": [[{ "node": "Return Agent Router Result", "type": "main", "index": 0 }]]
+    },
+    "Route Multi-Agent": {
+      "main": [
+        [
+          { "node": "Prepare Routed Staging", "type": "main", "index": 0 }
+        ],
+        [
+          { "node": "Return Agent Router Result", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Prepare Reporter Staging": {
+      "main": [[{ "node": "Convert Reporter Staging", "type": "main", "index": 0 }]]
+    },
+    "Convert Reporter Staging": {
+      "main": [[{ "node": "Write Reporter Staging File", "type": "main", "index": 0 }]]
+    },
+    "Write Reporter Staging File": {
+      "main": [[{ "node": "Return Reporter Result", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {},
+  "staticData": null,
+  "pinData": {},
+  "versionId": "pda-command-router-v1"
+}
+

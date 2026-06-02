@@ -1,0 +1,230 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "version": 1,
+  "description": "Canonical PDA worker registry and capability metadata.",
+  "routing_profiles": {
+    "standard": {
+      "name": "standard",
+      "description": "Category 1 tasks may use local or cloud-capable routing when such routes exist."
+    },
+    "restricted_local": {
+      "name": "restricted_local",
+      "description": "Category 2 tasks must remain local-only and fail closed if no local route exists.",
+      "allowed_surfaces": [
+        "local-only"
+      ],
+      "blocked_surfaces": [
+        "cloud-capable",
+        "external-api"
+      ],
+      "dry_run_on_unavailable_route": true
+    }
+  },
+  "workers": [
+    {
+      "worker_name": "reporter-worker",
+      "command": "/reporter",
+      "purpose": "Deterministically orchestrate the reporter pipeline across timeline, findings, draft, and review stages.",
+      "accepted_input_modes": [
+        "staged-json",
+        "queue-json"
+      ],
+      "required_fields": [
+        "task_id",
+        "command",
+        "message",
+        "project",
+        "classification",
+        "source_path",
+        "approved"
+      ],
+      "optional_fields": [
+        "target",
+        "source",
+        "category",
+        "requested_output",
+        "route",
+        "origin",
+        "next_worker"
+      ],
+      "output_locations": [
+        "PDA-Tasks/results",
+        "Obsidian Vault/02_Projects/AI Tool Ecosystem/Agent Findings/Reports"
+      ],
+      "routing_surface": "local-only",
+      "cloud_capable": false,
+      "category_support": [
+        "category_1",
+        "category_2"
+      ],
+      "safety_constraints": [
+        "No autonomous loops.",
+        "No legacy Tasks writes.",
+        "No external side effects inside the orchestration controller."
+      ],
+      "status": "active"
+    },
+    {
+      "worker_name": "planner-worker",
+      "command": "/planner",
+      "purpose": "Generate implementation-focused execution plans for PDA ecosystem work.",
+      "accepted_input_modes": [
+        "queue-json",
+        "staged-json",
+        "message-only-test"
+      ],
+      "required_fields": [
+        "task_id",
+        "command",
+        "project",
+        "classification"
+      ],
+      "optional_fields": [
+        "message",
+        "target",
+        "source_path",
+        "approved",
+        "category",
+        "requested_output",
+        "source",
+        "route"
+      ],
+      "output_locations": [
+        "PDA-Tasks/results",
+        "Obsidian Vault/02_Projects/AI Tool Ecosystem/Agent Findings/Planner"
+      ],
+      "routing_surface": "local-only",
+      "cloud_capable": false,
+      "category_support": [
+        "category_1",
+        "category_2"
+      ],
+      "safety_constraints": [
+        "Planning only; no execution side effects.",
+        "Keep recommendations aligned to the local-first PDA architecture."
+      ],
+      "status": "active"
+    },
+    {
+      "worker_name": "research-worker",
+      "command": "/research",
+      "purpose": "Produce concise operational research synthesis for a topic or source text.",
+      "accepted_input_modes": [
+        "queue-json",
+        "staged-json",
+        "message-only-test"
+      ],
+      "required_fields": [
+        "task_id",
+        "command",
+        "project",
+        "classification"
+      ],
+      "optional_fields": [
+        "message",
+        "target",
+        "source_path",
+        "approved",
+        "category",
+        "requested_output",
+        "source",
+        "route"
+      ],
+      "output_locations": [
+        "PDA-Tasks/results",
+        "Obsidian Vault/02_Projects/AI Tool Ecosystem/Agent Findings/Research"
+      ],
+      "routing_surface": "local-only",
+      "cloud_capable": false,
+      "category_support": [
+        "category_1",
+        "category_2"
+      ],
+      "safety_constraints": [
+        "No invented facts.",
+        "Clearly separate confirmed findings from open questions."
+      ],
+      "status": "active"
+    },
+    {
+      "worker_name": "review-worker",
+      "command": "/review",
+      "purpose": "Review drafts for unsupported claims, formatting issues, and missing caveats.",
+      "accepted_input_modes": [
+        "file-based",
+        "message-only-test"
+      ],
+      "required_fields": [
+        "task_id",
+        "command",
+        "project",
+        "classification"
+      ],
+      "optional_fields": [
+        "message",
+        "target",
+        "source_path",
+        "approved",
+        "category",
+        "requested_output",
+        "source",
+        "route"
+      ],
+      "output_locations": [
+        "PDA-Tasks/results",
+        "Obsidian Vault/02_Projects/AI Tool Ecosystem/Agent Findings/Reviews"
+      ],
+      "routing_surface": "local-only",
+      "cloud_capable": false,
+      "category_support": [
+        "category_1",
+        "category_2"
+      ],
+      "safety_constraints": [
+        "File-based review must resolve a real source file.",
+        "Message-only test mode is stub-safe and must not invent source material."
+      ],
+      "status": "active"
+    },
+    {
+      "worker_name": "execute-worker",
+      "command": "/execute",
+      "purpose": "Produce deterministic execution manifests without performing external side effects.",
+      "accepted_input_modes": [
+        "file-based",
+        "message-only-test-dry-run"
+      ],
+      "required_fields": [
+        "task_id",
+        "command",
+        "project",
+        "classification"
+      ],
+      "optional_fields": [
+        "message",
+        "target",
+        "source_path",
+        "approved",
+        "category",
+        "requested_output",
+        "source",
+        "route"
+      ],
+      "output_locations": [
+        "PDA-Tasks/results",
+        "Obsidian Vault/02_Projects/AI Tool Ecosystem/Agent Findings/Execution"
+      ],
+      "routing_surface": "local-only",
+      "cloud_capable": false,
+      "category_support": [
+        "category_1",
+        "category_2"
+      ],
+      "safety_constraints": [
+        "Never perform destructive actions unless explicitly approved.",
+        "Message-only mode must remain dry-run/no-op."
+      ],
+      "status": "active"
+    }
+  ]
+}

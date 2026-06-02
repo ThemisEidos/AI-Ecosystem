@@ -1,0 +1,348 @@
+{
+  "name": "Timeline Builder v2",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "44a6e85d-a030-488a-ba86-ce540dc82386",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -112,
+        -96
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "name": "raw_notes",
+              "value": "2145 arrived at loading dock area\n2210 alarm triggered at personnel door\n2215 security responded from east side\n2230 inspected north fire exits\n2245 examined loading dock readers",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "4470fd8c-7f44-495d-a657-29ded2720ee7",
+      "name": "Input Raw Notes",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        112,
+        -96
+      ]
+    },
+    {
+      "parameters": {
+        "method": "=POST",
+        "url": "=http://host.docker.internal:4000/v1/chat/completions",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "model",
+              "value": "local-llama"
+            },
+            {
+              "name": "messages[0][role]",
+              "value": "user"
+            },
+            {
+              "name": "messages[0][content]",
+              "value": "=={{\"Convert these raw operational notes into a professional markdown timeline table. Preserve timestamps. Do not add facts.\\n\\nRaw notes:\\n\\n\" + $json.raw_notes}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "8b4b0216-426e-4c4c-add1-6b68f59e9841",
+      "name": "Ollama - Build Timeline",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        368,
+        -96
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "name": "timeline_draft",
+              "value": "={{ $json.choices[0].message.content }}",
+              "type": "string",
+              "id": "0b2e6f07-ae85-42c2-a8d5-8ad097ba61df"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "e0a0b185-c766-4004-9289-c57618766276",
+      "name": "Capture Timeline Draft",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        608,
+        -96
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "name": "content",
+              "value": "={{ $json.choices[0].message.content }}",
+              "type": "string",
+              "id": "bc69f6bc-78ed-42e2-9565-91ca1b38cdae"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "e11f2811-017a-4fda-9dc0-8052686cbac2",
+      "name": "Prepare Final Timeline",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1088,
+        -96
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "toText",
+        "sourceProperty": "content",
+        "options": {}
+      },
+      "id": "4c1963e8-2473-4b05-866e-98a0df007a3b",
+      "name": "Convert to File",
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        1328,
+        -96
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "=/files/05_Reports/03_Timelines/Timeline_{{$now.toFormat('yyyy-MM-dd_HHmmss')}}.md",
+        "options": {}
+      },
+      "id": "29cabbf4-2400-4764-92f8-3c7cff8bf0d0",
+      "name": "Write Timeline to Obsidian",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        1568,
+        -96
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "name": "debug_content",
+              "value": "=# Debug Log\\n\\n## Timestamp\\n{{$now}}\\n\\n## Raw Notes\\n{{$node['Input Raw Notes'].json['raw_notes']}}\\n\\n## Timeline Draft\\n{{$node['Capture Timeline Draft'].json['timeline_draft']}}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "4d511084-155e-41e4-8b4b-a29793faf300",
+      "name": "Prepare Debug Log",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1088,
+        144
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "toText",
+        "sourceProperty": "debug_content",
+        "options": {}
+      },
+      "id": "0a7b7dfd-48b9-4908-8587-3bc78a188599",
+      "name": "Convert Debug Log",
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        1328,
+        144
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "=/files/07_Automations/n8n/debug/Timeline_Debug_{{$now.toFormat('yyyy-MM-dd_HHmmss')}}.md",
+        "options": {}
+      },
+      "id": "ce615b87-c77e-475b-8ca8-4033adbed264",
+      "name": "Write Debug Log",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        1568,
+        144
+      ]
+    },
+    {
+      "parameters": {
+        "method": "=POST",
+        "url": "=http://host.docker.internal:4000/v1/chat/completions",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "model",
+              "value": "local-llama"
+            },
+            {
+              "name": "messages[0][role]",
+              "value": "user"
+            },
+            {
+              "name": "messages[0][content]",
+              "value": "=={{\"Review this markdown timeline for clarity, formatting, timestamp preservation, and unsupported assumptions. Do not add facts. Return only corrected markdown.\\n\\nTimeline:\\n\\n\" + $json.timeline_draft}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "2e8fd4a7-ad9f-43a5-878f-341520286ba5",
+      "name": "Ollama - Editor Review",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        848,
+        -96
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Input Raw Notes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Input Raw Notes": {
+      "main": [
+        [
+          {
+            "node": "Ollama - Build Timeline",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama - Build Timeline": {
+      "main": [
+        [
+          {
+            "node": "Capture Timeline Draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Capture Timeline Draft": {
+      "main": [
+        [
+          {
+            "node": "Prepare Debug Log",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Ollama - Editor Review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Final Timeline": {
+      "main": [
+        [
+          {
+            "node": "Convert to File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert to File": {
+      "main": [
+        [
+          {
+            "node": "Write Timeline to Obsidian",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Debug Log": {
+      "main": [
+        [
+          {
+            "node": "Convert Debug Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert Debug Log": {
+      "main": [
+        [
+          {
+            "node": "Write Debug Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama - Editor Review": {
+      "main": [
+        [
+          {
+            "node": "Prepare Final Timeline",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "37fea967-a10f-46b1-b263-7b3324137636",
+  "meta": {
+    "instanceId": "39ebb5e0469680feb93ec353bc088cff6275250efb181ea0bf3b5516a16b2cc7"
+  },
+  "id": "FvGu4yl0HGxJc2Yv",
+  "tags": []
+}
