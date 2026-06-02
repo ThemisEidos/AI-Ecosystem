@@ -1,0 +1,63 @@
+{
+  "version": "1.0",
+  "default_action": "allow",
+  "approval_required": [
+    {
+      "condition": "command_equals",
+      "value": "/execute",
+      "reason": "Execute tasks require human approval."
+    },
+    {
+      "condition": "category_equals",
+      "value": "category_2",
+      "reason": "Category 2 tasks require human approval unless explicitly auto-approved by a local-only rule."
+    },
+    {
+      "condition": "routing_surface_contains",
+      "value": "cloud",
+      "reason": "Cloud-capable routing requires review when classification is uncertain."
+    }
+  ],
+  "auto_allow": [
+    {
+      "command": "/planner",
+      "categories": ["category_1"],
+      "reason": "Low-risk planning task."
+    },
+    {
+      "command": "/research",
+      "categories": ["category_1"],
+      "reason": "Low-risk research task."
+    },
+    {
+      "command": "/review",
+      "categories": ["category_1"],
+      "reason": "Low-risk review task."
+    },
+    {
+      "command": "/reporter",
+      "categories": ["category_1"],
+      "reason": "Existing validated reporter path."
+    },
+    {
+      "command": "/fabric",
+      "categories": ["category_1"],
+      "reason": "Category 1 Fabric pattern task."
+    }
+  ],
+  "hard_block": [
+    {
+      "condition": "contains_secret_like_key",
+      "reason": "Potential secret/API key detected."
+    },
+    {
+      "condition": "category_2_cloud_route",
+      "reason": "Category 2 material cannot route to cloud-capable model or external API."
+    }
+  ],
+  "notes": [
+    "This is an operator safety layer, not a replacement for local-only technical enforcement.",
+    "Category 2 remains local-only by policy.",
+    "/execute is approval-gated by default."
+  ]
+}
