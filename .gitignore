@@ -122,3 +122,6 @@ VeraCrypt/
 
 # Local PDA backups
 PDA-Backups/
+
+# Script patch backups
+Scripts/*.bak.ps1
