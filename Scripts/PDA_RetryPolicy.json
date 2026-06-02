@@ -1,0 +1,19 @@
+{
+  "default_max_retries": 2,
+  "dead_letter_folder": "PDA-Tasks/dead-letter",
+  "retryable_statuses": ["failed", "error"],
+  "non_retryable_reasons": [
+    "category_policy_blocked",
+    "missing_source_path",
+    "invalid_command",
+    "unsafe_execute"
+  ],
+  "workers": {
+    "reporter-worker": 2,
+    "planner-worker": 2,
+    "research-worker": 2,
+    "review-worker": 2,
+    "execute-worker": 0,
+    "fabric-worker": 1
+  }
+}
