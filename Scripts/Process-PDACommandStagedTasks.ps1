@@ -227,6 +227,31 @@ foreach ($StagedFile in $StagedFiles) {
         $QueueTask | ConvertTo-Json -Depth 20 | Set-Content -Path $PendingFile -Encoding UTF8
         Write-Log "Queued staged file: $($StagedFile.Name) -> $PendingFile"
 
+        # Approval gate check before final dispatch remains active in pending.
+        $ApprovalGate = Join-Path $PSScriptRoot "Invoke-PDAApprovalGate.ps1"
+        if (Test-Path $ApprovalGate) {
+            & pwsh -NoProfile -File $ApprovalGate -TaskPath $PendingFile
+            $ApprovalExit = $LASTEXITCODE
+
+            if ($ApprovalExit -eq 2) {
+                Write-Log "Approval gate BLOCKED task: $($StagedFile.Name)"
+                if (Test-Path $PendingFile) { Remove-Item $PendingFile -Force }
+                Move-Item -Path $StagedFile.FullName -Destination $ProcessedPath -Force
+                continue
+            }
+
+            if ($ApprovalExit -eq 3) {
+                Write-Log "Approval gate requires human approval: $($StagedFile.Name)"
+                if (Test-Path $PendingFile) { Remove-Item $PendingFile -Force }
+                Move-Item -Path $StagedFile.FullName -Destination $ProcessedPath -Force
+                continue
+            }
+
+            if ($ApprovalExit -ne 0) {
+                throw "Approval gate failed unexpectedly with exit code $ApprovalExit"
+            }
+        }
+
         Move-Item -Path $StagedFile.FullName -Destination $ProcessedPath -Force
         Write-Log "Processed staged file moved to: $ProcessedPath"
     }
@@ -242,3 +267,4 @@ foreach ($StagedFile in $StagedFiles) {
 }
 
 Write-Log "Multi-agent staged-task intake complete."
+
