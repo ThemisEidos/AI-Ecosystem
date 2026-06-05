@@ -1,32 +1,17 @@
-# PDA Operator Console
+# Task Summary
 
 Updated: 2026-06-05 13:26:26
 
-## Dashboard Index
-
-- [[System Status]]
-- [[Routing Summary]]
-- [[Task Summary]]
-
-## Snapshot
-
-- Service health source: `aiec-status`
-- Routing records: 14
-- Dispatch success rate: 85.71%
-- Queue depth: 227
-- Memory records: 2
-- Artifact records: 317
-
-## Key Metrics
+## Queue Metrics
 
 | metric | value |
 | --- | --- |
-| Cloud usage | 8 |
-| Local usage | 6 |
-| Fallback used | 0 |
-| Pending tasks | 227 |
-| Running tasks | 0 |
-| Recent artifacts | 10 |
+| Queue depth | 227 |
+| Pending | 227 |
+| Running | 0 |
+| Completed | 40 |
+| Failed | 0 |
+| Results | 209 |
 
 ## Recent Tasks
 
@@ -42,6 +27,13 @@ Updated: 2026-06-05 13:26:26
 | 24684ca0-9fea-4689-acd6-65fc81eae136 | /reporter |  | category_1 | pending | queued | 2026-06-04T15:43:27 |
 | 59176dfc-e50a-4a7d-a8bb-4bb197c0f67d | /review |  | category_1 | pending | queued | 2026-06-04T15:43:01 |
 | 14e048bc-4545-484c-8a58-b38541d8c1d4 | /reporter |  | category_1 | pending | queued | 2026-06-04T15:42:36 |
+
+## Recent Memory Records
+
+| memory_id | created_at | memory_type | category | title |
+| --- | --- | --- | --- | --- |
+| memory-17eaed7d-80ae-46e0-9541-7d48762b8229 | 06/02/2026 21:32:05 | promoted-artifact | category_1 | Planner artifact promoted to memory |
+| memory-7d41a212-3f98-4a48-8e1a-45fd67203375 | 06/02/2026 21:27:30 | test-note | test | Memory validation sample |
 
 ## Recent Artifacts
 
