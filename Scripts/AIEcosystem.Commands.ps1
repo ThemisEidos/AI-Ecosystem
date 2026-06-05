@@ -649,6 +649,129 @@ function Show-AIECDuplicateContainerWarnings {
     }
 }
 
+function Get-AIECObsidianDashboardNotePath {
+    param([Parameter(Mandatory = $true)][string]$RepoRoot)
+
+    return (Join-Path $RepoRoot "Obsidian Vault\02_Projects\AI Tool Ecosystem\PDA Operator Console.md")
+}
+
+function Test-AIECObsidianInstalled {
+    $Candidates = @(
+        "C:\Users\earth\AppData\Local\Programs\Obsidian\Obsidian.exe",
+        (Join-Path $env:LocalAppData "Programs\Obsidian\Obsidian.exe"),
+        (Join-Path $env:ProgramFiles "Obsidian\Obsidian.exe")
+    ) | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) }
+
+    foreach ($Candidate in $Candidates) {
+        if (Test-Path -LiteralPath $Candidate) {
+            return $true
+        }
+    }
+
+    try {
+        $ProtocolKey = Get-Item -LiteralPath "Registry::HKEY_CLASSES_ROOT\obsidian\shell\open\command" -ErrorAction Stop
+        return ($null -ne $ProtocolKey)
+    }
+    catch {
+        return $false
+    }
+}
+
+function Open-AIECDashboardNote {
+    param([Parameter(Mandatory = $true)][string]$DashboardPath)
+
+    if (-not (Test-Path -LiteralPath $DashboardPath -PathType Leaf)) {
+        Write-AIECLine -Level ERROR -Message ("Dashboard note not found: {0}" -f $DashboardPath)
+        return $false
+    }
+
+    $OpenedInObsidian = $false
+    if (Test-AIECObsidianInstalled) {
+        try {
+            $EncodedPath = [Uri]::EscapeDataString($DashboardPath)
+            Start-Process ("obsidian://open?path={0}" -f $EncodedPath) | Out-Null
+            Write-AIECLine -Level OK -Message ("Opened dashboard in Obsidian: {0}" -f $DashboardPath)
+            $OpenedInObsidian = $true
+        }
+        catch {
+            Write-AIECLine -Level WARN -Message "Obsidian launch failed; falling back to the default editor."
+        }
+    }
+    else {
+        Write-AIECLine -Level WARN -Message "Obsidian not detected; opening the dashboard in the default editor."
+    }
+
+    if ($OpenedInObsidian) {
+        return $true
+    }
+
+    try {
+        Start-Process -FilePath $DashboardPath | Out-Null
+        Write-AIECLine -Level OK -Message ("Opened dashboard note: {0}" -f $DashboardPath)
+        return $true
+    }
+    catch {
+        Write-AIECLine -Level ERROR -Message ("Could not open dashboard note: {0}" -f $_.Exception.Message)
+        return $false
+    }
+}
+
+function Invoke-AIECDashboard {
+    [CmdletBinding()]
+    param(
+        [string]$RepoRoot,
+        [switch]$NoOpen
+    )
+
+    $ResolvedRepoRoot = Get-AIECRepoRoot -RepoRoot $RepoRoot
+    $DashboardScript = Join-Path $ResolvedRepoRoot "Scripts\Update-PDADashboard.ps1"
+    $DashboardPath = Get-AIECObsidianDashboardNotePath -RepoRoot $ResolvedRepoRoot
+
+    Write-Host ""
+    Write-Host "=========================================" -ForegroundColor Cyan
+    Write-Host "      PDA Dashboard Refresh Pipeline" -ForegroundColor Cyan
+    Write-Host "=========================================" -ForegroundColor Cyan
+    Write-Host ""
+
+    if (-not (Test-Path -LiteralPath $DashboardScript -PathType Leaf)) {
+        Write-AIECLine -Level ERROR -Message ("Dashboard refresh script not found: {0}" -f $DashboardScript)
+        return 1
+    }
+
+    Write-AIECLine -Level INFO -Message ("Refreshing dashboards from repo root: {0}" -f $ResolvedRepoRoot)
+    $RefreshOutput = @(& pwsh -NoProfile -ExecutionPolicy Bypass -File $DashboardScript 2>&1)
+    if ($LASTEXITCODE -ne 0) {
+        Write-AIECLine -Level ERROR -Message "Dashboard refresh failed."
+        foreach ($Line in $RefreshOutput | Select-Object -Last 12) {
+            $Text = if ($Line -is [string]) { $Line } else { $Line.ToString() }
+            if (-not [string]::IsNullOrWhiteSpace($Text)) {
+                Write-Host ("    {0}" -f $Text)
+            }
+        }
+        return 1
+    }
+
+    Write-AIECLine -Level OK -Message "Dashboard refresh completed."
+    if (Test-Path -LiteralPath $DashboardPath -PathType Leaf) {
+        Write-AIECLine -Level OK -Message ("Dashboard note ready: {0}" -f $DashboardPath)
+    }
+    else {
+        Write-AIECLine -Level ERROR -Message ("Dashboard note missing after refresh: {0}" -f $DashboardPath)
+        return 1
+    }
+
+    if ($NoOpen) {
+        Write-AIECLine -Level INFO -Message "Skipping dashboard open because -NoOpen was specified."
+        return 0
+    }
+
+    if (-not (Open-AIECDashboardNote -DashboardPath $DashboardPath)) {
+        return 1
+    }
+
+    return 0
+}
+
 function Invoke-AIECStart {
     [CmdletBinding()]
     param(

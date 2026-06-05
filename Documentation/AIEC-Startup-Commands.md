@@ -6,6 +6,10 @@
   Starts Docker Desktop if needed, waits for the Docker engine, starts the AI Ecosystem stack with `docker compose`, falls back to `docker start` when compose cannot be used, waits for service readiness, starts the host-side PDA webhook server, and prints troubleshooting details for failures.
 - `aiec-status`
   Prints Docker status, container state, service reachability, PDA webhook server reachability on port `8788`, compose-file detection, and targeted troubleshooting for unhealthy services.
+- `pda-dashboard`
+  Refreshes the Obsidian PDA dashboard notes and opens `Obsidian Vault\02_Projects\AI Tool Ecosystem\PDA Operator Console.md`. It does not start Docker or require Open WebUI/n8n to be open.
+- `pda-console`
+  Compatibility alias for `pda-dashboard`.
 - `pda`
   Compatibility wrapper for `aiec-start`.
 - `pda-status`
@@ -31,6 +35,7 @@
 - If a required service fails, the command reports whether the compose file exists, whether the container exists, whether it is running, recent redacted logs, and whether another process is already listening on the target port.
 - If the PDA webhook server fails, the command reports whether the script exists, whether port `8788` already has a listener, probe errors against `http://localhost:8788/pda-chat-bridge`, and recent redacted server logs.
 - The profile installer is `setup-pda-profile.ps1`. Run it if the shell profile needs to be rebuilt.
+- `pda-dashboard` prefers opening the dashboard via Obsidian when the app or protocol handler is installed. If that fails, it falls back to the default editor for `.md` files.
 - Legacy duplicate containers named `open-webui` and `litellm` were removed so the compose-managed `pda-open-webui` and `pda-litellm` containers now own host ports `3000` and `4000`.
 - `aiec-status` treats LiteLLM `HTTP 401` on `/v1/models` as reachable because that endpoint can require authentication even when the service is healthy.
 - The n8n PDA HTTP bridge workflow should be imported from `n8n Workflow/PDA-ChatBridge-HTTP.json`. The current export is fail-closed and returns explicit JSON if the local bridge server is offline instead of an empty `{}` response.
