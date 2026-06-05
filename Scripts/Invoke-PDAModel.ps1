@@ -35,6 +35,7 @@ $ErrorActionPreference = "Stop"
 
 $Root = Split-Path -Parent $PSScriptRoot
 $RouteScript = Join-Path $PSScriptRoot "Get-PDAModelRoute.ps1"
+$RoutingLogRoot = Join-Path $Root "PDA-Logs\routing"
 $ResolvedPolicyPath = if ([string]::IsNullOrWhiteSpace($PolicyPath)) {
     Join-Path $PSScriptRoot "PDA_ModelRouting.json"
 } else {
@@ -204,6 +205,66 @@ function Get-PDARequiredEnvironmentVariable {
     }
 
     return [string]$Value
+}
+
+function New-PDARoutingAuditRecord {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Outcome,
+
+        [Parameter(Mandatory = $true)]
+        [string]$WorkerNameText,
+
+        [Parameter(Mandatory = $false)]
+        [string]$CommandText,
+
+        [Parameter(Mandatory = $false)]
+        [string]$CategoryText,
+
+        [Parameter(Mandatory = $false)]
+        [string]$SelectedModelText,
+
+        [Parameter(Mandatory = $false)]
+        [array]$FallbackChainText,
+
+        [Parameter(Mandatory = $false)]
+        [string]$RoutingReasonText
+    )
+
+    return [ordered]@{
+        command = if ([string]::IsNullOrWhiteSpace($CommandText)) { "" } else { [string]$CommandText }
+        category = if ([string]::IsNullOrWhiteSpace($CategoryText)) { "" } else { [string]$CategoryText }
+        selected_model = if ([string]::IsNullOrWhiteSpace($SelectedModelText)) { "" } else { [string]$SelectedModelText }
+        fallback_chain = @($FallbackChainText | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | ForEach-Object { [string]$_ })
+        routing_reason = if ([string]::IsNullOrWhiteSpace($RoutingReasonText)) { "" } else { [string]$RoutingReasonText }
+        worker = if ([string]::IsNullOrWhiteSpace($WorkerNameText)) { "" } else { [string]$WorkerNameText }
+        timestamp = [DateTime]::UtcNow.ToString("o")
+        outcome = [string]$Outcome
+    }
+}
+
+function Write-PDARoutingAuditRecord {
+    param(
+        [Parameter(Mandatory = $true)]
+        [hashtable]$Record
+    )
+
+    try {
+        if (-not (Test-Path -Path $RoutingLogRoot -PathType Container)) {
+            New-Item -ItemType Directory -Path $RoutingLogRoot -Force | Out-Null
+        }
+
+        $SafeWorker = if ([string]::IsNullOrWhiteSpace([string]$Record.worker)) { "unknown-worker" } else { ([string]$Record.worker -replace '[^A-Za-z0-9._-]', "_") }
+        $SafeCommand = if ([string]::IsNullOrWhiteSpace([string]$Record.command)) { "no-command" } else { ([string]$Record.command).TrimStart("/") -replace '[^A-Za-z0-9._-]', "_" }
+        $FileName = "{0}_{1}_{2}_{3}.json" -f ([DateTime]::UtcNow.ToString("yyyyMMddTHHmmssfffZ")), $SafeWorker, $SafeCommand, ([guid]::NewGuid().ToString("N"))
+        $LogPath = Join-Path $RoutingLogRoot $FileName
+        $Record | ConvertTo-Json -Depth 10 | Set-Content -Path $LogPath -Encoding UTF8
+        return $LogPath
+    }
+    catch {
+        Write-Warning ("Routing audit log write failed: {0}" -f $_.Exception.Message)
+        return $null
+    }
 }
 
 function Invoke-PDAModelAttempt {
@@ -467,6 +528,12 @@ if (-not $SuccessfulAttempt) {
         source_of_truth = "Scripts/Get-PDAModelRoute.ps1"
     }
 
+    $FailureAuditRecord = New-PDARoutingAuditRecord -Outcome "fail" -WorkerNameText $WorkerName -CommandText ([string]$Route.command) -CategoryText $NormalizedCategory -SelectedModelText $(if ($FinalAttempt) { [string]$FinalAttempt.logical_model } else { $SelectedModel }) -FallbackChainText $FallbackChain -RoutingReasonText ([string]$Route.routing_reason)
+    $FailureAuditPath = Write-PDARoutingAuditRecord -Record $FailureAuditRecord
+    if ($FailureAuditPath) {
+        $Failure | Add-Member -NotePropertyName routing_audit_log -NotePropertyValue $FailureAuditPath
+    }
+
     if ($AsJson) {
         $Failure | ConvertTo-Json -Depth 20
         if (-not $NoThrow) {
@@ -546,6 +613,12 @@ $Normalized = [pscustomobject]@{
     normalized_response_text = [string]$SuccessfulAttempt.response_text
     next_action = if (-not [string]::IsNullOrWhiteSpace([string]$SuccessfulAttempt.response_text)) { "Use the response text or inspect the raw response if you need provider metadata." } else { "Inspect LiteLLM routing, upstream provider credentials, and the local proxy logs." }
     source_of_truth = "Scripts/Get-PDAModelRoute.ps1"
+}
+
+$SuccessAuditRecord = New-PDARoutingAuditRecord -Outcome "pass" -WorkerNameText $WorkerName -CommandText ([string]$Route.command) -CategoryText $NormalizedCategory -SelectedModelText ([string]$SuccessfulAttempt.logical_model) -FallbackChainText $FallbackChain -RoutingReasonText ([string]$Route.routing_reason)
+$SuccessAuditPath = Write-PDARoutingAuditRecord -Record $SuccessAuditRecord
+if ($SuccessAuditPath) {
+    $Normalized | Add-Member -NotePropertyName routing_audit_log -NotePropertyValue $SuccessAuditPath
 }
 
 if ($AsJson) {

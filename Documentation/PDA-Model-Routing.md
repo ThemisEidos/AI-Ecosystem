@@ -44,6 +44,23 @@ The route helper and invocation adapter include these routing fields:
 
 Additional adapter metadata includes `primary_model`, `transport_model`, `route_source`, and `model_candidates`.
 
+## Routing Audit Logs
+
+Every governed PDA model dispatch writes a JSON audit record to `PDA-Logs/routing/`.
+
+Each record includes:
+
+- `command`
+- `category`
+- `selected_model`
+- `fallback_chain`
+- `routing_reason`
+- `worker`
+- `timestamp`
+- `outcome`
+
+Use these logs for explainability, governance review, performance tuning, and later self-optimization work. The invocation adapter also returns the written file path as `routing_audit_log` in its JSON output.
+
 ## Worker Integration
 
 The governed routing layer is currently wired into:
