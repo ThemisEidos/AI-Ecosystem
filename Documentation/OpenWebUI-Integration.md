@@ -75,6 +75,8 @@ Use a **Pipe Function**.
 - Keep the `confirm_dispatch` valve path disabled on first-pass recommendations.
 - Do not bypass the bridge by calling submitters, queue workers, or workers directly.
 - The Pipe Function stores pending confirmation state locally so the second message can replay the governed dispatch.
+- The Pipe Function ignores Open WebUI internal title-generation prompts and other internal request patterns so those prompts do not enter PDA command dispatch.
+- Normal chat responses are human-readable by default. Raw governed JSON stays in the debug log, and can be appended to chat responses only when `DEBUG_MODE` is enabled.
 
 ## Webhook Flow
 
