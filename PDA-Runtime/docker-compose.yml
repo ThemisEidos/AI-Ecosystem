@@ -31,4 +31,6 @@ services:
 
 volumes:
   open-webui:
+    external: true
+    name: open-webui
   n8n-data:
