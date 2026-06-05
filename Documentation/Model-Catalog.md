@@ -53,3 +53,13 @@ The test asked each alias to return a deterministic one-token-style marker. Curr
 ## Current Status
 
 The `gemini` alias now resolves to `gemini/gemini-2.5-flash` and passes live invocation through LiteLLM. Research routing remains unchanged.
+
+## Open WebUI Positioning
+
+This catalog describes the **LiteLLM governed alias layer**, not the full OpenRouter catalog exposed separately in Open WebUI.
+
+- LiteLLM is the stable PDA gateway for curated aliases.
+- OpenRouter direct in Open WebUI is intended for exploration and catalog browsing.
+- The PDA Chat Bridge remains a separate workflow Pipe and should remain visible alongside model providers.
+- Category 2 work must stay on `local-llama` only, regardless of any external catalog availability.
+- If the OpenRouter catalog feels too noisy in Open WebUI, prefer caching first and an allowlist or tagged presets second.
