@@ -1,0 +1,99 @@
+{
+  "schema_version": "1.1",
+  "policy_name": "PDA Governance & Model Routing",
+  "policy_version": "1.0",
+  "routing_gateway": "litellm",
+  "command_aliases": {
+    "research": "/research",
+    "/research": "/research",
+    "research_synthesis": "/research",
+    "review": "/review",
+    "/review": "/review",
+    "draft": "/draft",
+    "/draft": "/draft",
+    "report": "/draft",
+    "report_generation": "/draft",
+    "execute": "/execute",
+    "/execute": "/execute"
+  },
+  "worker_command_map": {
+    "research-worker": "/research",
+    "review-worker": "/review",
+    "draft-worker": "/draft",
+    "execute-worker": "/execute",
+    "reporter-worker": "/draft"
+  },
+  "command_routes": {
+    "/research": {
+      "primary_model": "gemini",
+      "fallback_chain": [
+        "openrouter"
+      ],
+      "routing_surface": "cloud-capable",
+      "cloud_allowed": true,
+      "provider_families": [
+        "google",
+        "openrouter"
+      ],
+      "reason": "Research work should prefer Gemini and fall back to OpenRouter if the primary alias fails."
+    },
+    "/review": {
+      "primary_model": "claude",
+      "fallback_chain": [
+        "openai"
+      ],
+      "routing_surface": "cloud-capable",
+      "cloud_allowed": true,
+      "provider_families": [
+        "anthropic",
+        "openai"
+      ],
+      "reason": "Review work should prefer Claude for critique quality and fall back to OpenAI if needed."
+    },
+    "/draft": {
+      "primary_model": "openai",
+      "fallback_chain": [
+        "claude"
+      ],
+      "routing_surface": "cloud-capable",
+      "cloud_allowed": true,
+      "provider_families": [
+        "openai",
+        "anthropic"
+      ],
+      "reason": "Drafting should prefer OpenAI for structured writing and fall back to Claude."
+    },
+    "/execute": {
+      "primary_model": "local-llama",
+      "fallback_chain": [],
+      "routing_surface": "local-only",
+      "cloud_allowed": false,
+      "provider_families": [
+        "local"
+      ],
+      "reason": "Execution planning must stay on the local model."
+    }
+  },
+  "category_routes": {
+    "category_2": {
+      "primary_model": "local-llama",
+      "fallback_chain": [],
+      "routing_surface": "local-only",
+      "cloud_allowed": false,
+      "provider_families": [
+        "local"
+      ],
+      "reason": "Category 2 tasks are restricted to the local model with no cloud fallback."
+    },
+    "restricted_local": {
+      "primary_model": "local-llama",
+      "fallback_chain": [],
+      "routing_surface": "local-only",
+      "cloud_allowed": false,
+      "provider_families": [
+        "local"
+      ],
+      "reason": "Restricted-local tasks are local-only with no cloud fallback."
+    }
+  }
+}
