@@ -1,0 +1,103 @@
+[CmdletBinding()]
+param(
+    [Parameter(Mandatory = $false)]
+    [switch]$Force
+)
+
+$ErrorActionPreference = "Stop"
+
+$Root = Split-Path -Parent $PSScriptRoot
+$WorkflowDir = Join-Path $Root "n8n Workflow"
+$WorkflowPath = Join-Path $WorkflowDir "PDA-ChatBridge-HTTP.json"
+$ServerPath = Join-Path $PSScriptRoot "Start-PDAWebhookServer.ps1"
+
+New-Item -ItemType Directory -Force -Path $WorkflowDir | Out-Null
+
+$ServerContent = Get-Content -Path $ServerPath -Raw
+
+$WorkflowContent = @'
+{
+  "id": "pda-chat-bridge-http",
+  "name": "PDA Chat Bridge HTTP",
+  "active": true,
+  "nodes": [
+    {
+      "id": "pda-http-webhook-node",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "pda-chat-bridge-http",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "name": "PDA HTTP Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "webhookId": "f5d16ab6-3d2d-4f8a-a0f1-0b8f1e5c7d41"
+    },
+    {
+      "id": "pda-http-normalize-node",
+      "parameters": {
+        "jsCode": "const body = $json.body || $json;\nconst userMessage = String(body.user_message || body.message || '').trim();\nconst confirmDispatch = body.confirm_dispatch === true || body.confirm_dispatch === 'true' || body.confirm_dispatch === 1 || body.confirm_dispatch === '1';\nconst conversationId = String(body.conversation_id || body.chat_id || (body.chat && body.chat.id) || '').trim();\nconst sessionId = String(body.session_id || '').trim();\nconst userId = String(body.user_id || (body.user && body.user.id) || '').trim();\nconst conversationTitle = String(body.conversation_title || body.title || (body.chat && body.chat.title) || '').trim();\nconst url = 'http://host.docker.internal:8788/pda-chat-bridge';\nreturn [{ json: { user_message: userMessage, confirm_dispatch: confirmDispatch, conversation_id: conversationId, session_id: sessionId, user_id: userId, conversation_title: conversationTitle, url, received_at: new Date().toISOString() } }];"
+      },
+      "name": "Normalize Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [260, 0]
+    },
+    {
+      "id": "pda-http-request-node",
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.url }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "responseFormat": "json",
+        "jsonBody": "={{ { user_message: $json.user_message, confirm_dispatch: $json.confirm_dispatch, conversation_id: $json.conversation_id, session_id: $json.session_id, user_id: $json.user_id, conversation_title: $json.conversation_title } }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "name": "Invoke Local HTTP Bridge",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [520, 0]
+    },
+    {
+      "id": "pda-http-parse-node",
+      "parameters": {
+        "jsCode": "const failClosed = (responseText, nextAction, errorDetail = '') => ({\n  status: 'fail',\n  response_text: responseText,\n  recommended_command: '',\n  intent: '',\n  confidence: 0,\n  requires_confirmation: false,\n  dispatch_ready: false,\n  dispatch_status: 'blocked',\n  next_action: nextAction,\n  source_of_truth: 'Scripts/PDA_CommandInterpreter.ps1',\n  bridge_status: 'fail_closed',\n  handoff_status: 'fail_closed',\n  error_detail: errorDetail\n});\n\nconst httpError = $json.error || $json.errors || null;\nif (httpError) {\n  const message = httpError.message || $json.message || 'Local PDA webhook server request failed.';\n  return [{ json: failClosed(\n    'Local PDA webhook server is unavailable.',\n    'Start Scripts/Start-PDAWebhookServer.ps1 and retry the request.',\n    String(message)\n  ) }];\n}\n\nconst payload = $json.body ?? $json.data ?? $json.json ?? $json;\nlet parsed = payload;\nif (typeof payload === 'string') {\n  try {\n    parsed = JSON.parse(payload);\n  } catch (error) {\n    parsed = failClosed(\n      'HTTP bridge returned invalid JSON.',\n      'Inspect the local webhook server and PowerShell bridge logs.',\n      error.message\n    );\n  }\n}\n\nif (!parsed || typeof parsed !== 'object') {\n  parsed = failClosed(\n    'HTTP bridge returned an invalid payload.',\n    'Inspect the local webhook server and PowerShell bridge logs.'\n  );\n}\n\nreturn [{ json: parsed }];"
+      },
+      "name": "Parse Bridge Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [780, 0]
+    },
+    {
+      "id": "pda-http-response-node",
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "name": "Return HTTP Bridge Result",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1040, 0]
+    }
+  ],
+  "settings": {},
+  "staticData": null,
+  "pinData": {},
+  "versionId": "pda-chat-bridge-http-v1"
+}
+'@
+
+$OverwriteNote = if ($Force) { "overwrite" } else { "refresh" }
+$null = $OverwriteNote
+$ServerContent | Set-Content -Path $ServerPath -Encoding UTF8
+$WorkflowContent | Set-Content -Path $WorkflowPath -Encoding UTF8
+
+Write-Host "[OK] Generated:"
+Write-Host $ServerPath
+Write-Host $WorkflowPath

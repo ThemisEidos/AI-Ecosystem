@@ -45,6 +45,7 @@ flowchart TD
 - The local PowerShell bridge returns machine-readable JSON with recommendation and dispatch status.
 - No direct queue access is allowed from Open WebUI, n8n, or the webhook layer.
 - The bridge server binds to local interfaces on port `8788` so Docker can reach it through the host gateway.
+- The bridge server exposes a lightweight health endpoint at `http://localhost:8788/pda-chat-bridge/healthz` for `aiec-status` and startup checks.
 
 ## Recommended Open WebUI Method
 
@@ -98,6 +99,8 @@ Use a **Pipe Function**.
 
 - If the bridge returns invalid JSON, verify that `pwsh` is installed and the script path is correct.
 - If the HTTP bridge workflow cannot reach the server, confirm `Scripts/Start-PDAWebhookServer.ps1` is running on port `8788`.
+- `aiec-start` now starts the PDA webhook server after the required Docker services are healthy, and `aiec-status` verifies the bridge on port `8788`.
+- The exported workflow at `n8n Workflow/PDA-ChatBridge-HTTP.json` is fail-closed. If the local bridge server is offline, n8n should return explicit JSON with `bridge_status = fail_closed` instead of an empty `{}` body.
 - If Docker-to-host calls hang, run `Scripts/Test-PDAWebhookServerReachability.ps1` and verify `host.docker.internal` returns HTTP 200 from inside the `pda-n8n` container.
 - If dispatch never happens, confirm that the interpreted request maps to a governed command and that the worker eligibility check passes.
 - If Category 2 requests are routed externally, stop and validate the ontology and worker registry immediately.

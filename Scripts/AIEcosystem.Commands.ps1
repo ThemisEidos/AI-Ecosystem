@@ -342,6 +342,118 @@ function Wait-AIECService {
     return $false
 }
 
+function Get-AIECPDAWebhookServer {
+    param([Parameter(Mandatory = $true)][string]$RepoRoot)
+
+    $LogDir = Join-Path $RepoRoot "PDA-Logs"
+    [pscustomobject]@{
+        Name           = "PDA Webhook Server"
+        Url            = "http://localhost:8788/pda-chat-bridge"
+        HealthUrl      = "http://localhost:8788/pda-chat-bridge/healthz"
+        Port           = 8788
+        StartupTimeout = 30
+        ScriptPath     = Join-Path $RepoRoot "Scripts\Start-PDAWebhookServer.ps1"
+        StdOutLogPath  = Join-Path $LogDir "PDAWebhookServer.stdout.log"
+        StdErrLogPath  = Join-Path $LogDir "PDAWebhookServer.stderr.log"
+        ServerLogPath  = Join-Path $LogDir "PDAWebhookServer.log"
+        LogTail        = 20
+    }
+}
+
+function Test-AIECPDAWebhookServer {
+    param(
+        [Parameter(Mandatory = $true)]$WebhookServer,
+        [int]$TimeoutSeconds = 5
+    )
+
+    $Payload = @{
+        user_message       = "health check"
+        confirm_dispatch   = $false
+        conversation_id    = "aiec-health"
+        session_id         = "aiec-health"
+        user_id            = "aiec-health"
+        conversation_title = "AI Ecosystem Health Check"
+    } | ConvertTo-Json -Depth 5
+
+    try {
+        $Parsed = Invoke-RestMethod -Uri $WebhookServer.HealthUrl -Method GET -TimeoutSec $TimeoutSeconds
+        return [pscustomobject]@{
+            Reachable = ($Parsed -and $Parsed.PSObject.Properties.Name -contains "status" -and [string]$Parsed.status -eq "ok")
+            StatusCode = 200
+            Parsed = $Parsed
+            Error = $null
+        }
+    }
+    catch {
+        $StatusCode = $null
+        if ($_.Exception.PSObject.Properties.Name -contains "Response" -and $_.Exception.Response -and $_.Exception.Response.StatusCode) {
+            $StatusCode = [int]$_.Exception.Response.StatusCode.value__
+        }
+
+        return [pscustomobject]@{
+            Reachable = $false
+            StatusCode = $StatusCode
+            Parsed = $null
+            Error = $_.Exception.Message
+        }
+    }
+}
+
+function Start-AIECPDAWebhookServer {
+    param(
+        [Parameter(Mandatory = $true)]$WebhookServer
+    )
+
+    if (-not (Test-Path -LiteralPath $WebhookServer.ScriptPath)) {
+        Write-AIECLine -Level ERROR -Message ("PDA webhook server script not found: {0}" -f $WebhookServer.ScriptPath)
+        return $false
+    }
+
+    $Probe = Test-AIECPDAWebhookServer -WebhookServer $WebhookServer -TimeoutSeconds 3
+    if ($Probe.Reachable) {
+        Write-AIECLine -Level OK -Message ("{0} already healthy at {1}" -f $WebhookServer.Name, $WebhookServer.HealthUrl)
+        return $true
+    }
+
+    $Listener = Get-AIECListeningProcess -Port $WebhookServer.Port
+    if ($Listener) {
+        Write-AIECLine -Level WARN -Message ("Port {0} is already in use by {1} (PID {2}); not launching a duplicate webhook server." -f $WebhookServer.Port, $Listener.ProcessName, $Listener.ProcessId)
+        return $false
+    }
+
+    $LogDir = Split-Path -Parent $WebhookServer.StdOutLogPath
+    New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
+
+    Write-AIECLine -Level INFO -Message ("Starting {0}." -f $WebhookServer.Name)
+    $EscapedScriptPath = $WebhookServer.ScriptPath.Replace("'", "''")
+    $CommandText = "& '$EscapedScriptPath'"
+    $EncodedCommand = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($CommandText))
+    $ArgumentList = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-EncodedCommand", $EncodedCommand)
+    Start-Process -FilePath "pwsh" -ArgumentList $ArgumentList -WindowStyle Hidden -RedirectStandardOutput $WebhookServer.StdOutLogPath -RedirectStandardError $WebhookServer.StdErrLogPath | Out-Null
+    return $true
+}
+
+function Wait-AIECPDAWebhookServer {
+    param(
+        [Parameter(Mandatory = $true)]$WebhookServer,
+        [int]$TimeoutSeconds = 30
+    )
+
+    $Stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+    while ($Stopwatch.Elapsed.TotalSeconds -lt $TimeoutSeconds) {
+        $Probe = Test-AIECPDAWebhookServer -WebhookServer $WebhookServer -TimeoutSeconds 3
+        if ($Probe.Reachable) {
+            Write-AIECLine -Level OK -Message ("{0} reachable at {1}" -f $WebhookServer.Name, $WebhookServer.HealthUrl)
+            return $true
+        }
+
+        Start-Sleep -Seconds 2
+    }
+
+    Write-AIECLine -Level ERROR -Message ("{0} did not become ready at {1}" -f $WebhookServer.Name, $WebhookServer.HealthUrl)
+    return $false
+}
+
 function Get-AIECListeningProcess {
     param([int]$Port)
 
@@ -438,6 +550,61 @@ function Show-AIECDiagnostics {
     }
 }
 
+function Show-AIECPDAWebhookDiagnostics {
+    param(
+        [Parameter(Mandatory = $true)]$WebhookServer,
+        [string]$ComposeFile
+    )
+
+    Write-Host ""
+    Write-Host ("Troubleshooting: {0}" -f $WebhookServer.Name) -ForegroundColor Yellow
+
+    if ($ComposeFile -and (Test-Path -LiteralPath $ComposeFile)) {
+        Write-AIECLine -Level OK -Message ("Compose file found: {0}" -f $ComposeFile)
+    }
+    else {
+        Write-AIECLine -Level ERROR -Message "Compose file not found."
+    }
+
+    if (Test-Path -LiteralPath $WebhookServer.ScriptPath) {
+        Write-AIECLine -Level OK -Message ("Webhook server script found: {0}" -f $WebhookServer.ScriptPath)
+    }
+    else {
+        Write-AIECLine -Level ERROR -Message ("Webhook server script missing: {0}" -f $WebhookServer.ScriptPath)
+    }
+
+    $Listener = Get-AIECListeningProcess -Port $WebhookServer.Port
+    if ($Listener) {
+        Write-AIECLine -Level INFO -Message ("Port {0} listener: {1} (PID {2})" -f $Listener.Port, $Listener.ProcessName, $Listener.ProcessId)
+    }
+    else {
+        Write-AIECLine -Level WARN -Message ("No process is listening on port {0}." -f $WebhookServer.Port)
+    }
+
+    $Probe = Test-AIECPDAWebhookServer -WebhookServer $WebhookServer -TimeoutSeconds 3
+    if ($Probe.Reachable) {
+        Write-AIECLine -Level OK -Message ("{0} responded with valid bridge JSON." -f $WebhookServer.Name)
+    }
+    elseif ($Probe.StatusCode) {
+        Write-AIECLine -Level WARN -Message ("{0} returned HTTP {1}." -f $WebhookServer.Name, $Probe.StatusCode)
+    }
+    elseif ($Probe.Error) {
+        Write-AIECLine -Level WARN -Message ("{0} probe error: {1}" -f $WebhookServer.Name, $Probe.Error)
+    }
+
+    $LogPaths = @($WebhookServer.ServerLogPath, $WebhookServer.StdOutLogPath, $WebhookServer.StdErrLogPath)
+    foreach ($LogPath in $LogPaths) {
+        if (-not (Test-Path -LiteralPath $LogPath)) {
+            continue
+        }
+
+        Write-Host ("Recent logs: {0}" -f $LogPath)
+        foreach ($Line in Get-Content -LiteralPath $LogPath -Tail $WebhookServer.LogTail -ErrorAction SilentlyContinue) {
+            Write-Host ("    {0}" -f (Redact-AIECLogLine -Line $Line))
+        }
+    }
+}
+
 function Show-AIECContainerSummary {
     if (-not (Test-AIECDockerEngine)) {
         Write-AIECLine -Level WARN -Message "Skipping container summary because Docker is offline."
@@ -492,6 +659,7 @@ function Invoke-AIECStart {
     $ResolvedRepoRoot = Get-AIECRepoRoot -RepoRoot $RepoRoot
     $ComposeFile = Get-AIECComposeFile -RepoRoot $ResolvedRepoRoot
     $Services = Get-AIECServices
+    $WebhookServer = Get-AIECPDAWebhookServer -RepoRoot $ResolvedRepoRoot
 
     Write-Host ""
     Write-Host "=========================================" -ForegroundColor Cyan
@@ -535,6 +703,23 @@ function Invoke-AIECStart {
         }
     }
 
+    if ($Failures -eq 0) {
+        $WebhookStarted = Start-AIECPDAWebhookServer -WebhookServer $WebhookServer
+        if ($WebhookStarted) {
+            if (-not (Wait-AIECPDAWebhookServer -WebhookServer $WebhookServer -TimeoutSeconds $WebhookServer.StartupTimeout)) {
+                Show-AIECPDAWebhookDiagnostics -WebhookServer $WebhookServer -ComposeFile $ComposeFile
+                $Failures++
+            }
+        }
+        else {
+            Show-AIECPDAWebhookDiagnostics -WebhookServer $WebhookServer -ComposeFile $ComposeFile
+            $Failures++
+        }
+    }
+    else {
+        Write-AIECLine -Level WARN -Message ("Skipping {0} startup because required Docker services are not healthy." -f $WebhookServer.Name)
+    }
+
     Show-AIECContainerSummary
     Show-AIECDuplicateContainerWarnings -Services $Services
 
@@ -566,6 +751,7 @@ function Invoke-AIECStatus {
     $ResolvedRepoRoot = Get-AIECRepoRoot -RepoRoot $RepoRoot
     $ComposeFile = Get-AIECComposeFile -RepoRoot $ResolvedRepoRoot
     $Services = Get-AIECServices
+    $WebhookServer = Get-AIECPDAWebhookServer -RepoRoot $ResolvedRepoRoot
 
     Write-Host ""
     Write-Host "=========================================" -ForegroundColor Cyan
@@ -597,5 +783,10 @@ function Invoke-AIECStatus {
         if (-not $Healthy) {
             Show-AIECDiagnostics -Service $Service -ComposeFile $ComposeFile
         }
+    }
+
+    $WebhookHealthy = Wait-AIECPDAWebhookServer -WebhookServer $WebhookServer -TimeoutSeconds 3
+    if (-not $WebhookHealthy) {
+        Show-AIECPDAWebhookDiagnostics -WebhookServer $WebhookServer -ComposeFile $ComposeFile
     }
 }
