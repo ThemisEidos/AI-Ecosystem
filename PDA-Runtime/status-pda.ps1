@@ -1,11 +1,6 @@
-param(
-    [switch]$NoBrowser
-)
-
 $RepoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..")).Path
 $CommandScript = Join-Path $RepoRoot "Scripts\AIEcosystem.Commands.ps1"
 
 . $CommandScript
 
-$ExitCode = Invoke-AIECStart -RepoRoot $RepoRoot -NoBrowser:$NoBrowser
-exit $ExitCode
+Invoke-AIECStatus -RepoRoot $RepoRoot

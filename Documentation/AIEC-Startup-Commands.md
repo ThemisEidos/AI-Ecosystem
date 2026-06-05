@@ -1,0 +1,31 @@
+# AI Ecosystem Startup Commands
+
+## Commands
+
+- `aiec-start`
+  Starts Docker Desktop if needed, waits for the Docker engine, starts the AI Ecosystem stack with `docker compose`, falls back to `docker start` when compose cannot be used, waits for service readiness, and prints troubleshooting details for failures.
+- `aiec-status`
+  Prints Docker status, container state, service reachability, compose-file detection, and targeted troubleshooting for unhealthy services.
+- `pda`
+  Compatibility wrapper for `aiec-start`.
+- `pda-status`
+  Compatibility wrapper for `aiec-status`.
+- `pdadown`
+  Stops the compose stack from `PDA-Runtime`.
+- `aiec`
+  Changes the shell location to the repo root.
+
+## Expected Services
+
+- Open WebUI: `http://localhost:3000`
+- LiteLLM: `http://localhost:4000`
+- n8n: `http://localhost:5678`
+- Ollama: optional, checked at `http://localhost:11434/api/tags`
+
+## Notes
+
+- The startup flow uses the checked-in compose file at `PDA-Runtime\docker-compose.yml`.
+- If a required service fails, the command reports whether the compose file exists, whether the container exists, whether it is running, recent redacted logs, and whether another process is already listening on the target port.
+- The profile installer is `setup-pda-profile.ps1`. Run it if the shell profile needs to be rebuilt.
+- Legacy duplicate containers named `open-webui` and `litellm` were removed so the compose-managed `pda-open-webui` and `pda-litellm` containers now own host ports `3000` and `4000`.
+- `aiec-status` treats LiteLLM `HTTP 401` on `/v1/models` as reachable because that endpoint can require authentication even when the service is healthy.
