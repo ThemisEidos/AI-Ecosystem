@@ -228,15 +228,31 @@ function New-PDARoutingAuditRecord {
         [array]$FallbackChainText,
 
         [Parameter(Mandatory = $false)]
-        [string]$RoutingReasonText
+        [string]$RoutingReasonText,
+
+        [Parameter(Mandatory = $false)]
+        [bool]$FallbackUsed = $false,
+
+        [Parameter(Mandatory = $false)]
+        [bool]$CloudAllowed = $false,
+
+        [Parameter(Mandatory = $false)]
+        [string]$RoutingSurface = "",
+
+        [Parameter(Mandatory = $false)]
+        [string]$TransportModelText = ""
     )
 
     return [ordered]@{
         command = if ([string]::IsNullOrWhiteSpace($CommandText)) { "" } else { [string]$CommandText }
         category = if ([string]::IsNullOrWhiteSpace($CategoryText)) { "" } else { [string]$CategoryText }
         selected_model = if ([string]::IsNullOrWhiteSpace($SelectedModelText)) { "" } else { [string]$SelectedModelText }
+        transport_model = if ([string]::IsNullOrWhiteSpace($TransportModelText)) { "" } else { [string]$TransportModelText }
         fallback_chain = @($FallbackChainText | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | ForEach-Object { [string]$_ })
+        fallback_used = [bool]$FallbackUsed
         routing_reason = if ([string]::IsNullOrWhiteSpace($RoutingReasonText)) { "" } else { [string]$RoutingReasonText }
+        routing_surface = if ([string]::IsNullOrWhiteSpace($RoutingSurface)) { "" } else { [string]$RoutingSurface }
+        cloud_allowed = [bool]$CloudAllowed
         worker = if ([string]::IsNullOrWhiteSpace($WorkerNameText)) { "" } else { [string]$WorkerNameText }
         timestamp = [DateTime]::UtcNow.ToString("o")
         outcome = [string]$Outcome
@@ -528,7 +544,7 @@ if (-not $SuccessfulAttempt) {
         source_of_truth = "Scripts/Get-PDAModelRoute.ps1"
     }
 
-    $FailureAuditRecord = New-PDARoutingAuditRecord -Outcome "fail" -WorkerNameText $WorkerName -CommandText ([string]$Route.command) -CategoryText $NormalizedCategory -SelectedModelText $(if ($FinalAttempt) { [string]$FinalAttempt.logical_model } else { $SelectedModel }) -FallbackChainText $FallbackChain -RoutingReasonText ([string]$Route.routing_reason)
+    $FailureAuditRecord = New-PDARoutingAuditRecord -Outcome "fail" -WorkerNameText $WorkerName -CommandText ([string]$Route.command) -CategoryText $NormalizedCategory -SelectedModelText $(if ($FinalAttempt) { [string]$FinalAttempt.logical_model } else { $SelectedModel }) -FallbackChainText $FallbackChain -RoutingReasonText ([string]$Route.routing_reason) -FallbackUsed $FallbackUsed -CloudAllowed $CloudAllowed -RoutingSurface ([string]$Route.routing_surface) -TransportModelText $(if ($FinalAttempt) { [string]$FinalAttempt.transport_model } else { Get-PDAModelTransportModel -LogicalModel $SelectedModel })
     $FailureAuditPath = Write-PDARoutingAuditRecord -Record $FailureAuditRecord
     if ($FailureAuditPath) {
         $Failure | Add-Member -NotePropertyName routing_audit_log -NotePropertyValue $FailureAuditPath
@@ -615,7 +631,7 @@ $Normalized = [pscustomobject]@{
     source_of_truth = "Scripts/Get-PDAModelRoute.ps1"
 }
 
-$SuccessAuditRecord = New-PDARoutingAuditRecord -Outcome "pass" -WorkerNameText $WorkerName -CommandText ([string]$Route.command) -CategoryText $NormalizedCategory -SelectedModelText ([string]$SuccessfulAttempt.logical_model) -FallbackChainText $FallbackChain -RoutingReasonText ([string]$Route.routing_reason)
+$SuccessAuditRecord = New-PDARoutingAuditRecord -Outcome "pass" -WorkerNameText $WorkerName -CommandText ([string]$Route.command) -CategoryText $NormalizedCategory -SelectedModelText ([string]$SuccessfulAttempt.logical_model) -FallbackChainText $FallbackChain -RoutingReasonText ([string]$Route.routing_reason) -FallbackUsed $FallbackUsed -CloudAllowed $CloudAllowed -RoutingSurface ([string]$Route.routing_surface) -TransportModelText ([string]$SuccessfulAttempt.transport_model)
 $SuccessAuditPath = Write-PDARoutingAuditRecord -Record $SuccessAuditRecord
 if ($SuccessAuditPath) {
     $Normalized | Add-Member -NotePropertyName routing_audit_log -NotePropertyValue $SuccessAuditPath
