@@ -20,6 +20,15 @@
       "dry_run_on_unavailable_route": true
     }
   },
+  "task_ontology": {
+    "ontology_path": "Scripts/PDA_TaskOntology.json",
+    "schema_path": "Scripts/PDA_TaskOntology.schema.json",
+    "validation_script": "Scripts/Validate-PDATaskOntology.ps1",
+    "query_script": "Scripts/Get-PDATaskType.ps1",
+    "resolve_script": "Scripts/Resolve-PDATaskWorkers.ps1",
+    "status": "active",
+    "notes": "Task intent semantics live in the ontology file; the registry remains the worker inventory source of truth."
+  },
   "workers": [
     {
       "worker_name": "reporter-worker",
@@ -128,8 +137,10 @@
         "category",
         "requested_output",
         "source",
-        "route"
+        "route",
+        "default_pattern"
       ],
+      "default_pattern": "Research/research-synthesis",
       "output_locations": [
         "PDA-Tasks/results",
         "Obsidian Vault/02_Projects/AI Tool Ecosystem/Agent Findings/Research"
@@ -143,6 +154,48 @@
       "safety_constraints": [
         "No invented facts.",
         "Clearly separate confirmed findings from open questions."
+      ],
+      "status": "active"
+    },
+    {
+      "worker_name": "draft-worker",
+      "command": "/draft",
+      "purpose": "Produce concise operational report drafts from findings or source content.",
+      "accepted_input_modes": [
+        "file-based",
+        "message-only-test"
+      ],
+      "required_fields": [
+        "task_id",
+        "command",
+        "project",
+        "classification"
+      ],
+      "optional_fields": [
+        "message",
+        "target",
+        "source_path",
+        "approved",
+        "category",
+        "requested_output",
+        "source",
+        "route",
+        "default_pattern"
+      ],
+      "default_pattern": "Reporting/report-summary",
+      "output_locations": [
+        "PDA-Tasks/results",
+        "Obsidian Vault/02_Projects/AI Tool Ecosystem/Agent Findings/Drafts"
+      ],
+      "routing_surface": "local-or-cloud",
+      "cloud_capable": true,
+      "category_support": [
+        "category_1",
+        "category_2"
+      ],
+      "safety_constraints": [
+        "No invented facts.",
+        "Preserve source uncertainty and keep the draft reviewable."
       ],
       "status": "active"
     },
@@ -168,8 +221,10 @@
         "category",
         "requested_output",
         "source",
-        "route"
+        "route",
+        "default_pattern"
       ],
+      "default_pattern": "Review/review-checklist",
       "output_locations": [
         "PDA-Tasks/results",
         "Obsidian Vault/02_Projects/AI Tool Ecosystem/Agent Findings/Reviews"
@@ -245,8 +300,10 @@
         "message",
         "source_path",
         "model",
-        "dry_run"
+        "dry_run",
+        "default_pattern"
       ],
+      "default_pattern": "Reporting/report-summary",
       "output_locations": [
         "Obsidian Vault/02_Projects/AI Tool Ecosystem/Agent Findings/Fabric",
         "PDA-Tasks/results"

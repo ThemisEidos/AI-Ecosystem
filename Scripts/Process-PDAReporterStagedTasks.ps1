@@ -4,6 +4,7 @@ param(
 
 $Root = "C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem"
 $Dispatcher = Join-Path $Root "Scripts\dispatch-pda-command.ps1"
+$OntologyScript = Join-Path $Root "Scripts\PDA_TaskOntology.ps1"
 $ProcessedRoot = Join-Path $Root "PDA-Tasks\staging\processed"
 $FailedRoot = Join-Path $Root "PDA-Tasks\staging\failed"
 $LogRoot = Join-Path $Root "PDA-Logs"
@@ -12,6 +13,8 @@ $LogRoot = Join-Path $Root "PDA-Logs"
 # This intake script only stages reporter tasks into the canonical PDA-Tasks flow.
 
 New-Item -ItemType Directory -Force -Path $StagingRoot, $ProcessedRoot, $FailedRoot, $LogRoot | Out-Null
+
+. $OntologyScript
 
 $Timestamp = Get-Date -Format "yyyy-MM-dd_HH-mm-ss"
 $LogFile = Join-Path $LogRoot "$Timestamp-reporter-staged-intake.log"
@@ -39,6 +42,8 @@ foreach ($StagedFile in $StagedFiles) {
         if ($Task.command -ne "/reporter") {
             throw "Unsupported staged command: $($Task.command)"
         }
+
+        $null = Resolve-PDATaskDispatchContext -Root $Root -Task $Task -Approved $true
 
         if (-not $Task.PSObject.Properties['task_id'] -or [string]::IsNullOrWhiteSpace([string]$Task.task_id)) {
             $Task | Add-Member -NotePropertyName task_id -NotePropertyValue ([guid]::NewGuid().ToString()) -Force

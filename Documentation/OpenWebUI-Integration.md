@@ -1,6 +1,6 @@
 # Open WebUI Integration
 
-This document defines the Open WebUI chat path for the PDA Chat Bridge.
+This document defines the Open WebUI chat path for PDA Commander.
 
 ## Dual-Provider Model Access
 
@@ -8,7 +8,7 @@ Open WebUI now serves two distinct model access patterns:
 
 - **LiteLLM** is the governed PDA gateway. It exposes the curated PDA aliases used for approved workflow routing and stable day-to-day use.
 - **OpenRouter direct** is connected separately as an OpenAI-compatible provider for exploration and broad model catalog browsing.
-- **PDA Chat Bridge** remains a preserved Pipe Function workflow and is not replaced by either provider connection.
+- **PDA Commander** remains a preserved Pipe Function workflow and is not replaced by either provider connection.
 
 ### Current Model Sources
 
@@ -16,7 +16,7 @@ Open WebUI now serves two distinct model access patterns:
   - Curated aliases: `local-llama`, `openai`, `claude`, `gemini`, `openrouter`
 - **OpenRouter Catalog**: `https://openrouter.ai/api/v1`
   - Large external catalog for discovery and ad hoc use
-- **PDA Chat Bridge**: preserved as the `PDA Chat Bridge` Pipe Function in Open WebUI
+- **PDA Commander**: preserved as the `PDA Commander` Pipe Function in Open WebUI
 
 ### Governance Notes
 
@@ -65,8 +65,8 @@ Use a **Pipe Function**.
 4. Run `Scripts/Start-PDAWebhookServer.ps1` on the host machine before testing the HTTP workflow.
 5. In Open WebUI, create a Pipe Function from [Open WebUI/PDA_ChatBridge_Pipe.py](C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\Open WebUI\PDA_ChatBridge_Pipe.py).
 6. Set the Pipe Function's `N8N_WEBHOOK_URL` valve to `http://host.docker.internal:5678/webhook/pda-chat-bridge-http` if Open WebUI runs in Docker, or `http://localhost:5678/webhook/pda-chat-bridge-http` if it runs on the host.
-7. Enable the Pipe Function and select it as the active model in the chat sidebar.
-8. Confirm that the Open WebUI model points to the PDA Pipe, not to queue files or workers.
+7. Enable the Pipe Function and select `PDA Commander` as the active model in the chat sidebar.
+8. Confirm that the Open WebUI model points to the PDA Commander Pipe, not to queue files or workers.
 
 ## Configuration Instructions
 
@@ -131,7 +131,7 @@ Use a **Pipe Function**.
 4. Save the function.
 5. Open the function settings and set `N8N_WEBHOOK_URL`.
 6. Enable the function.
-7. Select `PDA Chat Bridge` from the chat model picker.
+7. Select `PDA Commander` from the chat model picker.
 8. Send an initial message. The function will query the n8n webhook with `confirm_dispatch: false`.
 9. Reply with an explicit approval phrase such as `confirm dispatch`. The function will replay the same request with `confirm_dispatch: true`.
 
@@ -145,9 +145,34 @@ Use a **Pipe Function**.
 6. Enable `Cache Base Model List` in Open WebUI to reduce repeated provider list fetches.
 7. If the selector becomes too noisy, add an allowlist or create Open WebUI model presets and tags for the few OpenRouter models you actually want exposed.
 
+## API Health Validation
+
+Use `Scripts/Test-OpenWebUIChatCompletion.ps1` for an automated backend validation of the Open WebUI to LiteLLM chat path.
+
+- The script authenticates by minting an internal JWT from the running `pda-open-webui` container state. It does not print the token or secret.
+- It verifies that Open WebUI exposes the target model through `/api/models`.
+- It then submits a minimal non-browser chat-completion request against `/api/chat/completions`.
+
+Required request-shape notes:
+
+- A bare OpenAI-style payload with only `model` and `messages` is not sufficient for Open WebUI's internal chat pipeline.
+- The working minimal payload includes:
+  - `chat_id` set to a temporary `local:` value
+  - `id` for the assistant message placeholder
+  - `parent_id` set to `null`
+  - `user_message` with a generated message id and user content
+- This avoids the null `chat_id` middleware path that can produce `'NoneType' object has no attribute 'startswith'`.
+
+Suggested usage:
+
+```powershell
+pwsh -File Scripts\Test-OpenWebUIChatCompletion.ps1
+pwsh -File Scripts\Test-OpenWebUIChatCompletion.ps1 -AsJson -NoThrow
+```
+
 ## Notes
 
 - The Pipe Function is the primary integration path.
 - An Action Function can be added later if you want a button-driven confirmation step, but it is not required for the working chat flow.
 - The integration assumes the Open WebUI container can reach the host via `host.docker.internal`, which matches the documented Docker setup.
-- The dual-provider setup is intentional: LiteLLM for governance, OpenRouter direct for exploration, PDA Chat Bridge for workflow dispatch.
+- The dual-provider setup is intentional: LiteLLM for governance, OpenRouter direct for exploration, and PDA Commander for workflow dispatch.

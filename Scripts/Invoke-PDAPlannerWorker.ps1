@@ -5,6 +5,32 @@ param(
 
 $Root = "C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem"
 
+function Register-PDAWorkerArtifact {
+    param(
+        [string]$ArtifactPath,
+        [string]$TaskId,
+        [string]$WorkerName,
+        [string]$Command,
+        [string]$Category,
+        [string]$ArtifactType,
+        [string]$Summary
+    )
+
+    try {
+        $null = & "$Root\Scripts\Register-PDAArtifact.ps1" `
+            -ArtifactPath $ArtifactPath `
+            -SourceTaskId $TaskId `
+            -WorkerName $WorkerName `
+            -Command $Command `
+            -Category $Category `
+            -ArtifactType $ArtifactType `
+            -Summary $Summary
+    }
+    catch {
+        Write-Warning "Artifact registration skipped for ${WorkerName}: $($_.Exception.Message)"
+    }
+}
+
 $Task = Get-Content $TaskPath -Raw | ConvertFrom-Json
 
 $Prompt = @"
@@ -92,6 +118,11 @@ try {
     $MarkdownPath = Join-Path $OutputFolder "planner-output-$Timestamp.md"
 
     $Content | Set-Content -Path $MarkdownPath -Encoding UTF8
+
+    $TaskId = if ($Task.task_id) { [string]$Task.task_id } else { "unknown-task" }
+    $CommandText = if ($Task.command) { [string]$Task.command } elseif ($Task.target) { [string]$Task.target } else { "unspecified command" }
+    $CategoryText = if ($Task.classification) { [string]$Task.classification } elseif ($Task.category) { [string]$Task.category } else { "uncategorized" }
+    Register-PDAWorkerArtifact -ArtifactPath $MarkdownPath -TaskId $TaskId -WorkerName "planner-worker" -Command $CommandText -Category $CategoryText -ArtifactType "planner_markdown" -Summary "Planner worker markdown output"
 
     [ordered]@{
         task_id        = $Task.task_id

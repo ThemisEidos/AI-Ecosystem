@@ -22,6 +22,32 @@ $Root = Split-Path $PSScriptRoot -Parent
 $OutputDir = Join-Path $Root "Obsidian Vault\02_Projects\AI Tool Ecosystem\Agent Findings\Fabric"
 New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
 
+function Register-PDAWorkerArtifact {
+    param(
+        [string]$ArtifactPath,
+        [string]$TaskId,
+        [string]$WorkerName,
+        [string]$Command,
+        [string]$Category,
+        [string]$ArtifactType,
+        [string]$Summary
+    )
+
+    try {
+        $null = & "$Root\Scripts\Register-PDAArtifact.ps1" `
+            -ArtifactPath $ArtifactPath `
+            -SourceTaskId $TaskId `
+            -WorkerName $WorkerName `
+            -Command $Command `
+            -Category $Category `
+            -ArtifactType $ArtifactType `
+            -Summary $Summary
+    }
+    catch {
+        Write-Warning "Artifact registration skipped for ${WorkerName}: $($_.Exception.Message)"
+    }
+}
+
 if (-not (Test-Path $InputPath)) {
     throw "InputPath not found: $InputPath"
 }
@@ -75,6 +101,9 @@ Timestamp: $Timestamp
 No Fabric command executed.
 "@ | Set-Content $OutputPath -Encoding UTF8
 
+    $InputName = Split-Path $InputPath -Leaf
+    Register-PDAWorkerArtifact -ArtifactPath $OutputPath -TaskId "fabric-input:$InputName" -WorkerName "fabric" -Command "fabric --pattern $Pattern" -Category $Category -ArtifactType "fabric_markdown" -Summary "Fabric dry-run output"
+
     Write-Host "[OK] Dry-run output written:"
     Write-Host $OutputPath
     exit 0
@@ -89,6 +118,9 @@ if ([string]::IsNullOrWhiteSpace($Content)) {
 # Fabric CLI model flags vary by version/provider. Keep model enforcement external for now.
 # Safe default: pipe content into Fabric pattern.
 $Content | fabric --pattern $Pattern | Set-Content $OutputPath -Encoding UTF8
+
+$InputName = Split-Path $InputPath -Leaf
+Register-PDAWorkerArtifact -ArtifactPath $OutputPath -TaskId "fabric-input:$InputName" -WorkerName "fabric" -Command "fabric --pattern $Pattern" -Category $Category -ArtifactType "fabric_markdown" -Summary "Fabric output"
 
 Write-Host "[OK] Fabric output written:"
 Write-Host $OutputPath

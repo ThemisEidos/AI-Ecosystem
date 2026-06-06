@@ -7,6 +7,7 @@ $ErrorActionPreference = "Stop"
 
 $Root = Split-Path $PSScriptRoot -Parent
 $PolicyPath = Join-Path $PSScriptRoot "PDA_ApprovalPolicy.json"
+$OntologyScript = Join-Path $PSScriptRoot "PDA_TaskOntology.ps1"
 $ApprovalRoot = Join-Path $Root "PDA-Tasks\approvals"
 $PendingApprovalDir = Join-Path $ApprovalRoot "pending"
 $ApprovedDir = Join-Path $ApprovalRoot "approved"
@@ -22,8 +23,24 @@ if (-not (Test-Path $TaskPath)) {
     throw "TaskPath not found: $TaskPath"
 }
 
+. $OntologyScript
+
 $Task = Get-Content $TaskPath -Raw | ConvertFrom-Json
 $Policy = Get-Content $PolicyPath -Raw | ConvertFrom-Json
+
+$OntologyDecision = Get-PDATaskWorkerEligibility -Root $Root -Task $Task -Approved $true
+if ($OntologyDecision.status -eq "unmatched") {
+    throw "Unknown command for approval gating: $([string]$Task.command)"
+}
+
+if ((-not $Task.PSObject.Properties['assigned_worker'] -or [string]::IsNullOrWhiteSpace([string]$Task.assigned_worker)) -and @($OntologyDecision.eligible_workers).Count -gt 0) {
+    $Task | Add-Member -NotePropertyName assigned_worker -NotePropertyValue $OntologyDecision.eligible_workers[0].worker_name -Force
+}
+
+if (-not $Task.PSObject.Properties['routing_surface'] -or [string]::IsNullOrWhiteSpace([string]$Task.routing_surface)) {
+    $ResolvedSurface = if (@($OntologyDecision.eligible_workers).Count -gt 0) { [string]$OntologyDecision.eligible_workers[0].routing_surface } else { "" }
+    $Task | Add-Member -NotePropertyName routing_surface -NotePropertyValue $ResolvedSurface -Force
+}
 
 if (-not $Task.task_id) {
     $Task | Add-Member -NotePropertyName task_id -NotePropertyValue ([guid]::NewGuid().ToString()) -Force

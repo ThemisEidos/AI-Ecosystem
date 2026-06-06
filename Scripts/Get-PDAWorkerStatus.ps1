@@ -219,6 +219,7 @@ if ($Registry -and $Registry.workers) {
         $Modes = if ($Worker.accepted_input_modes) { ($Worker.accepted_input_modes -join ", ") } else { "n/a" }
         $Surface = if ($Worker.routing_surface) { $Worker.routing_surface } else { "n/a" }
         $Categories = if ($Worker.category_support) { ($Worker.category_support -join ", ") } else { "n/a" }
-        Write-Host ("{0,-12} {1,-18} {2,-12} {3,-14} {4} | {5}" -f $Command, $Worker.worker_name, $Worker.status, $Surface, $Categories, $Modes)
+        $DefaultPattern = if ($Worker.default_pattern) { $Worker.default_pattern } else { "n/a" }
+        Write-Host ("{0,-12} {1,-18} {2,-12} {3,-14} {4,-24} {5} | {6}" -f $Command, $Worker.worker_name, $Worker.status, $Surface, $DefaultPattern, $Categories, $Modes)
     }
 }

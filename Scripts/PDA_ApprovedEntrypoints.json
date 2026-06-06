@@ -1,0 +1,278 @@
+{
+  "version": 1,
+  "description": "Canonical approved PDA task entrypoints and governance classes for static drift detection.",
+  "protected_paths": [
+    "PDA-Tasks\\pending",
+    "PDA-Tasks\\running",
+    "PDA-Tasks\\approvals",
+    "PDA-Tasks\\staging",
+    "PDA-Tasks\\results",
+    "PDA-Tasks\\dead-letter"
+  ],
+  "approved_entrypoints": [
+    {
+      "path": "Scripts\\Submit-PDATask.ps1",
+      "governance_class": "ontology_gated",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "PendingPath"
+      ],
+      "required_tokens": [
+        "Resolve-PDATaskDispatchContext",
+        "Invoke-PDAApprovalGate"
+      ],
+      "notes": "Manual canonical queue submitter."
+    },
+    {
+      "path": "Scripts\\New-PDATask.ps1",
+      "governance_class": "ontology_gated",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "PendingPath",
+        "TaskFile"
+      ],
+      "required_tokens": [
+        "Resolve-PDATaskDispatchContext",
+        "Invoke-PDAApprovalGate"
+      ],
+      "notes": "Canonical task creation helper."
+    },
+    {
+      "path": "Scripts\\Submit-PDAFabricTask.ps1",
+      "governance_class": "ontology_gated",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "PendingDir"
+      ],
+      "required_tokens": [
+        "Resolve-PDATaskDispatchContext",
+        "Invoke-PDAApprovalGate"
+      ],
+      "notes": "Fabric task submitter."
+    },
+    {
+      "path": "Scripts\\New-PDAWorkflowTask.ps1",
+      "governance_class": "ontology_gated",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "PendingPath"
+      ],
+      "required_tokens": [
+        "Resolve-PDATaskDispatchContext",
+        "Invoke-PDAApprovalGate"
+      ],
+      "notes": "Workflow builder task submitter."
+    },
+    {
+      "path": "Scripts\\Process-PDACommandStagedTasks.ps1",
+      "governance_class": "ontology_gated",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "PendingRoot",
+        "ProcessedRoot",
+        "FailedRoot",
+        "PendingFile"
+      ],
+      "required_tokens": [
+        "Test-PDATaskOntologyContract",
+        "Resolve-PDATaskDispatchContext",
+        "Invoke-PDAApprovalGate"
+      ],
+      "notes": "Canonical n8n command intake."
+    },
+    {
+      "path": "Scripts\\Process-PDAReporterStagedTasks.ps1",
+      "governance_class": "ontology_gated",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "ProcessedRoot",
+        "FailedRoot",
+        "ProcessedPath",
+        "FailedPath"
+      ],
+      "required_tokens": [
+        "Resolve-PDATaskDispatchContext"
+      ],
+      "notes": "Reporter intake uses the shared resolver before dispatch."
+    },
+    {
+      "path": "Scripts\\dispatch-pda-command.ps1",
+      "governance_class": "ontology_gated",
+      "scan_mode": "indirect_dispatch",
+      "writer_signals": [
+        "TaskFile",
+        "Resolve-PDATaskDispatchContext"
+      ],
+      "required_tokens": [
+        "Resolve-PDATaskDispatchContext"
+      ],
+      "notes": "Legacy dispatcher remains ontology-backed."
+    },
+    {
+      "path": "Scripts\\process-pda-queue.ps1",
+      "governance_class": "ontology_gated",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "PendingPath",
+        "RunningPath",
+        "CompletedPath",
+        "FailedPath"
+      ],
+      "required_tokens": [
+        "Resolve-PDATaskDispatchContext"
+      ],
+      "notes": "Canonical queue processor."
+    },
+    {
+      "path": "Scripts\\Start-PDAQueueWorker.ps1",
+      "governance_class": "ontology_gated",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "Queued",
+        "Running",
+        "Results",
+        "RunningPath"
+      ],
+      "required_tokens": [
+        "Resolve-PDATaskDispatchContext"
+      ],
+      "notes": "Long-running queue worker."
+    },
+    {
+      "path": "Scripts\\Invoke-PDAApprovalGate.ps1",
+      "governance_class": "approval_gate",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "PendingApprovalDir",
+        "ApprovedDir",
+        "RejectedDir",
+        "ApprovalRoot"
+      ],
+      "required_tokens": [
+        "Get-PDATaskWorkerEligibility"
+      ],
+      "notes": "Approval gate validates ontology-backed worker eligibility before policy decisions."
+    },
+    {
+      "path": "Scripts\\Approve-PDATask.ps1",
+      "governance_class": "approval_writer",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "PendingApprovalDir",
+        "ApprovedDir",
+        "PendingQueueDir"
+      ],
+      "required_tokens": [
+        "Resolve-PDATaskDispatchContext"
+      ],
+      "notes": "Approval promotion must preserve ontology-backed worker assignment."
+    },
+    {
+      "path": "Scripts\\Retry-PDADeadLetterTask.ps1",
+      "governance_class": "requeue_writer",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "DeadDir",
+        "PendingDir"
+      ],
+      "required_tokens": [
+        "Resolve-PDATaskDispatchContext"
+      ],
+      "notes": "Dead-letter retry must re-enter the queue through ontology resolution."
+    },
+    {
+      "path": "Scripts\\Reject-PDATask.ps1",
+      "governance_class": "maintenance_writer",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "RejectedDir",
+        "ApprovalRoot"
+      ],
+      "required_tokens": [],
+      "notes": "Approval rejection moves tasks within the approvals lane."
+    },
+    {
+      "path": "Scripts\\Move-PDAFailedToDeadLetter.ps1",
+      "governance_class": "maintenance_writer",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "DeadDir"
+      ],
+      "required_tokens": [],
+      "notes": "Dead-letter maintenance move."
+    },
+    {
+      "path": "Scripts\\Invoke-PDAFabricWorker.ps1",
+      "governance_class": "worker_output",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "ResultsDir",
+        "GeneratedDir",
+        "GeneratedRoot"
+      ],
+      "required_tokens": [],
+      "notes": "Fabric worker output writer."
+    },
+    {
+      "path": "Scripts\\Invoke-PDAReporterWorker.ps1",
+      "governance_class": "worker_output",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "StageRunningRoot",
+        "StageResultsRoot",
+        "StageFailedRoot"
+      ],
+      "required_tokens": [],
+      "notes": "Reporter pipeline output writer."
+    },
+    {
+      "path": "Scripts\\Test-PDACategoryRouting.ps1",
+      "governance_class": "test_writer",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "QueueStagingRoot",
+        "TaskPath",
+        "Process-PDACommandStagedTasks.ps1"
+      ],
+      "required_tokens": [
+        "Process-PDACommandStagedTasks.ps1"
+      ],
+      "notes": "Routing test harness exercises staged intake."
+    },
+    {
+      "path": "Scripts\\Test-PDAOntologyDispatch.ps1",
+      "governance_class": "test_writer",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "TaskPath",
+        "PDA-Tasks\\pending",
+        "PDA-Tasks\\approvals\\pending",
+        "PDA-Tasks\\staging\\failed",
+        "PDA-Tasks\\staging\\generated"
+      ],
+      "required_tokens": [
+        "PDA_TaskOntology.ps1",
+        "Process-PDACommandStagedTasks.ps1"
+      ],
+      "notes": "Ontology dispatch test harness."
+    },
+    {
+      "path": "Scripts\\Test-PDAPreDispatchBypass.ps1",
+      "governance_class": "test_writer",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "ApprovalPath",
+        "PendingQueueDir",
+        "PDA-Tasks\\pending",
+        "PDA-Tasks\\approvals\\pending"
+      ],
+      "required_tokens": [
+        "Submit-PDATask.ps1",
+        "New-PDAWorkflowTask.ps1",
+        "Approve-PDATask.ps1",
+        "Submit-PDAFabricTask.ps1"
+      ],
+      "notes": "Bypass test harness."
+    }
+  ]
+}

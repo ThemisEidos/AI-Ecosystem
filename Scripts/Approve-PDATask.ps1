@@ -6,6 +6,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 $Root = Split-Path $PSScriptRoot -Parent
+$OntologyScript = Join-Path $PSScriptRoot "PDA_TaskOntology.ps1"
 $ApprovalRoot = Join-Path $Root "PDA-Tasks\approvals"
 $PendingApprovalDir = Join-Path $ApprovalRoot "pending"
 $ApprovedDir = Join-Path $ApprovalRoot "approved"
@@ -14,6 +15,8 @@ $PendingQueueDir = Join-Path $Root "PDA-Tasks\pending"
 New-Item -ItemType Directory -Force -Path $ApprovedDir | Out-Null
 New-Item -ItemType Directory -Force -Path $PendingQueueDir | Out-Null
 
+. $OntologyScript
+
 $Source = if (Test-Path $TaskFile) { $TaskFile } else { Join-Path $PendingApprovalDir $TaskFile }
 
 if (-not (Test-Path $Source)) {
@@ -21,10 +24,15 @@ if (-not (Test-Path $Source)) {
 }
 
 $Task = Get-Content $Source -Raw | ConvertFrom-Json
+$DispatchContext = Resolve-PDATaskDispatchContext -Root $Root -Task $Task -Approved $true
 $Task | Add-Member -NotePropertyName approved -NotePropertyValue $true -Force
 $Task | Add-Member -NotePropertyName approval_status -NotePropertyValue "approved" -Force
 $Task | Add-Member -NotePropertyName approved_at -NotePropertyValue (Get-Date).ToString("s") -Force
 $Task | Add-Member -NotePropertyName status -NotePropertyValue "pending" -Force
+$Task | Add-Member -NotePropertyName assigned_worker -NotePropertyValue $DispatchContext.assigned_worker -Force
+$Task | Add-Member -NotePropertyName routing_surface -NotePropertyValue $DispatchContext.routing_surface -Force
+$Task | Add-Member -NotePropertyName task_type -NotePropertyValue $DispatchContext.task_type -Force
+$Task | Add-Member -NotePropertyName intent -NotePropertyValue $DispatchContext.intent -Force
 
 $FileName = Split-Path $Source -Leaf
 $ApprovedCopy = Join-Path $ApprovedDir $FileName

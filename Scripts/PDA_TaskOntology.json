@@ -1,0 +1,229 @@
+{
+  "schema_version": "1.0",
+  "ontology_name": "PDA Task Ontology",
+  "ontology_version": "1.0",
+  "generated_at": "2026-06-03T00:00:00Z",
+  "task_categories": [
+    {
+      "category": "category_1",
+      "sensitivity_category": "standard",
+      "required_approvals": [
+        "none"
+      ],
+      "allowed_routing_surfaces": [
+        "local-only",
+        "cloud-capable",
+        "local-or-litellm"
+      ],
+      "notes": "General local-first work. Cloud-capable routing is permitted only when the worker registry allows it."
+    },
+    {
+      "category": "category_2",
+      "sensitivity_category": "restricted_local",
+      "required_approvals": [
+        "human_approval"
+      ],
+      "allowed_routing_surfaces": [
+        "local-only"
+      ],
+      "notes": "Restricted local-only work. No cloud or external-api routing is permitted."
+    }
+  ],
+  "task_intents": [
+    {
+      "task_type": "reporting",
+      "intent": "report_generation",
+      "command": "/reporter",
+      "title": "Reporter orchestration",
+      "description": "Deterministically orchestrate the reporter pipeline across timeline, findings, draft, and review stages.",
+      "supported_categories": [
+        "category_1",
+        "category_2"
+      ],
+      "sensitivity_category": "standard",
+      "required_approvals": {
+        "category_1": "none",
+        "category_2": "human_approval"
+      },
+      "input_types": [
+        "staged-json",
+        "queue-json"
+      ],
+      "output_types": [
+        "report_chain_markdown",
+        "result_json"
+      ],
+      "allowed_workers": [
+        "reporter-worker"
+      ],
+      "routing_constraints": [
+        "local-only"
+      ],
+      "notes": "Reporter stays within the canonical local queue and Obsidian artifact flow."
+    },
+    {
+      "task_type": "planning",
+      "intent": "planning",
+      "command": "/planner",
+      "title": "Planning",
+      "description": "Generate implementation-focused execution plans for PDA ecosystem work.",
+      "supported_categories": [
+        "category_1",
+        "category_2"
+      ],
+      "sensitivity_category": "standard",
+      "required_approvals": {
+        "category_1": "none",
+        "category_2": "human_approval"
+      },
+      "input_types": [
+        "queue-json",
+        "staged-json",
+        "message-only-test"
+      ],
+      "output_types": [
+        "plan_markdown",
+        "result_json"
+      ],
+      "allowed_workers": [
+        "planner-worker"
+      ],
+      "routing_constraints": [
+        "local-only"
+      ],
+      "notes": "Planning stays local and does not execute side effects."
+    },
+    {
+      "task_type": "research",
+      "intent": "research_synthesis",
+      "command": "/research",
+      "title": "Research synthesis",
+      "description": "Produce concise operational research synthesis for a topic or source text.",
+      "supported_categories": [
+        "category_1",
+        "category_2"
+      ],
+      "sensitivity_category": "standard",
+      "required_approvals": {
+        "category_1": "none",
+        "category_2": "human_approval"
+      },
+      "input_types": [
+        "queue-json",
+        "staged-json",
+        "message-only-test"
+      ],
+      "output_types": [
+        "research_markdown",
+        "result_json"
+      ],
+      "allowed_workers": [
+        "research-worker"
+      ],
+      "routing_constraints": [
+        "local-only"
+      ],
+      "notes": "Research output must remain grounded in confirmed source material."
+    },
+    {
+      "task_type": "review",
+      "intent": "review",
+      "command": "/review",
+      "title": "Draft review",
+      "description": "Review drafts for unsupported claims, formatting issues, and missing caveats.",
+      "supported_categories": [
+        "category_1",
+        "category_2"
+      ],
+      "sensitivity_category": "restricted_local",
+      "required_approvals": {
+        "category_1": "none",
+        "category_2": "human_approval"
+      },
+      "input_types": [
+        "file-based",
+        "message-only-test"
+      ],
+      "output_types": [
+        "review_markdown",
+        "result_json"
+      ],
+      "allowed_workers": [
+        "review-worker"
+      ],
+      "routing_constraints": [
+        "local-only"
+      ],
+      "notes": "File-based review must resolve a real source file."
+    },
+    {
+      "task_type": "execution",
+      "intent": "execution_manifest",
+      "command": "/execute",
+      "title": "Execution manifest",
+      "description": "Produce deterministic execution manifests without performing external side effects.",
+      "supported_categories": [
+        "category_1",
+        "category_2"
+      ],
+      "sensitivity_category": "restricted_local",
+      "required_approvals": {
+        "category_1": "human_approval",
+        "category_2": "human_approval"
+      },
+      "input_types": [
+        "file-based",
+        "message-only-test-dry-run"
+      ],
+      "output_types": [
+        "execution_manifest",
+        "result_json"
+      ],
+      "allowed_workers": [
+        "execute-worker"
+      ],
+      "routing_constraints": [
+        "local-only",
+        "dry-run-only"
+      ],
+      "notes": "Execution remains dry-run/no-op unless explicitly approved."
+    },
+    {
+      "task_type": "fabric",
+      "intent": "fabric_pattern",
+      "command": "/fabric",
+      "title": "Fabric pattern run",
+      "description": "Run Fabric patterns through PDA-controlled orchestration.",
+      "supported_categories": [
+        "category_1"
+      ],
+      "sensitivity_category": "standard",
+      "required_approvals": {
+        "category_1": "none",
+        "category_2": "blocked"
+      },
+      "input_types": [
+        "message-only-test",
+        "file"
+      ],
+      "output_types": [
+        "fabric_markdown",
+        "result_json"
+      ],
+      "allowed_workers": [
+        "fabric-worker"
+      ],
+      "routing_constraints": [
+        "local-only-for-category_1",
+        "category_2-blocked"
+      ],
+      "notes": "Category 2 Fabric requests are not eligible for routing in this phase."
+    }
+  ],
+  "registry_integration": {
+    "registry_path": "Scripts/PDA_WorkerRegistry.json",
+    "integration_mode": "pointer",
+    "status": "active",
+    "notes": "The worker registry remains the canonical worker inventory. The ontology adds task-intent semantics and routing rules."
+  }
+}

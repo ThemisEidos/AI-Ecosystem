@@ -6,6 +6,33 @@ param(
 $ErrorActionPreference = "Stop"
 
 $Root = Split-Path $PSScriptRoot -Parent
+
+function Register-PDAWorkerArtifact {
+    param(
+        [string]$ArtifactPath,
+        [string]$TaskId,
+        [string]$WorkerName,
+        [string]$Command,
+        [string]$Category,
+        [string]$ArtifactType,
+        [string]$Summary
+    )
+
+    try {
+        $null = & "$Root\Scripts\Register-PDAArtifact.ps1" `
+            -ArtifactPath $ArtifactPath `
+            -SourceTaskId $TaskId `
+            -WorkerName $WorkerName `
+            -Command $Command `
+            -Category $Category `
+            -ArtifactType $ArtifactType `
+            -Summary $Summary
+    }
+    catch {
+        Write-Warning "Artifact registration skipped for ${WorkerName}: $($_.Exception.Message)"
+    }
+}
+
 $ResultsDir = Join-Path $Root "PDA-Tasks\results"
 $FabricOutDir = Join-Path $Root "Obsidian Vault\02_Projects\AI Tool Ecosystem\Agent Findings\Fabric"
 $GeneratedDir = Join-Path $Root "PDA-Tasks\staging\generated\fabric"
@@ -43,14 +70,14 @@ Write-Host "    Category: $Category"
 Write-Host "    DryRun:   $DryRun"
 
 # Category enforcement
-if ($Category -eq "category_2") {
+    if ($Category -eq "category_2") {
     if ([string]::IsNullOrWhiteSpace($Model)) {
         $Model = "local-llama"
     }
 
-    if ($Model -notmatch "local|llama|ollama") {
-        $Result = @{
-            task_id = $TaskId
+        if ($Model -notmatch "local|llama|ollama") {
+            $Result = @{
+                task_id = $TaskId
             status = "blocked"
             reason = "Category 2 Fabric task blocked because requested model is not local-only."
             requested_model = $Model
@@ -85,7 +112,7 @@ if ([string]::IsNullOrWhiteSpace($InputText)) {
 }
 
 # Execute
-if ($DryRun) {
+    if ($DryRun) {
 @"
 # Fabric Dry Run
 
@@ -110,6 +137,10 @@ else {
     # Model routing is enforced by category policy and Fabric setup.
     $InputText | fabric --pattern $Pattern | Set-Content $ArtifactPath -Encoding UTF8
 }
+
+$CommandText = if ($Task.command) { [string]$Task.command } else { "fabric worker execution" }
+$CategoryText = if ($Task.category) { [string]$Task.category } elseif ($Task.classification) { [string]$Task.classification } else { $Category }
+Register-PDAWorkerArtifact -ArtifactPath $ArtifactPath -TaskId $TaskId -WorkerName "fabric-worker" -Command $CommandText -Category $CategoryText -ArtifactType "fabric_markdown" -Summary "Fabric worker artifact output"
 
 $Result = @{
     task_id = $TaskId

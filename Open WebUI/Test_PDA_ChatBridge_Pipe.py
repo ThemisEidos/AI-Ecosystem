@@ -57,6 +57,13 @@ def test_normal_reporter_request() -> None:
     assert len(calls) == 1
 
 
+def test_pipe_exposes_pda_commander_name() -> None:
+    pipe = make_pipe()
+    entries = pipe.pipes()
+
+    assert entries == [{"id": "pda_commander", "name": "PDA Commander"}]
+
+
 def test_confirm_dispatch_replays_pending_message() -> None:
     pipe = make_pipe()
     calls = []
@@ -126,7 +133,7 @@ def test_title_generation_prompt_is_ignored() -> None:
     }
 
     rendered = run(pipe.pipe(body))
-    assert rendered == "PDA Chat Bridge"
+    assert rendered == "PDA Commander"
 
 
 def test_fail_closed_response_is_human_readable() -> None:
@@ -177,6 +184,7 @@ def test_completed_task_result_path_is_rendered() -> None:
 
 if __name__ == "__main__":
     test_normal_reporter_request()
+    test_pipe_exposes_pda_commander_name()
     test_confirm_dispatch_replays_pending_message()
     test_title_generation_prompt_is_ignored()
     test_fail_closed_response_is_human_readable()

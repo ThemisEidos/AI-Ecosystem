@@ -1,0 +1,187 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PDA Task Ontology",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "ontology_name",
+    "ontology_version",
+    "generated_at",
+    "task_categories",
+    "task_intents",
+    "registry_integration"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string"
+    },
+    "ontology_name": {
+      "type": "string"
+    },
+    "ontology_version": {
+      "type": "string"
+    },
+    "generated_at": {
+      "type": "string"
+    },
+    "task_categories": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "category",
+          "sensitivity_category",
+          "required_approvals",
+          "allowed_routing_surfaces",
+          "notes"
+        ],
+        "properties": {
+          "category": {
+            "type": "string",
+            "enum": ["category_1", "category_2"]
+          },
+          "sensitivity_category": {
+            "type": "string",
+            "enum": ["standard", "restricted_local"]
+          },
+          "required_approvals": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["none", "human_approval", "blocked"]
+            }
+          },
+          "allowed_routing_surfaces": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "notes": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "task_intents": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "task_type",
+          "intent",
+          "command",
+          "title",
+          "description",
+          "supported_categories",
+          "sensitivity_category",
+          "required_approvals",
+          "input_types",
+          "output_types",
+          "allowed_workers",
+          "routing_constraints"
+        ],
+        "properties": {
+          "task_type": {
+            "type": "string"
+          },
+          "intent": {
+            "type": "string"
+          },
+          "command": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "supported_categories": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["category_1", "category_2"]
+            }
+          },
+          "sensitivity_category": {
+            "type": "string",
+            "enum": ["standard", "restricted_local"]
+          },
+          "required_approvals": {
+            "type": "object",
+            "required": [
+              "category_1",
+              "category_2"
+            ],
+            "properties": {
+              "category_1": {
+                "type": "string",
+                "enum": ["none", "human_approval", "blocked"]
+              },
+              "category_2": {
+                "type": "string",
+                "enum": ["none", "human_approval", "blocked"]
+              }
+            },
+            "additionalProperties": false
+          },
+          "input_types": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "output_types": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "allowed_workers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "routing_constraints": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "notes": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "registry_integration": {
+      "type": "object",
+      "required": [
+        "registry_path",
+        "integration_mode",
+        "status",
+        "notes"
+      ],
+      "properties": {
+        "registry_path": {
+          "type": "string"
+        },
+        "integration_mode": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "notes": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

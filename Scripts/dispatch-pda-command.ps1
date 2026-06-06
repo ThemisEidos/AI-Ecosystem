@@ -1,256 +1,64 @@
 param(
+    [Parameter(Mandatory = $true)]
     [string]$TaskFile
 )
 
+$ErrorActionPreference = "Stop"
+
 if (-not (Test-Path $TaskFile)) {
-    Write-Error "Task file not found."
-    exit 1
+    throw "Task file not found."
 }
 
-$Task = Get-Content $TaskFile | ConvertFrom-Json
+$Root = "C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem"
+$Runner = Join-Path $Root "Scripts\Invoke-PDAWorker.ps1"
 
-Write-Host ""
-Write-Host "=== PDA COMMAND DISPATCHER ==="
-Write-Host "Command:  $($Task.command)"
-Write-Host "Target:   $($Task.target)"
-Write-Host "Category: $($Task.category)"
-Write-Host "Approved: $($Task.approved)"
-Write-Host "Project:  $($Task.project)"
-Write-Host ""
+. (Join-Path $Root "Scripts\PDA_TaskOntology.ps1")
 
+$Task = Get-Content $TaskFile -Raw | ConvertFrom-Json
+$Command = if ($Task.PSObject.Properties['command']) { [string]$Task.command } else { "" }
+$Classification = if ($Task.PSObject.Properties['classification'] -and -not [string]::IsNullOrWhiteSpace([string]$Task.classification)) {
+    [string]$Task.classification
+}
+elseif ($Task.PSObject.Properties['category'] -and -not [string]::IsNullOrWhiteSpace([string]$Task.category)) {
+    [string]$Task.category
+}
+else {
+    "category_1"
+}
+$Approved = if ($Task.PSObject.Properties['approved']) { [bool]$Task.approved } else { $true }
 
-# -----------------------------
-# Worker Paths
-# -----------------------------
+$DispatchContext = Resolve-PDATaskDispatchContext -Root $Root -Task $Task -Command $Command -Classification $Classification -Approved $Approved
 
-$WorkerRoot = "C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\PDA-Workers"
-
-$GeminiInbox = Join-Path $WorkerRoot "gemini-cli\inbox"
-
-$ResearchInbox = "C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\PDA-Workers\research-worker\inbox" 
-
-$PlannerInbox = "C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\PDA-Workers\planner-worker\inbox"
-
-$QueueRoot = "C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\PDA-Tasks"
-$PendingInbox = Join-Path $QueueRoot "pending"
-
-
-
-# -----------------------------
-# Project Working Directories
-# -----------------------------
-
-$ProjectPaths = @{
-    "AI Ecosystem" = "C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem"
-    "AegisPasswordManager" = "C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AegisPasswordManager"
+if (-not $Task.PSObject.Properties['task_id'] -or [string]::IsNullOrWhiteSpace([string]$Task.task_id)) {
+    $Task | Add-Member -NotePropertyName task_id -NotePropertyValue ([guid]::NewGuid().ToString()) -Force
 }
 
-$WorkingDirectory = $null
-
-if ($Task.project -and $ProjectPaths.ContainsKey($Task.project)) {
-    $WorkingDirectory = $ProjectPaths[$Task.project]
+if (-not $Task.PSObject.Properties['assigned_worker'] -or [string]::IsNullOrWhiteSpace([string]$Task.assigned_worker)) {
+    $Task | Add-Member -NotePropertyName assigned_worker -NotePropertyValue $DispatchContext.assigned_worker -Force
+}
+elseif ([string]$Task.assigned_worker -ne $DispatchContext.assigned_worker) {
+    throw "Assigned worker mismatch for $TaskFile. Task has $($Task.assigned_worker) but ontology resolved $($DispatchContext.assigned_worker)."
 }
 
-
-# -----------------------------
-# Logging
-# -----------------------------
-
-$LogPath = "C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\PDA-Logs"
-
-if (-not (Test-Path $LogPath)) {
-    New-Item -ItemType Directory -Path $LogPath | Out-Null
+if (-not $Task.PSObject.Properties['routing_surface'] -or [string]::IsNullOrWhiteSpace([string]$Task.routing_surface)) {
+    $Task | Add-Member -NotePropertyName routing_surface -NotePropertyValue $DispatchContext.routing_surface -Force
+}
+elseif ([string]$Task.routing_surface -ne $DispatchContext.routing_surface) {
+    throw "Routing surface mismatch for $TaskFile. Task has $($Task.routing_surface) but ontology resolved $($DispatchContext.routing_surface)."
 }
 
-$Timestamp = Get-Date -Format "yyyy-MM-dd_HH-mm-ss"
+$Task | Add-Member -NotePropertyName route -NotePropertyValue $Command.TrimStart("/") -Force
+$Task | Add-Member -NotePropertyName status -NotePropertyValue "queued" -Force
+$Task | Add-Member -NotePropertyName task_type -NotePropertyValue $DispatchContext.task_type -Force
+$Task | Add-Member -NotePropertyName intent -NotePropertyValue $DispatchContext.intent -Force
 
-$LogFile = Join-Path $LogPath "$Timestamp.log"
+$Task | ConvertTo-Json -Depth 20 | Set-Content -Path $TaskFile -Encoding UTF8
 
-@"
-Timestamp: $Timestamp
-Command:   $($Task.command)
-Project:   $($Task.project)
-Target:    $($Task.target)
-Category:  $($Task.category)
-Approved:  $($Task.approved)
-"@ | Set-Content $LogFile
+Write-Host "[OK] Ontology-dispatched task:"
+Write-Host "Worker: $($DispatchContext.assigned_worker)"
+Write-Host "Surface: $($DispatchContext.routing_surface)"
 
-Write-Host "Log created:"
-Write-Host $LogFile
-Write-Host ""
-
-
-# -----------------------------
-# Output File
-# -----------------------------
-
-$OutputRoot = "C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\PDA-Outputs"
-
-if (-not (Test-Path $OutputRoot)) {
-
-    New-Item -ItemType Directory -Path $OutputRoot | Out-Null
+& pwsh -NoProfile -File $Runner -TaskPath $TaskFile
+if ($LASTEXITCODE -ne 0) {
+    throw "Worker dispatch failed with exit code $LASTEXITCODE"
 }
-
-$OutputFile = Join-Path $OutputRoot "$Timestamp-output.md"
-
-@"
-# PDA Task Output
-
-## Command
-$($Task.command)
-
-## Project
-$($Task.project)
-
-## Target
-$($Task.target)
-
-## Category
-$($Task.category)
-
-## Status
-Task dispatched successfully.
-
-## Timestamp
-$Timestamp
-"@ | Set-Content $OutputFile
-
-Write-Host "Output file created:"
-Write-Host $OutputFile
-Write-Host ""
-
-switch ($Task.command) {
-
-    "/debug-project" {
-
-        Write-Host "Launching Codex workflow..."
-
-        Start-Process "codex" -WorkingDirectory $WorkingDirectory
-    }
-
-    "/review-report" {
-
-        Write-Host "Routing to Claude review workflow..."
-    }
-
-    "/research-topic" {
-
-        Write-Host "Launching research workflow..."
-
-        Start-Process "https://www.perplexity.ai/search?q=$($Task.target)"
-    }
-
-    "/gemini-cli" {
-
-        Write-Host "Routing task to Gemini worker..."
-
-        $WorkerTask = Join-Path $GeminiInbox "$Timestamp-gemini-task.json"
-
-        $Task | ConvertTo-Json -Depth 10 | Set-Content $WorkerTask -Encoding UTF8
-
-        Write-Host "Gemini worker task created:"
-        Write-Host $WorkerTask
-    }
-
-    
-    "/multi-agent-research" {
-
-        Write-Host "Launching multi-agent research workflow..."
-
-        $PerplexityOutput = Join-Path "$OutputRoot\perplexity" "$Timestamp-perplexity.md"
-        $GeminiOutput     = Join-Path "$OutputRoot\gemini-cli" "$Timestamp-gemini.md"
-
-        if ($Task.agents -contains "perplexity") {
-
-            @"
-# Perplexity Research Task
-
-Target:
-$($Task.target)
-
-Timestamp:
-$Timestamp
-
-Status:
-Launched
-"@ | Set-Content $PerplexityOutput
-
-            Start-Process "https://www.perplexity.ai/search?q=$($Task.target)"
-        }
-
-        if ($Task.agents -contains "gemini-cli") {
-
-            @"
-# Gemini CLI Research Task
-
-Target:
-$($Task.target)
-
-Timestamp:
-$Timestamp
-
-Status:
-Launched
-"@ | Set-Content $GeminiOutput
-
-            $Prompt = "Research and summarize: $($Task.target)"
-
-            Start-Process pwsh `
-                -WorkingDirectory $WorkingDirectory `
-                -ArgumentList "-NoExit", "-Command", "gemini `"$Prompt`""
-        }
-    }
-    
-    "/research-worker" {
-
-        Write-Host "Routing task to Research Worker..."
-
-        $WorkerTask = Join-Path $ResearchInbox "$Timestamp-research-task.json"
-
-        $Task | ConvertTo-Json -Depth 10 | Set-Content $WorkerTask -Encoding UTF8
-
-        Write-Host "Research worker task created:"
-        Write-Host $WorkerTask
-    }
-    
-    "/planner-worker" {
-
-        Write-Host "Routing task to Planner Worker..."
-
-        $WorkerTask = Join-Path $PlannerInbox "$Timestamp-planner-task.json"
-
-        $Task | ConvertTo-Json -Depth 10 | Set-Content $WorkerTask -Encoding UTF8
-
-        Write-Host "Planner worker task created:"
-        Write-Host $WorkerTask
-    }
-
-    "/reporter" {
-        Write-Host "Routing task to Reporter Worker..."
-
-        $WorkerTask = Join-Path $PendingInbox "$Timestamp-reporter-task.json"
-
-        $Task | Add-Member -NotePropertyName assigned_worker -NotePropertyValue "reporter-worker" -Force
-        $Task | Add-Member -NotePropertyName status -NotePropertyValue "queued" -Force
-        $Task | Add-Member -NotePropertyName next_worker -NotePropertyValue "" -Force
-
-        New-Item -ItemType Directory -Force -Path $PendingInbox | Out-Null
-
-        $Task | ConvertTo-Json -Depth 10 | Set-Content $WorkerTask -Encoding UTF8
-
-        Write-Host "Reporter worker task created:"
-        Write-Host $WorkerTask
-    }
-    default {
-
-        Write-Warning "Unknown command."
-    }
-}
-
-
-
-
-
-
-
-

@@ -4,7 +4,7 @@ param(
 
 $Root = "C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem"
 $QueueRoot = Join-Path $Root "PDA-Tasks"
-$CategoryRoutingScript = Join-Path $Root "Scripts\PDA_CategoryRouting.ps1"
+$OntologyScript = Join-Path $Root "Scripts\PDA_TaskOntology.ps1"
 $PendingRoot = Join-Path $QueueRoot "pending"
 $ProcessedRoot = Join-Path $QueueRoot "staging\processed"
 $FailedRoot = Join-Path $QueueRoot "staging\failed"
@@ -81,6 +81,21 @@ function Normalize-Route {
     return $Route.Trim().ToLowerInvariant()
 }
 
+function Normalize-Command {
+    param([string]$Command)
+
+    if ([string]::IsNullOrWhiteSpace($Command)) {
+        return ""
+    }
+
+    $Normalized = $Command.Trim().ToLowerInvariant()
+    if (-not $Normalized.StartsWith("/")) {
+        $Normalized = "/" + $Normalized.TrimStart("/")
+    }
+
+    return $Normalized
+}
+
 function Test-LooksLikeFilePath {
     param([string]$Value)
 
@@ -119,7 +134,21 @@ function Get-NextWorkerForRoute {
     }
 }
 
-. $CategoryRoutingScript
+$OntologyReady = $false
+. $OntologyScript
+
+Write-Log "Validating PDA task ontology..."
+try {
+    $OntologyValidation = Test-PDATaskOntologyContract -Root $Root
+    $OntologyReady = $true
+    Write-Log "Ontology validation passed: $($OntologyValidation.intent_count) intents, $($OntologyValidation.category_count) categories."
+}
+catch {
+    Write-Log "Ontology validation failed."
+    Write-Log $_.Exception.Message
+    throw
+}
+
 $Registry = Get-PDAWorkerRegistry -Root $Root
 
 Write-Log "Multi-agent staged-task intake started."
@@ -133,20 +162,18 @@ foreach ($StagedFile in $StagedFiles) {
 
     try {
         $Task = Get-Content $StagedFile.FullName -Raw | ConvertFrom-Json
+        $Command = Normalize-Command -Command ([string]$Task.command)
+        if ([string]::IsNullOrWhiteSpace($Command)) {
+            throw "Missing command in staged task."
+        }
+
+        $DerivedRoute = Normalize-Route -Route $Command.TrimStart("/")
         $Route = Normalize-Route -Route ([string]$Task.route)
-
         if ([string]::IsNullOrWhiteSpace($Route)) {
-            throw "Missing route in staged task."
+            $Route = $DerivedRoute
         }
-
-        $Worker = Get-WorkerForRoute -Route $Route
-        if ([string]::IsNullOrWhiteSpace($Worker)) {
-            throw "Unsupported staged route: $Route"
-        }
-
-        $RegistryWorker = Get-PDAWorkerRegistryEntry -Registry $Registry -Command ("/$Route")
-        if (-not $RegistryWorker) {
-            throw "Registry missing worker metadata for /$Route"
+        elseif ($Route -ne $DerivedRoute) {
+            throw "Route mismatch for staged task. Command $Command resolves to $DerivedRoute but route was $Route."
         }
 
         if (-not $Task.PSObject.Properties['task_id'] -or [string]::IsNullOrWhiteSpace([string]$Task.task_id)) {
@@ -158,6 +185,25 @@ foreach ($StagedFile in $StagedFiles) {
                 $Task | Add-Member -NotePropertyName task_id -NotePropertyValue $GeneratedTaskId
             }
             Write-Log "Generated missing task_id for staged file: $($StagedFile.Name) -> $($Task.task_id)"
+        }
+
+        $Classification = if ($Task.PSObject.Properties['classification'] -and -not [string]::IsNullOrWhiteSpace([string]$Task.classification)) {
+            [string]$Task.classification
+        }
+        elseif ($Task.PSObject.Properties['category'] -and -not [string]::IsNullOrWhiteSpace([string]$Task.category)) {
+            [string]$Task.category
+        }
+        else {
+            "category_1"
+        }
+
+        $Approved = if ($Task.PSObject.Properties['approved']) { [bool]$Task.approved } else { $true }
+
+        $OntologyDecision = Resolve-PDATaskDispatchContext -Root $Root -Command $Command -Classification $Classification -Approved $true
+        $EligibleWorker = $OntologyDecision.eligible_worker
+        $RegistryWorker = Get-PDAWorkerRegistryEntry -Registry $Registry -Command $Command
+        if (-not $RegistryWorker) {
+            throw "Registry missing worker metadata for $Command"
         }
 
         $ResolvedSourcePath = Resolve-SourcePath -Value ([string]$Task.source_path)
@@ -191,32 +237,32 @@ foreach ($StagedFile in $StagedFiles) {
             }
         }
 
-        $RoutingDecision = Resolve-PDACategoryRouting -Task $Task -Worker $RegistryWorker
+        $RoutingDecision = Resolve-PDACategoryRouting -Task ([pscustomobject]@{ classification = $Classification }) -Worker $RegistryWorker
         if (-not $RoutingDecision.allowed) {
-            throw "Category routing blocked for /${Route}: $($RoutingDecision.reason)"
+            throw "Category routing blocked for ${Command}: $($RoutingDecision.reason)"
         }
 
         $QueueTask = [ordered]@{
             task_id           = [string]$Task.task_id
             created           = if ($Task.PSObject.Properties['received_at'] -and -not [string]::IsNullOrWhiteSpace([string]$Task.received_at)) { [string]$Task.received_at } else { (Get-Date).ToUniversalTime().ToString("o") }
-            command           = if ($Task.PSObject.Properties['command'] -and -not [string]::IsNullOrWhiteSpace([string]$Task.command)) { [string]$Task.command } else { "/$Route" }
+            command           = $Command
             route             = $Route
             message           = if ($Task.PSObject.Properties['message']) { [string]$Task.message } else { "" }
             target            = if ($Task.PSObject.Properties['target'] -and -not [string]::IsNullOrWhiteSpace([string]$Task.target)) { [string]$Task.target } else { [string]$Task.message }
             source_path       = $ResolvedSourcePath
             project           = if ($Task.PSObject.Properties['project'] -and -not [string]::IsNullOrWhiteSpace([string]$Task.project)) { [string]$Task.project } else { "AI Ecosystem" }
-            classification    = if ($Task.PSObject.Properties['classification'] -and -not [string]::IsNullOrWhiteSpace([string]$Task.classification)) { [string]$Task.classification } else { "category_1" }
+            classification    = $Classification
             status            = "queued"
             requested_output  = if ($Task.PSObject.Properties['requested_output'] -and -not [string]::IsNullOrWhiteSpace([string]$Task.requested_output)) { [string]$Task.requested_output } else { "markdown" }
             source            = if ($Task.PSObject.Properties['source'] -and -not [string]::IsNullOrWhiteSpace([string]$Task.source)) { [string]$Task.source } else { "n8n" }
-            assigned_worker   = $Worker
-            next_worker       = Get-NextWorkerForRoute -Route ([string]$Task.route)
+            assigned_worker   = [string]$EligibleWorker.worker_name
+            next_worker       = Get-NextWorkerForRoute -Route $Route
             retry_count       = 0
-            category          = if ($Task.PSObject.Properties['category'] -and -not [string]::IsNullOrWhiteSpace([string]$Task.category)) { [string]$Task.category } else { "category_1" }
-            approved          = if ($Task.PSObject.Properties['approved']) { [bool]$Task.approved } else { $true }
+            category          = $Classification
+            approved          = $Approved
             origin            = "n8n-staged"
             input_mode        = if ($MessageOnlyTestMode) { "message-only-test" } else { "file" }
-            routing_surface   = $RoutingDecision.routing_surface
+            routing_surface   = [string]$EligibleWorker.routing_surface
             routing_profile   = $RoutingDecision.routing_profile
             routing_mode      = $RoutingDecision.routing_mode
             category_policy   = $RoutingDecision.reason

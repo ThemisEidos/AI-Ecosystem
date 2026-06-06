@@ -125,3 +125,7 @@ PDA-Backups/
 
 # Script patch backups
 Scripts/*.bak.ps1
+
+# LiteLLM local env
+litellm/.env.local
+!litellm/.env.local.example
