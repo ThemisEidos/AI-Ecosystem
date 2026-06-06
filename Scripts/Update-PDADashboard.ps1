@@ -29,58 +29,38 @@ else {
     $OutputDirectory
 }
 
-$RoutingSummaryScript = Join-Path $PSScriptRoot "Get-PDARoutingSummary.ps1"
-$AIECCommandsScript = Join-Path $PSScriptRoot "AIEcosystem.Commands.ps1"
-$MemoryIndexPath = Join-Path $ResolvedRoot "PDA_MemoryIndex.json"
-$ArtifactIndexPath = Join-Path $ResolvedRoot "PDA_ArtifactIndex.json"
-$TaskRoot = Join-Path $ResolvedRoot "PDA-Tasks"
-
-function Get-PDAJsonFile {
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$Path,
-
-        [Parameter(Mandatory = $true)]
-        [string]$CollectionProperty
-    )
-
-    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
-        return [pscustomobject]@{
-            exists = $false
-            path = $Path
-            data = $null
-            items = @()
-        }
-    }
-
-    $Raw = Get-Content -LiteralPath $Path -Raw
-    $Parsed = $Raw | ConvertFrom-Json -ErrorAction Stop
-    $Items = @()
-    if ($Parsed.PSObject.Properties.Name -contains $CollectionProperty -and $Parsed.$CollectionProperty) {
-        $Items = @($Parsed.$CollectionProperty)
-    }
-
-    return [pscustomobject]@{
-        exists = $true
-        path = $Path
-        data = $Parsed
-        items = $Items
-    }
+$DashboardPath = Join-Path $ResolvedOutputDirectory "PDA Dashboard.md"
+$StatusScript = Join-Path $PSScriptRoot "Get-PDADashboardStatus.ps1"
+$ParserPath = Join-Path $PSScriptRoot "PDA_OutputParsing.ps1"
+if (Test-Path -LiteralPath $ParserPath -PathType Leaf) {
+    . $ParserPath
 }
 
-function Get-PDADateValue {
+function Get-PDAValueText {
     param([Parameter(Mandatory = $false)]$Value)
 
-    if ($null -eq $Value -or [string]::IsNullOrWhiteSpace([string]$Value)) {
-        return [datetime]::MinValue
+    if ($null -eq $Value) {
+        return "-"
     }
 
-    try {
-        return [datetime]::Parse([string]$Value)
+    if ($Value -is [bool]) {
+        return $(if ($Value) { "yes" } else { "no" })
     }
-    catch {
-        return [datetime]::MinValue
+
+    if ($Value -is [System.Collections.IEnumerable] -and $Value -isnot [string]) {
+        $Items = @($Value | ForEach-Object { Get-PDAValueText -Value $_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) -and $_ -ne "-" })
+        if ($Items.Count -eq 0) {
+            return "-"
+        }
+        return ($Items -join ", ")
     }
+
+    $Text = [string]$Value
+    if ([string]::IsNullOrWhiteSpace($Text)) {
+        return "-"
+    }
+
+    return $Text.Replace("|", "\|")
 }
 
 function ConvertTo-PDAMarkdownTable {
@@ -96,19 +76,13 @@ function ConvertTo-PDAMarkdownTable {
     $Lines.Add("| " + ($Columns -join " | ") + " |")
     $Lines.Add("| " + (($Columns | ForEach-Object { "---" }) -join " | ") + " |")
 
-    if ($null -eq $Rows -or $Rows.Count -eq 0) {
+    if ($null -eq $Rows -or @($Rows).Count -eq 0) {
         return ($Lines.ToArray() -join "`r`n")
     }
 
     foreach ($Row in $Rows) {
         $Values = foreach ($Column in $Columns) {
-            $Value = $Row.$Column
-            if ($null -eq $Value -or [string]::IsNullOrWhiteSpace([string]$Value)) {
-                ""
-            }
-            else {
-                ([string]$Value).Replace("|", "\|")
-            }
+            Get-PDAValueText -Value $Row.$Column
         }
 
         $Lines.Add("| " + ($Values -join " | ") + " |")
@@ -117,429 +91,269 @@ function ConvertTo-PDAMarkdownTable {
     return ($Lines.ToArray() -join "`r`n")
 }
 
-function Get-PDACountRows {
-    param(
-        [Parameter(Mandatory = $false)]
-        [object[]]$Items,
-
-        [Parameter(Mandatory = $true)]
-        [scriptblock]$KeySelector
-    )
-
-    $Counts = @{}
-    foreach ($Item in @($Items)) {
-        $Key = & $KeySelector $Item
-        if ([string]::IsNullOrWhiteSpace([string]$Key)) {
-            $Key = "(empty)"
-        }
-
-        if (-not $Counts.ContainsKey([string]$Key)) {
-            $Counts[[string]$Key] = 0
-        }
-
-        $Counts[[string]$Key]++
-    }
-
-    return @($Counts.GetEnumerator() | Sort-Object @{ Expression = "Value"; Descending = $true }, @{ Expression = "Key"; Descending = $false } | ForEach-Object {
-        [pscustomobject]@{
-            name = [string]$_.Key
-            count = [int]$_.Value
-        }
-    })
-}
-
-function Get-PDATaskQueueSummary {
-    param([Parameter(Mandatory = $true)][string]$TaskRootPath)
-
-    $QueueFolders = [ordered]@{
-        pending = Join-Path $TaskRootPath "pending"
-        running = Join-Path $TaskRootPath "running"
-        completed = Join-Path $TaskRootPath "completed"
-        failed = Join-Path $TaskRootPath "failed"
-        results = Join-Path $TaskRootPath "results"
-    }
-
-    $Counts = [ordered]@{}
-    $RecentTasks = @()
-    foreach ($QueueName in $QueueFolders.Keys) {
-        $Folder = $QueueFolders[$QueueName]
-        $Files = if (Test-Path -LiteralPath $Folder -PathType Container) {
-            @(Get-ChildItem -LiteralPath $Folder -Filter *.json -File -ErrorAction SilentlyContinue)
-        }
-        else {
-            @()
-        }
-
-        $Counts[$QueueName] = $Files.Count
-
-        foreach ($File in $Files) {
-            $TaskId = [System.IO.Path]::GetFileNameWithoutExtension($File.Name)
-            $Command = ""
-            $Worker = ""
-            $Category = ""
-            $TaskStatus = $QueueName
-
-            try {
-                $Parsed = Get-Content -LiteralPath $File.FullName -Raw | ConvertFrom-Json -ErrorAction Stop
-                if ($Parsed.PSObject.Properties.Name -contains "task_id" -and $Parsed.task_id) {
-                    $TaskId = [string]$Parsed.task_id
-                }
-                if ($Parsed.PSObject.Properties.Name -contains "command") {
-                    $Command = [string]$Parsed.command
-                }
-                if ($Parsed.PSObject.Properties.Name -contains "worker_name") {
-                    $Worker = [string]$Parsed.worker_name
-                }
-                elseif ($Parsed.PSObject.Properties.Name -contains "worker") {
-                    $Worker = [string]$Parsed.worker
-                }
-                if ($Parsed.PSObject.Properties.Name -contains "category") {
-                    $Category = [string]$Parsed.category
-                }
-                if ($Parsed.PSObject.Properties.Name -contains "task_status" -and $Parsed.task_status) {
-                    $TaskStatus = [string]$Parsed.task_status
-                }
-                elseif ($Parsed.PSObject.Properties.Name -contains "status" -and $Parsed.status) {
-                    $TaskStatus = [string]$Parsed.status
-                }
-            }
-            catch {}
-
-            $RecentTasks += [pscustomobject]@{
-                task_id = $TaskId
-                command = $Command
-                worker = $Worker
-                category = $Category
-                queue = $QueueName
-                status = $TaskStatus
-                updated_at = $File.LastWriteTime.ToString("s")
-                sort_time = $File.LastWriteTime
-                path = $File.FullName
-            }
-        }
-    }
-
-    return [pscustomobject]@{
-        counts = [pscustomobject]$Counts
-        queue_depth = ([int]$Counts.pending + [int]$Counts.running)
-        recent_tasks = @($RecentTasks | Sort-Object sort_time -Descending | Select-Object -First 10)
-        dispatches_by_queue = @(
-            $Counts.GetEnumerator() | ForEach-Object {
-                [pscustomobject]@{
-                    name = [string]$_.Key
-                    count = [int]$_.Value
-                }
-            }
-        )
-    }
-}
-
-function Get-PDAServiceStatusText {
-    param([Parameter(Mandatory = $true)][string]$RepoRootPath)
-
-    if (-not (Test-Path -LiteralPath $AIECCommandsScript -PathType Leaf)) {
-        return "[WARN] AIEcosystem.Commands.ps1 not found."
-    }
-
-    $EscapedScript = $AIECCommandsScript.Replace("'", "''")
-    $EscapedRoot = $RepoRootPath.Replace("'", "''")
-    $Command = ". '$EscapedScript'; Invoke-AIECStatus -RepoRoot '$EscapedRoot'"
-    $Output = & pwsh -NoProfile -Command $Command 2>&1
-    return [string]($Output -join "`r`n").Trim()
-}
-
-function Get-PDARoutingSummaryData {
-    param(
-        [Parameter(Mandatory = $true)][string]$RepoRootPath
-    )
-
-    if (-not (Test-Path -LiteralPath $RoutingSummaryScript -PathType Leaf)) {
-        throw "Routing summary script missing: $RoutingSummaryScript"
-    }
-
-    $RoutingLogPath = Join-Path $RepoRootPath "PDA-Logs\routing"
-    $Raw = & pwsh -NoProfile -File $RoutingSummaryScript -LogPath $RoutingLogPath -AsJson -NoThrow 2>&1
-    $Text = [string]($Raw -join "`n").Trim()
-    if ([string]::IsNullOrWhiteSpace($Text)) {
-        throw "Routing summary returned empty output."
-    }
-
-    return $Text | ConvertFrom-Json
-}
-
 function Write-PDAMarkdownFile {
     param(
         [Parameter(Mandatory = $true)][string]$Path,
-        [Parameter(Mandatory = $false)][object[]]$Lines
+        [Parameter(Mandatory = $true)][object[]]$Lines
     )
 
     $Directory = Split-Path -Parent $Path
     New-Item -ItemType Directory -Force -Path $Directory | Out-Null
-    function Expand-PDALineValues {
-        param([Parameter(Mandatory = $false)]$Value)
+    ($Lines -join "`r`n") | Set-Content -LiteralPath $Path -Encoding UTF8
+}
 
-        if ($null -eq $Value) {
-            return @("")
-        }
+function Invoke-PDAJsonScript {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string[]]$Arguments,
+        [Parameter(Mandatory = $true)][string]$SourceName
+    )
 
-        if ($Value -is [string]) {
-            return @([string]$Value)
-        }
-
-        if ($Value -is [System.Collections.IEnumerable]) {
-            $Expanded = @()
-            foreach ($Entry in $Value) {
-                $Expanded += @(Expand-PDALineValues -Value $Entry)
-            }
-            return $Expanded
-        }
-
-        return @([string]$Value)
+    $Raw = & pwsh -NoProfile -ExecutionPolicy Bypass -File $Path @Arguments 2>&1
+    $Text = [string]($Raw -join "`n").Trim()
+    if ([string]::IsNullOrWhiteSpace($Text)) {
+        throw "$SourceName returned empty output."
     }
 
-    $TextLines = @(Expand-PDALineValues -Value $Lines)
-    ($TextLines -join "`r`n") | Set-Content -Path $Path -Encoding UTF8
+    return ConvertFrom-PDAMixedJson -Text $Text -SourceName $SourceName
 }
 
-$RoutingSummary = Get-PDARoutingSummaryData -RepoRootPath $ResolvedRoot
-$TaskSummary = Get-PDATaskQueueSummary -TaskRootPath $TaskRoot
-$MemoryIndex = Get-PDAJsonFile -Path $MemoryIndexPath -CollectionProperty "memories"
-$ArtifactIndex = Get-PDAJsonFile -Path $ArtifactIndexPath -CollectionProperty "artifacts"
-$ServiceStatusText = Get-PDAServiceStatusText -RepoRootPath $ResolvedRoot
-
-$RecentArtifacts = @($ArtifactIndex.items | Sort-Object @{ Expression = { Get-PDADateValue $_.created_at } } -Descending | Select-Object -First 10 | ForEach-Object {
-    [pscustomobject]@{
-        artifact_id = [string]$_.artifact_id
-        created_at = [string]$_.created_at
-        worker_name = [string]$_.worker_name
-        category = [string]$_.category
-        artifact_type = [string]$_.artifact_type
-        summary = [string]$_.summary
-    }
-})
-
-$RecentMemories = @($MemoryIndex.items | Sort-Object @{ Expression = { Get-PDADateValue $_.created_at } } -Descending | Select-Object -First 10 | ForEach-Object {
-    [pscustomobject]@{
-        memory_id = [string]$_.memory_id
-        created_at = [string]$_.created_at
-        memory_type = [string]$_.memory_type
-        category = [string]$_.category
-        title = [string]$_.title
-        summary = [string]$_.summary
-    }
-})
-
-$ArtifactByWorker = Get-PDACountRows -Items $ArtifactIndex.items -KeySelector { param($Item) $Item.worker_name }
-$MemoryByCategory = Get-PDACountRows -Items $MemoryIndex.items -KeySelector { param($Item) $Item.category }
-$GeneratedAt = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
-
-$OperatorConsolePath = Join-Path $ResolvedOutputDirectory "PDA Operator Console.md"
-$RoutingSummaryPath = Join-Path $ResolvedOutputDirectory "Routing Summary.md"
-$SystemStatusPath = Join-Path $ResolvedOutputDirectory "System Status.md"
-$TaskSummaryPath = Join-Path $ResolvedOutputDirectory "Task Summary.md"
-
-$OperatorConsoleLines = @(
-    "# PDA Operator Console",
-    "",
-    "Updated: $GeneratedAt",
-    "",
-    "## Dashboard Index",
-    "",
-    "- [[System Status]]",
-    "- [[Routing Summary]]",
-    "- [[Task Summary]]",
-    "",
-    "## Snapshot",
-    "",
-    '- Service health source: `aiec-status`',
-    "- Routing records: $($RoutingSummary.valid_records)",
-    "- Dispatch success rate: $($RoutingSummary.success_rate)%",
-    "- Queue depth: $($TaskSummary.queue_depth)",
-    "- Memory records: $($MemoryIndex.items.Count)",
-    "- Artifact records: $($ArtifactIndex.items.Count)",
-    "",
-    "## Key Metrics",
-    ""
-)
-$OperatorConsoleLines += @(ConvertTo-PDAMarkdownTable -Rows @(
-    [pscustomobject]@{ metric = "Cloud usage"; value = [string]$RoutingSummary.cloud_usage_count }
-    [pscustomobject]@{ metric = "Local usage"; value = [string]$RoutingSummary.local_usage_count }
-    [pscustomobject]@{ metric = "Fallback used"; value = [string]$RoutingSummary.fallback_usage_count }
-    [pscustomobject]@{ metric = "Pending tasks"; value = [string]$TaskSummary.counts.pending }
-    [pscustomobject]@{ metric = "Running tasks"; value = [string]$TaskSummary.counts.running }
-    [pscustomobject]@{ metric = "Recent artifacts"; value = [string]$RecentArtifacts.Count }
-) -Columns @("metric", "value"))
-$OperatorConsoleLines += @(
-    "",
-    "## Recent Tasks",
-    ""
-)
-if ($TaskSummary.recent_tasks.Count -gt 0) {
-    $OperatorConsoleLines += @(ConvertTo-PDAMarkdownTable -Rows $TaskSummary.recent_tasks -Columns @("task_id", "command", "worker", "category", "queue", "status", "updated_at"))
-}
-else {
-    $OperatorConsoleLines += "- No task files found."
-}
-$OperatorConsoleLines += @(
-    "",
-    "## Recent Artifacts",
-    ""
-)
-if ($RecentArtifacts.Count -gt 0) {
-    $OperatorConsoleLines += @(ConvertTo-PDAMarkdownTable -Rows $RecentArtifacts -Columns @("artifact_id", "created_at", "worker_name", "category", "artifact_type"))
-}
-else {
-    $OperatorConsoleLines += "- No artifact records found."
+if (-not (Test-Path -LiteralPath $StatusScript -PathType Leaf)) {
+    throw "Dashboard status script missing: $StatusScript"
 }
 
-$RoutingSummaryLines = @(
-    "# Routing Summary",
-    "",
-    "Updated: $GeneratedAt",
-    "",
-    "## Summary",
-    ""
-)
-$RoutingSummaryLines += @(ConvertTo-PDAMarkdownTable -Rows @(
-    [pscustomobject]@{ metric = "Valid records"; value = [string]$RoutingSummary.valid_records }
-    [pscustomobject]@{ metric = "Success count"; value = [string]$RoutingSummary.success_count }
-    [pscustomobject]@{ metric = "Failure count"; value = [string]$RoutingSummary.failure_count }
-    [pscustomobject]@{ metric = "Success rate"; value = ("{0}%" -f $RoutingSummary.success_rate) }
-    [pscustomobject]@{ metric = "Fallback usage count"; value = [string]$RoutingSummary.fallback_usage_count }
-    [pscustomobject]@{ metric = "Category 1 volume"; value = [string]$RoutingSummary.category_1_volume }
-    [pscustomobject]@{ metric = "Category 2 volume"; value = [string]$RoutingSummary.category_2_volume }
-    [pscustomobject]@{ metric = "Cloud usage"; value = [string]$RoutingSummary.cloud_usage_count }
-    [pscustomobject]@{ metric = "Local usage"; value = [string]$RoutingSummary.local_usage_count }
-) -Columns @("metric", "value"))
-$RoutingSummaryLines += @("", "## Dispatches By Command", "")
-if ($RoutingSummary.dispatches_by_command.Count -gt 0) {
-    $RoutingSummaryLines += @(ConvertTo-PDAMarkdownTable -Rows $RoutingSummary.dispatches_by_command -Columns @("name", "count"))
+$StatusReport = Invoke-PDAJsonScript -Path $StatusScript -Arguments @("-AsJson", "-NoThrow", "-RootPath", $ResolvedRoot) -SourceName "PDA dashboard status"
+
+$GeneratedAt = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss zzz")
+$Lines = New-Object System.Collections.Generic.List[string]
+$Lines.Add("# PDA Dashboard v2")
+$Lines.Add("")
+$Lines.Add(("Updated: {0}" -f $GeneratedAt))
+$Lines.Add(("Overall health: {0}" -f (Get-PDAValueText $StatusReport.dashboard_health.status)))
+$Lines.Add("")
+
+$Lines.Add("## System Health")
+$Lines.Add("")
+$Lines.Add((ConvertTo-PDAMarkdownTable -Rows @(
+    [pscustomobject]@{ check = "PDA stack"; status = $StatusReport.system_health.status; passed = $StatusReport.system_health.passed_count; failed = $StatusReport.system_health.failed_count; details = "Open WebUI / n8n / LiteLLM / Ollama" }
+    [pscustomobject]@{ check = "Deep validation"; status = $(if ($StatusReport.system_health.deep_validation_requested) { if ($StatusReport.system_health.failed_count -eq 0) { "pass" } else { "fail" } } else { "skipped" }); passed = ""; failed = ""; details = "Open WebUI chat completion" }
+) -Columns @("check", "status", "passed", "failed", "details")))
+$Lines.Add("")
+if ($StatusReport.system_health.results) {
+    $Lines.Add((ConvertTo-PDAMarkdownTable -Rows @($StatusReport.system_health.results) -Columns @("name", "passed", "type", "status_code")))
 }
 else {
-    $RoutingSummaryLines += "- No routing records found."
+    $Lines.Add("- No system health results available.")
 }
-$RoutingSummaryLines += @("", "## Dispatches By Model", "")
-if ($RoutingSummary.dispatches_by_model.Count -gt 0) {
-    $RoutingSummaryLines += @(ConvertTo-PDAMarkdownTable -Rows $RoutingSummary.dispatches_by_model -Columns @("name", "count"))
+$Lines.Add("")
+
+$Lines.Add("## Queue Status")
+$Lines.Add("")
+$Lines.Add((ConvertTo-PDAMarkdownTable -Rows @(
+    [pscustomobject]@{ metric = "Queue depth"; value = $StatusReport.queue_status.queue_depth }
+    [pscustomobject]@{ metric = "Pending"; value = $StatusReport.queue_status.counts.pending }
+    [pscustomobject]@{ metric = "Running"; value = $StatusReport.queue_status.counts.running }
+    [pscustomobject]@{ metric = "Completed"; value = $StatusReport.queue_status.counts.completed }
+    [pscustomobject]@{ metric = "Failed"; value = $StatusReport.queue_status.counts.failed }
+    [pscustomobject]@{ metric = "Results"; value = $StatusReport.queue_status.counts.results }
+    [pscustomobject]@{ metric = "Pending approvals"; value = $StatusReport.queue_status.counts.approvals_pending }
+) -Columns @("metric", "value")))
+$Lines.Add("")
+$Lines.Add("### Latest Queue Files")
+$Lines.Add("")
+$LatestQueueRows = @(
+    [pscustomobject]@{ queue = "pending"; task_id = $StatusReport.queue_status.latest.pending.task_id; command = $StatusReport.queue_status.latest.pending.command; status = $StatusReport.queue_status.latest.pending.status; updated_at = $StatusReport.queue_status.latest.pending.updated_at }
+    [pscustomobject]@{ queue = "running"; task_id = $StatusReport.queue_status.latest.running.task_id; command = $StatusReport.queue_status.latest.running.command; status = $StatusReport.queue_status.latest.running.status; updated_at = $StatusReport.queue_status.latest.running.updated_at }
+    [pscustomobject]@{ queue = "completed"; task_id = $StatusReport.queue_status.latest.completed.task_id; command = $StatusReport.queue_status.latest.completed.command; status = $StatusReport.queue_status.latest.completed.status; updated_at = $StatusReport.queue_status.latest.completed.updated_at }
+    [pscustomobject]@{ queue = "failed"; task_id = $StatusReport.queue_status.latest.failed.task_id; command = $StatusReport.queue_status.latest.failed.command; status = $StatusReport.queue_status.latest.failed.status; updated_at = $StatusReport.queue_status.latest.failed.updated_at }
+    [pscustomobject]@{ queue = "results"; task_id = $StatusReport.queue_status.latest.result.task_id; command = $StatusReport.queue_status.latest.result.command; status = $StatusReport.queue_status.latest.result.status; updated_at = $StatusReport.queue_status.latest.result.updated_at }
+) | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_.task_id) -or -not [string]::IsNullOrWhiteSpace([string]$_.command) }
+if ($LatestQueueRows.Count -gt 0) {
+    $Lines.Add((ConvertTo-PDAMarkdownTable -Rows $LatestQueueRows -Columns @("queue", "task_id", "command", "status", "updated_at")))
 }
 else {
-    $RoutingSummaryLines += "- No model usage data found."
+    $Lines.Add("- No queue files found.")
 }
-$RoutingSummaryLines += @("", "## Dispatches By Worker", "")
-if ($RoutingSummary.dispatches_by_worker.Count -gt 0) {
-    $RoutingSummaryLines += @(ConvertTo-PDAMarkdownTable -Rows $RoutingSummary.dispatches_by_worker -Columns @("name", "count"))
+$Lines.Add("")
+
+$Lines.Add("## Worker Status")
+$Lines.Add("")
+$Lines.Add((ConvertTo-PDAMarkdownTable -Rows $StatusReport.worker_status.registry.workers -Columns @("worker_name", "command", "status", "routing_surface", "cloud_capable", "accepted_input_modes")))
+$Lines.Add("")
+$Lines.Add("### Runtime States")
+$Lines.Add("")
+if ($StatusReport.worker_status.runtime_states) {
+    $Lines.Add((ConvertTo-PDAMarkdownTable -Rows @($StatusReport.worker_status.runtime_states) -Columns @("component", "status", "pid", "started_at")))
 }
 else {
-    $RoutingSummaryLines += "- No worker usage data found."
+    $Lines.Add("- No worker runtime state files found.")
 }
-$RoutingSummaryLines += @("", "## Top Routing Reasons", "")
-if ($RoutingSummary.top_routing_reasons.Count -gt 0) {
-    $RoutingSummaryLines += @(ConvertTo-PDAMarkdownTable -Rows $RoutingSummary.top_routing_reasons -Columns @("name", "count"))
+$Lines.Add("")
+$Lines.Add("### Heartbeats")
+$Lines.Add("")
+if ($StatusReport.worker_status.heartbeats) {
+    $Lines.Add((ConvertTo-PDAMarkdownTable -Rows @($StatusReport.worker_status.heartbeats) -Columns @("worker_name", "status", "state", "age_minutes", "process_live")))
 }
 else {
-    $RoutingSummaryLines += "- No routing reasons found."
+    $Lines.Add("- No worker heartbeat files found.")
+}
+$Lines.Add("")
+
+$Lines.Add("## Pending Approvals")
+$Lines.Add("")
+if ($StatusReport.pending_approvals -and @($StatusReport.pending_approvals).Count -gt 0) {
+    $Lines.Add((ConvertTo-PDAMarkdownTable -Rows @($StatusReport.pending_approvals) -Columns @("task_id", "command", "worker", "category", "approval_status", "updated_at", "file_name")))
+}
+else {
+    $Lines.Add("- No pending approvals.")
+}
+$Lines.Add("")
+
+$Lines.Add("## Recent Tasks")
+$Lines.Add("")
+if ($StatusReport.recent_tasks -and @($StatusReport.recent_tasks).Count -gt 0) {
+    $Lines.Add((ConvertTo-PDAMarkdownTable -Rows @($StatusReport.recent_tasks) -Columns @("task_id", "command", "worker", "category", "queue", "status", "updated_at")))
+}
+else {
+    $Lines.Add("- No recent tasks.")
+}
+$Lines.Add("")
+
+$Lines.Add("## Recent Reports / Artifacts")
+$Lines.Add("")
+if ($StatusReport.recent_artifacts -and @($StatusReport.recent_artifacts).Count -gt 0) {
+    $Lines.Add((ConvertTo-PDAMarkdownTable -Rows @($StatusReport.recent_artifacts) -Columns @("artifact_id", "created_at", "worker_name", "category", "artifact_type", "summary")))
+}
+else {
+    $Lines.Add("- No artifact records.")
+}
+$Lines.Add("")
+
+$Lines.Add("## Model Status")
+$Lines.Add("")
+$Lines.Add((ConvertTo-PDAMarkdownTable -Rows @(
+    [pscustomobject]@{ metric = "Routing policy"; status = $StatusReport.model_status.routing_policy.status; path = $StatusReport.model_status.routing_policy.path }
+    [pscustomobject]@{ metric = "Provider validation"; status = $StatusReport.model_status.provider_validation.status; count = $StatusReport.model_status.provider_validation.provider_count; passed = $StatusReport.model_status.provider_validation.passed_count; failed = $StatusReport.model_status.provider_validation.failed_count }
+    [pscustomobject]@{ metric = "Env validation"; status = $StatusReport.model_status.env_validation.status; loaded = $StatusReport.model_status.env_validation.loaded_key_count; blank = $StatusReport.model_status.env_validation.blank_key_count; missing = $StatusReport.model_status.env_validation.missing_key_count }
+) -Columns @("metric", "status", "path", "count", "passed", "failed", "loaded", "blank", "missing")))
+$Lines.Add("")
+$Lines.Add("### Command Routes")
+$Lines.Add("")
+if ($StatusReport.model_status.routing_policy.command_routes -and @($StatusReport.model_status.routing_policy.command_routes).Count -gt 0) {
+    $Lines.Add((ConvertTo-PDAMarkdownTable -Rows @($StatusReport.model_status.routing_policy.command_routes) -Columns @("command", "primary_model", "fallback_chain", "routing_surface", "cloud_allowed")))
+}
+else {
+    $Lines.Add("- No command routes found.")
+}
+$Lines.Add("")
+$Lines.Add("### Provider Availability")
+$Lines.Add("")
+if ($StatusReport.model_status.provider_validation.providers -and @($StatusReport.model_status.provider_validation.providers).Count -gt 0) {
+    $Lines.Add((ConvertTo-PDAMarkdownTable -Rows @($StatusReport.model_status.provider_validation.providers) -Columns @("name", "configured", "env_reference_ok", "host_env_present", "live_available", "api_provider")))
+}
+else {
+    $Lines.Add("- No provider rows found.")
+}
+$Lines.Add("")
+
+$Lines.Add("## PDA Commander Integration")
+$Lines.Add("")
+$Lines.Add((ConvertTo-PDAMarkdownTable -Rows @(
+    [pscustomobject]@{ component = "Command Interpreter"; status = $StatusReport.commander_integration.command_interpreter.status; passed = $StatusReport.commander_integration.command_interpreter.passed_count; failed = $StatusReport.commander_integration.command_interpreter.failed_count; details = "mapped / ambiguous / unknown routing" }
+    [pscustomobject]@{ component = "Governed Handoff"; status = $StatusReport.commander_integration.command_handoff.status; passed = $StatusReport.commander_integration.command_handoff.passed_count; failed = $StatusReport.commander_integration.command_handoff.failed_count; details = "confirmation gate" }
+    [pscustomobject]@{ component = "Chat Bridge"; status = $StatusReport.commander_integration.chat_bridge.status; passed = $StatusReport.commander_integration.chat_bridge.passed_count; failed = $StatusReport.commander_integration.chat_bridge.failed_count; details = "Open WebUI / n8n bridge" }
+    [pscustomobject]@{ component = "Webhook Bridge"; status = $StatusReport.commander_integration.webhook_bridge.status; passed = $StatusReport.commander_integration.webhook_bridge.passed_count; failed = $StatusReport.commander_integration.webhook_bridge.failed_count; details = "webhook transport wrapper" }
+) -Columns @("component", "status", "passed", "failed", "details")))
+$Lines.Add("")
+$Lines.Add("### Conversation Snapshot")
+$Lines.Add("")
+$Lines.Add((ConvertTo-PDAMarkdownTable -Rows @(
+    [pscustomobject]@{ metric = "Conversation status"; value = $StatusReport.commander_integration.conversation_state.status }
+    [pscustomobject]@{ metric = "Conversation ID"; value = $StatusReport.commander_integration.conversation_state.conversation_id }
+    [pscustomobject]@{ metric = "Active tasks"; value = $StatusReport.commander_integration.conversation_state.active_task_count }
+    [pscustomobject]@{ metric = "Pending approvals"; value = $StatusReport.commander_integration.conversation_state.pending_approval_count }
+    [pscustomobject]@{ metric = "Submitted tasks"; value = $StatusReport.commander_integration.conversation_state.submitted_task_count }
+    [pscustomobject]@{ metric = "Completed tasks"; value = $StatusReport.commander_integration.conversation_state.completed_task_count }
+    [pscustomobject]@{ metric = "Latest task ID"; value = $StatusReport.commander_integration.conversation_state.latest_task_id }
+    [pscustomobject]@{ metric = "Latest result path"; value = $StatusReport.commander_integration.conversation_state.latest_result_path }
+) -Columns @("metric", "value")))
+$Lines.Add("")
+if (-not [string]::IsNullOrWhiteSpace([string]$StatusReport.commander_integration.task_result.response_text)) {
+    $Lines.Add(("> {0}" -f (Get-PDAValueText $StatusReport.commander_integration.task_result.response_text)))
+    $Lines.Add("")
+}
+if (-not [string]::IsNullOrWhiteSpace([string]$StatusReport.commander_integration.task_result.next_action)) {
+    $Lines.Add(("> Next: {0}" -f (Get-PDAValueText $StatusReport.commander_integration.task_result.next_action)))
+    $Lines.Add("")
 }
 
-$SystemStatusLines = @(
-    "# System Status",
-    "",
-    "Updated: $GeneratedAt",
-    "",
-    "## AI Ecosystem Status",
-    "",
-    '```text',
-    $ServiceStatusText,
-    '```',
-    "",
-    "## Data Stores",
-    ""
-)
-$SystemStatusLines += @(ConvertTo-PDAMarkdownTable -Rows @(
-    [pscustomobject]@{ store = "PDA_MemoryIndex.json"; exists = [string]$MemoryIndex.exists; count = [string]$MemoryIndex.items.Count }
-    [pscustomobject]@{ store = "PDA_ArtifactIndex.json"; exists = [string]$ArtifactIndex.exists; count = [string]$ArtifactIndex.items.Count }
-    [pscustomobject]@{ store = "Routing logs"; exists = [string](Test-Path -LiteralPath (Join-Path $ResolvedRoot "PDA-Logs\routing") -PathType Container); count = [string]$RoutingSummary.valid_records }
-    [pscustomobject]@{ store = "Task queue"; exists = [string](Test-Path -LiteralPath $TaskRoot -PathType Container); count = [string]$TaskSummary.queue_depth }
-) -Columns @("store", "exists", "count"))
-$SystemStatusLines += @("", "## Memory By Category", "")
-if ($MemoryByCategory.Count -gt 0) {
-    $SystemStatusLines += @(ConvertTo-PDAMarkdownTable -Rows $MemoryByCategory -Columns @("name", "count"))
+$Lines.Add("## Memory Summary")
+$Lines.Add("")
+$Lines.Add((ConvertTo-PDAMarkdownTable -Rows @(
+    [pscustomobject]@{ metric = "Memory count"; value = $StatusReport.memory_summary.count }
+    [pscustomobject]@{ metric = "Updated at"; value = $StatusReport.memory_summary.updated_at }
+    [pscustomobject]@{ metric = "By type"; value = ($StatusReport.memory_summary.by_type | ForEach-Object { "$($_.name): $($_.count)" }) }
+    [pscustomobject]@{ metric = "By category"; value = ($StatusReport.memory_summary.by_category | ForEach-Object { "$($_.name): $($_.count)" }) }
+) -Columns @("metric", "value")))
+$Lines.Add("")
+$Lines.Add("### Memory Types")
+$Lines.Add("")
+if ($StatusReport.memory_summary.by_type -and @($StatusReport.memory_summary.by_type).Count -gt 0) {
+    $Lines.Add((ConvertTo-PDAMarkdownTable -Rows @($StatusReport.memory_summary.by_type) -Columns @("name", "count")))
 }
 else {
-    $SystemStatusLines += "- No memory records found."
+    $Lines.Add("- No memory type data.")
 }
-$SystemStatusLines += @("", "## Artifacts By Worker", "")
-if ($ArtifactByWorker.Count -gt 0) {
-    $SystemStatusLines += @(ConvertTo-PDAMarkdownTable -Rows $ArtifactByWorker -Columns @("name", "count"))
+$Lines.Add("")
+$Lines.Add("### Memory Categories")
+$Lines.Add("")
+if ($StatusReport.memory_summary.by_category -and @($StatusReport.memory_summary.by_category).Count -gt 0) {
+    $Lines.Add((ConvertTo-PDAMarkdownTable -Rows @($StatusReport.memory_summary.by_category) -Columns @("name", "count")))
 }
 else {
-    $SystemStatusLines += "- No artifact records found."
+    $Lines.Add("- No memory category data.")
+}
+$Lines.Add("")
+$Lines.Add("### Recent Memories")
+$Lines.Add("")
+if ($StatusReport.memory_summary.recent -and @($StatusReport.memory_summary.recent).Count -gt 0) {
+    $Lines.Add((ConvertTo-PDAMarkdownTable -Rows @($StatusReport.memory_summary.recent) -Columns @("memory_id", "created_at", "memory_type", "category", "title", "summary")))
+}
+else {
+    $Lines.Add("- No memory records.")
 }
 
-$TaskSummaryLines = @(
-    "# Task Summary",
-    "",
-    "Updated: $GeneratedAt",
-    "",
-    "## Queue Metrics",
-    ""
-)
-$TaskSummaryLines += @(ConvertTo-PDAMarkdownTable -Rows @(
-    [pscustomobject]@{ metric = "Queue depth"; value = [string]$TaskSummary.queue_depth }
-    [pscustomobject]@{ metric = "Pending"; value = [string]$TaskSummary.counts.pending }
-    [pscustomobject]@{ metric = "Running"; value = [string]$TaskSummary.counts.running }
-    [pscustomobject]@{ metric = "Completed"; value = [string]$TaskSummary.counts.completed }
-    [pscustomobject]@{ metric = "Failed"; value = [string]$TaskSummary.counts.failed }
-    [pscustomobject]@{ metric = "Results"; value = [string]$TaskSummary.counts.results }
-) -Columns @("metric", "value"))
-$TaskSummaryLines += @("", "## Recent Tasks", "")
-if ($TaskSummary.recent_tasks.Count -gt 0) {
-    $TaskSummaryLines += @(ConvertTo-PDAMarkdownTable -Rows $TaskSummary.recent_tasks -Columns @("task_id", "command", "worker", "category", "queue", "status", "updated_at"))
-}
-else {
-    $TaskSummaryLines += "- No task records found."
-}
-$TaskSummaryLines += @("", "## Recent Memory Records", "")
-if ($RecentMemories.Count -gt 0) {
-    $TaskSummaryLines += @(ConvertTo-PDAMarkdownTable -Rows $RecentMemories -Columns @("memory_id", "created_at", "memory_type", "category", "title"))
-}
-else {
-    $TaskSummaryLines += "- No memory records found."
-}
-$TaskSummaryLines += @("", "## Recent Artifacts", "")
-if ($RecentArtifacts.Count -gt 0) {
-    $TaskSummaryLines += @(ConvertTo-PDAMarkdownTable -Rows $RecentArtifacts -Columns @("artifact_id", "created_at", "worker_name", "category", "artifact_type"))
-}
-else {
-    $TaskSummaryLines += "- No artifact records found."
-}
+Write-PDAMarkdownFile -Path $DashboardPath -Lines $Lines
 
-Write-PDAMarkdownFile -Path $OperatorConsolePath -Lines $OperatorConsoleLines
-Write-PDAMarkdownFile -Path $RoutingSummaryPath -Lines $RoutingSummaryLines
-Write-PDAMarkdownFile -Path $SystemStatusPath -Lines $SystemStatusLines
-Write-PDAMarkdownFile -Path $TaskSummaryPath -Lines $TaskSummaryLines
-
-$Result = [pscustomobject]@{
+$Report = [pscustomobject]@{
     status = "pass"
+    dashboard_path = $DashboardPath
+    generated_at = $StatusReport.generated_at
     root_path = $ResolvedRoot
     output_directory = $ResolvedOutputDirectory
-    generated_at = $GeneratedAt
-    outputs = @(
-        $OperatorConsolePath,
-        $RoutingSummaryPath,
-        $SystemStatusPath,
-        $TaskSummaryPath
-    )
+    dashboard_health = $StatusReport.dashboard_health
+    source = $StatusReport
 }
 
 if ($AsJson) {
-    $Result | ConvertTo-Json -Depth 10
-    if (-not $NoThrow -and $Result.status -ne "pass") {
+    $Report | ConvertTo-Json -Depth 30
+    if (-not $NoThrow -and $Report.status -ne "pass") {
         throw "PDA dashboard refresh failed."
     }
     return
 }
 
-Write-Host "[OK] PDA dashboard files updated:"
-foreach ($Path in $Result.outputs) {
-    Write-Host $Path
+if ($Report.status -eq "pass") {
+    Write-Host "[OK] PDA dashboard updated:"
+    Write-Host $Report.dashboard_path
+}
+else {
+    Write-Host "[FAIL] PDA dashboard update failed:"
+    foreach ($Issue in @($Report.issues)) {
+        Write-Host ("  {0}" -f $Issue)
+    }
+}
+
+if (-not $NoThrow -and $Report.status -ne "pass") {
+    throw "PDA dashboard refresh failed."
 }

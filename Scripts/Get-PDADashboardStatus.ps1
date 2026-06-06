@@ -1,0 +1,905 @@
+[CmdletBinding()]
+param(
+    [Parameter(Mandatory = $false)]
+    [string]$RootPath,
+
+    [Parameter(Mandatory = $false)]
+    [switch]$AsJson,
+
+    [Parameter(Mandatory = $false)]
+    [switch]$NoThrow
+)
+
+$ErrorActionPreference = "Stop"
+
+$Root = if ([string]::IsNullOrWhiteSpace($RootPath)) {
+    Split-Path -Parent $PSScriptRoot
+}
+else {
+    $RootPath
+}
+
+$DashboardPath = Join-Path $Root "Obsidian Vault\02_Projects\AI Tool Ecosystem\PDA Dashboard.md"
+$ParserPath = Join-Path $PSScriptRoot "PDA_OutputParsing.ps1"
+if (Test-Path -LiteralPath $ParserPath -PathType Leaf) {
+    . $ParserPath
+}
+
+function ConvertTo-PDAHashtable {
+    param([Parameter(Mandatory = $true)]$Value)
+
+    if ($null -eq $Value) {
+        return $null
+    }
+
+    if ($Value -is [hashtable] -or $Value -is [System.Collections.IDictionary]) {
+        $Copy = @{}
+        foreach ($Key in $Value.Keys) {
+            $Copy[$Key] = ConvertTo-PDAHashtable -Value $Value[$Key]
+        }
+        return $Copy
+    }
+
+    if ($Value -is [System.Collections.IEnumerable] -and $Value -isnot [string]) {
+        $List = @()
+        foreach ($Item in $Value) {
+            $List += ,(ConvertTo-PDAHashtable -Value $Item)
+        }
+        return $List
+    }
+
+    if ($Value -is [psobject] -and $Value.PSObject.Properties.Name.Count -gt 0) {
+        $Copy = @{}
+        foreach ($Prop in $Value.PSObject.Properties) {
+            $Copy[$Prop.Name] = ConvertTo-PDAHashtable -Value $Prop.Value
+        }
+        return $Copy
+    }
+
+    return $Value
+}
+
+function Get-PDASafeString {
+    param([Parameter(Mandatory = $false)]$Value)
+
+    if ($null -eq $Value) {
+        return ""
+    }
+
+    return [string]$Value
+}
+
+function Get-PDADateValue {
+    param([Parameter(Mandatory = $false)]$Value)
+
+    if ($null -eq $Value -or [string]::IsNullOrWhiteSpace([string]$Value)) {
+        return [datetime]::MinValue
+    }
+
+    try {
+        return [datetime]::Parse([string]$Value)
+    }
+    catch {
+        return [datetime]::MinValue
+    }
+}
+
+function Read-PDAJsonFile {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        return $null
+    }
+
+    try {
+        $Raw = Get-Content -LiteralPath $Path -Raw -ErrorAction Stop
+        if ([string]::IsNullOrWhiteSpace($Raw)) {
+            return $null
+        }
+
+        return $Raw | ConvertFrom-Json -ErrorAction Stop
+    }
+    catch {
+        return $null
+    }
+}
+
+function Invoke-PDAJsonScript {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $false)][string[]]$Arguments,
+        [Parameter(Mandatory = $true)][string]$SourceName
+    )
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        return [pscustomobject]@{
+            status = "missing"
+            issues = @("Script missing: $Path")
+        }
+    }
+
+    try {
+        $Raw = & pwsh -NoProfile -ExecutionPolicy Bypass -File $Path @Arguments 2>&1
+        $Text = [string]($Raw -join "`n").Trim()
+        if ([string]::IsNullOrWhiteSpace($Text)) {
+            throw "Script returned empty output."
+        }
+
+        return ConvertFrom-PDAMixedJson -Text $Text -SourceName $SourceName
+    }
+    catch {
+        return [pscustomobject]@{
+            status = "fail"
+            issues = @($_.Exception.Message)
+        }
+    }
+}
+
+function Get-PDAQueueRecord {
+    param(
+        [Parameter(Mandatory = $true)][string]$QueueName,
+        [Parameter(Mandatory = $true)][System.IO.FileInfo]$File
+    )
+
+    $Record = [ordered]@{
+        queue = $QueueName
+        file_name = $File.Name
+        file_path = $File.FullName
+        updated_at = $File.LastWriteTimeUtc.ToString("o")
+        sort_time = $File.LastWriteTimeUtc
+        task_id = [System.IO.Path]::GetFileNameWithoutExtension($File.Name)
+        command = ""
+        worker_name = ""
+        category = ""
+        status = $QueueName
+        task_status = $QueueName
+        approval_status = ""
+        route_source = ""
+        routing_surface = ""
+        requires_confirmation = $false
+        result_path = ""
+    }
+
+    try {
+        $Parsed = Get-Content -LiteralPath $File.FullName -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+
+        if ($Parsed.PSObject.Properties.Name -contains "task_id" -and -not [string]::IsNullOrWhiteSpace([string]$Parsed.task_id)) {
+            $Record.task_id = [string]$Parsed.task_id
+        }
+        if ($Parsed.PSObject.Properties.Name -contains "command") {
+            $Record.command = Get-PDASafeString $Parsed.command
+        }
+        if ($Parsed.PSObject.Properties.Name -contains "worker_name") {
+            $Record.worker_name = Get-PDASafeString $Parsed.worker_name
+        }
+        elseif ($Parsed.PSObject.Properties.Name -contains "worker") {
+            $Record.worker_name = Get-PDASafeString $Parsed.worker
+        }
+        elseif ($Parsed.PSObject.Properties.Name -contains "assigned_worker") {
+            $Record.worker_name = Get-PDASafeString $Parsed.assigned_worker
+        }
+        if ($Parsed.PSObject.Properties.Name -contains "category") {
+            $Record.category = Get-PDASafeString $Parsed.category
+        }
+        if ($Parsed.PSObject.Properties.Name -contains "status") {
+            $Record.status = Get-PDASafeString $Parsed.status
+        }
+        if ($Parsed.PSObject.Properties.Name -contains "task_status") {
+            $Record.task_status = Get-PDASafeString $Parsed.task_status
+        }
+        if ($Parsed.PSObject.Properties.Name -contains "approval_status") {
+            $Record.approval_status = Get-PDASafeString $Parsed.approval_status
+        }
+        if ($Parsed.PSObject.Properties.Name -contains "route_source") {
+            $Record.route_source = Get-PDASafeString $Parsed.route_source
+        }
+        if ($Parsed.PSObject.Properties.Name -contains "routing_surface") {
+            $Record.routing_surface = Get-PDASafeString $Parsed.routing_surface
+        }
+        if ($Parsed.PSObject.Properties.Name -contains "requires_confirmation") {
+            $Record.requires_confirmation = [bool]$Parsed.requires_confirmation
+        }
+        elseif ($QueueName -eq "approvals/pending") {
+            $Record.requires_confirmation = $true
+        }
+        if ($Parsed.PSObject.Properties.Name -contains "result_path") {
+            $Record.result_path = Get-PDASafeString $Parsed.result_path
+        }
+
+        if ($QueueName -eq "approvals/pending") {
+            $Record.approval_status = "pending"
+            $Record.task_status = "pending_approval"
+            $Record.status = "pending_approval"
+        }
+        elseif ($QueueName -eq "approvals/approved") {
+            $Record.approval_status = "approved"
+        }
+        elseif ($QueueName -eq "approvals/rejected") {
+            $Record.approval_status = "rejected"
+            $Record.task_status = "rejected"
+            $Record.status = "rejected"
+        }
+        elseif ($QueueName -eq "results" -or $File.Name -match '-result\.json$') {
+            $Record.task_status = "completed"
+            $Record.status = "completed"
+            if (-not [string]::IsNullOrWhiteSpace($Record.result_path)) {
+                # keep parsed result path
+            }
+            else {
+                $Record.result_path = $File.FullName
+            }
+        }
+    }
+    catch {
+        $Record.status = "parse-error"
+        $Record.task_status = "parse-error"
+        $Record.parse_error = $_.Exception.Message
+    }
+
+    return [pscustomobject]$Record
+}
+
+function Get-PDAQueueSnapshot {
+    param([Parameter(Mandatory = $true)][string]$RootPath)
+
+    $QueueFolders = [ordered]@{
+        pending = Join-Path $RootPath "PDA-Tasks\pending"
+        running = Join-Path $RootPath "PDA-Tasks\running"
+        completed = Join-Path $RootPath "PDA-Tasks\completed"
+        failed = Join-Path $RootPath "PDA-Tasks\failed"
+        results = Join-Path $RootPath "PDA-Tasks\results"
+    }
+
+    $ApprovalFolders = [ordered]@{
+        "approvals/pending" = Join-Path $RootPath "PDA-Tasks\approvals\pending"
+        "approvals/approved" = Join-Path $RootPath "PDA-Tasks\approvals\approved"
+        "approvals/rejected" = Join-Path $RootPath "PDA-Tasks\approvals\rejected"
+    }
+
+    $Counts = [ordered]@{
+        pending = 0
+        running = 0
+        completed = 0
+        failed = 0
+        results = 0
+        approvals_pending = 0
+        approvals_approved = 0
+        approvals_rejected = 0
+    }
+
+    $Records = @()
+    foreach ($QueueName in $QueueFolders.Keys) {
+        $Folder = $QueueFolders[$QueueName]
+        if (-not (Test-Path -LiteralPath $Folder -PathType Container)) {
+            continue
+        }
+
+        $Files = @(Get-ChildItem -LiteralPath $Folder -Filter *.json -File -ErrorAction SilentlyContinue)
+        $Counts[$QueueName] = $Files.Count
+        foreach ($File in $Files) {
+            $Records += Get-PDAQueueRecord -QueueName $QueueName -File $File
+        }
+    }
+
+    foreach ($ApprovalKey in $ApprovalFolders.Keys) {
+        $Folder = $ApprovalFolders[$ApprovalKey]
+        if (-not (Test-Path -LiteralPath $Folder -PathType Container)) {
+            continue
+        }
+
+        $Files = @(Get-ChildItem -LiteralPath $Folder -Filter *.json -File -ErrorAction SilentlyContinue)
+        switch ($ApprovalKey) {
+            "approvals/pending" { $Counts.approvals_pending = $Files.Count }
+            "approvals/approved" { $Counts.approvals_approved = $Files.Count }
+            "approvals/rejected" { $Counts.approvals_rejected = $Files.Count }
+        }
+
+        foreach ($File in $Files) {
+            $Record = Get-PDAQueueRecord -QueueName $ApprovalKey -File $File
+            if ([string]::IsNullOrWhiteSpace($Record.task_status)) {
+                $Record.task_status = "pending_approval"
+            }
+            $Records += $Record
+        }
+    }
+
+    $UniqueRecentTasks = @()
+    foreach ($Record in @($Records | Sort-Object sort_time -Descending)) {
+        if ([string]::IsNullOrWhiteSpace([string]$Record.task_id)) {
+            continue
+        }
+
+        if ($UniqueRecentTasks | Where-Object { [string]$_.task_id -eq [string]$Record.task_id }) {
+            continue
+        }
+
+        $UniqueRecentTasks += $Record
+        if ($UniqueRecentTasks.Count -ge 15) {
+            break
+        }
+    }
+
+    $UniqueRecentApprovals = @()
+    foreach ($Record in @($Records | Where-Object { [string]$_.approval_status -eq "pending" } | Sort-Object sort_time -Descending)) {
+        if ([string]::IsNullOrWhiteSpace([string]$Record.task_id)) {
+            continue
+        }
+
+        if ($UniqueRecentApprovals | Where-Object { [string]$_.task_id -eq [string]$Record.task_id }) {
+            continue
+        }
+
+        $UniqueRecentApprovals += $Record
+        if ($UniqueRecentApprovals.Count -ge 15) {
+            break
+        }
+    }
+
+    return [pscustomobject]@{
+        counts = [pscustomobject]$Counts
+        queue_depth = ([int]$Counts.pending + [int]$Counts.running)
+        latest = [pscustomobject]@{
+            pending = @($Records | Where-Object { $_.queue -eq "pending" } | Sort-Object sort_time -Descending | Select-Object -First 1)
+            running = @($Records | Where-Object { $_.queue -eq "running" } | Sort-Object sort_time -Descending | Select-Object -First 1)
+            completed = @($Records | Where-Object { $_.queue -eq "completed" } | Sort-Object sort_time -Descending | Select-Object -First 1)
+            failed = @($Records | Where-Object { $_.queue -eq "failed" } | Sort-Object sort_time -Descending | Select-Object -First 1)
+            result = @($Records | Where-Object { $_.queue -eq "results" } | Sort-Object sort_time -Descending | Select-Object -First 1)
+        }
+        recent_tasks = @($UniqueRecentTasks)
+        pending_approvals = @($UniqueRecentApprovals)
+        records = @($Records)
+    }
+}
+
+function Get-PDAWorkerSnapshot {
+    param([Parameter(Mandatory = $true)][string]$RootPath)
+
+    $RegistryPath = Join-Path $RootPath "Scripts\PDA_WorkerRegistry.json"
+    $WorkerStateFiles = @(
+        Join-Path $RootPath "PDA-Logs\workers\pda-worker-state.json"
+        Join-Path $RootPath "PDA-Logs\workers\pda-reporter-intake-state.json"
+        Join-Path $RootPath "PDA-Logs\workers\pda-multiagent-intake-state.json"
+    )
+    $HeartbeatDir = Join-Path $RootPath "PDA-Logs\heartbeats"
+
+    $Registry = Read-PDAJsonFile -Path $RegistryPath
+    $Workers = @()
+    if ($Registry) {
+        if ($Registry.PSObject.Properties.Name -contains "workers" -and $Registry.workers) {
+            $Workers = @($Registry.workers)
+        }
+        elseif ($Registry -is [System.Collections.IEnumerable] -and $Registry -isnot [string]) {
+            $Workers = @($Registry)
+        }
+    }
+
+    $WorkerRows = @($Workers | ForEach-Object {
+        [pscustomobject]@{
+            worker_name = Get-PDASafeString $_.worker_name
+            command = Get-PDASafeString $_.command
+            purpose = Get-PDASafeString $_.purpose
+            routing_surface = Get-PDASafeString $_.routing_surface
+            status = Get-PDASafeString $_.status
+            cloud_capable = [bool]($_.cloud_capable)
+            accepted_input_modes = @($_.accepted_input_modes)
+            category_support = @($_.category_support)
+        }
+    })
+
+    $RuntimeStates = @()
+    foreach ($Path in $WorkerStateFiles) {
+        $State = Read-PDAJsonFile -Path $Path
+        if ($null -eq $State) {
+            continue
+        }
+
+        $RuntimeStates += [pscustomobject]@{
+            component = [System.IO.Path]::GetFileNameWithoutExtension($Path)
+            status = Get-PDASafeString $State.status
+            pid = if ($State.PSObject.Properties.Name -contains "pid") { [int]$State.pid } else { $null }
+            started_at = if ($State.PSObject.Properties.Name -contains "started_at") { Get-PDASafeString $State.started_at } else { "" }
+            log_file = if ($State.PSObject.Properties.Name -contains "log_file") { Get-PDASafeString $State.log_file } else { "" }
+            script = if ($State.PSObject.Properties.Name -contains "script") { Get-PDASafeString $State.script } else { "" }
+        }
+    }
+
+    $HeartbeatRows = @()
+    if (Test-Path -LiteralPath $HeartbeatDir -PathType Container) {
+        foreach ($File in Get-ChildItem -LiteralPath $HeartbeatDir -File -Filter "*-heartbeat.json" -ErrorAction SilentlyContinue) {
+            try {
+                $Heartbeat = Get-Content -LiteralPath $File.FullName -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+                $HeartbeatTime = [datetime]$Heartbeat.heartbeat_at
+                $Age = New-TimeSpan -Start $HeartbeatTime -End (Get-Date)
+                $ProcessLive = $false
+                if ($Heartbeat.PSObject.Properties.Name -contains "process_id" -and $Heartbeat.process_id) {
+                    $ProcessLive = $null -ne (Get-Process -Id $Heartbeat.process_id -ErrorAction SilentlyContinue)
+                }
+
+                $HeartbeatRows += [pscustomobject]@{
+                    worker_name = Get-PDASafeString $Heartbeat.worker_name
+                    status = Get-PDASafeString $Heartbeat.status
+                    pid = if ($Heartbeat.PSObject.Properties.Name -contains "process_id") { [int]$Heartbeat.process_id } else { $null }
+                    process_live = [bool]$ProcessLive
+                    heartbeat_at = Get-PDASafeString $Heartbeat.heartbeat_at
+                    age_minutes = [math]::Round($Age.TotalMinutes, 2)
+                    state = if ($Age.TotalMinutes -gt 5) { "STALE" } else { "OK" }
+                }
+            }
+            catch {
+                $HeartbeatRows += [pscustomobject]@{
+                    worker_name = $File.BaseName
+                    status = "parse-error"
+                    pid = $null
+                    process_live = $false
+                    heartbeat_at = ""
+                    age_minutes = $null
+                    state = "ERROR"
+                }
+            }
+        }
+    }
+
+    return [pscustomobject]@{
+        registry = [pscustomobject]@{
+            path = $RegistryPath
+            workers = @($WorkerRows)
+            active_count = @($WorkerRows | Where-Object { [string]$_.status -eq "active" }).Count
+            experimental_count = @($WorkerRows | Where-Object { [string]$_.status -eq "experimental" }).Count
+        }
+        runtime_states = @($RuntimeStates)
+        heartbeats = @($HeartbeatRows)
+    }
+}
+
+function Get-PDAArtifactSnapshot {
+    param([Parameter(Mandatory = $true)][string]$RootPath)
+
+    $IndexPath = Join-Path $RootPath "PDA_ArtifactIndex.json"
+    $Index = Read-PDAJsonFile -Path $IndexPath
+    $Artifacts = @()
+    if ($Index -and ($Index.PSObject.Properties.Name -contains "artifacts") -and $Index.artifacts) {
+        $Artifacts = @($Index.artifacts)
+    }
+
+    $Recent = @(
+        $Artifacts |
+            Sort-Object @{ Expression = { Get-PDADateValue $_.created_at } } -Descending |
+            Select-Object -First 10 |
+            ForEach-Object {
+                [pscustomobject]@{
+                    artifact_id = Get-PDASafeString $_.artifact_id
+                    created_at = Get-PDASafeString $_.created_at
+                    worker_name = Get-PDASafeString $_.worker_name
+                    category = Get-PDASafeString $_.category
+                    artifact_type = Get-PDASafeString $_.artifact_type
+                    source_task_id = if ($_.PSObject.Properties.Name -contains "source_task_id") { Get-PDASafeString $_.source_task_id } else { "" }
+                    artifact_path = if ($_.PSObject.Properties.Name -contains "artifact_path") { Get-PDASafeString $_.artifact_path } else { "" }
+                    summary = Get-PDASafeString $_.summary
+                }
+            }
+    )
+
+    $ByWorker = @(
+        $Artifacts |
+            Group-Object worker_name |
+            Sort-Object Count -Descending |
+            ForEach-Object {
+                [pscustomobject]@{
+                    name = Get-PDASafeString $_.Name
+                    count = [int]$_.Count
+                }
+            }
+    )
+
+    return [pscustomobject]@{
+        path = $IndexPath
+        status = if ($null -ne $Index) { "pass" } else { "missing" }
+        count = @($Artifacts).Count
+        updated_at = if ($Index -and $Index.PSObject.Properties.Name -contains "updated_at") { Get-PDASafeString $Index.updated_at } else { "" }
+        recent = @($Recent)
+        by_worker = @($ByWorker)
+        artifacts = @($Artifacts)
+    }
+}
+
+function Get-PDAMemorySnapshot {
+    param([Parameter(Mandatory = $true)][string]$RootPath)
+
+    $IndexPath = Join-Path $RootPath "PDA_MemoryIndex.json"
+    $Index = Read-PDAJsonFile -Path $IndexPath
+    $Memories = @()
+    if ($Index -and ($Index.PSObject.Properties.Name -contains "memories") -and $Index.memories) {
+        $Memories = @($Index.memories)
+    }
+
+    $Recent = @(
+        $Memories |
+            Sort-Object @{ Expression = { Get-PDADateValue $_.created_at } } -Descending |
+            Select-Object -First 10 |
+            ForEach-Object {
+                [pscustomobject]@{
+                    memory_id = Get-PDASafeString $_.memory_id
+                    created_at = Get-PDASafeString $_.created_at
+                    memory_type = Get-PDASafeString $_.memory_type
+                    category = Get-PDASafeString $_.category
+                    title = if ($_.PSObject.Properties.Name -contains "title") { Get-PDASafeString $_.title } else { "" }
+                    summary = Get-PDASafeString $_.summary
+                    source_artifact_id = if ($_.PSObject.Properties.Name -contains "source_artifact_id") { Get-PDASafeString $_.source_artifact_id } else { "" }
+                }
+            }
+    )
+
+    $ByType = @(
+        $Memories |
+            Group-Object memory_type |
+            Sort-Object Count -Descending |
+            ForEach-Object {
+                [pscustomobject]@{
+                    name = Get-PDASafeString $_.Name
+                    count = [int]$_.Count
+                }
+            }
+    )
+
+    $ByCategory = @(
+        $Memories |
+            Group-Object category |
+            Sort-Object Count -Descending |
+            ForEach-Object {
+                [pscustomobject]@{
+                    name = Get-PDASafeString $_.Name
+                    count = [int]$_.Count
+                }
+            }
+    )
+
+    return [pscustomobject]@{
+        path = $IndexPath
+        status = if ($null -ne $Index) { "pass" } else { "missing" }
+        count = @($Memories).Count
+        updated_at = if ($Index -and $Index.PSObject.Properties.Name -contains "updated_at") { Get-PDASafeString $Index.updated_at } else { "" }
+        recent = @($Recent)
+        by_type = @($ByType)
+        by_category = @($ByCategory)
+        memories = @($Memories)
+    }
+}
+
+function Get-PDAModelStatus {
+    param([Parameter(Mandatory = $true)][string]$RootPath)
+
+    $RoutingPolicyPath = Join-Path $RootPath "Scripts\PDA_ModelRouting.json"
+    $RoutingPolicy = Read-PDAJsonFile -Path $RoutingPolicyPath
+    $RoutingSummary = [ordered]@{
+        path = $RoutingPolicyPath
+        status = if ($null -ne $RoutingPolicy) { "pass" } else { "missing" }
+        command_routes = @()
+        category_routes = @()
+    }
+    if ($RoutingPolicy) {
+        if ($RoutingPolicy.PSObject.Properties.Name -contains "command_routes" -and $RoutingPolicy.command_routes) {
+            foreach ($Key in @($RoutingPolicy.command_routes.PSObject.Properties.Name)) {
+                $Route = $RoutingPolicy.command_routes.$Key
+                $RoutingSummary.command_routes += [pscustomobject]@{
+                    command = $Key
+                    primary_model = Get-PDASafeString $Route.primary_model
+                    fallback_chain = @($Route.fallback_chain)
+                    routing_surface = Get-PDASafeString $Route.routing_surface
+                    cloud_allowed = [bool]$Route.cloud_allowed
+                }
+            }
+        }
+        if ($RoutingPolicy.PSObject.Properties.Name -contains "category_routes" -and $RoutingPolicy.category_routes) {
+            foreach ($Key in @($RoutingPolicy.category_routes.PSObject.Properties.Name)) {
+                $Route = $RoutingPolicy.category_routes.$Key
+                $RoutingSummary.category_routes += [pscustomobject]@{
+                    category = $Key
+                    primary_model = Get-PDASafeString $Route.primary_model
+                    fallback_chain = @($Route.fallback_chain)
+                    routing_surface = Get-PDASafeString $Route.routing_surface
+                    cloud_allowed = [bool]$Route.cloud_allowed
+                }
+            }
+        }
+    }
+
+    $ProvidersScript = Join-Path $PSScriptRoot "Test-PDALiteLLMProviders.ps1"
+    $EnvScript = Join-Path $PSScriptRoot "Test-PDALiteLLMEnv.ps1"
+    $Providers = Invoke-PDAJsonScript -Path $ProvidersScript -Arguments @("-AsJson", "-NoThrow") -SourceName "LiteLLM provider validation"
+    $Env = Invoke-PDAJsonScript -Path $EnvScript -Arguments @("-AsJson", "-NoThrow") -SourceName "LiteLLM env validation"
+
+    $ProviderRows = @()
+    if ($Providers -and $Providers.PSObject.Properties.Name -contains "providers" -and $Providers.providers) {
+        $ProviderRows = @($Providers.providers | ForEach-Object {
+            [pscustomobject]@{
+                name = Get-PDASafeString $_.name
+                model_name = Get-PDASafeString $_.model_name
+                configured = [bool]$_.configured
+                env_reference_ok = [bool]$_.env_reference_ok
+                host_env_present = if ($_.PSObject.Properties.Name -contains "host_env_present") { [bool]$_.host_env_present } else { $false }
+                live_available = [bool]$_.live_available
+                api_provider = Get-PDASafeString $_.api_provider
+                env_name = Get-PDASafeString $_.env_name
+                issues = @($_.issues)
+            }
+        })
+    }
+
+    return [pscustomobject]@{
+        status = if (([string]$Providers.status -eq "pass" -or [string]$Providers.status -eq "warn") -and ([string]$Env.status -in @("pass", "warn")) -and $RoutingSummary.status -eq "pass") { "pass" } else { "degraded" }
+        routing_policy = [pscustomobject]$RoutingSummary
+        provider_validation = [pscustomobject]@{
+            status = Get-PDASafeString $Providers.status
+            endpoint = if ($Providers.PSObject.Properties.Name -contains "endpoint") { Get-PDASafeString $Providers.endpoint } else { "" }
+            provider_count = if ($Providers.PSObject.Properties.Name -contains "provider_count") { [int]$Providers.provider_count } else { @($ProviderRows).Count }
+            passed_count = if ($Providers.PSObject.Properties.Name -contains "provider_pass_count") { [int]$Providers.provider_pass_count } else { @($ProviderRows | Where-Object { $_.configured -and $_.live_available -and $_.env_reference_ok -and @($_.issues).Count -eq 0 }).Count }
+            failed_count = if ($Providers.PSObject.Properties.Name -contains "provider_fail_count") { [int]$Providers.provider_fail_count } else { @($ProviderRows).Count - @($ProviderRows | Where-Object { $_.configured -and $_.live_available -and $_.env_reference_ok -and @($_.issues).Count -eq 0 }).Count }
+            providers = @($ProviderRows)
+            issues = @($Providers.issues)
+        }
+        env_validation = [pscustomobject]@{
+            status = Get-PDASafeString $Env.status
+            compose_path = if ($Env.PSObject.Properties.Name -contains "compose_path") { Get-PDASafeString $Env.compose_path } else { "" }
+            env_path = if ($Env.PSObject.Properties.Name -contains "env_path") { Get-PDASafeString $Env.env_path } else { "" }
+            example_path = if ($Env.PSObject.Properties.Name -contains "example_path") { Get-PDASafeString $Env.example_path } else { "" }
+            loaded_key_count = if ($Env.PSObject.Properties.Name -contains "loaded_key_count") { [int]$Env.loaded_key_count } else { 0 }
+            blank_key_count = if ($Env.PSObject.Properties.Name -contains "blank_key_count") { [int]$Env.blank_key_count } else { 0 }
+            missing_key_count = if ($Env.PSObject.Properties.Name -contains "missing_key_count") { [int]$Env.missing_key_count } else { 0 }
+            issues = @($Env.issues)
+        }
+    }
+}
+
+function Get-PDACoreIntegrationStatus {
+    param([Parameter(Mandatory = $true)][string]$RootPath)
+
+    $ConversationStateScript = Join-Path $PSScriptRoot "Get-PDAConversationState.ps1"
+    $TaskResultScript = Join-Path $PSScriptRoot "Get-PDATaskResult.ps1"
+    $InterpreterScript = Join-Path $PSScriptRoot "Test-PDACommandInterpreter.ps1"
+    $HandoffScript = Join-Path $PSScriptRoot "Test-PDACommandHandoff.ps1"
+    $ChatBridgeScript = Join-Path $PSScriptRoot "Test-PDAChatBridge.ps1"
+    $WebhookBridgeScript = Join-Path $PSScriptRoot "Test-PDAWebhookBridge.ps1"
+
+    $ConversationState = Invoke-PDAJsonScript -Path $ConversationStateScript -Arguments @("-AsJson", "-NoThrow") -SourceName "Conversation state"
+    $TaskResult = Invoke-PDAJsonScript -Path $TaskResultScript -Arguments @("-AsJson", "-NoThrow") -SourceName "Task result lookup"
+    $Interpreter = Invoke-PDAJsonScript -Path $InterpreterScript -Arguments @("-AsJson", "-NoThrow") -SourceName "Command interpreter"
+    $Handoff = Invoke-PDAJsonScript -Path $HandoffScript -Arguments @("-AsJson", "-NoThrow") -SourceName "Command handoff"
+    $ChatBridge = Invoke-PDAJsonScript -Path $ChatBridgeScript -Arguments @("-AsJson", "-NoThrow") -SourceName "Chat bridge"
+    $WebhookBridge = Invoke-PDAJsonScript -Path $WebhookBridgeScript -Arguments @("-AsJson", "-NoThrow") -SourceName "Webhook bridge"
+
+    $ConversationSummary = [pscustomobject]@{
+        status = Get-PDASafeString $ConversationState.status
+        conversation_id = if ($ConversationState.PSObject.Properties.Name -contains "conversation_id") { Get-PDASafeString $ConversationState.conversation_id } else { "" }
+        active_task_count = if ($ConversationState.PSObject.Properties.Name -contains "active_task_count") { [int]$ConversationState.active_task_count } else { 0 }
+        pending_approval_count = if ($ConversationState.PSObject.Properties.Name -contains "pending_approval_count") { [int]$ConversationState.pending_approval_count } else { 0 }
+        submitted_task_count = if ($ConversationState.PSObject.Properties.Name -contains "submitted_task_count") { [int]$ConversationState.submitted_task_count } else { 0 }
+        completed_task_count = if ($ConversationState.PSObject.Properties.Name -contains "completed_task_count") { [int]$ConversationState.completed_task_count } else { 0 }
+        latest_task_id = if ($ConversationState.PSObject.Properties.Name -contains "latest_task_id") { Get-PDASafeString $ConversationState.latest_task_id } else { "" }
+        latest_result_path = if ($ConversationState.PSObject.Properties.Name -contains "latest_result_path") { Get-PDASafeString $ConversationState.latest_result_path } else { "" }
+        response_text = if ($ConversationState.PSObject.Properties.Name -contains "response_text") { Get-PDASafeString $ConversationState.response_text } else { "" }
+        next_action = if ($ConversationState.PSObject.Properties.Name -contains "next_action") { Get-PDASafeString $ConversationState.next_action } else { "" }
+        tasks = if ($ConversationState.PSObject.Properties.Name -contains "tasks") { @($ConversationState.tasks) } else { @() }
+        pending_approvals = if ($ConversationState.PSObject.Properties.Name -contains "pending_approvals") { @($ConversationState.pending_approvals) } else { @() }
+        completed_tasks = if ($ConversationState.PSObject.Properties.Name -contains "completed_tasks") { @($ConversationState.completed_tasks) } else { @() }
+        latest_task = if ($ConversationState.PSObject.Properties.Name -contains "latest_task") { $ConversationState.latest_task } else { $null }
+        latest_result = if ($ConversationState.PSObject.Properties.Name -contains "latest_result") { $ConversationState.latest_result } else { $null }
+    }
+
+    $TaskResultSummary = [pscustomobject]@{
+        status = Get-PDASafeString $TaskResult.status
+        conversation_id = if ($TaskResult.PSObject.Properties.Name -contains "conversation_id") { Get-PDASafeString $TaskResult.conversation_id } else { "" }
+        task_id = if ($TaskResult.PSObject.Properties.Name -contains "task_id") { Get-PDASafeString $TaskResult.task_id } else { "" }
+        latest_task_id = if ($TaskResult.PSObject.Properties.Name -contains "latest_task_id") { Get-PDASafeString $TaskResult.latest_task_id } else { "" }
+        latest_result_path = if ($TaskResult.PSObject.Properties.Name -contains "latest_result_path") { Get-PDASafeString $TaskResult.latest_result_path } else { "" }
+        response_text = if ($TaskResult.PSObject.Properties.Name -contains "response_text") { Get-PDASafeString $TaskResult.response_text } else { "" }
+        next_action = if ($TaskResult.PSObject.Properties.Name -contains "next_action") { Get-PDASafeString $TaskResult.next_action } else { "" }
+        active_task_count = if ($TaskResult.PSObject.Properties.Name -contains "active_task_count") { [int]$TaskResult.active_task_count } else { 0 }
+        pending_approval_count = if ($TaskResult.PSObject.Properties.Name -contains "pending_approval_count") { [int]$TaskResult.pending_approval_count } else { 0 }
+        completed_task_count = if ($TaskResult.PSObject.Properties.Name -contains "completed_task_count") { [int]$TaskResult.completed_task_count } else { 0 }
+    }
+
+    return [pscustomobject]@{
+        status = if ($Interpreter.status -eq "pass" -and $Handoff.status -eq "pass" -and $ChatBridge.status -eq "pass") { "pass" } else { "degraded" }
+        conversation_state = $ConversationSummary
+        task_result = $TaskResultSummary
+        command_interpreter = [pscustomobject]@{
+            status = Get-PDASafeString $Interpreter.status
+            test_case_count = if ($Interpreter.PSObject.Properties.Name -contains "test_case_count") { [int]$Interpreter.test_case_count } else { 0 }
+            passed_count = if ($Interpreter.PSObject.Properties.Name -contains "passed_count") { [int]$Interpreter.passed_count } else { 0 }
+            failed_count = if ($Interpreter.PSObject.Properties.Name -contains "failed_count") { [int]$Interpreter.failed_count } else { 0 }
+            mapped_count = if ($Interpreter.PSObject.Properties.Name -contains "mapped_count") { [int]$Interpreter.mapped_count } else { 0 }
+            ambiguous_count = if ($Interpreter.PSObject.Properties.Name -contains "ambiguous_count") { [int]$Interpreter.ambiguous_count } else { 0 }
+            unknown_count = if ($Interpreter.PSObject.Properties.Name -contains "unknown_count") { [int]$Interpreter.unknown_count } else { 0 }
+            results = if ($Interpreter.PSObject.Properties.Name -contains "results") { @($Interpreter.results) } else { @() }
+        }
+        command_handoff = [pscustomobject]@{
+            status = Get-PDASafeString $Handoff.status
+            test_case_count = if ($Handoff.PSObject.Properties.Name -contains "test_case_count") { [int]$Handoff.test_case_count } else { 0 }
+            passed_count = if ($Handoff.PSObject.Properties.Name -contains "passed_count") { [int]$Handoff.passed_count } else { 0 }
+            failed_count = if ($Handoff.PSObject.Properties.Name -contains "failed_count") { [int]$Handoff.failed_count } else { 0 }
+            dispatch_confirmed_count = if ($Handoff.PSObject.Properties.Name -contains "dispatch_confirmed_count") { [int]$Handoff.dispatch_confirmed_count } else { 0 }
+            dispatch_blocked_count = if ($Handoff.PSObject.Properties.Name -contains "dispatch_blocked_count") { [int]$Handoff.dispatch_blocked_count } else { 0 }
+            results = if ($Handoff.PSObject.Properties.Name -contains "results") { @($Handoff.results) } else { @() }
+        }
+        chat_bridge = [pscustomobject]@{
+            status = Get-PDASafeString $ChatBridge.status
+            test_case_count = if ($ChatBridge.PSObject.Properties.Name -contains "test_case_count") { [int]$ChatBridge.test_case_count } else { 0 }
+            passed_count = if ($ChatBridge.PSObject.Properties.Name -contains "passed_count") { [int]$ChatBridge.passed_count } else { 0 }
+            failed_count = if ($ChatBridge.PSObject.Properties.Name -contains "failed_count") { [int]$ChatBridge.failed_count } else { 0 }
+            dispatch_confirmed_count = if ($ChatBridge.PSObject.Properties.Name -contains "dispatch_confirmed_count") { [int]$ChatBridge.dispatch_confirmed_count } else { 0 }
+            dispatch_blocked_count = if ($ChatBridge.PSObject.Properties.Name -contains "dispatch_blocked_count") { [int]$ChatBridge.dispatch_blocked_count } else { 0 }
+            results = if ($ChatBridge.PSObject.Properties.Name -contains "results") { @($ChatBridge.results) } else { @() }
+        }
+        webhook_bridge = [pscustomobject]@{
+            status = Get-PDASafeString $WebhookBridge.status
+            test_case_count = if ($WebhookBridge.PSObject.Properties.Name -contains "test_case_count") { [int]$WebhookBridge.test_case_count } else { 0 }
+            passed_count = if ($WebhookBridge.PSObject.Properties.Name -contains "passed_count") { [int]$WebhookBridge.passed_count } else { 0 }
+            failed_count = if ($WebhookBridge.PSObject.Properties.Name -contains "failed_count") { [int]$WebhookBridge.failed_count } else { 0 }
+            dispatch_confirmed_count = if ($WebhookBridge.PSObject.Properties.Name -contains "dispatch_confirmed_count") { [int]$WebhookBridge.dispatch_confirmed_count } else { 0 }
+            dispatch_blocked_count = if ($WebhookBridge.PSObject.Properties.Name -contains "dispatch_blocked_count") { [int]$WebhookBridge.dispatch_blocked_count } else { 0 }
+            results = if ($WebhookBridge.PSObject.Properties.Name -contains "results") { @($WebhookBridge.results) } else { @() }
+        }
+    }
+}
+
+$GeneratedAt = (Get-Date).ToUniversalTime().ToString("o")
+$StackScript = Join-Path $PSScriptRoot "Test-PDAStack.ps1"
+$QueueSnapshot = Get-PDAQueueSnapshot -RootPath $Root
+$WorkerSnapshot = Get-PDAWorkerSnapshot -RootPath $Root
+$ArtifactSnapshot = Get-PDAArtifactSnapshot -RootPath $Root
+$MemorySnapshot = Get-PDAMemorySnapshot -RootPath $Root
+$ModelSnapshot = Get-PDAModelStatus -RootPath $Root
+$CommanderSnapshot = Get-PDACoreIntegrationStatus -RootPath $Root
+$StackReport = Invoke-PDAJsonScript -Path $StackScript -Arguments @("-Deep", "-AsJson", "-NoThrow") -SourceName "PDA stack validation"
+
+$SystemHealthResults = @()
+if ($StackReport -and $StackReport.PSObject.Properties.Name -contains "results") {
+    $SystemHealthResults = @($StackReport.results | ForEach-Object {
+        [pscustomobject]@{
+            name = Get-PDASafeString $_.name
+            passed = [bool]$_.passed
+            type = Get-PDASafeString $_.type
+            url = if ($_.PSObject.Properties.Name -contains "url") { Get-PDASafeString $_.url } else { "" }
+            status_code = if ($_.PSObject.Properties.Name -contains "status_code") { $_.status_code } else { $null }
+            issues = @($_.issues)
+        }
+    })
+}
+
+$RecentTasks = @(
+    $QueueSnapshot.recent_tasks | Select-Object -First 10 | ForEach-Object {
+        [pscustomobject]@{
+            task_id = Get-PDASafeString $_.task_id
+            command = Get-PDASafeString $_.command
+            worker = Get-PDASafeString $_.worker_name
+            category = Get-PDASafeString $_.category
+            queue = Get-PDASafeString $_.queue
+            status = Get-PDASafeString $_.status
+            updated_at = Get-PDASafeString $_.updated_at
+        }
+    }
+)
+
+$PendingApprovals = @(
+    $QueueSnapshot.pending_approvals | Select-Object -First 10 | ForEach-Object {
+        [pscustomobject]@{
+            task_id = Get-PDASafeString $_.task_id
+            command = Get-PDASafeString $_.command
+            worker = Get-PDASafeString $_.worker_name
+            category = Get-PDASafeString $_.category
+            approval_status = Get-PDASafeString $_.approval_status
+            queue = Get-PDASafeString $_.queue
+            updated_at = Get-PDASafeString $_.updated_at
+            file_name = Get-PDASafeString $_.file_name
+        }
+    }
+)
+
+$OverallHealth = "pass"
+foreach ($Candidate in @(
+    $StackReport.status,
+    $ModelSnapshot.status,
+    $CommanderSnapshot.status,
+    $ModelSnapshot.provider_validation.status,
+    $ModelSnapshot.env_validation.status,
+    $CommanderSnapshot.command_interpreter.status,
+    $CommanderSnapshot.command_handoff.status,
+    $CommanderSnapshot.chat_bridge.status,
+    $CommanderSnapshot.webhook_bridge.status
+)) {
+    if ([string]$Candidate -in @("fail", "degraded")) {
+        $OverallHealth = "degraded"
+        break
+    }
+    elseif ([string]$Candidate -in @("warn", "partial", "unknown", "missing")) {
+        if ($OverallHealth -ne "degraded") {
+            $OverallHealth = "warning"
+        }
+    }
+}
+
+$Report = [pscustomobject]@{
+    status = "pass"
+    generated_at = $GeneratedAt
+    root_path = $Root
+    dashboard_path = $DashboardPath
+    dashboard_health = [pscustomobject]@{
+        status = $OverallHealth
+        note = if ($OverallHealth -eq "pass") { "All tracked dashboard surfaces are healthy." } elseif ($OverallHealth -eq "warning") { "At least one tracked surface is degraded or unavailable." } else { "One or more critical surfaces failed validation." }
+    }
+    system_health = [pscustomobject]@{
+        status = Get-PDASafeString $StackReport.status
+        deep_validation_requested = if ($StackReport.PSObject.Properties.Name -contains "deep_validation_requested") { [bool]$StackReport.deep_validation_requested } else { $false }
+        service_check_count = if ($StackReport.PSObject.Properties.Name -contains "service_check_count") { [int]$StackReport.service_check_count } else { 0 }
+        total_check_count = if ($StackReport.PSObject.Properties.Name -contains "total_check_count") { [int]$StackReport.total_check_count } else { 0 }
+        passed_count = if ($StackReport.PSObject.Properties.Name -contains "passed_count") { [int]$StackReport.passed_count } else { 0 }
+        failed_count = if ($StackReport.PSObject.Properties.Name -contains "failed_count") { [int]$StackReport.failed_count } else { 0 }
+        results = @($SystemHealthResults)
+        raw = if ($StackReport) { $StackReport } else { $null }
+    }
+    queue_status = [pscustomobject]@{
+        counts = $QueueSnapshot.counts
+        queue_depth = [int]$QueueSnapshot.queue_depth
+        latest = $QueueSnapshot.latest
+        recent_tasks = @($RecentTasks)
+    }
+    worker_status = [pscustomobject]@{
+        registry = $WorkerSnapshot.registry
+        runtime_states = @($WorkerSnapshot.runtime_states)
+        heartbeats = @($WorkerSnapshot.heartbeats)
+    }
+    pending_approvals = @($PendingApprovals)
+    recent_tasks = @($RecentTasks)
+    recent_artifacts = @($ArtifactSnapshot.recent)
+    model_status = [pscustomobject]@{
+        status = Get-PDASafeString $ModelSnapshot.status
+        routing_policy = $ModelSnapshot.routing_policy
+        provider_validation = $ModelSnapshot.provider_validation
+        env_validation = $ModelSnapshot.env_validation
+    }
+    commander_integration = [pscustomobject]@{
+        status = Get-PDASafeString $CommanderSnapshot.status
+        conversation_state = $CommanderSnapshot.conversation_state
+        task_result = $CommanderSnapshot.task_result
+        command_interpreter = $CommanderSnapshot.command_interpreter
+        command_handoff = $CommanderSnapshot.command_handoff
+        chat_bridge = $CommanderSnapshot.chat_bridge
+        webhook_bridge = $CommanderSnapshot.webhook_bridge
+    }
+    memory_summary = [pscustomobject]@{
+        status = Get-PDASafeString $MemorySnapshot.status
+        count = [int]$MemorySnapshot.count
+        updated_at = Get-PDASafeString $MemorySnapshot.updated_at
+        by_type = @($MemorySnapshot.by_type)
+        by_category = @($MemorySnapshot.by_category)
+        recent = @($MemorySnapshot.recent)
+    }
+    artifacts_summary = [pscustomobject]@{
+        status = Get-PDASafeString $ArtifactSnapshot.status
+        count = [int]$ArtifactSnapshot.count
+        updated_at = Get-PDASafeString $ArtifactSnapshot.updated_at
+        by_worker = @($ArtifactSnapshot.by_worker)
+        recent = @($ArtifactSnapshot.recent)
+    }
+}
+
+if ($AsJson) {
+    $Report | ConvertTo-Json -Depth 30
+    if (-not $NoThrow -and $Report.status -ne "pass") {
+        throw "PDA dashboard status collection failed."
+    }
+    return
+}
+
+Write-Host "[PDA DASHBOARD STATUS]"
+Write-Host ("Generated at    : {0}" -f $Report.generated_at)
+Write-Host ("Dashboard path  : {0}" -f $Report.dashboard_path)
+Write-Host ("Overall health   : {0}" -f $Report.dashboard_health.status)
+Write-Host ("Queue depth      : {0}" -f $Report.queue_status.queue_depth)
+Write-Host ("Pending approvals: {0}" -f @($Report.pending_approvals).Count)
+Write-Host ("Recent tasks     : {0}" -f @($Report.recent_tasks).Count)
+Write-Host ("Recent artifacts : {0}" -f @($Report.recent_artifacts).Count)
+
+if (-not $NoThrow -and $Report.status -ne "pass") {
+    throw "PDA dashboard status collection failed."
+}

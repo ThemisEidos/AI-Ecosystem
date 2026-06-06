@@ -1,249 +1,194 @@
-# PDA Dashboard
+# PDA Dashboard v2
 
-Last updated: 2026-06-04
+Updated: 2026-06-05 23:07:00 -07:00
+Overall health: pass
 
-## Active Workers
+## System Health
 
-| Worker | Command | Status | Notes |
-|---|---|---|---|
-| `reporter-worker` | `/reporter` | active | Orchestrates timeline, findings, research, draft, review, and staged intake. |
-| `planner-worker` | `/planner` | active | Produces implementation plans. |
-| `research-worker` | `/research` | active | Produces operational research synthesis. |
-| `review-worker` | `/review` | active | Supports file-based review and message-only test mode. |
-| `execute-worker` | `/execute` | active | Dry-run/no-op unless explicitly approved. |
+| check | status | passed | failed | details |
+| --- | --- | --- | --- | --- |
+| PDA stack | pass | 5 | 0 | Open WebUI / n8n / LiteLLM / Ollama |
+| Deep validation | pass | - | - | Open WebUI chat completion |
 
-## Supported Commands
+| name | passed | type | status_code |
+| --- | --- | --- | --- |
+| Open WebUI | yes | service | 200 |
+| n8n | yes | service | 200 |
+| LiteLLM | yes | service | 401 |
+| Ollama | yes | service | 200 |
+| Open WebUI Chat Completion | yes | deep_validation | 200 |
 
-| Command | Route | Input Modes | Output |
-|---|---|---|---|
-| `/reporter` | reporter | staged JSON + queue JSON | Obsidian report chain + result JSON |
-| `/planner` | planner | staged JSON + queue JSON + message-only test | Planner markdown + result JSON |
-| `/research` | research | staged JSON + queue JSON + message-only test | Research markdown + result JSON |
-| `/review` | review | file-based + message-only test | Review markdown + result JSON |
-| `/execute` | execute | file-based + message-only test-dry-run | Execution manifest + result JSON |
+## Queue Status
 
-## Task Ontology Status
+| metric | value |
+| --- | --- |
+| Queue depth | 71 |
+| Pending | 71 |
+| Running | 0 |
+| Completed | 41 |
+| Failed | 244 |
+| Results | 521 |
+| Pending approvals | 27 |
 
-- Ontology file: `C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\Scripts\PDA_TaskOntology.json`
-- Schema file: `C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\Scripts\PDA_TaskOntology.schema.json`
-- Validation helper: `C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\Scripts\Validate-PDATaskOntology.ps1`
-- Query helper: `C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\Scripts\Get-PDATaskType.ps1`
-- Worker resolver: `C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\Scripts\Resolve-PDATaskWorkers.ps1`
-- Category 2 routing remains local-only and fails closed if a cloud-capable route appears.
+### Latest Queue Files
 
-## Conversational PDA
+| queue | task_id | command | status | updated_at |
+| --- | --- | --- | --- | --- |
+| pending | 7fed2f49-eb17-41f5-9443-be7cc525b9b2 | /review | queued | 06/06/2026 06:05:01 |
+| completed | b4486b1b-8663-4068-b110-b4f215ea418f | /research | success | 06/06/2026 03:47:41 |
+| failed | 881c700e-d685-42e6-b7fa-39ca8d904501 | /research | failed | 06/06/2026 03:44:44 |
+| results | 8830e146-9624-4700-8a42-3cd5858b9eeb | - | completed | 06/06/2026 04:56:12 |
 
-- Interpreter: `C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\Scripts\PDA_CommandInterpreter.ps1`
-- Handoff gate: `C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\Scripts\Invoke-PDACommandHandoff.ps1`
-- Chat bridge: `C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\Scripts\Invoke-PDAChatBridge.ps1`
-- Webhook bridge: `C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\Scripts\Invoke-PDAWebhookBridge.ps1`
-- HTTP bridge generator: `C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\Scripts\New-PDAHttpBridgeWorkflow.ps1`
-- n8n clipboard generator: `C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\Scripts\New-PDAN8nClipboardWorkflow.ps1`
-- reachability probe: `C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\Scripts\Test-PDAWebhookServerReachability.ps1`
-- HTTP server: `C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\Scripts\Start-PDAWebhookServer.ps1`
-- Phase 1 status: read-only interpreter with ontology-backed recommendations
-- Phase 2 status: UI-facing confirmation gate before governed dispatch
-- Phase 3 status: JSON bridge contract for Open WebUI / n8n
-- Phase 4 status: webhook wrapper for n8n transport and confirmation replay
-- Phase 5 status: local HTTP bridge for n8n HTTP Request integration
-- Safety: unknown or ambiguous requests do not dispatch and confirmation is explicit only
+## Worker Status
 
-## Open WebUI Integration Status
+| worker_name | command | status | routing_surface | cloud_capable | accepted_input_modes |
+| --- | --- | --- | --- | --- | --- |
+| reporter-worker | /reporter | active | local-only | no | staged-json, queue-json |
+| planner-worker | /planner | active | local-only | no | queue-json, staged-json, message-only-test |
+| research-worker | /research | active | local-only | no | queue-json, staged-json, message-only-test |
+| draft-worker | /draft | active | local-or-cloud | yes | file-based, message-only-test |
+| review-worker | /review | active | local-only | no | file-based, message-only-test |
+| execute-worker | /execute | active | local-only | no | file-based, message-only-test-dry-run |
+| fabric-worker | /fabric | experimental | local-or-litellm | yes | message-only-test, file |
 
-- Chat Bridge: `C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\Scripts\Invoke-PDAChatBridge.ps1`
-- Webhook Bridge: `C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\Scripts\Invoke-PDAWebhookBridge.ps1`
-- HTTP Bridge: `C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\Scripts\Start-PDAWebhookServer.ps1`
-- n8n Clipboard Workflow: `C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\n8n Workflow\PDA-ChatBridge-HTTP-Clipboard.json`
-- Webhook Reachability: `C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\Scripts\Test-PDAWebhookServerReachability.ps1`
-- n8n Workflow: `C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\n8n Workflow\PDA-ChatBridge.json`
-- HTTP Workflow: `C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\n8n Workflow\PDA-ChatBridge-HTTP.json`
-- Integration Test Status: deterministic, local-only, no queue bypass
+### Runtime States
 
-## Model Routing Policy
+| component | status | pid | started_at |
+| --- | --- | --- | --- |
+| pda-worker-state | running | 19676 | 06/03/2026 04:23:53 |
+| pda-reporter-intake-state | running | 26484 | 06/03/2026 04:24:02 |
+| pda-multiagent-intake-state | running | 25164 | 06/03/2026 04:24:10 |
 
-- Policy file: `C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\Scripts\PDA_ModelRouting.json`
-- Lookup script: `C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\Scripts\Get-PDAModelRoute.ps1`
-- Test script: `C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\Scripts\Test-PDAModelRouting.ps1`
-- Gateway: LiteLLM where possible
-- Review worker: Claude or GPT
-- Draft worker: GPT or Claude
-- Research worker: Gemini or OpenRouter
-- Sensitive or local-only tasks: local-llama only
-- Validation status: pass
+### Heartbeats
 
-## LiteLLM Provider Health
+| worker_name | status | state | age_minutes | process_live |
+| --- | --- | --- | --- | --- |
+| test-worker | running | STALE | 4818.34 | no |
 
-- Config file: `C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\litellm\litellm_config.yaml`
-- Compose file: `C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\PDA-Runtime\docker-compose.yml`
-- Validation script: `C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\Scripts\Test-PDALiteLLMProviders.ps1`
-- Endpoint: `http://localhost:4000/v1/models`
-- Provider routes: `openai`, `claude`, `gemini`, `openrouter`, `local-llama`
-- Key loading: environment variables only via `os.environ/...`
-- Secret policy: no provider secrets are checked into the repo
-- Live validation: confirms the provider aliases exposed by LiteLLM match the expected routes
-- Validation status: pass
+## Pending Approvals
 
-## LiteLLM Env Loading
+| task_id | command | worker | category | approval_status | updated_at | file_name |
+| --- | --- | --- | --- | --- | --- | --- |
+| 3013f01d-bb38-4d22-addd-6cbe716f2ff6 | /execute | execute-worker | category_1 | pending | 06/06/2026 03:34:37 | 2026-06-05_20-34-37-execute.json |
+| 6e640052-e868-4eb2-b5e1-908861b49d22 | /execute | execute-worker | category_1 | pending | 06/06/2026 03:32:16 | 2026-06-05_20-32-16-execute.json |
+| f92850bd-a0f0-4fc8-a61c-dada79be843f | /review | review-worker | category_2 | pending | 06/03/2026 23:02:04 | approval-category2.json |
+| 0af1ad7e-a52f-46e2-9710-d697bf18571a | /execute | execute-worker | category_1 | pending | 06/03/2026 23:02:03 | approval-execute.json |
+| 5cd5435c-91c3-4b7c-974d-7db09c198706 | /review | review-worker | category_2 | pending | 06/03/2026 22:06:10 | 5cd5435c-91c3-4b7c-974d-7db09c198706.json |
+| f499fe03-4beb-4a1f-aa19-9a6ec0b59858 | /review | review-worker | category_2 | pending | 06/03/2026 21:31:03 | f499fe03-4beb-4a1f-aa19-9a6ec0b59858.json |
+| 91619039-fd2c-41e2-874f-c56fa8c360ad | /review | review-worker | category_2 | pending | 06/03/2026 21:21:50 | 91619039-fd2c-41e2-874f-c56fa8c360ad.json |
+| 93a0ef92-3437-4e32-aa58-ff0e6af72370 | /review | review-worker | category_2 | pending | 06/03/2026 21:16:01 | 93a0ef92-3437-4e32-aa58-ff0e6af72370.json |
+| ec022471-2812-4968-88d8-e51c31e5fd0c | /review | review-worker | category_2 | pending | 06/03/2026 21:08:55 | ec022471-2812-4968-88d8-e51c31e5fd0c.json |
+| b7b97849-807c-45a9-97ca-b274681bb09a | /review | review-worker | category_2 | pending | 06/03/2026 20:42:25 | b7b97849-807c-45a9-97ca-b274681bb09a.json |
 
-- Local env file: `C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\litellm\.env.local`
-- Example template: `C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\litellm\.env.local.example`
-- Compose env_file: `../litellm/.env.local`
-- Validation script: `C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\Scripts\Test-PDALiteLLMEnv.ps1`
-- Git ignore protection: `.gitignore` excludes `litellm/.env.local`
-- Example safety: template contains placeholders only, no secrets
-- Validation status: pass
+## Recent Tasks
 
-## LiteLLM Invocation Adapter
+| task_id | command | worker | category | queue | status | updated_at |
+| --- | --- | --- | --- | --- | --- | --- |
+| 7fed2f49-eb17-41f5-9443-be7cc525b9b2 | /review | review-worker | category_1 | pending | queued | 06/06/2026 06:05:01 |
+| d47d67b9-3071-4bfe-84d0-78d273b4ace2 | /review | review-worker | category_1 | pending | queued | 06/06/2026 06:04:28 |
+| e050c7c2-30cd-42c6-9a50-e389455e7caf | /reporter | reporter-worker | category_1 | pending | queued | 06/06/2026 06:03:55 |
+| 87d8b47f-3747-4256-87c2-f08649335b7f | /planner | planner-worker | category_1 | pending | queued | 06/06/2026 06:03:37 |
+| 1f33ea4f-4981-4e8e-b8a9-1a29e915604b | /review | review-worker | category_1 | pending | queued | 06/06/2026 06:02:59 |
+| 74333a35-507a-4601-9402-619449dfc22a | /review | review-worker | category_1 | pending | queued | 06/06/2026 06:02:29 |
+| 0bd26de3-ea5b-404f-9e13-05834c1fec87 | /review | review-worker | category_1 | pending | queued | 06/06/2026 06:02:26 |
+| 3e16aa88-7ea5-4730-bc2d-809ed51c26b8 | /review | review-worker | category_1 | pending | queued | 06/06/2026 06:01:54 |
+| 17bde713-f10a-48d9-b061-e74e921ce082 | /reporter | reporter-worker | category_1 | pending | queued | 06/06/2026 06:01:51 |
+| 9e4ea66a-7aef-4179-bdf3-cb28905f4ed2 | /planner | planner-worker | category_1 | pending | queued | 06/06/2026 06:01:31 |
 
-- Adapter file: `C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\Scripts\Invoke-PDAModel.ps1`
-- Validation script: `C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\Scripts\Test-PDAModelInvocation.ps1`
-- Inputs: `worker_name`, `task_type`, `sensitivity`, `prompt`
-- Flow: model route lookup, LiteLLM `/v1/chat/completions`, normalized JSON response
-- Restricted local rule: `restricted_local` routes only to `local-llama`
-- Secret policy: no provider secrets are checked into the repo
-- Validation status: pass, with one skipped upstream provider case during live validation
+## Recent Reports / Artifacts
 
-## LiteLLM Fallback Status
+| artifact_id | created_at | worker_name | category | artifact_type | summary |
+| --- | --- | --- | --- | --- | --- |
+| artifact-e411c055-55e8-418c-a219-08a96a346d91 | 06/05/2026 21:56:13 | review-worker | category_2 | worker_result_json | Review worker canonical result contract |
+| artifact-7c8f9604-e9a2-4119-abc8-1907da2e35da | 06/05/2026 21:56:12 | review-worker | category_2 | worker_result_json | Review worker canonical result contract |
+| artifact-3d5464ec-d37f-41a2-8bc1-20271f21fec1 | 06/05/2026 21:56:12 | review-worker | category_2 | review_markdown | Review worker markdown output |
+| artifact-cd57c999-5e1a-4546-9a6d-d23997d5b61e | 06/05/2026 21:55:11 | draft-worker | category_1 | worker_result_json | Draft worker canonical result contract |
+| artifact-618843e4-fa0b-4fda-993d-dcb7bf58aa1a | 06/05/2026 21:55:10 | draft-worker | category_1 | draft_markdown | Draft worker markdown output |
+| artifact-2f9b138a-1af2-4a67-b279-aa42286c4016 | 06/05/2026 21:55:10 | draft-worker | category_1 | worker_result_json | Draft worker canonical result contract |
+| artifact-3a4fc72e-a00a-44d1-9a1a-81e205da7fb4 | 06/05/2026 21:55:04 | draft-worker | category_1 | draft_markdown | Draft worker markdown output |
+| artifact-701edbba-e641-44b7-bcea-bbec1ce76300 | 06/05/2026 21:55:04 | draft-worker | category_1 | worker_result_json | Draft worker canonical result contract |
+| artifact-f7287e2c-d766-446c-ad78-5e6eaf457502 | 06/05/2026 21:54:58 | research-worker | category_3 | worker_result_json | Research worker canonical result contract |
+| artifact-bd0d5b4e-c180-47d4-8411-92a3ffba941b | 06/05/2026 21:54:57 | research-worker | category_3 | worker_result_json | Research worker canonical result contract |
 
-- Validation script: `C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\Scripts\Test-PDAModelFallback.ps1`
-- Fallback policy: approved draft/research routes may retry within their model candidate list
-- Restricted local rule: no cloud fallback is allowed
-- Draft fallback: enabled within approved policy
-- Research fallback: enabled within approved policy
-- Validation status: pass
+## Model Status
 
-## Review Worker Adapter
+| metric | status | path | count | passed | failed | loaded | blank | missing |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Routing policy | pass | C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\Scripts\PDA_ModelRouting.json | 1 | - | - | - | - | - |
+| Provider validation | pass | - | 5 | 5 | 0 | - | - | - |
+| Env validation | pass | - | 1 | - | - | 5 | 0 | 0 |
 
-- Worker file: `C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\Scripts\Invoke-PDAReviewWorker.ps1`
-- Validation script: `C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\Scripts\Test-PDAReviewWorker.ps1`
-- Flow: `Get-PDAModelRoute.ps1` -> `Invoke-PDAModel.ps1` -> LiteLLM -> canonical result JSON
-- Local route: review tasks are forced through `restricted_local` and stay on `local-llama`
-- Result artifact: written to `PDA-Tasks/results/<task_id>-result.json`
-- Failure handling: writes a safe failed result artifact without queue bypass
-- Validation status: pass
+### Command Routes
 
-## Draft Worker Adapter
+| command | primary_model | fallback_chain | routing_surface | cloud_allowed |
+| --- | --- | --- | --- | --- |
+| /research | gemini | openrouter | cloud-capable | yes |
+| /review | claude | openai | cloud-capable | yes |
+| /draft | openai | claude | cloud-capable | yes |
+| /execute | local-llama | - | local-only | no |
 
-- Worker file: `C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\Scripts\Invoke-PDADraftWorker.ps1`
-- Validation script: `C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\Scripts\Test-PDADraftWorker.ps1`
-- Flow: `Get-PDAModelRoute.ps1` -> `Invoke-PDAModel.ps1` -> LiteLLM -> canonical result JSON
-- Default sensitivity: `standard`
-- Route preference: `gpt` or `claude`
-- Result artifact: written to `PDA-Tasks/results/<task_id>-result.json`
-- Failure handling: writes a safe failed result artifact without queue bypass
-- Validation status: pass
+### Provider Availability
 
-## Research Worker Adapter
+| name | configured | env_reference_ok | host_env_present | live_available | api_provider |
+| --- | --- | --- | --- | --- | --- |
+| openai | yes | yes | yes | yes | openai/gpt-4o-mini |
+| claude | yes | yes | yes | yes | anthropic/claude-sonnet-4-5-20250929 |
+| gemini | yes | yes | yes | yes | gemini/gemini-2.0-flash |
+| openrouter | yes | yes | yes | yes | openrouter/openai/gpt-4o-mini |
+| local-llama | yes | yes | yes | yes | ollama/llama3.2 |
 
-- Worker file: `C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\Scripts\Invoke-PDAResearchWorker.ps1`
-- Validation script: `C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\Scripts\Test-PDAResearchWorker.ps1`
-- Flow: `Get-PDAModelRoute.ps1` -> `Invoke-PDAModel.ps1` -> LiteLLM -> canonical result JSON
-- Default route: `gemini` or `openrouter`
-- Result artifact: written to `PDA-Tasks/results/<task_id>-result.json`
-- Failure handling: writes a safe failed result artifact without queue bypass
-- Validation status: pass
+## PDA Commander Integration
 
-## Reporter Pipeline Status
+| component | status | passed | failed | details |
+| --- | --- | --- | --- | --- |
+| Command Interpreter | pass | 7 | 0 | mapped / ambiguous / unknown routing |
+| Governed Handoff | pass | 5 | 0 | confirmation gate |
+| Chat Bridge | pass | 6 | 0 | Open WebUI / n8n bridge |
+| Webhook Bridge | pass | 4 | 0 | webhook transport wrapper |
 
-- Worker file: `C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\Scripts\Invoke-PDAReporterWorker.ps1`
-- Validation script: `C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\Scripts\Test-PDAReporterWorker.ps1`
-- Flow: `Invoke-PDATimelineWorker.ps1` -> `Invoke-PDAFindingsWorker.ps1` -> `Invoke-PDAResearchWorker.ps1` -> `Invoke-PDADraftWorker.ps1` -> `Invoke-PDAReviewWorker.ps1`
-- Result artifact: written to `PDA-Tasks/results/<task_id>-result.json`
-- Conversation lookup: passes through `latest_task_id` and `latest_result_path`
-- Failure handling: writes a safe failed result artifact without queue bypass
-- Validation status: pass
+### Conversation Snapshot
 
-## Conversation State Registry
+| metric | value |
+| --- | --- |
+| Conversation status | pass |
+| Conversation ID | default |
+| Active tasks | 18 |
+| Pending approvals | 0 |
+| Submitted tasks | 18 |
+| Completed tasks | 0 |
+| Latest task ID | - |
+| Latest result path | - |
 
-- Registry file: `C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\PDA-Runtime\data\conversation-state.json`
-- Lookup script: `C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\Scripts\Get-PDAConversationState.ps1`
-- Update script: `C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\Scripts\Update-PDAConversationState.ps1`
-- Bridge integration: conversation/session IDs now pass from Open WebUI Pipe through n8n to the bridge
-- Tracked surfaces: active conversations, pending approvals, submitted tasks, completed tasks, latest results
-- Status lookup: later prompts such as "What happened to my report?" resolve from the tracked conversation state
-- Current live snapshot: `conv-live-dispatch-001` is the latest submitted conversation, `conv-live-pass-004` is the latest status lookup conversation
-- Current tracked conversations: `conv-live-dispatch-001`, `conv-live-pass-004`, `conv-state-test-001`, `conv-state-test-004`, `default`
+> Task e050c7c2-30cd-42c6-9a50-e389455e7caf for /reporter has been submitted and is waiting in the queue.
 
-## Task Result Retrieval
+> Next: Wait for the queue worker to finish, then ask again for the latest status.
 
-- Lookup script: `C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\Scripts\Get-PDATaskResult.ps1`
-- Test script: `C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\Scripts\Test-PDATaskResult.ps1`
-- Live lookup mode: prefers `latest_task_id` from conversation state, then resolves the matching task record and result artifact
-- Completed artifact example: `ea5d19d8-4cc0-427f-9be0-8659b10ffe8a-result.json`
-- Live queued example: `conv-live-dispatch-001` resolves to task `e6deb443-580d-4d61-bf36-84f10125de9a` and reports queue wait status
-- Result exposure: the bridge returns both task status text and latest result artifact metadata when a result exists
-- Validation status: pass
+## Memory Summary
 
-## Ontology Enforcement
+| metric | value |
+| --- | --- |
+| Memory count | 2 |
+| Updated at | 06/03/2026 13:26:24 |
+| By type | promoted-artifact: 1, test-note: 1 |
+| By category | category_1: 1, test: 1 |
 
-- Approved entrypoints snapshot: `C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\Scripts\PDA_ApprovedEntrypoints.json`
-- Static drift scan: `C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\Scripts\Test-PDAOntologyGovernance.ps1`
-- Drift challenge test: `C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\Scripts\Test-PDAOntologyGovernanceDrift.ps1`
-- Enforced rules: ontology validation, command to task-type resolution, eligible worker resolution, Category 2 local-only routing, and fail-closed handling for unknown commands.
+### Memory Types
 
-## Repo Governance
+| name | count |
+| --- | --- |
+| promoted-artifact | 1 |
+| test-note | 1 |
 
-- Preflight check: `C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\Scripts\Test-PDARepoGovernance.ps1`
-- Scope: `Scripts\*.ps1` files that write to protected PDA task surfaces.
-- Status: compared against the approved-entrypoint manifest before runtime dispatch.
+### Memory Categories
 
-## Retrieval Layer
+| name | count |
+| --- | --- |
+| category_1 | 1 |
+| test | 1 |
 
-- Shared retrieval module: `C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\Scripts\PDA_Retrieval.ps1`
-- Retrieval integrity check: `C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\Scripts\Test-PDARetrieval.ps1`
-- Query wrappers: `Get-PDAArtifacts.ps1`, `Get-PDAMemory.ps1`, `Get-PDATaskOntologyEntry.ps1`, `Get-PDAWorkerCapability.ps1`
-- Deterministic scope: artifact index, memory index, task ontology, worker registry, and lineage/foreign-reference validation only.
+### Recent Memories
 
-## Memory Taxonomy
-
-- Taxonomy file: `C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\Scripts\PDA_MemoryTaxonomy.json`
-- Schema file: `C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\Scripts\PDA_MemoryTaxonomy.schema.json`
-- Validation helper: `C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\Scripts\Validate-PDAMemoryTaxonomy.ps1`
-- Normalization checker: `C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\Scripts\Test-PDAMemoryTaxonomy.ps1`
-- Current status: pass
-- Total memory records: 2
-- Valid records: 2
-- Invalid records: 0
-- Missing fields: 0
-- Invalid values: 0
-- Invalid tags: 0
-- Source reference issues: 0
-- Orphaned lineage: 0
-
-## Queue / Watchers
-
-- Queue counts:
-  - pending: 161
-  - running: 0
-  - completed: 40
-  - failed: 0
-  - results: 23
-- Watchers:
-  - queue worker: running
-  - reporter intake watcher: running
-  - multi-agent intake watcher: running
-
-## Latest Artifacts
-
-- Reporter manifest: `C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\Obsidian Vault\02_Projects\AI Tool Ecosystem\Agent Findings\Reports\reporter-manifest-20260602-123105.json`
-- Planner output: `C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\Obsidian Vault\02_Projects\AI Tool Ecosystem\Agent Findings\Planner\planner-output-20260602-125723.md`
-- Research output: `C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\Obsidian Vault\02_Projects\AI Tool Ecosystem\Agent Findings\Research\research-output-20260602-130045.md`
-- Review output: `C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\Obsidian Vault\02_Projects\AI Tool Ecosystem\Agent Findings\Reviews\review-output-20260602-130620.md`
-- Execute output: `C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\Obsidian Vault\02_Projects\AI Tool Ecosystem\Agent Findings\Execution\execution-output-20260602-130629.md`
-
-## Known Limitations
-
-- `execute-worker` is intentionally dry-run/no-op unless explicitly approved.
-- Message-only tests for `/review` and `/execute` create synthetic local inputs so real file-based validation remains strict.
-- n8n is a staging transport only; canonical control lives in PowerShell queue workers.
-- Codex remains for development and maintenance, not routine operation.
-
-## Category Enforcement
-
-| Category | Policy |
-|---|---|
-| `category_1` | Local or cloud-capable routing allowed. |
-| `category_2` | Restricted-local only; no cloud-capable or external-api routing. |
-
-- Restricted-local profile: no cloud credentials exposed in logs.
-- If a local route is unavailable, routing fails closed and does not dispatch.
+| memory_id | created_at | memory_type | category | title | summary |
+| --- | --- | --- | --- | --- | --- |
+| memory-17eaed7d-80ae-46e0-9541-7d48762b8229 | 06/02/2026 21:32:05 | promoted-artifact | category_1 | Planner artifact promoted to memory | Promoted the planner output for durable retention. |
+| memory-7d41a212-3f98-4a48-8e1a-45fd67203375 | 06/02/2026 21:27:30 | test-note | test | Memory validation sample | Harmless test memory for validating the registry. |

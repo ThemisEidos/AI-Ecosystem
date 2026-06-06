@@ -11,7 +11,16 @@ $ErrorActionPreference = "Stop"
 
 $Root = Split-Path -Parent $PSScriptRoot
 $HandoffScript = Join-Path $PSScriptRoot "Invoke-PDACommandHandoff.ps1"
-$PendingRoot = Join-Path $Root "PDA-Tasks\pending"
+$QueueSearchRoots = @(
+    Join-Path $Root "PDA-Tasks\pending"
+    Join-Path $Root "PDA-Tasks\running"
+    Join-Path $Root "PDA-Tasks\completed"
+    Join-Path $Root "PDA-Tasks\failed"
+    Join-Path $Root "PDA-Tasks\results"
+    Join-Path $Root "PDA-Tasks\approvals\pending"
+    Join-Path $Root "PDA-Tasks\approvals\approved"
+    Join-Path $Root "PDA-Tasks\approvals\rejected"
+)
 
 if (-not (Test-Path -Path $HandoffScript -PathType Leaf)) {
     throw "Command handoff missing: $HandoffScript"
@@ -23,17 +32,27 @@ function Find-QueueArtifactByMarker {
         [string]$Marker
     )
 
-    Get-ChildItem -Path $PendingRoot -Filter *.json -ErrorAction SilentlyContinue |
-        Where-Object {
-            try {
-                $Content = Get-Content $_.FullName -Raw -ErrorAction Stop
-                return ($Content -match [regex]::Escape($Marker))
-            }
-            catch {
-                return $false
-            }
-        } |
-        Select-Object -First 1
+    foreach ($SearchRoot in $QueueSearchRoots) {
+        if (-not (Test-Path -Path $SearchRoot -PathType Container)) {
+            continue
+        }
+
+        $Match = Get-ChildItem -Path $SearchRoot -Filter *.json -ErrorAction SilentlyContinue |
+            Where-Object {
+                try {
+                    $Content = Get-Content $_.FullName -Raw -ErrorAction Stop
+                    return ($Content -match [regex]::Escape($Marker))
+                }
+                catch {
+                    return $false
+                }
+            } |
+            Select-Object -First 1
+
+        if ($Match) {
+            return $Match
+        }
+    }
 }
 
 $Results = @()
@@ -163,13 +182,18 @@ foreach ($Case in $Cases) {
         $PendingMatch = Find-QueueArtifactByMarker -Marker $Case.marker
         if (-not $PendingMatch) {
             $CasePassed = $false
-            $Issues.Add("Confirmed dispatch did not create a pending queue task.")
+            $Issues.Add("Confirmed dispatch did not create a canonical queue artifact.")
         }
         else {
             $Queued = Get-Content $PendingMatch.FullName -Raw | ConvertFrom-Json
             if ($Queued.command -ne $Case.expect_command) {
                 $CasePassed = $false
                 $Issues.Add("Queued task command mismatch: $($Queued.command).")
+            }
+
+            if ($PendingMatch.FullName -match '\\approvals\\pending\\' -and $Case.expect_dispatch) {
+                $CasePassed = $false
+                $Issues.Add("Confirmed dispatch should not remain in approvals\\pending.")
             }
         }
     }

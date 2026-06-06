@@ -9,126 +9,100 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$DashboardScript = Join-Path $PSScriptRoot "Update-PDADashboard.ps1"
-if (-not (Test-Path -LiteralPath $DashboardScript -PathType Leaf)) {
-    throw "Dashboard refresh script missing: $DashboardScript"
+$Root = Split-Path -Parent $PSScriptRoot
+$UpdateScript = Join-Path $PSScriptRoot "Update-PDADashboard.ps1"
+$StatusScript = Join-Path $PSScriptRoot "Get-PDADashboardStatus.ps1"
+$DashboardPath = Join-Path $Root "Obsidian Vault\02_Projects\AI Tool Ecosystem\PDA Dashboard.md"
+$ParserPath = Join-Path $PSScriptRoot "PDA_OutputParsing.ps1"
+if (Test-Path -LiteralPath $ParserPath -PathType Leaf) {
+    . $ParserPath
 }
 
-function Invoke-DashboardRefresh {
+function Invoke-PDAJsonScript {
     param(
-        [Parameter(Mandatory = $true)][string]$RootPath,
-        [Parameter(Mandatory = $true)][string]$OutputDirectory
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string[]]$Arguments,
+        [Parameter(Mandatory = $true)][string]$SourceName
     )
 
-    $Raw = & pwsh -NoProfile -File $DashboardScript -RootPath $RootPath -OutputDirectory $OutputDirectory -AsJson -NoThrow 2>&1
+    $Raw = & pwsh -NoProfile -ExecutionPolicy Bypass -File $Path @Arguments 2>&1
     $Text = [string]($Raw -join "`n").Trim()
     if ([string]::IsNullOrWhiteSpace($Text)) {
-        throw "Dashboard refresh returned empty output."
+        throw "$SourceName returned empty output."
     }
 
-    return ($Text | ConvertFrom-Json)
+    return ConvertFrom-PDAMixedJson -Text $Text -SourceName $SourceName
 }
 
-function New-EmptyTestRoot {
-    param([Parameter(Mandatory = $true)][string]$Path)
-
-    New-Item -ItemType Directory -Force -Path (Join-Path $Path "Scripts") | Out-Null
-    New-Item -ItemType Directory -Force -Path (Join-Path $Path "PDA-Logs\routing") | Out-Null
-    New-Item -ItemType Directory -Force -Path (Join-Path $Path "PDA-Tasks") | Out-Null
-    New-Item -ItemType Directory -Force -Path (Join-Path $Path "Obsidian Vault\02_Projects\AI Tool Ecosystem") | Out-Null
-    @'
-{
-  "schema_version": "1.0",
-  "created_at": "",
-  "updated_at": "",
-  "memories": []
-}
-'@ | Set-Content -Path (Join-Path $Path "PDA_MemoryIndex.json") -Encoding UTF8
-    @'
-{
-  "schema_version": "1.0",
-  "created_at": "",
-  "updated_at": "",
-  "artifacts": []
-}
-'@ | Set-Content -Path (Join-Path $Path "PDA_ArtifactIndex.json") -Encoding UTF8
-}
-
-$RepoRoot = Split-Path -Parent $PSScriptRoot
-$TempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("pda-dashboard-" + [guid]::NewGuid().ToString("N"))
-New-Item -ItemType Directory -Path $TempRoot -Force | Out-Null
+$Issues = New-Object System.Collections.Generic.List[string]
 
 try {
-    $EmptyRoot = Join-Path $TempRoot "empty-root"
-    $EmptyOutput = Join-Path $EmptyRoot "Obsidian Vault\02_Projects\AI Tool Ecosystem"
-    New-EmptyTestRoot -Path $EmptyRoot
+    if (-not (Test-Path -LiteralPath $StatusScript -PathType Leaf)) {
+        throw "Dashboard status script missing: $StatusScript"
+    }
+    if (-not (Test-Path -LiteralPath $UpdateScript -PathType Leaf)) {
+        throw "Dashboard update script missing: $UpdateScript"
+    }
 
-    $LiveOutput = Join-Path $RepoRoot "Obsidian Vault\02_Projects\AI Tool Ecosystem"
+    $StatusReport = Invoke-PDAJsonScript -Path $StatusScript -Arguments @("-AsJson", "-NoThrow", "-RootPath", $Root) -SourceName "dashboard status"
+    $UpdateReport = Invoke-PDAJsonScript -Path $UpdateScript -Arguments @("-AsJson", "-NoThrow", "-RootPath", $Root) -SourceName "dashboard refresh"
 
-    $EmptyResult = Invoke-DashboardRefresh -RootPath $EmptyRoot -OutputDirectory $EmptyOutput
-    $LiveResult = Invoke-DashboardRefresh -RootPath $RepoRoot -OutputDirectory $LiveOutput
+    if ($StatusReport.status -ne "pass") {
+        $Issues.Add("Dashboard status collection did not return pass.")
+    }
+    if ($UpdateReport.status -ne "pass") {
+        $Issues.Add("Dashboard refresh did not return pass.")
+    }
 
-    $Results = @()
-
-    $EmptyIssues = @()
-    foreach ($ExpectedFile in @("PDA Operator Console.md", "Routing Summary.md", "System Status.md", "Task Summary.md")) {
-        $Path = Join-Path $EmptyOutput $ExpectedFile
-        if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
-            $EmptyIssues += "Missing dashboard output: $ExpectedFile"
-            continue
-        }
-
-        $Content = Get-Content -LiteralPath $Path -Raw
+    if (-not (Test-Path -LiteralPath $DashboardPath -PathType Leaf)) {
+        $Issues.Add("Dashboard markdown file was not written.")
+    }
+    else {
+        $Content = Get-Content -LiteralPath $DashboardPath -Raw
         if ([string]::IsNullOrWhiteSpace($Content)) {
-            $EmptyIssues += "Dashboard output is empty: $ExpectedFile"
-        }
-    }
-    $Results += [pscustomobject]@{
-        name = "empty system"
-        passed = ($EmptyIssues.Count -eq 0)
-        issues = @($EmptyIssues)
-    }
-
-    $LiveIssues = @()
-    if ([string]$LiveResult.status -ne "pass") {
-        $LiveIssues += "Live dashboard refresh did not return pass."
-    }
-    foreach ($ExpectedFile in @("PDA Operator Console.md", "Routing Summary.md", "System Status.md", "Task Summary.md")) {
-        $Path = Join-Path $LiveOutput $ExpectedFile
-        if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
-            $LiveIssues += "Missing live dashboard output: $ExpectedFile"
-            continue
+            $Issues.Add("Dashboard markdown file is empty.")
         }
 
-        $Content = Get-Content -LiteralPath $Path -Raw
-        if ($ExpectedFile -eq "System Status.md" -and $Content -notmatch "AI Ecosystem Status") {
-            $LiveIssues += "System Status.md missing AI Ecosystem status section."
+        foreach ($Heading in @(
+            "# PDA Dashboard v2",
+            "## System Health",
+            "## Queue Status",
+            "## Worker Status",
+            "## Pending Approvals",
+            "## Recent Tasks",
+            "## Recent Reports / Artifacts",
+            "## Model Status",
+            "## PDA Commander Integration",
+            "## Memory Summary"
+        )) {
+            if ($Content -notmatch [regex]::Escape($Heading)) {
+                $Issues.Add("Dashboard markdown file is missing heading: $Heading")
+            }
         }
-        if ($ExpectedFile -eq "Routing Summary.md" -and $Content -notmatch "Dispatches By Model") {
-            $LiveIssues += "Routing Summary.md missing routing metrics section."
+
+        if ($Content -notmatch '(?m)^Updated:\s+') {
+            $Issues.Add("Dashboard markdown file is missing a refresh timestamp.")
         }
-        if ($ExpectedFile -eq "Task Summary.md" -and $Content -notmatch "Queue Metrics") {
-            $LiveIssues += "Task Summary.md missing queue metrics section."
-        }
-    }
-    $Results += [pscustomobject]@{
-        name = "active system"
-        passed = ($LiveIssues.Count -eq 0)
-        issues = @($LiveIssues)
     }
 
-    $FailedCount = @($Results | Where-Object { -not $_.passed }).Count
     $Report = [pscustomobject]@{
-        status = if ($FailedCount -eq 0) { "pass" } else { "fail" }
-        dashboard_script = $DashboardScript
-        result_count = $Results.Count
-        failed_count = $FailedCount
-        results = @($Results)
+        status = if ($Issues.Count -eq 0) { "pass" } else { "fail" }
+        dashboard_script = $UpdateScript
+        status_script = $StatusScript
+        dashboard_path = $DashboardPath
+        issues = @($Issues)
+        status_report = $StatusReport
+        update_report = $UpdateReport
     }
 }
-finally {
-    if (Test-Path -LiteralPath $TempRoot -PathType Container) {
-        Remove-Item -LiteralPath $TempRoot -Recurse -Force
+catch {
+    $Issues.Add($_.Exception.Message)
+    $Report = [pscustomobject]@{
+        status = "fail"
+        dashboard_script = $UpdateScript
+        status_script = $StatusScript
+        dashboard_path = $DashboardPath
+        issues = @($Issues)
     }
 }
 
@@ -141,8 +115,9 @@ if ($AsJson) {
 }
 
 Write-Host "[*] PDA dashboard refresh tests"
-Write-Host ("Test cases : {0}" -f $Report.result_count)
-Write-Host ("Failed     : {0}" -f $Report.failed_count)
+Write-Host ("Dashboard path : {0}" -f $Report.dashboard_path)
+Write-Host ("Status         : {0}" -f $Report.status)
+Write-Host ("Issues         : {0}" -f @($Report.issues).Count)
 
 if (-not $NoThrow -and $Report.status -ne "pass") {
     throw "PDA dashboard refresh validation failed."

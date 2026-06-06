@@ -56,7 +56,7 @@ function Test-PDAConfirmationMessage {
 }
 
 function Get-PDAConversationPendingActionFromSummary {
-    param([Parameter(Mandatory = $true)]$ConversationState)
+    param([Parameter(Mandatory = $false)]$ConversationState)
 
     if (-not $ConversationState) {
         return $null
