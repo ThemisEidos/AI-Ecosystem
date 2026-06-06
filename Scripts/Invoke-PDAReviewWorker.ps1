@@ -9,6 +9,7 @@ param(
 $Root = "C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem"
 $AdapterScript = Join-Path $Root "Scripts\Invoke-PDAModel.ps1"
 $FabricScript = Join-Path $Root "Scripts\Invoke-PDAFabricPattern.ps1"
+. (Join-Path $Root "Scripts\PDA_OutputParsing.ps1")
 if ([string]::IsNullOrWhiteSpace($RegistryPath)) {
     $RegistryPath = Join-Path $Root "Scripts\PDA_WorkerRegistry.json"
 }
@@ -135,8 +136,8 @@ function Invoke-PDAFabricPromptRender {
         [Parameter(Mandatory = $true)]
         [string]$Category,
 
-        [Parameter(Mandatory = $true)]
-        [string]$SourcePath
+        [Parameter(Mandatory = $false)]
+        [string]$SourcePath = ""
     )
 
     if ([string]::IsNullOrWhiteSpace($PatternName)) {
@@ -176,18 +177,8 @@ function Invoke-PDAFabricPromptRender {
 
     try {
         $RawRender = & pwsh -NoProfile -File $FabricScript -PatternName $PatternName -ContentInput $PromptText -VariablesJson $VariablesJson -AsJson 2>&1
-        $JsonText = [string]($RawRender -join "`n").Trim()
-        if ([string]::IsNullOrWhiteSpace($JsonText)) {
-            throw "Fabric renderer returned empty output."
-        }
-
-        $Match = [regex]::Match($JsonText, '(?m)^\{')
-        if (-not $Match.Success) {
-            throw "Fabric renderer output did not contain JSON."
-        }
-
-        $JsonText = $JsonText.Substring($Match.Index).Trim()
-        $Render = $JsonText | ConvertFrom-Json -ErrorAction Stop
+        $JsonText = [string]($RawRender -join "`n")
+        $Render = ConvertFrom-PDAMixedJson -Text $JsonText -SourceName "Fabric renderer output"
 
         if ($Render.status -eq "success") {
             return [pscustomobject]@{
@@ -347,12 +338,8 @@ try {
         -AsJson `
         -NoThrow 2>&1
 
-    $JsonText = [string]($RawInvocation -join "`n").Trim()
-    if ([string]::IsNullOrWhiteSpace($JsonText)) {
-        throw "Model adapter returned empty output."
-    }
-
-    $Invocation = $JsonText | ConvertFrom-Json -ErrorAction Stop
+    $JsonText = [string]($RawInvocation -join "`n")
+    $Invocation = ConvertFrom-PDAMixedJson -Text $JsonText -SourceName "Model adapter output"
     if (-not $Invocation -or $Invocation.status -ne "pass") {
         $ErrorText = if ($Invocation.response -and $Invocation.response.error_message) { [string]$Invocation.response.error_message } elseif ($Invocation.next_action) { [string]$Invocation.next_action } else { "Model invocation failed." }
         throw $ErrorText

@@ -5,6 +5,7 @@ param(
 
 $Root = "C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem"
 $AdapterScript = Join-Path $Root "Scripts\Invoke-PDAModel.ps1"
+. (Join-Path $Root "Scripts\PDA_OutputParsing.ps1")
 
 function Register-PDAWorkerArtifact {
     param(
@@ -183,18 +184,8 @@ try {
         -AsJson `
         -NoThrow 2>&1
 
-    $JsonText = [string]($RawInvocation -join "`n").Trim()
-    if ([string]::IsNullOrWhiteSpace($JsonText)) {
-        throw "Model adapter returned empty output."
-    }
-
-    $Match = [regex]::Match($JsonText, '(?m)^\{')
-    if (-not $Match.Success) {
-        throw "Model adapter output did not contain JSON."
-    }
-
-    $JsonText = $JsonText.Substring($Match.Index).Trim()
-    $Invocation = $JsonText | ConvertFrom-Json -ErrorAction Stop
+    $JsonText = [string]($RawInvocation -join "`n")
+    $Invocation = ConvertFrom-PDAMixedJson -Text $JsonText -SourceName "Model adapter output"
     if (-not $Invocation -or $Invocation.status -ne "pass") {
         $ErrorText = if ($Invocation.response -and $Invocation.response.error_message) { [string]$Invocation.response.error_message } elseif ($Invocation.next_action) { [string]$Invocation.next_action } else { "Model invocation failed." }
         throw $ErrorText
