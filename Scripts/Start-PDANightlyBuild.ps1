@@ -19,6 +19,9 @@ param(
     [switch]$PrepareExecution,
 
     [Parameter(Mandatory = $false)]
+    [switch]$ExecutePreparedTask,
+
+    [Parameter(Mandatory = $false)]
     [switch]$AsJson
 )
 
@@ -40,6 +43,9 @@ if (-not [string]::IsNullOrWhiteSpace($OutputRoot)) {
 
 if ($PSBoundParameters.ContainsKey("DryRun")) {
     $Args += "-DryRun"
+}
+elseif ($ExecutePreparedTask) {
+    $Args += "-ExecutePreparedTask"
 }
 elseif ($NoDryRun) {
     $Args += "-PrepareExecution"
