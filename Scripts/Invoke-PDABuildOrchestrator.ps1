@@ -16,14 +16,17 @@ param(
     [switch]$NoDryRun,
 
     [Parameter(Mandatory = $false)]
+    [switch]$PrepareExecution,
+
+    [Parameter(Mandatory = $false)]
     [switch]$AsJson
 )
 
 $ErrorActionPreference = "Stop"
 
-$IsDryRun = if ($PSBoundParameters.ContainsKey("DryRun")) { $DryRun.IsPresent } elseif ($NoDryRun) { $false } else { $true }
-if (-not $IsDryRun) {
-    throw "Unattended orchestration is disabled in PDA Nightly Build Orchestrator v1."
+$Mode = if ($PrepareExecution) { "prepare" } elseif ($PSBoundParameters.ContainsKey("DryRun")) { if ($DryRun.IsPresent) { "dry-run" } else { "prepare" } } elseif ($NoDryRun) { "prepare" } else { "dry-run" }
+if ($Mode -notin @("dry-run", "prepare")) {
+    throw "Unsupported orchestrator mode: $Mode"
 }
 
 if (-not (Test-Path -Path $RoadmapPath -PathType Leaf)) {
@@ -39,6 +42,20 @@ $RepoBackupScript = Join-Path $ScriptsRoot "Backup-PDARepo.ps1"
 $VolumeBackupScript = Join-Path $ScriptsRoot "Backup-PDAVolumes.ps1"
 $NightlyDir = $OutputRoot
 New-Item -ItemType Directory -Force -Path $NightlyDir | Out-Null
+
+function Invoke-PDAGit {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string[]]$Arguments
+    )
+
+    return @(& git -C $Root @Arguments 2>$null)
+}
+
+function Test-PDAWorktreeDirty {
+    $Status = @(& git -C $Root status --porcelain 2>$null)
+    return (@($Status).Count -gt 0)
+}
 
 function Get-PDARoadmap {
     param([string]$Path)
@@ -104,10 +121,46 @@ function Invoke-PDAJsonScript {
 $Roadmap = Get-PDARoadmap -Path $RoadmapPath
 $SelectedTask = Get-PDANextEligibleTask -Roadmap $Roadmap
 
+if ($Mode -eq "prepare" -and (Test-PDAWorktreeDirty)) {
+    throw "Dirty worktree detected before orchestrator start."
+}
+
 $SelectedTaskId = if ($SelectedTask) { [string]$SelectedTask.id } else { "" }
 $SelectedTaskTitle = if ($SelectedTask) { [string]$SelectedTask.title } else { "" }
 $SelectedTaskObjective = if ($SelectedTask) { [string]$SelectedTask.objective } else { "" }
-$BranchName = if ($SelectedTaskId) { "codex/nightly-$($SelectedTaskId)-$(Get-Date -Format 'yyyyMMdd-HHmmss')" } else { "codex/nightly-idle-$(Get-Date -Format 'yyyyMMdd-HHmmss')" }
+$Timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
+$BranchName = if ($SelectedTaskId) { "codex/nightly-$($SelectedTaskId)-$Timestamp" } else { "codex/nightly-idle-$Timestamp" }
+
+$CurrentBranch = [string]((& git -C $Root branch --show-current 2>$null | Select-Object -First 1))
+$BranchCreationStatus = "not_attempted"
+$BranchCreationMessage = ""
+if ($Mode -eq "prepare") {
+    if ([string]::IsNullOrWhiteSpace($CurrentBranch)) {
+        $CurrentBranch = "(detached)"
+    }
+
+    $BranchExists = $false
+    & git -C $Root rev-parse --verify --quiet $BranchName 2>$null | Out-Null
+    $BranchExists = ($LASTEXITCODE -eq 0)
+
+    if ($BranchExists) {
+        $BranchCreationStatus = "existing"
+        $BranchCreationMessage = "Branch already exists; no checkout needed."
+    }
+    else {
+        $CheckoutArgs = @("checkout", "-b", $BranchName)
+        $CheckoutOutput = Invoke-PDAGit -Arguments $CheckoutArgs
+        if ($LASTEXITCODE -ne 0) {
+            if ($CurrentBranch -eq "main") {
+                throw "Branch creation failed while on main."
+            }
+            throw "Branch creation failed: $($CheckoutOutput -join ' ')"
+        }
+
+        $BranchCreationStatus = "created"
+        $BranchCreationMessage = "Checked out new task branch."
+    }
+}
 
 $RepoBackup = Invoke-PDAJsonScript -Path $RepoBackupScript -Arguments @(
     "-Root", $Root,
@@ -130,6 +183,9 @@ $WorkPacket = [pscustomobject]@{
     roadmap_name            = [string]$Roadmap.roadmap_name
     selected_task           = $SelectedTask
     branch_name             = $BranchName
+    current_branch          = $CurrentBranch
+    branch_creation_status  = $BranchCreationStatus
+    branch_creation_message = $BranchCreationMessage
     repo_backup_manifest    = $RepoBackup
     volume_backup_manifest   = $VolumeBackup
     required_tests          = if ($SelectedTask) { @($SelectedTask.required_tests) } else { @() }
@@ -141,7 +197,7 @@ $WorkPacket = [pscustomobject]@{
         "No auto-push",
         "No queue deletion"
     )
-    next_action             = "Human review required before branch creation or execution."
+    next_action             = if ($Mode -eq "prepare") { "Human review required before commit, push, or task execution." } else { "Human review required before branch creation or execution." }
 }
 
 $WorkPacketPath = Join-Path $NightlyDir "work-packet.json"
@@ -164,20 +220,24 @@ $SummaryLines | Set-Content -Path $SummaryPath -Encoding UTF8
 
 $Result = [pscustomobject]@{
     status                  = "pass"
-    mode                    = "dry-run"
+    mode                    = $Mode
     roadmap_path            = $RoadmapPath
     roadmap_name            = [string]$Roadmap.roadmap_name
     selected_task           = $SelectedTask
     selected_task_id        = $SelectedTaskId
     selected_task_title     = $SelectedTaskTitle
     branch_name             = $BranchName
+    current_branch          = $CurrentBranch
+    branch_creation_status  = $BranchCreationStatus
+    branch_creation_message = $BranchCreationMessage
     repo_backup_manifest    = $RepoBackup
     volume_backup_manifest  = $VolumeBackup
     work_packet_path        = $WorkPacketPath
     summary_path            = $SummaryPath
-    next_action             = "Human review required before branch creation or execution."
+    next_action             = if ($Mode -eq "prepare") { "Human review required before commit, push, or task execution." } else { "Human review required before branch creation or execution." }
     safety_gates            = @(
         "Dry-run only",
+        "Prepare mode allowed",
         "No secrets",
         "No auto-approval",
         "No auto-push",
@@ -190,9 +250,13 @@ if ($AsJson) {
     return
 }
 
-Write-Host "[OK] PDA nightly build orchestrator dry-run complete."
+Write-Host ("[OK] PDA nightly build orchestrator {0} complete." -f $Mode)
 Write-Host ("Selected task   : {0}" -f $(if ($SelectedTaskId) { "$SelectedTaskId - $SelectedTaskTitle" } else { "(none)" }))
+Write-Host ("Current branch  : {0}" -f $CurrentBranch)
 Write-Host ("Branch          : {0}" -f $BranchName)
+if ($BranchCreationMessage) {
+    Write-Host ("Branch status   : {0}" -f $BranchCreationMessage)
+}
 Write-Host ("Work packet     : {0}" -f $WorkPacketPath)
 Write-Host ("Summary         : {0}" -f $SummaryPath)
 Write-Host ("Repo manifest   : {0}" -f $RepoBackup.manifest_path)

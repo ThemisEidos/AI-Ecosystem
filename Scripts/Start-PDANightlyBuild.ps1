@@ -16,6 +16,9 @@ param(
     [switch]$NoDryRun,
 
     [Parameter(Mandatory = $false)]
+    [switch]$PrepareExecution,
+
+    [Parameter(Mandatory = $false)]
     [switch]$AsJson
 )
 
@@ -39,7 +42,10 @@ if ($PSBoundParameters.ContainsKey("DryRun")) {
     $Args += "-DryRun"
 }
 elseif ($NoDryRun) {
-    $Args += "-NoDryRun"
+    $Args += "-PrepareExecution"
+}
+elseif ($PrepareExecution) {
+    $Args += "-PrepareExecution"
 }
 else {
     $Args += "-DryRun"
