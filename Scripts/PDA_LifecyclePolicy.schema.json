@@ -1,0 +1,57 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PDA Lifecycle Policy",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "policy_name",
+    "policy_version",
+    "history_field",
+    "artifact",
+    "memory"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string"
+    },
+    "policy_name": {
+      "type": "string"
+    },
+    "policy_version": {
+      "type": "string"
+    },
+    "history_field": {
+      "type": "string"
+    },
+    "artifact": {
+      "type": "object",
+      "required": ["default_state", "states", "allowed_transitions"],
+      "properties": {
+        "default_state": { "type": "string" },
+        "states": { "type": "array", "items": { "type": "string" } },
+        "allowed_transitions": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      }
+    },
+    "memory": {
+      "type": "object",
+      "required": ["default_state", "states", "allowed_transitions"],
+      "properties": {
+        "default_state": { "type": "string" },
+        "states": { "type": "array", "items": { "type": "string" } },
+        "allowed_transitions": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      }
+    }
+  }
+}

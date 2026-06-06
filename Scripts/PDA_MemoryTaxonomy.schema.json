@@ -1,0 +1,121 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PDA Memory Taxonomy",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "taxonomy_name",
+    "taxonomy_version",
+    "generated_at",
+    "required_fields",
+    "memory_types",
+    "categories",
+    "statuses",
+    "confidence_scale",
+    "sensitivities",
+    "source_types",
+    "lifecycle_states",
+    "tag_policy",
+    "index_integration"
+  ],
+  "properties": {
+    "schema_version": { "type": "string" },
+    "taxonomy_name": { "type": "string" },
+    "taxonomy_version": { "type": "string" },
+    "generated_at": { "type": "string" },
+    "required_fields": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1
+    },
+    "memory_types": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1
+    },
+    "categories": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["category_1", "category_2", "test"]
+      },
+      "minItems": 1
+    },
+    "statuses": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["active", "seeded", "draft", "archived", "suppressed", "test"]
+      },
+      "minItems": 1
+    },
+    "confidence_scale": {
+      "type": "object",
+      "required": ["minimum", "maximum", "precision", "allowed_bands"],
+      "properties": {
+        "minimum": { "type": "number", "minimum": 0, "maximum": 1 },
+        "maximum": { "type": "number", "minimum": 0, "maximum": 1 },
+        "precision": { "type": "integer", "minimum": 0, "maximum": 4 },
+        "allowed_bands": {
+          "type": "array",
+          "items": { "type": "number" },
+          "minItems": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "sensitivities": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["standard", "restricted_local", "confidential", "test"]
+      },
+      "minItems": 1
+    },
+    "source_types": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["artifact", "manual", "generated", "imported", "seed", "file"]
+      },
+      "minItems": 1
+    },
+    "lifecycle_states": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["draft", "active", "seeded", "archived", "deprecated", "retired", "test"]
+      },
+      "minItems": 1
+    },
+    "tag_policy": {
+      "type": "object",
+      "required": [
+        "allowed_namespaces",
+        "legacy_tag_pattern",
+        "namespaced_tag_pattern"
+      ],
+      "properties": {
+        "allowed_namespaces": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1
+        },
+        "legacy_tag_pattern": { "type": "string" },
+        "namespaced_tag_pattern": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "index_integration": {
+      "type": "object",
+      "required": ["memory_index_path", "status", "notes"],
+      "properties": {
+        "memory_index_path": { "type": "string" },
+        "status": { "type": "string" },
+        "notes": { "type": "string" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

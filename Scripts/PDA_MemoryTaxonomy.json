@@ -1,0 +1,103 @@
+{
+  "schema_version": "1.0",
+  "taxonomy_name": "PDA Memory Taxonomy",
+  "taxonomy_version": "1.0",
+  "generated_at": "2026-06-03T00:00:00Z",
+  "required_fields": [
+    "memory_id",
+    "created_at",
+    "updated_at",
+    "memory_type",
+    "category",
+    "title",
+    "summary",
+    "source_artifact_id",
+    "source_path",
+    "status",
+    "confidence",
+    "sensitivity",
+    "source_type",
+    "lifecycle_state",
+    "tags"
+  ],
+  "memory_types": [
+    "promoted-artifact",
+    "test-note",
+    "retrieval-seed",
+    "research-note",
+    "planner-note",
+    "review-note",
+    "report-note",
+    "execution-manifest",
+    "findings-note",
+    "timeline-note",
+    "fabric-note"
+  ],
+  "categories": [
+    "category_1",
+    "category_2",
+    "test"
+  ],
+  "statuses": [
+    "active",
+    "seeded",
+    "draft",
+    "archived",
+    "suppressed",
+    "test"
+  ],
+  "confidence_scale": {
+    "minimum": 0,
+    "maximum": 1,
+    "precision": 2,
+    "allowed_bands": [
+      0,
+      0.25,
+      0.5,
+      0.75,
+      1
+    ]
+  },
+  "sensitivities": [
+    "standard",
+    "restricted_local",
+    "confidential",
+    "test"
+  ],
+  "source_types": [
+    "artifact",
+    "manual",
+    "generated",
+    "imported",
+    "seed",
+    "file"
+  ],
+  "lifecycle_states": [
+    "draft",
+    "active",
+    "seeded",
+    "archived",
+    "deprecated",
+    "retired",
+    "test"
+  ],
+  "tag_policy": {
+    "allowed_namespaces": [
+      "pda",
+      "memory",
+      "artifact",
+      "lineage",
+      "test",
+      "source",
+      "status",
+      "context"
+    ],
+    "legacy_tag_pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+    "namespaced_tag_pattern": "^[a-z0-9][a-z0-9._-]{0,31}:[a-z0-9][a-z0-9._-]{0,63}$"
+  },
+  "index_integration": {
+    "memory_index_path": "PDA_MemoryIndex.json",
+    "status": "active",
+    "notes": "The taxonomy standardizes memory record fields used by dashboards, retrieval, and lineage checks."
+  }
+}

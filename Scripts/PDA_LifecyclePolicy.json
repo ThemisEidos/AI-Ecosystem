@@ -1,0 +1,60 @@
+{
+  "schema_version": "1.0",
+  "policy_name": "PDA Lifecycle Policy",
+  "policy_version": "1.0",
+  "history_field": "lifecycle_history",
+  "artifact": {
+    "default_state": "active",
+    "states": [
+      "draft",
+      "active",
+      "promoted",
+      "archived",
+      "deprecated",
+      "retired"
+    ],
+    "allowed_transitions": {
+      "draft": [
+        "active"
+      ],
+      "active": [
+        "promoted",
+        "archived",
+        "deprecated"
+      ],
+      "promoted": [
+        "archived",
+        "deprecated"
+      ],
+      "archived": [],
+      "deprecated": [
+        "retired"
+      ],
+      "retired": []
+    }
+  },
+  "memory": {
+    "default_state": "active",
+    "states": [
+      "draft",
+      "active",
+      "archived",
+      "deprecated",
+      "retired"
+    ],
+    "allowed_transitions": {
+      "draft": [
+        "active"
+      ],
+      "active": [
+        "archived",
+        "deprecated"
+      ],
+      "archived": [],
+      "deprecated": [
+        "retired"
+      ],
+      "retired": []
+    }
+  }
+}
