@@ -48,7 +48,12 @@ function aiec-start {
 }
 
 function pda-go {
-    pwsh -NoProfile -ExecutionPolicy Bypass -File "$ProjectRoot\Scripts\Start-PDABuildRunner.ps1" @args
+    if ($args.Count -eq 0) {
+        pwsh -NoProfile -ExecutionPolicy Bypass -File "$ProjectRoot\Scripts\Start-PDABuildRunner.ps1" -ExecuteCodexTask
+    }
+    else {
+        pwsh -NoProfile -ExecutionPolicy Bypass -File "$ProjectRoot\Scripts\Start-PDABuildRunner.ps1" @args
+    }
 }
 
 function aiec-status {

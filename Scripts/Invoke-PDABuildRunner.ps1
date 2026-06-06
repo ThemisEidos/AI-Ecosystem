@@ -28,6 +28,18 @@ param(
     [switch]$ExportCodexExecutionPrompt,
 
     [Parameter(Mandatory = $false)]
+    [int]$MaxTasks,
+
+    [Parameter(Mandatory = $false)]
+    [int]$MaxRuntimeMinutes,
+
+    [Parameter(Mandatory = $false)]
+    [switch]$StopOnFailure,
+
+    [Parameter(Mandatory = $false)]
+    [string]$RunReport,
+
+    [Parameter(Mandatory = $false)]
     [string]$CodexExecutable,
 
     [Parameter(Mandatory = $false)]
@@ -40,7 +52,10 @@ param(
     [switch]$Monitor,
 
     [Parameter(Mandatory = $false)]
-    [switch]$AsJson
+    [switch]$AsJson,
+
+    [Parameter(Mandatory = $false)]
+    [switch]$NoThrow
 )
 
 $ErrorActionPreference = "Stop"
@@ -200,10 +215,10 @@ if ($Unattended) {
     $Policy = Import-PDABuildRunnerPolicy -Root $Root -PolicyPath $PolicyPath
     Test-PDAUnattendedRunPolicy -Policy $Policy
 
-    $MaxTasksPerRun = Get-PDABuildRunnerPolicyNumber -Policy $Policy -Names @("max_tasks_per_run", "MaxTasks") -Default 1
-    $MaxRuntimeMinutes = Get-PDABuildRunnerPolicyNumber -Policy $Policy -Names @("max_runtime_minutes", "MaxRuntimeMinutes") -Default 120
-    $StopOnFailure = Get-PDABuildRunnerPolicyBoolean -Policy $Policy -Names @("stop_on_failed_tests", "StopOnFailure") -Default $true
-    $RunReportRootValue = Get-PDABuildRunnerPolicyValue -Policy $Policy -Name "RunReport" -Default "PDA-Backups/build-runner/reports"
+    $MaxTasksPerRun = if ($PSBoundParameters.ContainsKey("MaxTasks")) { [int]$MaxTasks } else { Get-PDABuildRunnerPolicyNumber -Policy $Policy -Names @("max_tasks_per_run", "MaxTasks") -Default 1 }
+    $MaxRuntimeMinutesValue = if ($PSBoundParameters.ContainsKey("MaxRuntimeMinutes")) { [int]$MaxRuntimeMinutes } else { Get-PDABuildRunnerPolicyNumber -Policy $Policy -Names @("max_runtime_minutes", "MaxRuntimeMinutes") -Default 120 }
+    $StopOnFailureValue = if ($PSBoundParameters.ContainsKey("StopOnFailure")) { [bool]$StopOnFailure.IsPresent } else { Get-PDABuildRunnerPolicyBoolean -Policy $Policy -Names @("stop_on_failed_tests", "StopOnFailure") -Default $true }
+    $RunReportRootValue = if ($PSBoundParameters.ContainsKey("RunReport") -and -not [string]::IsNullOrWhiteSpace($RunReport)) { $RunReport } else { Get-PDABuildRunnerPolicyValue -Policy $Policy -Name "RunReport" -Default "PDA-Backups/build-runner/reports" }
     if ([string]::IsNullOrWhiteSpace([string]$RunReportRootValue)) {
         $RunReportRootValue = "PDA-Backups/build-runner/reports"
     }
@@ -232,8 +247,8 @@ if ($Unattended) {
             codex_issue       = [string]$CodexResolution.issue
             codex_candidates  = @($CodexResolution.candidates)
             max_tasks         = $MaxTasksPerRun
-            max_runtime_minutes = $MaxRuntimeMinutes
-            stop_on_failure   = [bool]$StopOnFailure
+            max_runtime_minutes = $MaxRuntimeMinutesValue
+            stop_on_failure   = [bool]$StopOnFailureValue
             selected_task_ids = @()
             policy_violation_message = ""
             executed_tasks    = @()
@@ -281,7 +296,7 @@ if ($Unattended) {
             break
         }
 
-        if (((Get-Date) - $RunStarted).TotalMinutes -ge $MaxRuntimeMinutes) {
+        if (((Get-Date) - $RunStarted).TotalMinutes -ge $MaxRuntimeMinutesValue) {
             $StopReason = "max_runtime_minutes"
             break
         }
@@ -361,7 +376,7 @@ if ($Unattended) {
 
         if ($Worker.status -ne "pass") {
             $StopReason = "test_failure"
-            if ($StopOnFailure) {
+            if ($StopOnFailureValue) {
                 break
             }
         }
@@ -443,8 +458,8 @@ if ($Unattended) {
         report_path     = $ReportPath
         stop_reason     = if ($StopReason) { $StopReason } else { "completed" }
         max_tasks       = $MaxTasksPerRun
-        max_runtime_minutes = $MaxRuntimeMinutes
-        stop_on_failure = [bool]$StopOnFailure
+        max_runtime_minutes = $MaxRuntimeMinutesValue
+        stop_on_failure = [bool]$StopOnFailureValue
         selected_task_ids = @($SelectedTaskIds)
         policy_violation_message = $(if ($PolicyViolationMessage) { $PolicyViolationMessage } else { "" })
         executed_tasks  = @($ExecutedTasksArray)

@@ -80,6 +80,7 @@ function Initialize-PDATempRepo {
         "Scripts\Generate-PDACodexWorkPacket.ps1",
         "Scripts\Generate-PDAMorningReport.ps1",
         "Scripts\Generate-PDARunReport.ps1",
+        "Scripts\Test-PDADashboardRefresh.ps1",
         "Scripts\Invoke-PDAQueueBacklogAudit.ps1",
         "Scripts\Test-PDAQueueBacklogAudit.ps1",
         "Scripts\Invoke-PDABuildOrchestrator.ps1",
@@ -89,6 +90,7 @@ function Initialize-PDATempRepo {
         "Scripts\Backup-PDARepo.ps1",
         "Scripts\Backup-PDAVolumes.ps1",
         "Scripts\Export-PDACodexExecutionPrompt.ps1",
+        "Scripts\Invoke-PDACodexExecution.ps1",
         "Scripts\PDA_BuildRunnerPolicy.json"
     )) {
         Copy-Item -Force (Join-Path $SourceRoot $Path) (Join-Path $DestinationRoot $Path)
@@ -111,6 +113,7 @@ function Initialize-PDATempRepo {
         "Scripts/Generate-PDACodexWorkPacket.ps1",
         "Scripts/Generate-PDAMorningReport.ps1",
         "Scripts/Generate-PDARunReport.ps1",
+        "Scripts/Test-PDADashboardRefresh.ps1",
         "Scripts/Invoke-PDAQueueBacklogAudit.ps1",
         "Scripts/Test-PDAQueueBacklogAudit.ps1",
         "Scripts/Invoke-PDABuildOrchestrator.ps1",
@@ -120,6 +123,7 @@ function Initialize-PDATempRepo {
         "Scripts/Backup-PDARepo.ps1",
         "Scripts/Backup-PDAVolumes.ps1",
         "Scripts/Export-PDACodexExecutionPrompt.ps1",
+        "Scripts/Invoke-PDACodexExecution.ps1",
         "Scripts\PDA_BuildRunnerPolicy.json"
     ) | Add-Content -Path $ExcludePath
 }

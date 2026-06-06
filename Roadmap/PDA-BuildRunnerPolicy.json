@@ -53,8 +53,8 @@
     "crash"
   ],
   "safety_gates": [
-    "No auto-commit",
-    "No auto-push",
+    "No auto-commit unless policy allows",
+    "No auto-push unless policy allows",
     "No approval bypass",
     "Stop on dirty worktree",
     "Stop on failed tests",

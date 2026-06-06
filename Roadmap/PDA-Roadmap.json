@@ -6,10 +6,29 @@
   "builder": "Codex",
   "controller": "PDA Build Runner",
   "created_at": "2026-06-06T00:00:00Z",
-  "last_updated": "2026-06-06T00:00:00Z",
-  "current_task_id": "task-001",
-  "completed_task_ids": [],
-  "task_state_history": [],
+  "last_updated": "2026-06-06T23:14:00.8007513Z",
+  "current_task_id": "task-002",
+  "completed_task_ids": [
+    "task-001"
+  ],
+  "task_state_history": [
+    {
+      "task_id": "task-002",
+      "from_state": "eligible",
+      "to_state": "prepared",
+      "actor": "Human Approval",
+      "reason": "Approved for Build Runner execution",
+      "changed_at": "2026-06-06T23:12:41.7687727Z"
+    },
+    {
+      "task_id": "task-002",
+      "from_state": "prepared",
+      "to_state": "assigned",
+      "actor": "Human Approval",
+      "reason": "Ready for Build Runner execution",
+      "changed_at": "2026-06-06T23:14:00.8095582Z"
+    }
+  ],
   "task_state_model": {
     "states": [
       "backlog",
@@ -24,13 +43,27 @@
       "failed"
     ],
     "allowed_transitions": {
-      "backlog": ["eligible"],
-      "eligible": ["prepared"],
-      "prepared": ["assigned"],
-      "assigned": ["in_progress"],
-      "in_progress": ["testing"],
-      "testing": ["ready_for_review"],
-      "ready_for_review": ["completed"],
+      "backlog": [
+        "eligible"
+      ],
+      "eligible": [
+        "prepared"
+      ],
+      "prepared": [
+        "assigned"
+      ],
+      "assigned": [
+        "in_progress"
+      ],
+      "in_progress": [
+        "testing"
+      ],
+      "testing": [
+        "ready_for_review"
+      ],
+      "ready_for_review": [
+        "completed"
+      ],
       "completed": [],
       "blocked": [],
       "failed": []
@@ -53,11 +86,21 @@
         "Scripts/Start-PDANightlyBuild.ps1",
         "Scripts/Invoke-PDABuildRunner.ps1",
         "Scripts/Start-PDABuildRunner.ps1",
+        "Scripts/PDA_BuildRunner.ps1",
         "Scripts/Generate-PDARunReport.ps1",
         "Scripts/Get-PDABuildRunnerTaskState.ps1",
         "Scripts/Test-PDABuildRunner.ps1",
+        "Scripts/Test-PDANightlyAutomation.ps1",
+        "Scripts/Test-PDABuildOrchestrator.ps1",
+        "Scripts/Test-PDACodexExecutionPrompt.ps1",
+        "Scripts/Test-PDACodexExecution.ps1",
+        "Scripts/Export-PDACodexExecutionPrompt.ps1",
+        "Scripts/Invoke-PDACodexExecution.ps1",
         "Scripts/Backup-PDARepo.ps1",
         "Scripts/Backup-PDAVolumes.ps1",
+        "setup-pda-profile.ps1",
+        "Documentation/AIEC-Startup-Commands.md",
+        "Documentation/OpenWebUI-Integration.md",
         "Roadmap/PDA-Roadmap.json"
       ],
       "required_tests": [
@@ -79,6 +122,369 @@
         "file access outside allowed_files"
       ],
       "commit_message": "chore: audit queue and approval backlog",
+      "status": "completed"
+    },
+    {
+      "id": "task-002",
+      "title": "Improve research worker flow",
+      "description": "Harden the research worker, command interpreter, and governed handoff path so research requests route predictably, surface validation cleanly, and remain compatible with the Build Runner pipeline.",
+      "objective": "Make research commands reliable end to end.",
+      "dependencies": [
+        "task-001"
+      ],
+      "allowed_files": [
+        "Scripts/Invoke-PDAResearchWorker.ps1",
+        "Scripts/Test-PDAResearchWorker.ps1",
+        "Scripts/PDA_CommandInterpreter.ps1",
+        "Scripts/Invoke-PDAChatBridge.ps1",
+        "Scripts/Invoke-PDACommandHandoff.ps1",
+        "Scripts/PDA_TaskOntology.json",
+        "Scripts/PDA_WorkerRegistry.json",
+        "Scripts/PDA_BuildRunner.ps1",
+        "Scripts/Test-PDABuildRunner.ps1",
+        "Scripts/Test-PDABuildRunnerMonitor.ps1",
+        "Scripts/Test-PDAStack.ps1",
+        "Roadmap/PDA-Roadmap.json",
+        "Roadmap/work-packets/**",
+        "Roadmap/codex-prompts/**",
+        "PDA-Tasks/**",
+        "PDA-Backups/**",
+        "Documentation/OpenWebUI-Integration.md"
+      ],
+      "required_tests": [
+        "Scripts/Test-PDAResearchWorker.ps1 -NoThrow",
+        "Scripts/Test-PDACommandInterpreter.ps1 -NoThrow",
+        "Scripts/Test-PDACommandHandoff.ps1 -NoThrow",
+        "Scripts/Test-PDABuildRunner.ps1 -NoThrow",
+        "Scripts/Test-PDAStack.ps1 -Deep -NoThrow"
+      ],
+      "completion_criteria": [
+        "Research requests route to the governed research path.",
+        "Research worker output is validated through the Build Runner framework.",
+        "Tests confirm safe handoff and no approval bypass."
+      ],
+      "stop_conditions": [
+        "routing regression",
+        "approval bypass",
+        "secret exposure",
+        "queue deletion",
+        "failed validation",
+        "file access outside allowed_files"
+      ],
+      "commit_message": "feat: improve research worker flow",
+      "status": "assigned"
+    },
+    {
+      "id": "task-003",
+      "title": "Stabilize draft and review pipelines",
+      "description": "Harden draft and review execution paths, including mixed-output parsing, adapter normalization, and regression coverage for the governed worker pipeline.",
+      "objective": "Make draft and review worker execution resilient.",
+      "dependencies": [
+        "task-002"
+      ],
+      "allowed_files": [
+        "Scripts/Invoke-PDADraftWorker.ps1",
+        "Scripts/Invoke-PDAReviewWorker.ps1",
+        "Scripts/Test-PDADraftWorker.ps1",
+        "Scripts/Test-PDAReviewWorker.ps1",
+        "Scripts/Invoke-PDAModel.ps1",
+        "Scripts/Invoke-PDAFabric.ps1",
+        "Scripts/Invoke-PDAFabricPattern.ps1",
+        "Scripts/PDA_OutputParsing.ps1",
+        "Scripts/PDA_BuildRunner.ps1",
+        "Scripts/Test-PDABuildRunner.ps1",
+        "Scripts/Test-PDAStack.ps1",
+        "Roadmap/PDA-Roadmap.json",
+        "Roadmap/work-packets/**",
+        "Roadmap/codex-prompts/**",
+        "PDA-Tasks/**",
+        "PDA-Backups/**"
+      ],
+      "required_tests": [
+        "Scripts/Test-PDADraftWorker.ps1 -NoThrow",
+        "Scripts/Test-PDAReviewWorker.ps1 -NoThrow",
+        "Scripts/Test-PDABuildRunner.ps1 -NoThrow",
+        "Scripts/Test-PDAStack.ps1 -Deep -NoThrow"
+      ],
+      "completion_criteria": [
+        "Draft and review workers consistently parse mixed output.",
+        "Validation surfaces JSON parsing failures with clear diagnostics.",
+        "Build Runner can execute and validate the worker flow sequentially."
+      ],
+      "stop_conditions": [
+        "adapter regression",
+        "mixed-output parse failure",
+        "secret exposure",
+        "approval bypass",
+        "failed validation",
+        "file access outside allowed_files"
+      ],
+      "commit_message": "feat: stabilize draft and review pipelines",
+      "status": "backlog"
+    },
+    {
+      "id": "task-004",
+      "title": "Aggregate findings and artifacts",
+      "description": "Expand the findings worker and artifact promotion flow so findings, reports, and artifacts are aggregated into consistent indexes and dashboards.",
+      "objective": "Make findings and artifact aggregation first-class.",
+      "dependencies": [
+        "task-003"
+      ],
+      "allowed_files": [
+        "Scripts/Invoke-PDAFindingsWorker.ps1",
+        "Scripts/Register-PDAArtifact.ps1",
+        "Scripts/Update-PDAArtifactIndex.ps1",
+        "Scripts/Update-PDAArtifactDashboard.ps1",
+        "Scripts/Promote-PDAArtifactToMemory.ps1",
+        "Scripts/Get-PDAArtifactIndex.ps1",
+        "Scripts/Get-PDAArtifacts.ps1",
+        "Scripts/PDA_BuildRunner.ps1",
+        "Scripts/Test-PDABuildRunner.ps1",
+        "Scripts/Test-PDAStack.ps1",
+        "Roadmap/PDA-Roadmap.json",
+        "Roadmap/work-packets/**",
+        "Roadmap/codex-prompts/**",
+        "PDA-Tasks/**",
+        "PDA-Backups/**",
+        "Obsidian Vault/02_Projects/AI Tool Ecosystem/**"
+      ],
+      "required_tests": [
+        "Scripts/Test-PDABuildRunner.ps1 -NoThrow",
+        "Scripts/Test-PDAStack.ps1 -Deep -NoThrow"
+      ],
+      "completion_criteria": [
+        "Findings are aggregated into the artifact index and dashboard.",
+        "Artifact promotion remains governed and auditable.",
+        "Dashboard summaries remain refreshable from the Build Runner outputs."
+      ],
+      "stop_conditions": [
+        "artifact corruption",
+        "secret exposure",
+        "approval bypass",
+        "queue deletion",
+        "failed validation",
+        "file access outside allowed_files"
+      ],
+      "commit_message": "feat: aggregate findings and artifacts",
+      "status": "backlog"
+    },
+    {
+      "id": "task-005",
+      "title": "Automate timeline planning",
+      "description": "Improve the timeline worker so roadmap, task, and report data can be turned into a trustworthy sequence of milestones and follow-up actions.",
+      "objective": "Make timeline automation useful for roadmap planning.",
+      "dependencies": [
+        "task-004"
+      ],
+      "allowed_files": [
+        "Scripts/Invoke-PDATimelineWorker.ps1",
+        "Scripts/Update-PDATimeline*.ps1",
+        "Scripts/Get-PDATimeline*.ps1",
+        "Scripts/PDA_BuildRunner.ps1",
+        "Scripts/Test-PDABuildRunner.ps1",
+        "Scripts/Test-PDAStack.ps1",
+        "Documentation/**",
+        "Roadmap/PDA-Roadmap.json",
+        "Roadmap/work-packets/**",
+        "Roadmap/codex-prompts/**",
+        "PDA-Tasks/**",
+        "PDA-Backups/**"
+      ],
+      "required_tests": [
+        "Scripts/Test-PDABuildRunner.ps1 -NoThrow",
+        "Scripts/Test-PDAStack.ps1 -Deep -NoThrow"
+      ],
+      "completion_criteria": [
+        "Timeline outputs reflect roadmap and artifact state.",
+        "Generated timeline artifacts are readable and repeatable.",
+        "No unsafe writes occur outside allowed files."
+      ],
+      "stop_conditions": [
+        "timeline corruption",
+        "secret exposure",
+        "approval bypass",
+        "failed validation",
+        "file access outside allowed_files"
+      ],
+      "commit_message": "feat: automate timeline planning",
+      "status": "backlog"
+    },
+    {
+      "id": "task-006",
+      "title": "Strengthen memory indexing and retrieval",
+      "description": "Expand memory indexing and retrieval so memory records, lifecycle controls, and taxonomy validation remain consistent with ecosystem growth.",
+      "objective": "Improve memory operations and retrieval fidelity.",
+      "dependencies": [
+        "task-005"
+      ],
+      "allowed_files": [
+        "Scripts/Get-PDAMemory.ps1",
+        "Scripts/Get-PDAMemoryIndex.ps1",
+        "Scripts/PDA_MemoryTaxonomy.ps1",
+        "Scripts/Register-PDAMemory.ps1",
+        "Scripts/Repair-PDALegacyMemoryRecord.ps1",
+        "Scripts/Set-PDAMemoryLifecycle.ps1",
+        "Scripts/Test-PDAMemoryIndex.ps1",
+        "Scripts/Test-PDAMemoryTaxonomy.ps1",
+        "Scripts/Test-PDAMemoryWriterEnforcement.ps1",
+        "Scripts/Test-PDARetrieval.ps1",
+        "Scripts/Test-PDALifecycle.ps1",
+        "Scripts/Test-PDARepoGovernance.ps1",
+        "Scripts/PDA_BuildRunner.ps1",
+        "Roadmap/PDA-Roadmap.json",
+        "Roadmap/work-packets/**",
+        "Roadmap/codex-prompts/**",
+        "PDA-Tasks/**",
+        "PDA-Backups/**"
+      ],
+      "required_tests": [
+        "Scripts/Test-PDAMemoryIndex.ps1 -NoThrow",
+        "Scripts/Test-PDAMemoryTaxonomy.ps1 -NoThrow",
+        "Scripts/Test-PDARetrieval.ps1 -NoThrow",
+        "Scripts/Test-PDALifecycle.ps1 -NoThrow",
+        "Scripts/Test-PDARepoGovernance.ps1 -NoThrow",
+        "Scripts/Test-PDAStack.ps1 -Deep -NoThrow"
+      ],
+      "completion_criteria": [
+        "Memory indexes remain synchronized and retrievable.",
+        "Lifecycle and taxonomy validation stay enforced.",
+        "Retrieval tests continue to reject unsafe writers and invalid mappings."
+      ],
+      "stop_conditions": [
+        "taxonomy drift",
+        "invalid writer mapping",
+        "secret exposure",
+        "approval bypass",
+        "failed validation",
+        "file access outside allowed_files"
+      ],
+      "commit_message": "feat: strengthen memory indexing and retrieval",
+      "status": "backlog"
+    },
+    {
+      "id": "task-007",
+      "title": "Add NotebookLM integration",
+      "description": "Design and implement a governed NotebookLM integration path that can ingest approved notes, reports, and memory artifacts without leaking secrets or bypassing policy.",
+      "objective": "Enable NotebookLM as a read-only knowledge surface.",
+      "dependencies": [
+        "task-006"
+      ],
+      "allowed_files": [
+        "Scripts/**",
+        "Documentation/**",
+        "Obsidian Vault/**",
+        "Roadmap/PDA-Roadmap.json",
+        "Roadmap/work-packets/**",
+        "Roadmap/codex-prompts/**",
+        "PDA-Tasks/**",
+        "PDA-Backups/**"
+      ],
+      "required_tests": [
+        "Scripts/Test-PDABuildRunner.ps1 -NoThrow",
+        "Scripts/Test-PDAStack.ps1 -Deep -NoThrow"
+      ],
+      "completion_criteria": [
+        "NotebookLM inputs are governed and read-only.",
+        "No secrets or restricted files are exposed.",
+        "Integration notes describe supported and unsupported flows."
+      ],
+      "stop_conditions": [
+        "secret exposure",
+        "policy violation",
+        "approval bypass",
+        "failed validation",
+        "file access outside allowed_files"
+      ],
+      "commit_message": "feat: add NotebookLM integration",
+      "status": "backlog"
+    },
+    {
+      "id": "task-008",
+      "title": "Integrate OpenRouter and external LLMs",
+      "description": "Expand model routing and provider validation so external LLM options such as OpenRouter can be added safely alongside the current provider stack.",
+      "objective": "Support additional governed LLM providers.",
+      "dependencies": [
+        "task-007"
+      ],
+      "allowed_files": [
+        "Scripts/Invoke-PDAModel.ps1",
+        "Scripts/PDA_ModelRouting.json",
+        "Scripts/Test-PDALiteLLMProviders.ps1",
+        "Scripts/Test-PDALiteLLMEnv.ps1",
+        "Scripts/Test-PDAStack.ps1",
+        "Documentation/OpenWebUI-Integration.md",
+        "Documentation/AIEC-Startup-Commands.md",
+        "Roadmap/PDA-Roadmap.json",
+        "Roadmap/work-packets/**",
+        "Roadmap/codex-prompts/**",
+        "PDA-Tasks/**",
+        "PDA-Backups/**"
+      ],
+      "required_tests": [
+        "Scripts/Test-PDALiteLLMProviders.ps1 -NoThrow",
+        "Scripts/Test-PDALiteLLMEnv.ps1 -NoThrow",
+        "Scripts/Test-PDAStack.ps1 -Deep -NoThrow"
+      ],
+      "completion_criteria": [
+        "Provider validation covers the new LLM route cleanly.",
+        "Routing policy remains explicit and documented.",
+        "No secrets or runtime credentials are committed."
+      ],
+      "stop_conditions": [
+        "routing regression",
+        "secret exposure",
+        "policy violation",
+        "failed validation",
+        "file access outside allowed_files"
+      ],
+      "commit_message": "feat: integrate external LLM providers",
+      "status": "backlog"
+    },
+    {
+      "id": "task-009",
+      "title": "Expand automation and note-taking tools",
+      "description": "Add auxiliary tooling for automation, AI-assisted analytics, and note-taking so ecosystem users can move faster without losing governance controls.",
+      "objective": "Provide additional safe productivity tools.",
+      "dependencies": [
+        "task-008"
+      ],
+      "allowed_files": [
+        "Scripts/Update-PDAMemoryDashboard.ps1",
+        "Scripts/Update-PDAArtifactDashboard.ps1",
+        "Scripts/Update-PDAConversationState.ps1",
+        "Scripts/Register-PDAArtifact.ps1",
+        "Scripts/Register-PDAMemory.ps1",
+        "Scripts/Promote-PDAArtifactToMemory.ps1",
+        "Scripts/Set-PDAMemoryLifecycle.ps1",
+        "Scripts/Test-PDAMemoryIndex.ps1",
+        "Scripts/Test-PDAMemoryTaxonomy.ps1",
+        "Scripts/Test-PDAStack.ps1",
+        "Documentation/**",
+        "Obsidian Vault/**",
+        "Roadmap/PDA-Roadmap.json",
+        "Roadmap/work-packets/**",
+        "Roadmap/codex-prompts/**",
+        "PDA-Tasks/**",
+        "PDA-Backups/**"
+      ],
+      "required_tests": [
+        "Scripts/Test-PDAMemoryIndex.ps1 -NoThrow",
+        "Scripts/Test-PDAMemoryTaxonomy.ps1 -NoThrow",
+        "Scripts/Test-PDAStack.ps1 -Deep -NoThrow"
+      ],
+      "completion_criteria": [
+        "Productivity tools remain governed and documented.",
+        "Note-taking and analytics tooling do not bypass policy.",
+        "Artifact and memory dashboards continue to refresh cleanly."
+      ],
+      "stop_conditions": [
+        "secret exposure",
+        "approval bypass",
+        "policy violation",
+        "failed validation",
+        "file access outside allowed_files"
+      ],
+      "commit_message": "feat: expand automation and note-taking tools",
       "status": "backlog"
     }
   ]

@@ -22,7 +22,16 @@ param(
     [switch]$ExecutePreparedTask,
 
     [Parameter(Mandatory = $false)]
+    [switch]$ExecuteCodexTask,
+
+    [Parameter(Mandatory = $false)]
     [switch]$ExportCodexExecutionPrompt,
+
+    [Parameter(Mandatory = $false)]
+    [string]$CodexExecutable,
+
+    [Parameter(Mandatory = $false)]
+    [string]$CodexArguments,
 
     [Parameter(Mandatory = $false)]
     [switch]$AsJson
@@ -31,9 +40,10 @@ param(
 $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "PDA_OutputParsing.ps1")
 . (Join-Path $PSScriptRoot "PDA_NightlyAutomation.ps1")
+. (Join-Path $PSScriptRoot "PDA_BuildRunner.ps1")
 
-$Mode = if ($ExecutePreparedTask) { "execute" } elseif ($PrepareExecution) { "prepare" } elseif ($PSBoundParameters.ContainsKey("DryRun")) { if ($DryRun.IsPresent) { "dry-run" } else { "prepare" } } elseif ($NoDryRun) { "prepare" } else { "dry-run" }
-if ($Mode -notin @("dry-run", "prepare", "execute")) {
+$Mode = if ($ExecuteCodexTask) { "codex" } elseif ($ExecutePreparedTask) { "execute" } elseif ($PrepareExecution) { "prepare" } elseif ($PSBoundParameters.ContainsKey("DryRun")) { if ($DryRun.IsPresent) { "dry-run" } else { "prepare" } } elseif ($NoDryRun) { "prepare" } else { "dry-run" }
+if ($Mode -notin @("dry-run", "prepare", "execute", "codex")) {
     throw "Unsupported orchestrator mode: $Mode"
 }
 
@@ -58,6 +68,7 @@ $PacketScript = Join-Path $ScriptsRoot "Generate-PDACodexWorkPacket.ps1"
 $BuildRunnerReportScript = Join-Path $ScriptsRoot "Generate-PDARunReport.ps1"
 $NightlyReportScript = Join-Path $ScriptsRoot "Generate-PDAMorningReport.ps1"
 $CodexPromptScript = Join-Path $ScriptsRoot "Export-PDACodexExecutionPrompt.ps1"
+$CodexExecutionScript = Join-Path $ScriptsRoot "Invoke-PDACodexExecution.ps1"
 $ExecutionStageRoot = Join-Path $Root "PDA-Tasks\staging\nightly-build"
 $QueueAuditScriptExists = Test-Path -Path $QueueAuditScript -PathType Leaf
 $HelperScriptInUse = if (Test-Path -Path $BuildRunnerHelperScript -PathType Leaf) { $BuildRunnerHelperScript } else { $NightlyHelperScript }
@@ -71,7 +82,9 @@ $RequiredScripts = @(
     $TaskStateScript,
     $UpdateRoadmapScript,
     $PacketScript,
-    $MorningReportScript
+    $MorningReportScript,
+    $CodexPromptScript,
+    $CodexExecutionScript
 )
 foreach ($RequiredScript in $RequiredScripts) {
     if (-not (Test-Path -Path $RequiredScript -PathType Leaf)) {
@@ -149,6 +162,9 @@ function Invoke-PDAJsonScript {
         throw "Command returned empty output: $Path"
     }
     $Result = ConvertFrom-PDAMixedJson -Text $Text -SourceName $Path
+    if ($Result.PSObject.Properties.Name -contains "status" -and [string]$Result.status -eq "fail") {
+        throw "Command failed: $Path"
+    }
     if ($LASTEXITCODE -ne 0 -and (-not $Result.PSObject.Properties.Name -contains "status" -or [string]$Result.status -ne "pass")) {
         throw "Command failed: $Path"
     }
@@ -157,14 +173,14 @@ function Invoke-PDAJsonScript {
 }
 
 $Roadmap = Get-PDARoadmap -Path $RoadmapPath
-$SelectedTask = if ($Mode -eq "execute") {
+$SelectedTask = if ($Mode -in @("execute", "codex")) {
     Get-PDANightlyTask -Roadmap $Roadmap -TaskId ([string]$Roadmap.current_task_id)
 }
 else {
     Get-PDANextEligibleTask -Roadmap $Roadmap
 }
 
-if ($Mode -in @("prepare", "execute") -and (Test-PDAWorktreeDirty)) {
+if ($Mode -in @("prepare", "execute", "codex") -and (Test-PDAWorktreeDirty)) {
     throw "Dirty worktree detected before orchestrator start."
 }
 
@@ -177,7 +193,7 @@ $BranchName = if ($SelectedTaskId) { "codex/nightly-$($SelectedTaskId)-$Timestam
 $CurrentBranch = [string]((& git -C $Root branch --show-current 2>$null | Select-Object -First 1))
 $BranchCreationStatus = "not_attempted"
 $BranchCreationMessage = ""
-if ($Mode -in @("prepare", "execute")) {
+if ($Mode -in @("prepare", "execute", "codex")) {
     if ([string]::IsNullOrWhiteSpace($CurrentBranch)) {
         $CurrentBranch = "(detached)"
     }
@@ -235,7 +251,29 @@ $ExecutionSummary = $null
 $ExecutionSummaryPath = ""
 $ExecutionSummaryMarkdownPath = ""
 $PacketResult = $null
-if ($Mode -eq "execute") {
+if ($Mode -eq "codex") {
+    $PacketLookup = Find-PDANightlyWorkPacket -Root $Root -TaskId $SelectedTaskId -PacketRoot (Join-Path $Root "Roadmap\work-packets")
+    if ($PacketLookup) {
+        $PacketResult = [pscustomobject]@{
+            status        = "pass"
+            task_id       = $SelectedTaskId
+            packet_root   = (Join-Path $Root "Roadmap\work-packets")
+            json_path     = $PacketLookup.json_path
+            markdown_path = $PacketLookup.markdown_path
+            packet        = $PacketLookup.packet
+        }
+    }
+    else {
+        $PacketResult = Invoke-PDAJsonScript -Path $PacketScript -Arguments @(
+            "-Root", $Root,
+            "-RoadmapPath", $RoadmapPath,
+            "-TaskId", $SelectedTaskId,
+            "-PacketRoot", (Join-Path $Root "Roadmap\work-packets"),
+            "-BranchName", $BranchName
+        )
+    }
+}
+elseif ($Mode -eq "execute") {
     $PacketLookup = Find-PDANightlyWorkPacket -Root $Root -TaskId $SelectedTaskId -PacketRoot (Join-Path $Root "Roadmap\work-packets")
     if ($PacketLookup) {
         $PacketResult = [pscustomobject]@{
@@ -280,6 +318,72 @@ if ($Mode -eq "execute") {
     $ExecutionSummarySaved = Save-PDANightlyExecutionSummary -Summary $ExecutionSummary -OutputRoot $ExecutionStageRoot
     $ExecutionSummaryPath = $ExecutionSummarySaved.json_path
     $ExecutionSummaryMarkdownPath = $ExecutionSummarySaved.markdown_path
+}
+elseif ($Mode -eq "codex") {
+    $CodexExecutionArguments = @(
+        "-Root", $Root,
+        "-RoadmapPath", $RoadmapPath,
+        "-PacketRoot", (Join-Path $Root "Roadmap\work-packets"),
+        "-PromptRoot", (Join-Path $Root "Roadmap\codex-prompts"),
+        "-StagingRoot", $ExecutionStageRoot,
+        "-ExecutionRoot", (Join-Path $Root "PDA-Backups\build-runner\executions"),
+        "-TaskId", $SelectedTaskId
+    )
+    $CodexExecutionArguments += @(
+        "-RepoBackupManifestPath", [string]$RepoBackup.manifest_path,
+        "-VolumeBackupManifestPath", [string]$VolumeBackup.manifest_path,
+        "-QueueAuditReportPath", [string]$QueueBacklogAudit.report_path
+    )
+    if (-not [string]::IsNullOrWhiteSpace($CodexExecutable)) {
+        $CodexExecutionArguments += @("-CodexExecutable", $CodexExecutable)
+    }
+    if (-not [string]::IsNullOrWhiteSpace($CodexArguments)) {
+        $CodexExecutionArguments += @("-CodexArguments", $CodexArguments)
+    }
+
+    $CodexExecution = Invoke-PDAJsonScript -Path $CodexExecutionScript -Arguments $CodexExecutionArguments
+
+    $TransitionResults = @()
+    foreach ($StateName in @($CodexExecution.preparation_transition_chain)) {
+        $TransitionResults += [pscustomobject]@{ to_state = [string]$StateName }
+    }
+    foreach ($StateName in @($CodexExecution.execution_transition_chain)) {
+        $TransitionResults += [pscustomobject]@{ to_state = [string]$StateName }
+    }
+
+    $TaskState = Invoke-PDAJsonScript -Path $TaskStateScript -Arguments @(
+        "-Root", $Root,
+        "-RoadmapPath", $RoadmapPath,
+        "-TaskId", $SelectedTaskId
+    )
+
+    $StateUpdate = [pscustomobject]@{
+        status           = "pass"
+        task_id          = $SelectedTaskId
+        from_state       = [string]$CodexExecution.state_before
+        to_state         = [string]$CodexExecution.state_after
+        updated          = $true
+        roadmap          = $TaskState
+        transition_chain = @($TransitionResults | ForEach-Object { $_.to_state })
+    }
+
+    $ExecutionSummaryPath = [string]$CodexExecution.summary_json_path
+    $ExecutionSummaryMarkdownPath = [string]$CodexExecution.summary_markdown_path
+    $CodexPrompt = [pscustomobject]@{
+        json_path     = [string]$CodexExecution.source_prompt_json_path
+        markdown_path = [string]$CodexExecution.source_prompt_markdown_path
+    }
+    $CodexPromptPath = [string]$CodexPrompt.json_path
+    $CodexPromptMarkdownPath = [string]$CodexPrompt.markdown_path
+    $BackupManifests = @([string]$RepoBackup.manifest_path, [string]$VolumeBackup.manifest_path, [string]$QueueBacklogAudit.report_path)
+    $RequiredTests = @($CodexExecution.tests_executed) | ForEach-Object { [string]$_ }
+    $GeneratedReports = @(
+        [string]$PacketResult.markdown_path,
+        [string]$QueueBacklogAudit.report_path,
+        [string]$ExecutionSummaryMarkdownPath,
+        [string]$CodexPrompt.json_path,
+        [string]$CodexPrompt.markdown_path
+    )
 }
 else {
     $TargetState = switch ($CurrentState) {
@@ -358,6 +462,12 @@ $GeneratedReports = @(
 if ($ExecutionSummaryMarkdownPath) {
     $GeneratedReports += [string]$ExecutionSummaryMarkdownPath
 }
+if (-not [string]::IsNullOrWhiteSpace([string]$CodexPromptPath)) {
+    $GeneratedReports += [string]$CodexPromptPath
+}
+if (-not [string]::IsNullOrWhiteSpace([string]$CodexPromptMarkdownPath)) {
+    $GeneratedReports += [string]$CodexPromptMarkdownPath
+}
 
     $MorningReport = Invoke-PDAJsonScript -Path $MorningReportScript -Arguments @(
         "-Root", $Root,
@@ -369,9 +479,12 @@ if ($ExecutionSummaryMarkdownPath) {
     "-GeneratedReports", ($GeneratedReports -join '|'),
     "-OutputRoot", (Join-Path $NightlyDir "reports")
     )
+    $MorningReportPath = [string]$MorningReport.report_path
 
-    $CodexPrompt = $null
-    if ($ExportCodexExecutionPrompt) {
+    if (-not $CodexPrompt) {
+        $CodexPrompt = $null
+    }
+    if ($ExportCodexExecutionPrompt -and -not $CodexPrompt) {
         if (-not (Test-Path -Path $CodexPromptScript -PathType Leaf)) {
             throw "Codex execution prompt exporter not found: $CodexPromptScript"
         }
@@ -388,7 +501,6 @@ if ($ExecutionSummaryMarkdownPath) {
 
     $WorkPacketPath = [string]$PacketResult.json_path
     $WorkPacketMarkdownPath = [string]$PacketResult.markdown_path
-    $MorningReportPath = [string]$MorningReport.report_path
     $CodexPromptPath = if ($CodexPrompt) { [string]$CodexPrompt.json_path } else { "" }
     $CodexPromptMarkdownPath = if ($CodexPrompt) { [string]$CodexPrompt.markdown_path } else { "" }
     $SummaryPath = Join-Path $NightlyDir "summary.md"
@@ -409,9 +521,58 @@ $SummaryLines = @(
     "- Codex prompt JSON: $(if ($CodexPromptPath) { $CodexPromptPath } else { '(none)' })"
     "- Codex prompt markdown: $(if ($CodexPromptMarkdownPath) { $CodexPromptMarkdownPath } else { '(none)' })"
     "- Morning report: $MorningReportPath"
-    "- Next action: $(if ($Mode -eq 'prepare') { 'Human review required before commit, push, or task execution.' } elseif ($Mode -eq 'execute') { 'Human review required before Codex execution.' } else { 'Human review required before branch creation or execution.' })"
+    "- Next action: $(if ($Mode -eq 'prepare') { 'Human review required before commit, push, or task execution.' } elseif ($Mode -eq 'execute') { 'Human review required before Codex execution.' } elseif ($Mode -eq 'codex') { 'Human review required before merge or promotion.' } else { 'Human review required before branch creation or execution.' })"
 )
 $SummaryLines | Set-Content -Path $SummaryPath -Encoding UTF8
+
+$ResolvedTaskState = $TaskState
+if (-not $ResolvedTaskState -and $Mode -eq "codex") {
+    $ResolvedTaskState = Get-PDABuildRunnerTaskState -Roadmap (Import-PDABuildRunnerRoadmap -Root $Root -RoadmapPath $RoadmapPath) -TaskId $SelectedTaskId
+}
+
+$ResolvedStateUpdate = $StateUpdate
+if (-not $ResolvedStateUpdate -and $Mode -eq "codex" -and $CodexExecution) {
+    $ResolvedExecutionTransitionChain = @(
+        @($CodexExecution.preparation_transition_chain)
+        @($CodexExecution.execution_transition_chain)
+    ) | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+    $ResolvedStateUpdate = [pscustomobject]@{
+        status           = "pass"
+        task_id          = $SelectedTaskId
+        from_state       = [string]$CodexExecution.state_before
+        to_state         = [string]$CodexExecution.state_after
+        updated          = $true
+        roadmap          = $ResolvedTaskState
+        transition_chain = $ResolvedExecutionTransitionChain
+    }
+}
+
+$ResolvedExecutionSummaryPath = if (-not [string]::IsNullOrWhiteSpace($ExecutionSummaryPath)) { [string]$ExecutionSummaryPath } elseif ($Mode -eq "codex" -and $CodexExecution) { [string]$CodexExecution.summary_json_path } else { "" }
+$ResolvedExecutionSummaryMarkdownPath = if (-not [string]::IsNullOrWhiteSpace($ExecutionSummaryMarkdownPath)) { [string]$ExecutionSummaryMarkdownPath } elseif ($Mode -eq "codex" -and $CodexExecution) { [string]$CodexExecution.summary_markdown_path } else { "" }
+$ResolvedCodexPromptPath = if (-not [string]::IsNullOrWhiteSpace($CodexPromptPath)) { [string]$CodexPromptPath } elseif ($Mode -eq "codex" -and $CodexExecution) { [string]$CodexExecution.source_prompt_json_path } else { "" }
+$ResolvedCodexPromptMarkdownPath = if (-not [string]::IsNullOrWhiteSpace($CodexPromptMarkdownPath)) { [string]$CodexPromptMarkdownPath } elseif ($Mode -eq "codex" -and $CodexExecution) { [string]$CodexExecution.source_prompt_markdown_path } else { "" }
+$ResolvedMorningReportPath = if (-not [string]::IsNullOrWhiteSpace($MorningReportPath)) { [string]$MorningReportPath } elseif ($MorningReport -and $MorningReport.PSObject.Properties.Name -contains "report_path") { [string]$MorningReport.report_path } else { "" }
+$ResolvedExecutionTransitionChain = if ($TransitionResults) {
+    @($TransitionResults | ForEach-Object { [string]$_.to_state })
+}
+elseif ($Mode -eq "codex" -and $CodexExecution) {
+    @(
+        @($CodexExecution.preparation_transition_chain)
+        @($CodexExecution.execution_transition_chain)
+    ) | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+}
+else {
+    @()
+}
+$ResolvedExecutionTransitionCount = if ($TransitionResults) {
+    @($TransitionResults).Count
+}
+elseif ($Mode -eq "codex" -and $CodexExecution) {
+    @($ResolvedExecutionTransitionChain).Count
+}
+else {
+    0
+}
 
 $Result = [pscustomobject]@{
     status                  = "pass"
@@ -428,20 +589,20 @@ $Result = [pscustomobject]@{
     repo_backup_manifest    = $RepoBackup
     volume_backup_manifest  = $VolumeBackup
     queue_backlog_audit     = $QueueBacklogAudit
-    task_state              = $TaskState
-    task_state_transition   = $StateUpdate
-    execution_transition_chain = if ($TransitionResults) { @($TransitionResults | ForEach-Object { $_.to_state }) } else { @() }
-    execution_transition_count = @($TransitionResults).Count
+    task_state              = $ResolvedTaskState
+    task_state_transition   = $ResolvedStateUpdate
+    execution_transition_chain = $ResolvedExecutionTransitionChain
+    execution_transition_count = $ResolvedExecutionTransitionCount
     work_packet_path        = $WorkPacketPath
     work_packet_markdown_path = $WorkPacketMarkdownPath
-    execution_summary_path  = $ExecutionSummaryPath
-    execution_summary_markdown_path = $ExecutionSummaryMarkdownPath
-    codex_prompt_path       = $CodexPromptPath
-    codex_prompt_markdown_path = $CodexPromptMarkdownPath
-    morning_report_path     = $MorningReportPath
+    execution_summary_path  = $ResolvedExecutionSummaryPath
+    execution_summary_markdown_path = $ResolvedExecutionSummaryMarkdownPath
+    codex_prompt_path       = $ResolvedCodexPromptPath
+    codex_prompt_markdown_path = $ResolvedCodexPromptMarkdownPath
+    morning_report_path     = $ResolvedMorningReportPath
     summary_path            = $SummaryPath
     audit_report_path       = $QueueBacklogAudit.report_path
-    next_action             = if ($Mode -eq "prepare") { "Human review required before commit, push, or task execution." } elseif ($Mode -eq "execute") { "Human review required before Codex execution." } else { "Human review required before branch creation or execution." }
+    next_action             = if ($Mode -eq "prepare") { "Human review required before commit, push, or task execution." } elseif ($Mode -eq "execute") { "Human review required before Codex execution." } elseif ($Mode -eq "codex") { "Human review required before merge or promotion." } else { "Human review required before branch creation or execution." }
     safety_gates            = @(
         "Dry-run only",
         "Prepare mode allowed",

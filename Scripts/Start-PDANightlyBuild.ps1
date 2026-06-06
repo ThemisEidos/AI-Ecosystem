@@ -22,6 +22,21 @@ param(
     [switch]$ExecutePreparedTask,
 
     [Parameter(Mandatory = $false)]
+    [switch]$ExecuteCodexTask,
+
+    [Parameter(Mandatory = $false)]
+    [string]$CodexExecutable,
+
+    [Parameter(Mandatory = $false)]
+    [string]$CodexArguments,
+
+    [Parameter(Mandatory = $false)]
+    [switch]$Unattended,
+
+    [Parameter(Mandatory = $false)]
+    [switch]$Monitor,
+
+    [Parameter(Mandatory = $false)]
     [switch]$AsJson
 )
 
@@ -47,6 +62,9 @@ if ($PSBoundParameters.ContainsKey("DryRun")) {
 elseif ($ExecutePreparedTask) {
     $Args += "-ExecutePreparedTask"
 }
+elseif ($ExecuteCodexTask) {
+    $Args += "-ExecuteCodexTask"
+}
 elseif ($NoDryRun) {
     $Args += "-PrepareExecution"
 }
@@ -55,6 +73,22 @@ elseif ($PrepareExecution) {
 }
 else {
     $Args += "-DryRun"
+}
+
+if (-not [string]::IsNullOrWhiteSpace($CodexExecutable)) {
+    $Args += @("-CodexExecutable", $CodexExecutable)
+}
+
+if (-not [string]::IsNullOrWhiteSpace($CodexArguments)) {
+    $Args += @("-CodexArguments", $CodexArguments)
+}
+
+if ($Unattended) {
+    $Args += "-Unattended"
+}
+
+if ($Monitor) {
+    $Args += "-Monitor"
 }
 
 if ($AsJson) {

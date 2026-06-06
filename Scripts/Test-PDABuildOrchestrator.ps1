@@ -8,6 +8,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "PDA_OutputParsing.ps1")
 
 $Root = Split-Path -Parent $PSScriptRoot
 $RoadmapPath = Join-Path $Root "Roadmap\PDA-Roadmap.json"
@@ -38,16 +39,16 @@ function Invoke-PDAJsonScript {
     )
 
     $Raw = & pwsh -NoProfile -File $Path @Arguments -AsJson 2>&1
-    if ($LASTEXITCODE -ne 0) {
-        throw "Command failed: $Path"
-    }
-
     $Text = [string]($Raw -join "`n").Trim()
     if ([string]::IsNullOrWhiteSpace($Text)) {
         throw "Command returned empty output: $Path"
     }
+    $Result = ConvertFrom-PDAMixedJson -Text $Text -SourceName $Path
+    if ($LASTEXITCODE -ne 0 -and (-not $Result.PSObject.Properties.Name -contains "status" -or [string]$Result.status -ne "pass")) {
+        throw "Command failed: $Path"
+    }
 
-    return $Text | ConvertFrom-Json
+    return $Result
 }
 
 $Roadmap = Get-Content -Path $RoadmapPath -Raw | ConvertFrom-Json
@@ -64,6 +65,8 @@ $Report = [pscustomobject]@{
     repo_manifest_exists   = $false
     volume_manifest_exists = $false
     work_packet_exists     = $false
+    work_packet_markdown_exists = $false
+    morning_report_exists  = $false
     summary_exists         = $false
     proposed_branch_ok     = $false
     required_tests_ok      = $false
@@ -102,11 +105,20 @@ function Initialize-PDAPrepareRepo {
 
     foreach ($Path in @(
         "Roadmap\PDA-Roadmap.json",
+        "Scripts\PDA_OutputParsing.ps1",
+        "Scripts\PDA_NightlyAutomation.ps1",
+        "Scripts\PDA_BuildRunner.ps1",
         "Scripts\Invoke-PDABuildOrchestrator.ps1",
         "Scripts\Start-PDANightlyBuild.ps1",
         "Scripts\Backup-PDARepo.ps1",
         "Scripts\Backup-PDAVolumes.ps1",
         "Scripts\Invoke-PDAQueueBacklogAudit.ps1",
+        "Scripts\Get-PDANightlyTaskState.ps1",
+        "Scripts\Update-PDARoadmapStatus.ps1",
+        "Scripts\Generate-PDACodexWorkPacket.ps1",
+        "Scripts\Generate-PDAMorningReport.ps1",
+        "Scripts\Export-PDACodexExecutionPrompt.ps1",
+        "Scripts\Invoke-PDACodexExecution.ps1",
         "Scripts\Test-PDABuildOrchestrator.ps1"
     )) {
         Copy-Item -Force (Join-Path $SourceRoot $Path) (Join-Path $DestinationRoot $Path)
@@ -115,11 +127,21 @@ function Initialize-PDAPrepareRepo {
     $ExcludePath = Join-Path $DestinationRoot ".git\info\exclude"
     Add-Content -Path $ExcludePath -Value @(
         "Roadmap/",
+        "Roadmap/work-packets/",
+        "Scripts/PDA_OutputParsing.ps1",
+        "Scripts/PDA_NightlyAutomation.ps1",
+        "Scripts/PDA_BuildRunner.ps1",
         "Scripts/Invoke-PDABuildOrchestrator.ps1",
         "Scripts/Start-PDANightlyBuild.ps1",
         "Scripts/Backup-PDARepo.ps1",
         "Scripts/Backup-PDAVolumes.ps1",
         "Scripts/Invoke-PDAQueueBacklogAudit.ps1",
+        "Scripts/Get-PDANightlyTaskState.ps1",
+        "Scripts/Update-PDARoadmapStatus.ps1",
+        "Scripts/Generate-PDACodexWorkPacket.ps1",
+        "Scripts/Generate-PDAMorningReport.ps1",
+        "Scripts/Export-PDACodexExecutionPrompt.ps1",
+        "Scripts/Invoke-PDACodexExecution.ps1",
         "Scripts/Test-PDABuildOrchestrator.ps1"
     )
 }
@@ -148,6 +170,8 @@ $PrepareWrapperResult = Invoke-PDAJsonScript -Path $PrepareStart -Arguments @(
 $RepoManifestPath = [string]$OrchestratorResult.repo_backup_manifest.manifest_path
 $VolumeManifestPath = [string]$OrchestratorResult.volume_backup_manifest.manifest_path
 $WorkPacketPath = [string]$OrchestratorResult.work_packet_path
+$WorkPacketMarkdownPath = [string]$OrchestratorResult.work_packet_markdown_path
+$MorningReportPath = [string]$OrchestratorResult.morning_report_path
 $SummaryPath = [string]$OrchestratorResult.summary_path
 
 if ($OrchestratorResult.mode -ne "dry-run") {
@@ -230,6 +254,14 @@ if (-not (Test-Path -Path $WorkPacketPath -PathType Leaf)) {
     $Issues.Add("Work packet was not written.")
 }
 
+if (-not (Test-Path -Path $WorkPacketMarkdownPath -PathType Leaf)) {
+    $Issues.Add("Work packet markdown was not written.")
+}
+
+if (-not (Test-Path -Path $MorningReportPath -PathType Leaf)) {
+    $Issues.Add("Morning report was not written.")
+}
+
 if (-not (Test-Path -Path $SummaryPath -PathType Leaf)) {
     $Issues.Add("Summary report was not written.")
 }
@@ -276,6 +308,8 @@ $Report.prepare_mode_exists = ($PrepareResult.mode -eq "prepare" -and $PrepareWr
 $Report.repo_manifest_exists = (Test-Path -Path $RepoManifestPath -PathType Leaf)
 $Report.volume_manifest_exists = (Test-Path -Path $VolumeManifestPath -PathType Leaf)
 $Report.work_packet_exists = (Test-Path -Path $WorkPacketPath -PathType Leaf)
+$Report.work_packet_markdown_exists = (Test-Path -Path $WorkPacketMarkdownPath -PathType Leaf)
+$Report.morning_report_exists = (Test-Path -Path $MorningReportPath -PathType Leaf)
 $Report.summary_exists = (Test-Path -Path $SummaryPath -PathType Leaf)
 $Report.proposed_branch_ok = ($OrchestratorResult.branch_name -like "codex/nightly-task-001-*")
 $Report.proposed_branch_ok = $Report.proposed_branch_ok -and ($PrepareResult.branch_name -like "codex/nightly-task-001-*") -and ($PrepareWrapperResult.branch_name -like "codex/nightly-task-001-*")
@@ -285,11 +319,14 @@ $Report.results = @(
     [pscustomobject]@{ name = "roadmap"; passed = $Report.roadmap_exists; path = $RoadmapPath }
     [pscustomobject]@{ name = "task-selection"; passed = ($OrchestratorResult.selected_task_id -eq "task-001"); task_id = $OrchestratorResult.selected_task_id }
     [pscustomobject]@{ name = "queue-backlog-audit"; passed = ($QueueAuditResult.status -eq "pass"); path = $QueueAuditResult.report_path }
+    [pscustomobject]@{ name = "task-state"; passed = ($OrchestratorResult.task_state -and $OrchestratorResult.task_state.task_state -and $OrchestratorResult.task_state.task_state.task_id -eq "task-001"); state = if ($OrchestratorResult.task_state -and $OrchestratorResult.task_state.task_state) { $OrchestratorResult.task_state.task_state.status } else { "" } }
     [pscustomobject]@{ name = "prepare-selection"; passed = ($PrepareResult.selected_task_id -eq "task-001"); task_id = $PrepareResult.selected_task_id }
     [pscustomobject]@{ name = "prepare-wrapper"; passed = ($PrepareWrapperResult.selected_task_id -eq "task-001"); task_id = $PrepareWrapperResult.selected_task_id }
     [pscustomobject]@{ name = "repo-manifest"; passed = $Report.repo_manifest_exists; path = $RepoManifestPath }
     [pscustomobject]@{ name = "volume-manifest"; passed = $Report.volume_manifest_exists; path = $VolumeManifestPath }
     [pscustomobject]@{ name = "work-packet"; passed = $Report.work_packet_exists; path = $WorkPacketPath }
+    [pscustomobject]@{ name = "work-packet-markdown"; passed = $Report.work_packet_markdown_exists; path = $WorkPacketMarkdownPath }
+    [pscustomobject]@{ name = "morning-report"; passed = $Report.morning_report_exists; path = $MorningReportPath }
     [pscustomobject]@{ name = "summary"; passed = $Report.summary_exists; path = $SummaryPath }
 )
 

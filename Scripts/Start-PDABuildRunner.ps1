@@ -22,10 +22,40 @@ param(
     [switch]$ExecutePreparedTask,
 
     [Parameter(Mandatory = $false)]
+    [switch]$ExecuteCodexTask,
+
+    [Parameter(Mandatory = $false)]
     [switch]$ExportCodexExecutionPrompt,
 
     [Parameter(Mandatory = $false)]
-    [switch]$AsJson
+    [int]$MaxTasks,
+
+    [Parameter(Mandatory = $false)]
+    [int]$MaxRuntimeMinutes,
+
+    [Parameter(Mandatory = $false)]
+    [switch]$StopOnFailure,
+
+    [Parameter(Mandatory = $false)]
+    [string]$RunReport,
+
+    [Parameter(Mandatory = $false)]
+    [string]$CodexExecutable,
+
+    [Parameter(Mandatory = $false)]
+    [string]$CodexArguments,
+
+    [Parameter(Mandatory = $false)]
+    [switch]$Unattended,
+
+    [Parameter(Mandatory = $false)]
+    [switch]$Monitor,
+
+    [Parameter(Mandatory = $false)]
+    [switch]$AsJson,
+
+    [Parameter(Mandatory = $false)]
+    [switch]$NoThrow
 )
 
 $Runner = Join-Path $PSScriptRoot "Invoke-PDABuildRunner.ps1"
@@ -48,6 +78,9 @@ if ($PSBoundParameters.ContainsKey("DryRun")) {
 elseif ($ExecutePreparedTask) {
     $Args += "-ExecutePreparedTask"
 }
+elseif ($ExecuteCodexTask) {
+    $Args += "-ExecuteCodexTask"
+}
 elseif ($NoDryRun) {
     $Args += "-PrepareExecution"
 }
@@ -62,8 +95,44 @@ if ($ExportCodexExecutionPrompt) {
     $Args += "-ExportCodexExecutionPrompt"
 }
 
+if ($PSBoundParameters.ContainsKey("MaxTasks")) {
+    $Args += @("-MaxTasks", [string]$MaxTasks)
+}
+
+if ($PSBoundParameters.ContainsKey("MaxRuntimeMinutes")) {
+    $Args += @("-MaxRuntimeMinutes", [string]$MaxRuntimeMinutes)
+}
+
+if ($PSBoundParameters.ContainsKey("StopOnFailure")) {
+    $Args += "-StopOnFailure"
+}
+
+if (-not [string]::IsNullOrWhiteSpace($RunReport)) {
+    $Args += @("-RunReport", $RunReport)
+}
+
+if (-not [string]::IsNullOrWhiteSpace($CodexExecutable)) {
+    $Args += @("-CodexExecutable", $CodexExecutable)
+}
+
+if (-not [string]::IsNullOrWhiteSpace($CodexArguments)) {
+    $Args += @("-CodexArguments", $CodexArguments)
+}
+
+if ($Unattended) {
+    $Args += "-Unattended"
+}
+
+if ($Monitor) {
+    $Args += "-Monitor"
+}
+
 if ($AsJson) {
     $Args += "-AsJson"
+}
+
+if ($NoThrow) {
+    $Args += "-NoThrow"
 }
 
 & pwsh -NoProfile -File $Runner @Args
