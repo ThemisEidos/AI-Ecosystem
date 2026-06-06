@@ -471,8 +471,8 @@ function New-PDANightlyExecutionSummaryObject {
         [Parameter(Mandatory = $true)]
         [string]$FinalState,
 
-        [Parameter(Mandatory = $true)]
-        [string[]]$TransitionChain,
+        [Parameter(Mandatory = $false)]
+        [string[]]$TransitionChain = @(),
 
         [Parameter(Mandatory = $false)]
         [string[]]$BackupManifests = @(),
@@ -480,6 +480,10 @@ function New-PDANightlyExecutionSummaryObject {
         [Parameter(Mandatory = $false)]
         [string[]]$TestsRequired = @()
     )
+
+    if ($null -eq $TransitionChain) {
+        $TransitionChain = @()
+    }
 
     return [pscustomobject]@{
         schema_version           = "1.0"

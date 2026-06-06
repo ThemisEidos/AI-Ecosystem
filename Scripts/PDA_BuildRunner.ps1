@@ -103,8 +103,8 @@ function New-PDABuildRunnerExecutionSummaryObject {
         [Parameter(Mandatory = $true)]
         [string]$FinalState,
 
-        [Parameter(Mandatory = $true)]
-        [string[]]$TransitionChain,
+        [Parameter(Mandatory = $false)]
+        [string[]]$TransitionChain = @(),
 
         [Parameter(Mandatory = $false)]
         [string[]]$BackupManifests = @(),
@@ -112,6 +112,10 @@ function New-PDABuildRunnerExecutionSummaryObject {
         [Parameter(Mandatory = $false)]
         [string[]]$TestsRequired = @()
     )
+
+    if ($null -eq $TransitionChain) {
+        $TransitionChain = @()
+    }
 
     return (New-PDANightlyExecutionSummaryObject -Roadmap $Roadmap -Task $Task -WorkPacket $WorkPacket -BranchName $BranchName -CurrentState $CurrentState -FinalState $FinalState -TransitionChain $TransitionChain -BackupManifests $BackupManifests -TestsRequired $TestsRequired)
 }
