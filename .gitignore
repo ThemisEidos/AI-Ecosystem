@@ -123,6 +123,10 @@ VeraCrypt/
 # Local PDA backups
 PDA-Backups/
 
+# Generated nightly work packets
+Roadmap/work-packets/
+Roadmap/codex-prompts/
+
 # Script patch backups
 Scripts/*.bak.ps1
 

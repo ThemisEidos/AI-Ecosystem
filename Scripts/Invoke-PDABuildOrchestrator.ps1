@@ -22,6 +22,9 @@ param(
     [switch]$ExecutePreparedTask,
 
     [Parameter(Mandatory = $false)]
+    [switch]$ExportCodexExecutionPrompt,
+
+    [Parameter(Mandatory = $false)]
     [switch]$AsJson
 )
 
@@ -51,6 +54,7 @@ $TaskStateScript = Join-Path $ScriptsRoot "Get-PDANightlyTaskState.ps1"
 $UpdateRoadmapScript = Join-Path $ScriptsRoot "Update-PDARoadmapStatus.ps1"
 $PacketScript = Join-Path $ScriptsRoot "Generate-PDACodexWorkPacket.ps1"
 $MorningReportScript = Join-Path $ScriptsRoot "Generate-PDAMorningReport.ps1"
+$CodexPromptScript = Join-Path $ScriptsRoot "Export-PDACodexExecutionPrompt.ps1"
 $ExecutionStageRoot = Join-Path $Root "PDA-Tasks\staging\nightly-build"
 $QueueAuditScriptExists = Test-Path -Path $QueueAuditScript -PathType Leaf
 $RequiredScripts = @(
@@ -349,21 +353,39 @@ if ($ExecutionSummaryMarkdownPath) {
     $GeneratedReports += [string]$ExecutionSummaryMarkdownPath
 }
 
-$MorningReport = Invoke-PDAJsonScript -Path $MorningReportScript -Arguments @(
-    "-Root", $Root,
-    "-RoadmapPath", $RoadmapPath,
-    "-TaskId", $SelectedTaskId,
+    $MorningReport = Invoke-PDAJsonScript -Path $MorningReportScript -Arguments @(
+        "-Root", $Root,
+        "-RoadmapPath", $RoadmapPath,
+        "-TaskId", $SelectedTaskId,
     "-BranchName", $BranchName,
     "-BackupManifests", ($BackupManifests -join '|'),
     "-TestsExecuted", ($RequiredTests -join '|'),
     "-GeneratedReports", ($GeneratedReports -join '|'),
     "-OutputRoot", (Join-Path $NightlyDir "reports")
-)
+    )
 
-$WorkPacketPath = [string]$PacketResult.json_path
-$WorkPacketMarkdownPath = [string]$PacketResult.markdown_path
-$MorningReportPath = [string]$MorningReport.report_path
-$SummaryPath = Join-Path $NightlyDir "summary.md"
+    $CodexPrompt = $null
+    if ($ExportCodexExecutionPrompt) {
+        if (-not (Test-Path -Path $CodexPromptScript -PathType Leaf)) {
+            throw "Codex execution prompt exporter not found: $CodexPromptScript"
+        }
+
+        $CodexPrompt = Invoke-PDAJsonScript -Path $CodexPromptScript -Arguments @(
+            "-Root", $Root,
+            "-RoadmapPath", $RoadmapPath,
+            "-PacketRoot", (Join-Path $Root "Roadmap\work-packets"),
+            "-StagingRoot", $ExecutionStageRoot,
+            "-PromptRoot", (Join-Path $Root "Roadmap\codex-prompts"),
+            "-TaskId", $SelectedTaskId
+        )
+    }
+
+    $WorkPacketPath = [string]$PacketResult.json_path
+    $WorkPacketMarkdownPath = [string]$PacketResult.markdown_path
+    $MorningReportPath = [string]$MorningReport.report_path
+    $CodexPromptPath = if ($CodexPrompt) { [string]$CodexPrompt.json_path } else { "" }
+    $CodexPromptMarkdownPath = if ($CodexPrompt) { [string]$CodexPrompt.markdown_path } else { "" }
+    $SummaryPath = Join-Path $NightlyDir "summary.md"
 $SummaryLines = @(
     "# PDA Nightly Build Orchestrator Summary"
     ""
@@ -378,6 +400,8 @@ $SummaryLines = @(
     "- Work packet JSON: $WorkPacketPath"
     "- Work packet markdown: $WorkPacketMarkdownPath"
     "- Execution summary: $(if ($ExecutionSummaryPath) { $ExecutionSummaryPath } else { '(none)' })"
+    "- Codex prompt JSON: $(if ($CodexPromptPath) { $CodexPromptPath } else { '(none)' })"
+    "- Codex prompt markdown: $(if ($CodexPromptMarkdownPath) { $CodexPromptMarkdownPath } else { '(none)' })"
     "- Morning report: $MorningReportPath"
     "- Next action: $(if ($Mode -eq 'prepare') { 'Human review required before commit, push, or task execution.' } elseif ($Mode -eq 'execute') { 'Human review required before Codex execution.' } else { 'Human review required before branch creation or execution.' })"
 )
@@ -406,6 +430,8 @@ $Result = [pscustomobject]@{
     work_packet_markdown_path = $WorkPacketMarkdownPath
     execution_summary_path  = $ExecutionSummaryPath
     execution_summary_markdown_path = $ExecutionSummaryMarkdownPath
+    codex_prompt_path       = $CodexPromptPath
+    codex_prompt_markdown_path = $CodexPromptMarkdownPath
     morning_report_path     = $MorningReportPath
     summary_path            = $SummaryPath
     audit_report_path       = $QueueBacklogAudit.report_path
