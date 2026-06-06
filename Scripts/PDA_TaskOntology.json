@@ -126,6 +126,35 @@
       "notes": "Research output must remain grounded in confirmed source material."
     },
     {
+      "task_type": "draft",
+      "intent": "draft_generation",
+      "command": "/draft",
+      "title": "Draft generation",
+      "description": "Convert findings or source material into a professional operational draft.",
+      "supported_categories": [
+        "category_1"
+      ],
+      "sensitivity_category": "standard",
+      "required_approvals": {
+        "category_1": "none"
+      },
+      "input_types": [
+        "file-based",
+        "message-only-test"
+      ],
+      "output_types": [
+        "draft_markdown",
+        "result_json"
+      ],
+      "allowed_workers": [
+        "draft-worker"
+      ],
+      "routing_constraints": [
+        "local-or-cloud"
+      ],
+      "notes": "Draft generation can use either local or cloud-capable routing for category_1 work."
+    },
+    {
       "task_type": "review",
       "intent": "review",
       "command": "/review",

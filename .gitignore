@@ -129,3 +129,20 @@ Scripts/*.bak.ps1
 # LiteLLM local env
 litellm/.env.local
 !litellm/.env.local.example
+
+# PDA generated exports / local mirrors
+PDA-Fabric/
+PDA-Obsidian-Vault/
+PDA-Runtime/data/
+PDA_ArtifactIndex.json
+PDA_MemoryIndex.json
+Scripts/PDA_LegacyMemoryRepairAllowlist.json
+PDA-ChatBridge-HTTP.json
+n8n Workflow/PDA-ChatBridge-HTTP.json
+n8n Workflow/PDA-ChatBridge.json
+n8n Workflow/PDA-ChatBridge-Rebuilt.json
+n8n Workflow/ScriptsNew-PDAHttpBridgeWorkflow.ps1
+chat-bridge-export.json
+n8n-workflows-backup.json
+workers.json
+Timeline Builder*.json
