@@ -40,6 +40,11 @@ if ([string]::IsNullOrWhiteSpace($OutputRoot)) {
 $ScriptsRoot = Join-Path $Root "Scripts"
 $RepoBackupScript = Join-Path $ScriptsRoot "Backup-PDARepo.ps1"
 $VolumeBackupScript = Join-Path $ScriptsRoot "Backup-PDAVolumes.ps1"
+$QueueAuditScript = Join-Path $ScriptsRoot "Invoke-PDAQueueBacklogAudit.ps1"
+$QueueAuditScriptExists = Test-Path -Path $QueueAuditScript -PathType Leaf
+if (-not $QueueAuditScriptExists) {
+    throw "Queue backlog audit script not found: $QueueAuditScript"
+}
 $NightlyDir = $OutputRoot
 New-Item -ItemType Directory -Force -Path $NightlyDir | Out-Null
 
@@ -174,10 +179,15 @@ $VolumeBackup = Invoke-PDAJsonScript -Path $VolumeBackupScript -Arguments @(
     "-DryRun"
 )
 
+$QueueBacklogAudit = Invoke-PDAJsonScript -Path $QueueAuditScript -Arguments @(
+    "-Root", $Root,
+    "-ReportRoot", (Join-Path $NightlyDir "reports")
+)
+
 $WorkPacket = [pscustomobject]@{
     schema_version          = "1.0"
     generated_at            = (Get-Date).ToUniversalTime().ToString("o")
-    mode                    = "dry-run"
+    mode                    = $Mode
     root_path               = $Root
     roadmap_path            = $RoadmapPath
     roadmap_name            = [string]$Roadmap.roadmap_name
@@ -188,6 +198,7 @@ $WorkPacket = [pscustomobject]@{
     branch_creation_message = $BranchCreationMessage
     repo_backup_manifest    = $RepoBackup
     volume_backup_manifest   = $VolumeBackup
+    queue_backlog_audit     = $QueueBacklogAudit
     required_tests          = if ($SelectedTask) { @($SelectedTask.required_tests) } else { @() }
     stop_conditions         = if ($SelectedTask) { @($SelectedTask.stop_conditions) } else { @() }
     safety_gates            = @(
@@ -207,14 +218,15 @@ $WorkPacket | ConvertTo-Json -Depth 30 | Set-Content -Path $WorkPacketPath -Enco
 $SummaryLines = @(
     "# PDA Nightly Build Orchestrator Summary"
     ""
-    "- Mode: dry-run"
+    "- Mode: $Mode"
     "- Roadmap: $RoadmapPath"
     "- Selected task: $(if ($SelectedTaskId) { "$SelectedTaskId - $SelectedTaskTitle" } else { '(none)' })"
     "- Proposed branch: $BranchName"
     "- Repo backup manifest: $($RepoBackup.manifest_path)"
     "- Volume backup manifest: $($VolumeBackup.manifest_path)"
+    "- Backlog audit report: $($QueueBacklogAudit.report_path)"
     "- Work packet: $WorkPacketPath"
-    "- Next action: Human review required before branch creation or execution."
+    "- Next action: $(if ($Mode -eq 'prepare') { 'Human review required before commit, push, or task execution.' } else { 'Human review required before branch creation or execution.' })"
 )
 $SummaryLines | Set-Content -Path $SummaryPath -Encoding UTF8
 
@@ -232,8 +244,10 @@ $Result = [pscustomobject]@{
     branch_creation_message = $BranchCreationMessage
     repo_backup_manifest    = $RepoBackup
     volume_backup_manifest  = $VolumeBackup
+    queue_backlog_audit     = $QueueBacklogAudit
     work_packet_path        = $WorkPacketPath
     summary_path            = $SummaryPath
+    audit_report_path       = $QueueBacklogAudit.report_path
     next_action             = if ($Mode -eq "prepare") { "Human review required before commit, push, or task execution." } else { "Human review required before branch creation or execution." }
     safety_gates            = @(
         "Dry-run only",

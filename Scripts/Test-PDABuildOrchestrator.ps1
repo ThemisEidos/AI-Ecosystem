@@ -12,6 +12,7 @@ $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
 $RoadmapPath = Join-Path $Root "Roadmap\PDA-Roadmap.json"
 $Orchestrator = Join-Path $PSScriptRoot "Invoke-PDABuildOrchestrator.ps1"
+$QueueAuditTest = Join-Path $PSScriptRoot "Test-PDAQueueBacklogAudit.ps1"
 
 if (-not (Test-Path -Path $RoadmapPath -PathType Leaf)) {
     throw "Roadmap missing: $RoadmapPath"
@@ -105,6 +106,7 @@ function Initialize-PDAPrepareRepo {
         "Scripts\Start-PDANightlyBuild.ps1",
         "Scripts\Backup-PDARepo.ps1",
         "Scripts\Backup-PDAVolumes.ps1",
+        "Scripts\Invoke-PDAQueueBacklogAudit.ps1",
         "Scripts\Test-PDABuildOrchestrator.ps1"
     )) {
         Copy-Item -Force (Join-Path $SourceRoot $Path) (Join-Path $DestinationRoot $Path)
@@ -117,6 +119,7 @@ function Initialize-PDAPrepareRepo {
         "Scripts/Start-PDANightlyBuild.ps1",
         "Scripts/Backup-PDARepo.ps1",
         "Scripts/Backup-PDAVolumes.ps1",
+        "Scripts/Invoke-PDAQueueBacklogAudit.ps1",
         "Scripts/Test-PDABuildOrchestrator.ps1"
     )
 }
@@ -126,6 +129,9 @@ Initialize-PDAPrepareRepo -DestinationRoot $PrepareRepoRoot -SourceRoot $Root
 $PrepareOrchestrator = Join-Path $PrepareRepoRoot "Scripts\Invoke-PDABuildOrchestrator.ps1"
 $PrepareStart = Join-Path $PrepareRepoRoot "Scripts\Start-PDANightlyBuild.ps1"
 $PrepareRoadmap = Join-Path $PrepareRepoRoot "Roadmap\PDA-Roadmap.json"
+$QueueAuditResult = Invoke-PDAJsonScript -Path $QueueAuditTest -Arguments @(
+    "-NoThrow"
+)
 $PrepareResult = Invoke-PDAJsonScript -Path $PrepareOrchestrator -Arguments @(
     "-Root", $PrepareRepoRoot,
     "-RoadmapPath", $PrepareRoadmap,
@@ -146,6 +152,10 @@ $SummaryPath = [string]$OrchestratorResult.summary_path
 
 if ($OrchestratorResult.mode -ne "dry-run") {
     $Issues.Add("Default orchestrator mode should be dry-run.")
+}
+
+if ($QueueAuditResult.status -ne "pass") {
+    $Issues.Add("Queue backlog audit validation did not pass.")
 }
 
 if ($PrepareResult.mode -ne "prepare") {
@@ -224,6 +234,12 @@ if (-not (Test-Path -Path $SummaryPath -PathType Leaf)) {
     $Issues.Add("Summary report was not written.")
 }
 
+if (-not [string]::IsNullOrWhiteSpace([string]$OrchestratorResult.audit_report_path)) {
+    if (-not (Test-Path -Path $OrchestratorResult.audit_report_path -PathType Leaf)) {
+        $Issues.Add("Audit report path from orchestrator was not written.")
+    }
+}
+
 if (-not ($PrepareResult.branch_creation_status -in @("created", "existing"))) {
     $Issues.Add("Prepare mode did not attempt branch creation.")
 }
@@ -268,6 +284,7 @@ $Report.safety_gates_ok = ($OrchestratorResult.safety_gates -contains "Dry-run o
 $Report.results = @(
     [pscustomobject]@{ name = "roadmap"; passed = $Report.roadmap_exists; path = $RoadmapPath }
     [pscustomobject]@{ name = "task-selection"; passed = ($OrchestratorResult.selected_task_id -eq "task-001"); task_id = $OrchestratorResult.selected_task_id }
+    [pscustomobject]@{ name = "queue-backlog-audit"; passed = ($QueueAuditResult.status -eq "pass"); path = $QueueAuditResult.report_path }
     [pscustomobject]@{ name = "prepare-selection"; passed = ($PrepareResult.selected_task_id -eq "task-001"); task_id = $PrepareResult.selected_task_id }
     [pscustomobject]@{ name = "prepare-wrapper"; passed = ($PrepareWrapperResult.selected_task_id -eq "task-001"); task_id = $PrepareWrapperResult.selected_task_id }
     [pscustomobject]@{ name = "repo-manifest"; passed = $Report.repo_manifest_exists; path = $RepoManifestPath }
