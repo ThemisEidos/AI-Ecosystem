@@ -44,6 +44,17 @@ function Test-PDAStatusLookupMessage {
     return [bool]($Text -match '(?i)\b(status|what happened|where is|how is|did it finish|latest result|result location|what happened to)\b')
 }
 
+function Test-PDAOperatorConsoleMessage {
+    param([Parameter(Mandatory = $true)][string]$Text)
+
+    if ([string]::IsNullOrWhiteSpace($Text)) {
+        return $false
+    }
+
+    $Normalized = $Text.Trim().ToLowerInvariant()
+    return [bool]($Normalized -match '^(\/status|\/tasks|\/approvals|\/workers|\/reports|\/memory|\/help)(\b|\s|$)')
+}
+
 function Test-PDAConfirmationMessage {
     param([Parameter(Mandatory = $true)][string]$Text)
 
@@ -335,6 +346,7 @@ $PendingAction = Get-PDAConversationPendingActionFromSummary -ConversationState 
 $HasPendingAction = $PendingAction -and -not [bool]$PendingAction.is_expired
 $IsConfirmationMessage = Test-PDAConfirmationMessage -Text $Message
 $IsStatusLookup = Test-PDAStatusLookupMessage -Text $Message
+$IsOperatorConsoleCommand = Test-PDAOperatorConsoleMessage -Text $Message
 
 if ($IsConfirmationMessage -and -not $HasPendingAction) {
     if ($PendingAction -and [bool]$PendingAction.is_expired) {
@@ -391,7 +403,11 @@ if ($HasPendingAction -and ($IsConfirmationMessage -or $ConfirmDispatch)) {
     $ConfirmationArgs = @(
         "-Text", $DispatchMessage,
         "-AsJson",
-        "-ConfirmDispatch"
+        "-ConfirmDispatch",
+        "-ConversationId", $(if ($ConversationId) { $ConversationId } else { "" }),
+        "-SessionId", $(if ($SessionId) { $SessionId } else { "" }),
+        "-UserId", $(if ($UserId) { $UserId } else { "" }),
+        "-ConversationTitle", $(if ($ConversationTitle) { $ConversationTitle } else { "" })
     )
 
     $Raw = & pwsh -NoProfile -File $HandoffScript @ConfirmationArgs
@@ -400,7 +416,11 @@ if ($HasPendingAction -and ($IsConfirmationMessage -or $ConfirmDispatch)) {
     $ResponseText = ""
     $NextAction = ""
 
-    if ($Handoff.dispatch_status -eq "submitted") {
+    if ($Handoff.dispatch_status -eq "not_applicable") {
+        $ResponseText = [string]$Handoff.response_text
+        $NextAction = [string]$Handoff.next_action
+    }
+    elseif ($Handoff.dispatch_status -eq "submitted") {
         $ResponseText = "Dispatched via governed PDA handoff using $($Handoff.recommended_command)."
         $NextAction = "Dispatch submitted through the governed submitter."
     }
@@ -496,7 +516,7 @@ if ($HasPendingAction -and ($IsConfirmationMessage -or $ConfirmDispatch)) {
     return
 }
 
-if ($IsStatusLookup) {
+if ($IsStatusLookup -and -not $IsOperatorConsoleCommand) {
     $TaskResult = Invoke-PDATaskResultQuery -ConversationId $ConversationId -SessionId $SessionId -Message $Message
     if (-not $TaskResult) {
         $TaskResult = Invoke-PDAConversationStateQuery -ConversationId $ConversationId -SessionId $SessionId -Message $Message
@@ -580,7 +600,11 @@ if ($IsStatusLookup) {
 
 $HandoffArgs = @(
     "-Text", $Message,
-    "-AsJson"
+    "-AsJson",
+    "-ConversationId", $(if ($ConversationId) { $ConversationId } else { "" }),
+    "-SessionId", $(if ($SessionId) { $SessionId } else { "" }),
+    "-UserId", $(if ($UserId) { $UserId } else { "" }),
+    "-ConversationTitle", $(if ($ConversationTitle) { $ConversationTitle } else { "" })
 )
 if ($ConfirmDispatch) {
     $HandoffArgs += "-ConfirmDispatch"
@@ -592,6 +616,11 @@ $Handoff = $Raw | ConvertFrom-Json
 $ResponseText = ""
 $NextAction = ""
 
+if ($Handoff.dispatch_status -eq "not_applicable") {
+    $ResponseText = [string]$Handoff.response_text
+    $NextAction = [string]$Handoff.next_action
+}
+else {
 switch ($Handoff.interpreter_status) {
     "mapped" {
         if ($Handoff.dispatch_status -eq "submitted") {
@@ -615,6 +644,7 @@ switch ($Handoff.interpreter_status) {
         $ResponseText = "No governed command matched. $($Handoff.ambiguity_reason)"
         $NextAction = "Rephrase using review, report, analyze, run, or research language."
     }
+}
 }
 
 $PendingTimestamp = ""

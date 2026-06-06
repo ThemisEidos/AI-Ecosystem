@@ -94,6 +94,209 @@
       "notes": "Planning stays local and does not execute side effects."
     },
     {
+      "task_type": "operator_status",
+      "intent": "operator_status",
+      "command": "/status",
+      "title": "Operator status",
+      "description": "Render a read-only PDA operator console summary for overall system health.",
+      "supported_categories": [
+        "category_1"
+      ],
+      "sensitivity_category": "standard",
+      "required_approvals": {
+        "category_1": "none"
+      },
+      "input_types": [
+        "message-only-test"
+      ],
+      "output_types": [
+        "operator_console_markdown",
+        "result_json"
+      ],
+      "allowed_workers": [
+        "operator-console-worker"
+      ],
+      "routing_constraints": [
+        "local-only",
+        "read-only"
+      ],
+      "notes": "Status is a read-only operator console command and does not submit work."
+    },
+    {
+      "task_type": "operator_tasks",
+      "intent": "operator_tasks",
+      "command": "/tasks",
+      "title": "Operator tasks",
+      "description": "Render a read-only summary of recent task activity.",
+      "supported_categories": [
+        "category_1"
+      ],
+      "sensitivity_category": "standard",
+      "required_approvals": {
+        "category_1": "none"
+      },
+      "input_types": [
+        "message-only-test"
+      ],
+      "output_types": [
+        "operator_console_markdown",
+        "result_json"
+      ],
+      "allowed_workers": [
+        "operator-console-worker"
+      ],
+      "routing_constraints": [
+        "local-only",
+        "read-only"
+      ],
+      "notes": "Tasks is a read-only operator console command and does not submit work."
+    },
+    {
+      "task_type": "operator_approvals",
+      "intent": "operator_approvals",
+      "command": "/approvals",
+      "title": "Operator approvals",
+      "description": "Render a read-only summary of pending approvals.",
+      "supported_categories": [
+        "category_1"
+      ],
+      "sensitivity_category": "standard",
+      "required_approvals": {
+        "category_1": "none"
+      },
+      "input_types": [
+        "message-only-test"
+      ],
+      "output_types": [
+        "operator_console_markdown",
+        "result_json"
+      ],
+      "allowed_workers": [
+        "operator-console-worker"
+      ],
+      "routing_constraints": [
+        "local-only",
+        "read-only"
+      ],
+      "notes": "Approvals is a read-only operator console command and does not submit work."
+    },
+    {
+      "task_type": "operator_workers",
+      "intent": "operator_workers",
+      "command": "/workers",
+      "title": "Operator workers",
+      "description": "Render a read-only summary of worker health and registry status.",
+      "supported_categories": [
+        "category_1"
+      ],
+      "sensitivity_category": "standard",
+      "required_approvals": {
+        "category_1": "none"
+      },
+      "input_types": [
+        "message-only-test"
+      ],
+      "output_types": [
+        "operator_console_markdown",
+        "result_json"
+      ],
+      "allowed_workers": [
+        "operator-console-worker"
+      ],
+      "routing_constraints": [
+        "local-only",
+        "read-only"
+      ],
+      "notes": "Workers is a read-only operator console command and does not submit work."
+    },
+    {
+      "task_type": "operator_reports",
+      "intent": "operator_reports",
+      "command": "/reports",
+      "title": "Operator reports",
+      "description": "Render a read-only summary of recent reports and artifacts.",
+      "supported_categories": [
+        "category_1"
+      ],
+      "sensitivity_category": "standard",
+      "required_approvals": {
+        "category_1": "none"
+      },
+      "input_types": [
+        "message-only-test"
+      ],
+      "output_types": [
+        "operator_console_markdown",
+        "result_json"
+      ],
+      "allowed_workers": [
+        "operator-console-worker"
+      ],
+      "routing_constraints": [
+        "local-only",
+        "read-only"
+      ],
+      "notes": "Reports is a read-only operator console command and does not submit work."
+    },
+    {
+      "task_type": "operator_memory",
+      "intent": "operator_memory",
+      "command": "/memory",
+      "title": "Operator memory",
+      "description": "Render a read-only summary of memory index health and recent records.",
+      "supported_categories": [
+        "category_1"
+      ],
+      "sensitivity_category": "standard",
+      "required_approvals": {
+        "category_1": "none"
+      },
+      "input_types": [
+        "message-only-test"
+      ],
+      "output_types": [
+        "operator_console_markdown",
+        "result_json"
+      ],
+      "allowed_workers": [
+        "operator-console-worker"
+      ],
+      "routing_constraints": [
+        "local-only",
+        "read-only"
+      ],
+      "notes": "Memory is a read-only operator console command and does not submit work."
+    },
+    {
+      "task_type": "operator_help",
+      "intent": "operator_help",
+      "command": "/help",
+      "title": "Operator help",
+      "description": "Render a read-only list of PDA Commander operator console commands.",
+      "supported_categories": [
+        "category_1"
+      ],
+      "sensitivity_category": "standard",
+      "required_approvals": {
+        "category_1": "none"
+      },
+      "input_types": [
+        "message-only-test"
+      ],
+      "output_types": [
+        "operator_console_markdown",
+        "result_json"
+      ],
+      "allowed_workers": [
+        "operator-console-worker"
+      ],
+      "routing_constraints": [
+        "local-only",
+        "read-only"
+      ],
+      "notes": "Help is a read-only operator console command and does not submit work."
+    },
+    {
       "task_type": "research",
       "intent": "research_synthesis",
       "command": "/research",

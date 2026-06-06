@@ -4,7 +4,10 @@ param(
     [switch]$AsJson,
 
     [Parameter(Mandatory = $false)]
-    [switch]$NoThrow
+    [switch]$NoThrow,
+
+    [Parameter(Mandatory = $false)]
+    [switch]$SkipOperatorConsole
 )
 
 $ErrorActionPreference = "Stop"
@@ -63,6 +66,69 @@ $TestCases = @(
         source_check     = $true
     }
     [pscustomobject]@{
+        name             = "operator status"
+        input            = "/status"
+        expected_status  = "mapped"
+        expected_intent  = "operator_status"
+        expected_task    = "operator_status"
+        expected_command = "/status"
+        source_check     = $true
+    }
+    [pscustomobject]@{
+        name             = "operator tasks"
+        input            = "/tasks"
+        expected_status  = "mapped"
+        expected_intent  = "operator_tasks"
+        expected_task    = "operator_tasks"
+        expected_command = "/tasks"
+        source_check     = $true
+    }
+    [pscustomobject]@{
+        name             = "operator approvals"
+        input            = "/approvals"
+        expected_status  = "mapped"
+        expected_intent  = "operator_approvals"
+        expected_task    = "operator_approvals"
+        expected_command = "/approvals"
+        source_check     = $true
+    }
+    [pscustomobject]@{
+        name             = "operator workers"
+        input            = "/workers"
+        expected_status  = "mapped"
+        expected_intent  = "operator_workers"
+        expected_task    = "operator_workers"
+        expected_command = "/workers"
+        source_check     = $true
+    }
+    [pscustomobject]@{
+        name             = "operator reports"
+        input            = "/reports"
+        expected_status  = "mapped"
+        expected_intent  = "operator_reports"
+        expected_task    = "operator_reports"
+        expected_command = "/reports"
+        source_check     = $true
+    }
+    [pscustomobject]@{
+        name             = "operator memory"
+        input            = "/memory"
+        expected_status  = "mapped"
+        expected_intent  = "operator_memory"
+        expected_task    = "operator_memory"
+        expected_command = "/memory"
+        source_check     = $true
+    }
+    [pscustomobject]@{
+        name             = "operator help"
+        input            = "/help"
+        expected_status  = "mapped"
+        expected_intent  = "operator_help"
+        expected_task    = "operator_help"
+        expected_command = "/help"
+        source_check     = $true
+    }
+    [pscustomobject]@{
         name             = "research task"
         input            = "create a test research task"
         expected_status  = "mapped"
@@ -99,6 +165,10 @@ $TestCases = @(
         source_check     = $false
     }
 )
+
+if ($SkipOperatorConsole) {
+    $TestCases = @($TestCases | Where-Object { [string]$_.name -notlike "operator *" })
+}
 
 $Results = @()
 $Passed = 0

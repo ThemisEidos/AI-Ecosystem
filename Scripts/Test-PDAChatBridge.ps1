@@ -4,7 +4,10 @@ param(
     [switch]$AsJson,
 
     [Parameter(Mandatory = $false)]
-    [switch]$NoThrow
+    [switch]$NoThrow,
+
+    [Parameter(Mandatory = $false)]
+    [switch]$SkipOperatorConsole
 )
 
 $ErrorActionPreference = "Stop"
@@ -14,6 +17,10 @@ $BridgeScript = Join-Path $PSScriptRoot "Invoke-PDAChatBridge.ps1"
 $HandoffScript = Join-Path $PSScriptRoot "Invoke-PDACommandHandoff.ps1"
 $StateScript = Join-Path $PSScriptRoot "Get-PDAConversationState.ps1"
 $PendingRoot = Join-Path $Root "PDA-Tasks\pending"
+$ParserPath = Join-Path $PSScriptRoot "PDA_OutputParsing.ps1"
+if (Test-Path -Path $ParserPath -PathType Leaf) {
+    . $ParserPath
+}
 
 if (-not (Test-Path -Path $BridgeScript -PathType Leaf)) {
     throw "Chat bridge missing: $BridgeScript"
@@ -83,7 +90,7 @@ function Invoke-JsonScript {
         throw "Script returned empty output: $Path"
     }
 
-    return $Text | ConvertFrom-Json
+    return ConvertFrom-PDAMixedJson -Text $Text -SourceName $Path
 }
 
 $ScriptContent = Get-Content -Path $BridgeScript -Raw
@@ -106,6 +113,7 @@ $Cases = @(
         confirm = $false
         expected_handoff = "mapped"
         expected_response_contains = "Recommended command"
+        expected_dispatch_ready = $true
         expected_dispatch = $false
         expected_command = "/review"
         marker = "chat-known-$([guid]::NewGuid().ToString())"
@@ -116,6 +124,7 @@ $Cases = @(
         confirm = $false
         expected_handoff = "ambiguous"
         expected_response_contains = "Clarification required"
+        expected_dispatch_ready = $false
         expected_dispatch = $false
         expected_command = ""
         marker = "chat-ambiguous-$([guid]::NewGuid().ToString())"
@@ -126,6 +135,7 @@ $Cases = @(
         confirm = $false
         expected_handoff = "unknown"
         expected_response_contains = "No governed command matched"
+        expected_dispatch_ready = $false
         expected_dispatch = $false
         expected_command = ""
         marker = "chat-unknown-$([guid]::NewGuid().ToString())"
@@ -136,6 +146,7 @@ $Cases = @(
         confirm = $true
         expected_handoff = "mapped"
         expected_response_contains = "Dispatched via governed PDA handoff"
+        expected_dispatch_ready = $true
         expected_dispatch = $true
         expected_command = "/review"
         marker = "chat-dispatch-$([guid]::NewGuid().ToString())"
@@ -146,11 +157,93 @@ $Cases = @(
         confirm = $false
         expected_handoff = "mapped"
         expected_response_contains = "Recommended command"
+        expected_dispatch_ready = $true
         expected_dispatch = $false
         expected_command = "/research"
         marker = "chat-research-$([guid]::NewGuid().ToString())"
     }
+    [pscustomobject]@{
+        name = "operator status"
+        message = "/status"
+        confirm = $false
+        expected_handoff = "mapped"
+        expected_response_contains = "PDA Operator Console: Status"
+        expected_dispatch_ready = $false
+        expected_dispatch = $false
+        expected_command = "/status"
+        marker = "chat-status-$([guid]::NewGuid().ToString())"
+    }
+    [pscustomobject]@{
+        name = "operator tasks"
+        message = "/tasks"
+        confirm = $false
+        expected_handoff = "mapped"
+        expected_response_contains = "PDA Operator Console: Tasks"
+        expected_dispatch_ready = $false
+        expected_dispatch = $false
+        expected_command = "/tasks"
+        marker = "chat-tasks-$([guid]::NewGuid().ToString())"
+    }
+    [pscustomobject]@{
+        name = "operator approvals"
+        message = "/approvals"
+        confirm = $false
+        expected_handoff = "mapped"
+        expected_response_contains = "PDA Operator Console: Approvals"
+        expected_dispatch_ready = $false
+        expected_dispatch = $false
+        expected_command = "/approvals"
+        marker = "chat-approvals-$([guid]::NewGuid().ToString())"
+    }
+    [pscustomobject]@{
+        name = "operator workers"
+        message = "/workers"
+        confirm = $false
+        expected_handoff = "mapped"
+        expected_response_contains = "PDA Operator Console: Workers"
+        expected_dispatch_ready = $false
+        expected_dispatch = $false
+        expected_command = "/workers"
+        marker = "chat-workers-$([guid]::NewGuid().ToString())"
+    }
+    [pscustomobject]@{
+        name = "operator reports"
+        message = "/reports"
+        confirm = $false
+        expected_handoff = "mapped"
+        expected_response_contains = "PDA Operator Console: Reports"
+        expected_dispatch_ready = $false
+        expected_dispatch = $false
+        expected_command = "/reports"
+        marker = "chat-reports-$([guid]::NewGuid().ToString())"
+    }
+    [pscustomobject]@{
+        name = "operator memory"
+        message = "/memory"
+        confirm = $false
+        expected_handoff = "mapped"
+        expected_response_contains = "PDA Operator Console: Memory"
+        expected_dispatch_ready = $false
+        expected_dispatch = $false
+        expected_command = "/memory"
+        marker = "chat-memory-$([guid]::NewGuid().ToString())"
+    }
+    [pscustomobject]@{
+        name = "operator help"
+        message = "/help"
+        confirm = $false
+        expected_handoff = "mapped"
+        expected_response_contains = "PDA Commander Operator Console Commands"
+        expected_dispatch_ready = $false
+        expected_dispatch = $false
+        expected_command = "/help"
+        marker = "chat-help-$([guid]::NewGuid().ToString())"
+    }
 )
+
+if ($SkipOperatorConsole) {
+    $Cases = @($Cases | Where-Object { [string]$_.name -notlike "operator *" })
+}
 
 $ConfirmationConversationId = "conv-confirm-$([guid]::NewGuid().ToString('N').Substring(0, 12))"
 $ConfirmationSessionId = "sess-confirm-$([guid]::NewGuid().ToString('N').Substring(0, 12))"
@@ -254,8 +347,13 @@ foreach ($Case in $Cases) {
         throw "Test marker already existed in pending queue: $($Case.marker)"
     }
 
+    $CaseConversationId = "conv-$([guid]::NewGuid().ToString('N').Substring(0, 12))"
+    $CaseSessionId = "sess-$([guid]::NewGuid().ToString('N').Substring(0, 12))"
+
     $BridgeArgs = @(
         "-Message", "$($Case.message) [$($Case.marker)]",
+        "-ConversationId", $CaseConversationId,
+        "-SessionId", $CaseSessionId,
         "-AsJson"
     )
     if ($Case.confirm) {
@@ -263,7 +361,7 @@ foreach ($Case in $Cases) {
     }
 
     $Raw = & pwsh -NoProfile -File $BridgeScript @BridgeArgs
-    $Result = $Raw | ConvertFrom-Json
+    $Result = ConvertFrom-PDAMixedJson -Text ([string]($Raw -join "`n")) -SourceName $BridgeScript
 
     $CasePassed = $true
     $Issues = New-Object System.Collections.Generic.List[string]
@@ -288,7 +386,13 @@ foreach ($Case in $Cases) {
         $Issues.Add("Non-mapped input should not recommend an executable command.")
     }
 
-    if ([bool]$Result.dispatch_ready -ne [bool]($Case.expected_handoff -eq "mapped")) {
+    if ($Case.PSObject.Properties.Name -contains "expected_dispatch_ready") {
+        if ([bool]$Result.dispatch_ready -ne [bool]$Case.expected_dispatch_ready) {
+            $CasePassed = $false
+            $Issues.Add("Dispatch readiness mismatch.")
+        }
+    }
+    elseif ([bool]$Result.dispatch_ready -ne [bool]($Case.expected_handoff -eq "mapped")) {
         $CasePassed = $false
         $Issues.Add("Dispatch readiness mismatch.")
     }

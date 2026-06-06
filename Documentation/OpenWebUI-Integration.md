@@ -47,6 +47,20 @@ flowchart TD
 - The bridge server binds to local interfaces on port `8788` so Docker can reach it through the host gateway.
 - The bridge server exposes a lightweight health endpoint at `http://localhost:8788/pda-chat-bridge/healthz` for `aiec-status` and startup checks.
 
+## Operator Console Commands
+
+PDA Commander now supports explicit read-only operator console commands in addition to governed task submission.
+
+- `/status` - system health, queue depth, worker state, model status, and commander integration
+- `/tasks` - latest tracked task summary
+- `/approvals` - pending approvals summary
+- `/workers` - worker registry and runtime status
+- `/reports` - recent report and artifact index summary
+- `/memory` - memory index summary
+- `/help` - command reference
+
+These commands are read-only and do not require approval. They should return human-readable summaries, not raw JSON.
+
 ## Recommended Open WebUI Method
 
 Use a **Pipe Function**.
@@ -96,6 +110,7 @@ Use a **Pipe Function**.
 - If the result is `ambiguous` or `unknown`, no dispatch is allowed.
 - The Pipe Function records the pending request and waits for an explicit user approval phrase before replaying with `confirm_dispatch: true`.
 - Confirmation does not bypass ontology, approval, or category controls.
+- Read-only operator commands bypass the confirmation flow entirely and never enter the queue.
 
 ## Troubleshooting
 

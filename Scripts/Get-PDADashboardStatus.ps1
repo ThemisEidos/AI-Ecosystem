@@ -7,7 +7,10 @@ param(
     [switch]$AsJson,
 
     [Parameter(Mandatory = $false)]
-    [switch]$NoThrow
+    [switch]$NoThrow,
+
+    [Parameter(Mandatory = $false)]
+    [switch]$SkipCoreIntegration
 )
 
 $ErrorActionPreference = "Stop"
@@ -662,9 +665,9 @@ function Get-PDACoreIntegrationStatus {
 
     $ConversationState = Invoke-PDAJsonScript -Path $ConversationStateScript -Arguments @("-AsJson", "-NoThrow") -SourceName "Conversation state"
     $TaskResult = Invoke-PDAJsonScript -Path $TaskResultScript -Arguments @("-AsJson", "-NoThrow") -SourceName "Task result lookup"
-    $Interpreter = Invoke-PDAJsonScript -Path $InterpreterScript -Arguments @("-AsJson", "-NoThrow") -SourceName "Command interpreter"
-    $Handoff = Invoke-PDAJsonScript -Path $HandoffScript -Arguments @("-AsJson", "-NoThrow") -SourceName "Command handoff"
-    $ChatBridge = Invoke-PDAJsonScript -Path $ChatBridgeScript -Arguments @("-AsJson", "-NoThrow") -SourceName "Chat bridge"
+    $Interpreter = Invoke-PDAJsonScript -Path $InterpreterScript -Arguments @("-AsJson", "-NoThrow", "-SkipOperatorConsole") -SourceName "Command interpreter"
+    $Handoff = Invoke-PDAJsonScript -Path $HandoffScript -Arguments @("-AsJson", "-NoThrow", "-SkipOperatorConsole") -SourceName "Command handoff"
+    $ChatBridge = Invoke-PDAJsonScript -Path $ChatBridgeScript -Arguments @("-AsJson", "-NoThrow", "-SkipOperatorConsole") -SourceName "Chat bridge"
     $WebhookBridge = Invoke-PDAJsonScript -Path $WebhookBridgeScript -Arguments @("-AsJson", "-NoThrow") -SourceName "Webhook bridge"
 
     $ConversationSummary = [pscustomobject]@{
@@ -749,7 +752,20 @@ $WorkerSnapshot = Get-PDAWorkerSnapshot -RootPath $Root
 $ArtifactSnapshot = Get-PDAArtifactSnapshot -RootPath $Root
 $MemorySnapshot = Get-PDAMemorySnapshot -RootPath $Root
 $ModelSnapshot = Get-PDAModelStatus -RootPath $Root
-$CommanderSnapshot = Get-PDACoreIntegrationStatus -RootPath $Root
+$CommanderSnapshot = if ($SkipCoreIntegration) {
+    [pscustomobject]@{
+        status = "skipped"
+        conversation_state = [pscustomobject]@{}
+        task_result = [pscustomobject]@{}
+        command_interpreter = [pscustomobject]@{ status = "skipped"; test_case_count = 0; passed_count = 0; failed_count = 0; mapped_count = 0; ambiguous_count = 0; unknown_count = 0; results = @() }
+        command_handoff = [pscustomobject]@{ status = "skipped"; test_case_count = 0; passed_count = 0; failed_count = 0; dispatch_confirmed_count = 0; dispatch_blocked_count = 0; results = @() }
+        chat_bridge = [pscustomobject]@{ status = "skipped"; test_case_count = 0; passed_count = 0; failed_count = 0; dispatch_confirmed_count = 0; dispatch_blocked_count = 0; results = @() }
+        webhook_bridge = [pscustomobject]@{ status = "skipped"; test_case_count = 0; passed_count = 0; failed_count = 0; dispatch_confirmed_count = 0; dispatch_blocked_count = 0; results = @() }
+    }
+}
+else {
+    Get-PDACoreIntegrationStatus -RootPath $Root
+}
 $StackReport = Invoke-PDAJsonScript -Path $StackScript -Arguments @("-Deep", "-AsJson", "-NoThrow") -SourceName "PDA stack validation"
 
 $SystemHealthResults = @()

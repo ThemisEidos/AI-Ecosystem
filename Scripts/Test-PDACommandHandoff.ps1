@@ -4,7 +4,10 @@ param(
     [switch]$AsJson,
 
     [Parameter(Mandatory = $false)]
-    [switch]$NoThrow
+    [switch]$NoThrow,
+
+    [Parameter(Mandatory = $false)]
+    [switch]$SkipOperatorConsole
 )
 
 $ErrorActionPreference = "Stop"
@@ -21,6 +24,10 @@ $QueueSearchRoots = @(
     Join-Path $Root "PDA-Tasks\approvals\approved"
     Join-Path $Root "PDA-Tasks\approvals\rejected"
 )
+$ParserPath = Join-Path $PSScriptRoot "PDA_OutputParsing.ps1"
+if (Test-Path -Path $ParserPath -PathType Leaf) {
+    . $ParserPath
+}
 
 if (-not (Test-Path -Path $HandoffScript -PathType Leaf)) {
     throw "Command handoff missing: $HandoffScript"
@@ -105,6 +112,97 @@ $Cases = @(
         marker = "handoff-dispatch-$([guid]::NewGuid().ToString())"
     }
     [pscustomobject]@{
+        name = "operator status"
+        input = "/status"
+        confirm = $false
+        expect_status = "mapped"
+        expect_ready = $false
+        expect_confirm = $false
+        expect_dispatch = $false
+        expect_dispatch_status = "not_applicable"
+        expect_command = "/status"
+        expect_response_contains = "PDA Operator Console: Status"
+        marker = "handoff-status-$([guid]::NewGuid().ToString())"
+    }
+    [pscustomobject]@{
+        name = "operator tasks"
+        input = "/tasks"
+        confirm = $false
+        expect_status = "mapped"
+        expect_ready = $false
+        expect_confirm = $false
+        expect_dispatch = $false
+        expect_dispatch_status = "not_applicable"
+        expect_command = "/tasks"
+        expect_response_contains = "PDA Operator Console: Tasks"
+        marker = "handoff-tasks-$([guid]::NewGuid().ToString())"
+    }
+    [pscustomobject]@{
+        name = "operator approvals"
+        input = "/approvals"
+        confirm = $false
+        expect_status = "mapped"
+        expect_ready = $false
+        expect_confirm = $false
+        expect_dispatch = $false
+        expect_dispatch_status = "not_applicable"
+        expect_command = "/approvals"
+        expect_response_contains = "PDA Operator Console: Approvals"
+        marker = "handoff-approvals-$([guid]::NewGuid().ToString())"
+    }
+    [pscustomobject]@{
+        name = "operator workers"
+        input = "/workers"
+        confirm = $false
+        expect_status = "mapped"
+        expect_ready = $false
+        expect_confirm = $false
+        expect_dispatch = $false
+        expect_dispatch_status = "not_applicable"
+        expect_command = "/workers"
+        expect_response_contains = "PDA Operator Console: Workers"
+        marker = "handoff-workers-$([guid]::NewGuid().ToString())"
+    }
+    [pscustomobject]@{
+        name = "operator reports"
+        input = "/reports"
+        confirm = $false
+        expect_status = "mapped"
+        expect_ready = $false
+        expect_confirm = $false
+        expect_dispatch = $false
+        expect_dispatch_status = "not_applicable"
+        expect_command = "/reports"
+        expect_response_contains = "PDA Operator Console: Reports"
+        marker = "handoff-reports-$([guid]::NewGuid().ToString())"
+    }
+    [pscustomobject]@{
+        name = "operator memory"
+        input = "/memory"
+        confirm = $false
+        expect_status = "mapped"
+        expect_ready = $false
+        expect_confirm = $false
+        expect_dispatch = $false
+        expect_dispatch_status = "not_applicable"
+        expect_command = "/memory"
+        expect_response_contains = "PDA Operator Console: Memory"
+        marker = "handoff-memory-$([guid]::NewGuid().ToString())"
+    }
+    [pscustomobject]@{
+        name = "operator help"
+        input = "/help"
+        confirm = $false
+        expect_status = "mapped"
+        expect_ready = $false
+        expect_confirm = $false
+        expect_dispatch = $false
+        expect_dispatch_status = "not_applicable"
+        expect_command = "/help"
+        expect_response_contains = "PDA Commander Operator Console Commands"
+        marker = "handoff-help-$([guid]::NewGuid().ToString())"
+    }
+    [pscustomobject]@{
         name = "research request"
         input = "create a test research task"
         confirm = $false
@@ -116,6 +214,10 @@ $Cases = @(
         marker = "handoff-research-$([guid]::NewGuid().ToString())"
     }
 )
+
+if ($SkipOperatorConsole) {
+    $Cases = @($Cases | Where-Object { [string]$_.name -notlike "operator *" })
+}
 
 foreach ($Case in $Cases) {
     $MarkerInput = "$($Case.input) [$($Case.marker)]"
@@ -133,7 +235,7 @@ foreach ($Case in $Cases) {
     }
 
     $Raw = & pwsh -NoProfile -File $HandoffScript @Args
-    $Result = $Raw | ConvertFrom-Json
+    $Result = ConvertFrom-PDAMixedJson -Text ([string]($Raw -join "`n")) -SourceName $HandoffScript
 
     $CasePassed = $true
     $Issues = New-Object System.Collections.Generic.List[string]
@@ -166,6 +268,20 @@ foreach ($Case in $Cases) {
     if (($Result.dispatch_status -eq "submitted") -ne [bool]$Case.expect_dispatch) {
         $CasePassed = $false
         $Issues.Add("Expected dispatch_status submitted '$($Case.expect_dispatch)' but got '$($Result.dispatch_status)'.")
+    }
+
+    if ($Case.PSObject.Properties.Name -contains "expect_dispatch_status" -and $Case.expect_dispatch_status) {
+        if ($Result.dispatch_status -ne $Case.expect_dispatch_status) {
+            $CasePassed = $false
+            $Issues.Add("Expected dispatch_status '$($Case.expect_dispatch_status)' but got '$($Result.dispatch_status)'.")
+        }
+    }
+
+    if ($Case.PSObject.Properties.Name -contains "expect_response_contains" -and $Case.expect_response_contains) {
+        if ([string]$Result.response_text -notlike "*$($Case.expect_response_contains)*") {
+            $CasePassed = $false
+            $Issues.Add("Response text did not include expected operator console summary.")
+        }
     }
 
     if ($Result.original_input -notlike "*$($Case.marker)*") {

@@ -115,6 +115,45 @@
       "status": "active"
     },
     {
+      "worker_name": "operator-console-worker",
+      "command": "/status",
+      "purpose": "Serve read-only PDA operator console summaries for status, tasks, approvals, workers, reports, memory, and help.",
+      "accepted_input_modes": [
+        "message-only-test"
+      ],
+      "required_fields": [
+        "task_id",
+        "command",
+        "project",
+        "classification"
+      ],
+      "optional_fields": [
+        "message",
+        "target",
+        "source_path",
+        "approved",
+        "category",
+        "requested_output",
+        "source",
+        "route"
+      ],
+      "output_locations": [
+        "PDA-Logs",
+        "Obsidian Vault/02_Projects/AI Tool Ecosystem/PDA Dashboard.md"
+      ],
+      "routing_surface": "local-only",
+      "cloud_capable": false,
+      "category_support": [
+        "category_1",
+        "category_2"
+      ],
+      "safety_constraints": [
+        "Read-only operator console summaries only.",
+        "No task submission or queue mutation."
+      ],
+      "status": "active"
+    },
+    {
       "worker_name": "research-worker",
       "command": "/research",
       "purpose": "Produce concise operational research synthesis for a topic or source text.",

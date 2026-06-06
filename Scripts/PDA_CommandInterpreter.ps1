@@ -55,6 +55,76 @@ function Get-PDACommandInterpreterRules {
             recommendation = "Use /planner for project analysis, planning, and workflow design requests."
         }
         [pscustomobject]@{
+            rule_id        = "operator_status"
+            intent         = "operator_status"
+            task_type      = "operator_status"
+            command        = "/status"
+            priority       = 92
+            exact_phrases  = @("/status")
+            keywords       = @()
+            recommendation = "Use /status for a read-only PDA operator console health summary."
+        }
+        [pscustomobject]@{
+            rule_id        = "operator_tasks"
+            intent         = "operator_tasks"
+            task_type      = "operator_tasks"
+            command        = "/tasks"
+            priority       = 91
+            exact_phrases  = @("/tasks")
+            keywords       = @()
+            recommendation = "Use /tasks for a read-only summary of recent task activity."
+        }
+        [pscustomobject]@{
+            rule_id        = "operator_approvals"
+            intent         = "operator_approvals"
+            task_type      = "operator_approvals"
+            command        = "/approvals"
+            priority       = 90
+            exact_phrases  = @("/approvals")
+            keywords       = @()
+            recommendation = "Use /approvals for a read-only summary of pending approvals."
+        }
+        [pscustomobject]@{
+            rule_id        = "operator_workers"
+            intent         = "operator_workers"
+            task_type      = "operator_workers"
+            command        = "/workers"
+            priority       = 89
+            exact_phrases  = @("/workers")
+            keywords       = @()
+            recommendation = "Use /workers for a read-only summary of worker health and registry status."
+        }
+        [pscustomobject]@{
+            rule_id        = "operator_reports"
+            intent         = "operator_reports"
+            task_type      = "operator_reports"
+            command        = "/reports"
+            priority       = 88
+            exact_phrases  = @("/reports")
+            keywords       = @()
+            recommendation = "Use /reports for a read-only summary of recent reports and artifacts."
+        }
+        [pscustomobject]@{
+            rule_id        = "operator_memory"
+            intent         = "operator_memory"
+            task_type      = "operator_memory"
+            command        = "/memory"
+            priority       = 87
+            exact_phrases  = @("/memory")
+            keywords       = @()
+            recommendation = "Use /memory for a read-only summary of memory health and recent records."
+        }
+        [pscustomobject]@{
+            rule_id        = "operator_help"
+            intent         = "operator_help"
+            task_type      = "operator_help"
+            command        = "/help"
+            priority       = 86
+            exact_phrases  = @("/help")
+            keywords       = @()
+            recommendation = "Use /help for a read-only list of PDA Commander operator commands."
+        }
+        [pscustomobject]@{
             rule_id        = "research_task_requests"
             intent         = "research_synthesis"
             task_type      = "research_synthesis"
