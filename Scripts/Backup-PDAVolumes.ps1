@@ -20,7 +20,7 @@ $ErrorActionPreference = "Stop"
 
 $IsDryRun = if ($PSBoundParameters.ContainsKey("DryRun")) { $DryRun.IsPresent } elseif ($NoDryRun) { $false } else { $true }
 if (-not $IsDryRun) {
-    throw "Unattended Docker volume backup is disabled in PDA Nightly Build Orchestrator v1."
+    throw "Unattended Docker volume backup is disabled in PDA Build Runner."
 }
 
 if ([string]::IsNullOrWhiteSpace($OutputRoot)) {

@@ -117,6 +117,7 @@ Use a **Pipe Function**.
 - If the bridge returns invalid JSON, verify that `pwsh` is installed and the script path is correct.
 - If the HTTP bridge workflow cannot reach the server, confirm `Scripts/Start-PDAWebhookServer.ps1` is running on port `8788`.
 - `aiec-start` now starts the PDA webhook server after the required Docker services are healthy, and `aiec-status` verifies the bridge on port `8788`.
+- `pda-go` starts the human-governed PDA Build Runner on demand when you want to prepare or execute the next eligible roadmap task without waiting for an overnight schedule.
 - The exported workflow at `n8n Workflow/PDA-ChatBridge-HTTP.json` is fail-closed. If the local bridge server is offline, n8n should return explicit JSON with `bridge_status = fail_closed` instead of an empty `{}` body.
 - If Docker-to-host calls hang, run `Scripts/Test-PDAWebhookServerReachability.ps1` and verify `host.docker.internal` returns HTTP 200 from inside the `pda-n8n` container.
 - If dispatch never happens, confirm that the interpreted request maps to a governed command and that the worker eligibility check passes.

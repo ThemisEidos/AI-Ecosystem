@@ -146,6 +146,8 @@ Overall health: pass
 | Chat Bridge | pass | 6 | 0 | Open WebUI / n8n bridge |
 | Webhook Bridge | pass | 4 | 0 | webhook transport wrapper |
 
+> Build Runner entrypoint: `pda-go` starts the on-demand, time-agnostic build runner while preserving the same governed handoff, backup, and approval gates.
+
 ### Conversation Snapshot
 
 | metric | value |

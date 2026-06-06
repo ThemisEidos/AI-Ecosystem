@@ -46,19 +46,25 @@ if ([string]::IsNullOrWhiteSpace($OutputRoot)) {
 }
 
 $ScriptsRoot = Join-Path $Root "Scripts"
+$BuildRunnerHelperScript = Join-Path $ScriptsRoot "PDA_BuildRunner.ps1"
 $NightlyHelperScript = Join-Path $ScriptsRoot "PDA_NightlyAutomation.ps1"
 $RepoBackupScript = Join-Path $ScriptsRoot "Backup-PDARepo.ps1"
 $VolumeBackupScript = Join-Path $ScriptsRoot "Backup-PDAVolumes.ps1"
 $QueueAuditScript = Join-Path $ScriptsRoot "Invoke-PDAQueueBacklogAudit.ps1"
-$TaskStateScript = Join-Path $ScriptsRoot "Get-PDANightlyTaskState.ps1"
+$BuildRunnerTaskStateScript = Join-Path $ScriptsRoot "Get-PDABuildRunnerTaskState.ps1"
+$NightlyTaskStateScript = Join-Path $ScriptsRoot "Get-PDANightlyTaskState.ps1"
 $UpdateRoadmapScript = Join-Path $ScriptsRoot "Update-PDARoadmapStatus.ps1"
 $PacketScript = Join-Path $ScriptsRoot "Generate-PDACodexWorkPacket.ps1"
-$MorningReportScript = Join-Path $ScriptsRoot "Generate-PDAMorningReport.ps1"
+$BuildRunnerReportScript = Join-Path $ScriptsRoot "Generate-PDARunReport.ps1"
+$NightlyReportScript = Join-Path $ScriptsRoot "Generate-PDAMorningReport.ps1"
 $CodexPromptScript = Join-Path $ScriptsRoot "Export-PDACodexExecutionPrompt.ps1"
 $ExecutionStageRoot = Join-Path $Root "PDA-Tasks\staging\nightly-build"
 $QueueAuditScriptExists = Test-Path -Path $QueueAuditScript -PathType Leaf
+$HelperScriptInUse = if (Test-Path -Path $BuildRunnerHelperScript -PathType Leaf) { $BuildRunnerHelperScript } else { $NightlyHelperScript }
+$TaskStateScript = if (Test-Path -Path $BuildRunnerTaskStateScript -PathType Leaf) { $BuildRunnerTaskStateScript } else { $NightlyTaskStateScript }
+$MorningReportScript = if (Test-Path -Path $BuildRunnerReportScript -PathType Leaf) { $BuildRunnerReportScript } else { $NightlyReportScript }
 $RequiredScripts = @(
-    $NightlyHelperScript,
+    $HelperScriptInUse,
     $RepoBackupScript,
     $VolumeBackupScript,
     $QueueAuditScript,
@@ -69,7 +75,7 @@ $RequiredScripts = @(
 )
 foreach ($RequiredScript in $RequiredScripts) {
     if (-not (Test-Path -Path $RequiredScript -PathType Leaf)) {
-        throw "Nightly automation script not found: $RequiredScript"
+        throw "Build runner script not found: $RequiredScript"
     }
 }
 $NightlyDir = $OutputRoot
@@ -259,7 +265,7 @@ if ($Mode -eq "execute") {
             "-TaskId", $SelectedTaskId,
             "-ToState", $NextState,
             "-Actor", "PDA Build Orchestrator",
-            "-Reason", "Human-approved nightly execution"
+            "-Reason", "Human-approved build runner execution"
         )
         $TransitionResults += $TransitionResult
     }
@@ -304,7 +310,7 @@ else {
             "-TaskId", $SelectedTaskId,
             "-ToState", $TargetState,
             "-Actor", "PDA Build Orchestrator",
-            "-Reason", "Nightly automation packet generation"
+            "-Reason", "Build runner packet generation"
         )
         if ($Mode -eq "dry-run") {
             $UpdateArguments += "-NoWrite"
@@ -387,7 +393,7 @@ if ($ExecutionSummaryMarkdownPath) {
     $CodexPromptMarkdownPath = if ($CodexPrompt) { [string]$CodexPrompt.markdown_path } else { "" }
     $SummaryPath = Join-Path $NightlyDir "summary.md"
 $SummaryLines = @(
-    "# PDA Nightly Build Orchestrator Summary"
+    "# PDA Build Runner Summary"
     ""
     "- Mode: $Mode"
     "- Roadmap: $RoadmapPath"
@@ -452,7 +458,7 @@ if ($AsJson) {
     return
 }
 
-Write-Host ("[OK] PDA nightly build orchestrator {0} complete." -f $Mode)
+Write-Host ("[OK] PDA build runner orchestrator {0} complete." -f $Mode)
 Write-Host ("Selected task   : {0}" -f $(if ($SelectedTaskId) { "$SelectedTaskId - $SelectedTaskTitle" } else { "(none)" }))
 Write-Host ("Current branch  : {0}" -f $CurrentBranch)
 Write-Host ("Branch          : {0}" -f $BranchName)

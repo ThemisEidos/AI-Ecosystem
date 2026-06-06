@@ -1,0 +1,22 @@
+{
+  "schema_version": "1.0",
+  "policy_name": "PDA Build Runner Policy",
+  "legacy_policy_name": "PDA Nightly Execution Policy",
+  "runner_name": "PDA Build Runner",
+  "legacy_runner_name": "PDA Nightly Build Orchestrator",
+  "modes": [
+    "dry-run",
+    "prepare",
+    "execute"
+  ],
+  "safety_gates": [
+    "No auto-commit",
+    "No auto-push",
+    "No approval bypass",
+    "Stop on dirty worktree",
+    "Stop on failed tests",
+    "Stop on blocked policy actions"
+  ],
+  "trigger_command": "pda-go",
+  "documentation_note": "Build Runner is the time-agnostic replacement for nightly scheduling. Legacy nightly wrappers remain supported for backward compatibility."
+}

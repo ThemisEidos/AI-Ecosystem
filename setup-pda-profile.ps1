@@ -47,6 +47,10 @@ function aiec-start {
     pwsh -NoProfile -ExecutionPolicy Bypass -File "$RuntimeRoot\launch-pda.ps1" @args
 }
 
+function pda-go {
+    pwsh -NoProfile -ExecutionPolicy Bypass -File "$ProjectRoot\Scripts\Start-PDABuildRunner.ps1" @args
+}
+
 function aiec-status {
     pwsh -NoProfile -ExecutionPolicy Bypass -File "$RuntimeRoot\status-pda.ps1" @args
 }
@@ -104,10 +108,12 @@ Write-Host ""
 Write-Host "Commands:" -ForegroundColor Cyan
 Write-Host "  aiec         - jump to the repo root"
 Write-Host "  aiec-start   - start Docker Desktop if needed, then start and verify the stack"
+Write-Host "  pda-go       - start the PDA Build Runner on demand"
 Write-Host "  aiec-status  - stack status and troubleshooting"
 Write-Host "  pda-dashboard - refresh and open the PDA Operator Console note"
 Write-Host "  pda-console  - compatibility alias for pda-dashboard"
 Write-Host "  pda          - compatibility wrapper for aiec-start"
+Write-Host "  pda-go       - compatibility wrapper for the Build Runner"
 Write-Host "  pda-status   - compatibility wrapper for aiec-status"
 Write-Host "  pdadown      - stop the compose stack"
 Write-Host ""

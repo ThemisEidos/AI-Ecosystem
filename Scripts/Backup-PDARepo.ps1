@@ -20,7 +20,7 @@ $ErrorActionPreference = "Stop"
 
 $IsDryRun = if ($PSBoundParameters.ContainsKey("DryRun")) { $DryRun.IsPresent } elseif ($NoDryRun) { $false } else { $true }
 if (-not $IsDryRun) {
-    throw "Unattended repo backup is disabled in PDA Nightly Build Orchestrator v1."
+    throw "Unattended repo backup is disabled in PDA Build Runner."
 }
 
 if ([string]::IsNullOrWhiteSpace($OutputRoot)) {
@@ -70,7 +70,14 @@ $Manifest = [pscustomobject]@{
     included_paths        = @(
         "Roadmap/PDA-Roadmap.json",
         "Scripts/Invoke-PDABuildOrchestrator.ps1",
+        "Scripts/Invoke-PDABuildRunner.ps1",
         "Scripts/Start-PDANightlyBuild.ps1",
+        "Scripts/Start-PDABuildRunner.ps1",
+        "Scripts/Generate-PDARunReport.ps1",
+        "Scripts/Get-PDABuildRunnerTaskState.ps1",
+        "Scripts/Test-PDABuildRunner.ps1",
+        "Scripts/PDA_BuildRunner.ps1",
+        "Scripts/PDA_BuildRunnerPolicy.json",
         "Scripts/Backup-PDARepo.ps1",
         "Scripts/Backup-PDAVolumes.ps1",
         "Scripts/Test-PDABuildOrchestrator.ps1"

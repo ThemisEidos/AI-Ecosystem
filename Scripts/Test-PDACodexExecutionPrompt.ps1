@@ -73,17 +73,23 @@ function Initialize-PDATempRepo {
         "Roadmap\PDA-Roadmap.json",
         "Scripts\PDA_OutputParsing.ps1",
         "Scripts\PDA_NightlyAutomation.ps1",
+        "Scripts\PDA_BuildRunner.ps1",
         "Scripts\Get-PDANightlyTaskState.ps1",
+        "Scripts\Get-PDABuildRunnerTaskState.ps1",
         "Scripts\Update-PDARoadmapStatus.ps1",
         "Scripts\Generate-PDACodexWorkPacket.ps1",
         "Scripts\Generate-PDAMorningReport.ps1",
+        "Scripts\Generate-PDARunReport.ps1",
         "Scripts\Invoke-PDAQueueBacklogAudit.ps1",
         "Scripts\Test-PDAQueueBacklogAudit.ps1",
         "Scripts\Invoke-PDABuildOrchestrator.ps1",
+        "Scripts\Invoke-PDABuildRunner.ps1",
         "Scripts\Start-PDANightlyBuild.ps1",
+        "Scripts\Start-PDABuildRunner.ps1",
         "Scripts\Backup-PDARepo.ps1",
         "Scripts\Backup-PDAVolumes.ps1",
-        "Scripts\Export-PDACodexExecutionPrompt.ps1"
+        "Scripts\Export-PDACodexExecutionPrompt.ps1",
+        "Scripts\PDA_BuildRunnerPolicy.json"
     )) {
         Copy-Item -Force (Join-Path $SourceRoot $Path) (Join-Path $DestinationRoot $Path)
     }
@@ -98,17 +104,23 @@ function Initialize-PDATempRepo {
         "PDA-Backups/",
         "Scripts/PDA_OutputParsing.ps1",
         "Scripts/PDA_NightlyAutomation.ps1",
+        "Scripts/PDA_BuildRunner.ps1",
         "Scripts/Get-PDANightlyTaskState.ps1",
+        "Scripts/Get-PDABuildRunnerTaskState.ps1",
         "Scripts/Update-PDARoadmapStatus.ps1",
         "Scripts/Generate-PDACodexWorkPacket.ps1",
         "Scripts/Generate-PDAMorningReport.ps1",
+        "Scripts/Generate-PDARunReport.ps1",
         "Scripts/Invoke-PDAQueueBacklogAudit.ps1",
         "Scripts/Test-PDAQueueBacklogAudit.ps1",
         "Scripts/Invoke-PDABuildOrchestrator.ps1",
+        "Scripts/Invoke-PDABuildRunner.ps1",
         "Scripts/Start-PDANightlyBuild.ps1",
+        "Scripts/Start-PDABuildRunner.ps1",
         "Scripts/Backup-PDARepo.ps1",
         "Scripts/Backup-PDAVolumes.ps1",
-        "Scripts/Export-PDACodexExecutionPrompt.ps1"
+        "Scripts/Export-PDACodexExecutionPrompt.ps1",
+        "Scripts\PDA_BuildRunnerPolicy.json"
     ) | Add-Content -Path $ExcludePath
 }
 

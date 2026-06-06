@@ -14,6 +14,8 @@
   Compatibility alias for `pda-dashboard`.
 - `pda`
   Compatibility wrapper for `aiec-start`.
+- `pda-go`
+  Compatibility wrapper for the on-demand PDA Build Runner.
 - `pda-status`
   Compatibility wrapper for `aiec-status`.
 - `pdadown`
@@ -42,3 +44,4 @@
 - `aiec-status` treats LiteLLM `HTTP 401` on `/v1/models` as reachable because that endpoint can require authentication even when the service is healthy.
 - `Scripts\Test-PDAStack.ps1` stays fast by default. The Open WebUI chat-completion probe is opt-in because it performs a real authenticated completion through Open WebUI and LiteLLM.
 - The n8n PDA HTTP bridge workflow should be imported from `n8n Workflow/PDA-ChatBridge-HTTP.json`. The current export is fail-closed and returns explicit JSON if the local bridge server is offline instead of an empty `{}` response.
+- `pda-go` is the human-triggered entrypoint for the time-agnostic PDA Build Runner. It preserves the same safety gates as the older nightly flow, but it is not tied to an overnight schedule.
