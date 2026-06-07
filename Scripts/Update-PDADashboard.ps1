@@ -251,11 +251,22 @@ $Lines.Add("")
 if ($StatusReport.model_status.provider_validation.providers -and @($StatusReport.model_status.provider_validation.providers).Count -gt 0) {
     $Lines.Add((ConvertTo-PDAMarkdownTable -Rows @($StatusReport.model_status.provider_validation.providers) -Columns @("name", "configured", "env_reference_ok", "host_env_present", "live_available", "api_provider")))
 }
-else {
-    $Lines.Add("- No provider rows found.")
-}
-$Lines.Add("")
+  else {
+      $Lines.Add("- No provider rows found.")
+  }
+  $Lines.Add("")
 
+$Lines.Add("## Capability Router")
+$Lines.Add("")
+$Lines.Add((ConvertTo-PDAMarkdownTable -Rows @(
+    [pscustomobject]@{ metric = "Status"; value = $StatusReport.capability_router.status }
+    [pscustomobject]@{ metric = "Matrix path"; value = $StatusReport.capability_router.matrix_path }
+    [pscustomobject]@{ metric = "Route count"; value = $StatusReport.capability_router.route_count }
+    [pscustomobject]@{ metric = "Local-only routes"; value = $StatusReport.capability_router.local_only_count }
+    [pscustomobject]@{ metric = "Cloud-allowed routes"; value = $StatusReport.capability_router.cloud_allowed_count }
+) -Columns @("metric", "value")))
+$Lines.Add("")
+  
 $Lines.Add("### Fabric CLI Status")
 $Lines.Add("")
 $Lines.Add((ConvertTo-PDAMarkdownTable -Rows @(

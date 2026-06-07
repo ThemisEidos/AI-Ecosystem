@@ -32,9 +32,13 @@ $InterpreterScript = Join-Path $PSScriptRoot "PDA_CommandInterpreter.ps1"
 $SubmitScript = Join-Path $PSScriptRoot "Submit-PDATask.ps1"
 $FabricSubmitScript = Join-Path $PSScriptRoot "Submit-PDAFabricTask.ps1"
 $NotebookLMCommandScript = Join-Path $PSScriptRoot "Invoke-PDANotebookLMCommand.ps1"
+$CapabilityRouterScript = Join-Path $PSScriptRoot "PDA_CapabilityRouter.ps1"
 . (Join-Path $PSScriptRoot "PDA_OutputParsing.ps1")
 . (Join-Path $PSScriptRoot "PDA_Fabric.ps1")
 . (Join-Path $PSScriptRoot "PDA_TaskOntology.ps1")
+if (Test-Path -LiteralPath $CapabilityRouterScript -PathType Leaf) {
+    . $CapabilityRouterScript
+}
 $DashboardStatusScript = Join-Path $PSScriptRoot "Get-PDADashboardStatus.ps1"
 $WorkerStatusScript = Join-Path $PSScriptRoot "Get-PDAWorkerStatus.ps1"
 $TaskResultScript = Join-Path $PSScriptRoot "Get-PDATaskResult.ps1"
@@ -242,6 +246,14 @@ $DispatchOutput = @()
 $DispatchResponseText = ""
 $DispatchNextAction = ""
 $DispatchTaskId = ""
+$CapabilityRoute = $null
+$CapabilityMatrixSummary = [pscustomobject]@{
+    status              = "skipped"
+    matrix_path         = ""
+    route_count         = 0
+    local_only_count    = 0
+    cloud_allowed_count = 0
+}
 $Eligibility = $null
 $OperatorConsoleResponse = $null
 $OperatorCommands = @("/status", "/tasks", "/approvals", "/workers", "/reports", "/memory", "/help")
@@ -266,6 +278,70 @@ elseif ($Interpreter.status -eq "ambiguous") {
 }
 else {
     $AmbiguityReason = [string]$Interpreter.reason
+}
+
+if (Get-Command -Name Get-PDACapabilityMatrix -ErrorAction SilentlyContinue) {
+    try {
+        $CapabilityMatrix = Get-PDACapabilityMatrix -Root $Root
+        $CapabilityMatrixSummary = [pscustomobject]@{
+            status              = [string]$CapabilityMatrix.status
+            matrix_path         = [string]$CapabilityMatrix.matrix_path
+            route_count         = [int]$CapabilityMatrix.route_count
+            local_only_count    = [int]$CapabilityMatrix.local_only_count
+            cloud_allowed_count = [int]$CapabilityMatrix.cloud_allowed_count
+        }
+    }
+    catch {
+        $CapabilityMatrixSummary = [pscustomobject]@{
+            status              = "error"
+            matrix_path         = [string]$CapabilityRouterScript
+            route_count         = 0
+            local_only_count    = 0
+            cloud_allowed_count = 0
+            error               = $_.Exception.Message
+        }
+    }
+}
+
+if ($Interpreter.status -eq "mapped" -and -not [string]::IsNullOrWhiteSpace($RecommendedCommand) -and -not $IsOperatorConsoleCommand -and (Get-Command -Name Get-PDAToolForTask -ErrorAction SilentlyContinue)) {
+    try {
+        $TaskDefinition = @(
+            Find-PDATaskTypes -Root $Root -Command $RecommendedCommand -Classification $DispatchCategory | Select-Object -First 1
+        )[0]
+        $PreferredOutput = if ($TaskDefinition -and $TaskDefinition.PSObject.Properties.Name -contains "output_types" -and @($TaskDefinition.output_types).Count -gt 0) {
+            [string]@($TaskDefinition.output_types)[0]
+        }
+        else {
+            ""
+        }
+
+        $CapabilityRoute = Get-PDAToolForTask -TaskType $Interpreter.task_type -Category $DispatchCategory -PreferredOutput $PreferredOutput -RequiresLocalOnly:($DispatchCategory -in @("category_2", "restricted_local")) -Root $Root
+        if ($CapabilityRoute -and -not [bool]$CapabilityRoute.allowed) {
+            $DispatchReady = $false
+            $RequiresConfirmation = $false
+            $DispatchStatus = "blocked"
+            $AmbiguityReason = if ([string]::IsNullOrWhiteSpace([string]$CapabilityRoute.blocked_reason)) { [string]$CapabilityRoute.routing_reason } else { [string]$CapabilityRoute.blocked_reason }
+        }
+    }
+    catch {
+        $CapabilityRoute = [pscustomobject]@{
+            selected_tool       = ""
+            backup_tool         = ""
+            routing_reason      = "Capability router failed: $($_.Exception.Message)"
+            allowed             = $false
+            blocked_reason      = $_.Exception.Message
+            output_location     = @()
+            task_type           = [string]$Interpreter.task_type
+            category            = $DispatchCategory
+            preferred_output    = ""
+            requires_local_only = ($DispatchCategory -in @("category_2", "restricted_local"))
+            cloud_allowed       = $false
+            matrix_status       = "error"
+            matrix_path         = [string]$CapabilityRouterScript
+            route_count         = 0
+            matrix_loaded       = $false
+        }
+    }
 }
 
 if ($ConfirmDispatch -and $Interpreter.status -eq "mapped" -and $DispatchReady) {
@@ -354,6 +430,13 @@ $Result = [pscustomobject]@{
     dispatch_path       = $DispatchPath
     dispatch_category   = $DispatchCategory
     task_id             = $DispatchTaskId
+    capability_matrix   = $CapabilityMatrixSummary
+    capability_route    = $CapabilityRoute
+    selected_tool       = if ($CapabilityRoute) { [string]$CapabilityRoute.selected_tool } else { "" }
+    backup_tool         = if ($CapabilityRoute) { [string]$CapabilityRoute.backup_tool } else { "" }
+    routing_reason      = if ($CapabilityRoute) { [string]$CapabilityRoute.routing_reason } else { "" }
+    blocked_reason      = if ($CapabilityRoute) { [string]$CapabilityRoute.blocked_reason } else { "" }
+    output_location     = if ($CapabilityRoute) { @($CapabilityRoute.output_location) } else { @() }
     response_text       = if ($DispatchResponseText) { [string]$DispatchResponseText } elseif ($OperatorConsoleResponse) { [string]$OperatorConsoleResponse.response_text } else { "" }
     next_action         = if ($DispatchNextAction) { [string]$DispatchNextAction } elseif ($OperatorConsoleResponse) { [string]$OperatorConsoleResponse.next_action } else { "" }
     source_of_truth     = [string]$Interpreter.source_of_truth

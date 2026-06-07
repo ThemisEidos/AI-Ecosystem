@@ -270,17 +270,22 @@ function Get-PDAQueueSnapshot {
         approvals_rejected = 0
     }
 
-    $Records = @()
+    $RecentRecords = @()
+    $LatestByQueue = @{}
     foreach ($QueueName in $QueueFolders.Keys) {
         $Folder = $QueueFolders[$QueueName]
         if (-not (Test-Path -LiteralPath $Folder -PathType Container)) {
             continue
         }
 
-        $Files = @(Get-ChildItem -LiteralPath $Folder -Filter *.json -File -ErrorAction SilentlyContinue)
+        $Files = @(Get-ChildItem -LiteralPath $Folder -Filter *.json -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTimeUtc -Descending)
         $Counts[$QueueName] = $Files.Count
-        foreach ($File in $Files) {
-            $Records += Get-PDAQueueRecord -QueueName $QueueName -File $File
+        if ($Files.Count -gt 0) {
+            $LatestByQueue[$QueueName] = Get-PDAQueueRecord -QueueName $QueueName -File $Files[0]
+        }
+
+        foreach ($File in @($Files | Select-Object -First 20)) {
+            $RecentRecords += Get-PDAQueueRecord -QueueName $QueueName -File $File
         }
     }
 
@@ -290,24 +295,24 @@ function Get-PDAQueueSnapshot {
             continue
         }
 
-        $Files = @(Get-ChildItem -LiteralPath $Folder -Filter *.json -File -ErrorAction SilentlyContinue)
+        $Files = @(Get-ChildItem -LiteralPath $Folder -Filter *.json -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTimeUtc -Descending)
         switch ($ApprovalKey) {
             "approvals/pending" { $Counts.approvals_pending = $Files.Count }
             "approvals/approved" { $Counts.approvals_approved = $Files.Count }
             "approvals/rejected" { $Counts.approvals_rejected = $Files.Count }
         }
 
-        foreach ($File in $Files) {
+        foreach ($File in @($Files | Select-Object -First 20)) {
             $Record = Get-PDAQueueRecord -QueueName $ApprovalKey -File $File
             if ([string]::IsNullOrWhiteSpace($Record.task_status)) {
                 $Record.task_status = "pending_approval"
             }
-            $Records += $Record
+            $RecentRecords += $Record
         }
     }
 
     $UniqueRecentTasks = @()
-    foreach ($Record in @($Records | Sort-Object sort_time -Descending)) {
+    foreach ($Record in @($RecentRecords | Sort-Object sort_time -Descending)) {
         if ([string]::IsNullOrWhiteSpace([string]$Record.task_id)) {
             continue
         }
@@ -323,7 +328,7 @@ function Get-PDAQueueSnapshot {
     }
 
     $UniqueRecentApprovals = @()
-    foreach ($Record in @($Records | Where-Object { [string]$_.approval_status -eq "pending" } | Sort-Object sort_time -Descending)) {
+    foreach ($Record in @($RecentRecords | Where-Object { [string]$_.approval_status -eq "pending" } | Sort-Object sort_time -Descending)) {
         if ([string]::IsNullOrWhiteSpace([string]$Record.task_id)) {
             continue
         }
@@ -342,15 +347,14 @@ function Get-PDAQueueSnapshot {
         counts = [pscustomobject]$Counts
         queue_depth = ([int]$Counts.pending + [int]$Counts.running)
         latest = [pscustomobject]@{
-            pending = @($Records | Where-Object { $_.queue -eq "pending" } | Sort-Object sort_time -Descending | Select-Object -First 1)
-            running = @($Records | Where-Object { $_.queue -eq "running" } | Sort-Object sort_time -Descending | Select-Object -First 1)
-            completed = @($Records | Where-Object { $_.queue -eq "completed" } | Sort-Object sort_time -Descending | Select-Object -First 1)
-            failed = @($Records | Where-Object { $_.queue -eq "failed" } | Sort-Object sort_time -Descending | Select-Object -First 1)
-            result = @($Records | Where-Object { $_.queue -eq "results" } | Sort-Object sort_time -Descending | Select-Object -First 1)
+            pending = @($LatestByQueue["pending"])
+            running = @($LatestByQueue["running"])
+            completed = @($LatestByQueue["completed"])
+            failed = @($LatestByQueue["failed"])
+            result = @($LatestByQueue["results"])
         }
         recent_tasks = @($UniqueRecentTasks)
         pending_approvals = @($UniqueRecentApprovals)
-        records = @($Records)
     }
 }
 
@@ -666,9 +670,9 @@ function Get-PDACoreIntegrationStatus {
     $ConversationState = Invoke-PDAJsonScript -Path $ConversationStateScript -Arguments @("-AsJson", "-NoThrow") -SourceName "Conversation state"
     $TaskResult = Invoke-PDAJsonScript -Path $TaskResultScript -Arguments @("-AsJson", "-NoThrow") -SourceName "Task result lookup"
     $Interpreter = Invoke-PDAJsonScript -Path $InterpreterScript -Arguments @("-AsJson", "-NoThrow", "-SkipOperatorConsole") -SourceName "Command interpreter"
-    $Handoff = Invoke-PDAJsonScript -Path $HandoffScript -Arguments @("-AsJson", "-NoThrow", "-SkipOperatorConsole") -SourceName "Command handoff"
-    $ChatBridge = Invoke-PDAJsonScript -Path $ChatBridgeScript -Arguments @("-AsJson", "-NoThrow", "-SkipOperatorConsole") -SourceName "Chat bridge"
-    $WebhookBridge = Invoke-PDAJsonScript -Path $WebhookBridgeScript -Arguments @("-AsJson", "-NoThrow") -SourceName "Webhook bridge"
+    $Handoff = Invoke-PDAJsonScript -Path $HandoffScript -Arguments @("-AsJson", "-NoThrow", "-SkipOperatorConsole", "-SkipDispatch", "-DashboardMode") -SourceName "Command handoff"
+    $ChatBridge = Invoke-PDAJsonScript -Path $ChatBridgeScript -Arguments @("-AsJson", "-NoThrow", "-SkipOperatorConsole", "-SkipDispatch", "-DashboardMode") -SourceName "Chat bridge"
+    $WebhookBridge = Invoke-PDAJsonScript -Path $WebhookBridgeScript -Arguments @("-AsJson", "-NoThrow", "-SkipDispatch", "-DashboardMode") -SourceName "Webhook bridge"
 
     $ConversationSummary = [pscustomobject]@{
         status = Get-PDASafeString $ConversationState.status
@@ -681,11 +685,6 @@ function Get-PDACoreIntegrationStatus {
         latest_result_path = if ($ConversationState.PSObject.Properties.Name -contains "latest_result_path") { Get-PDASafeString $ConversationState.latest_result_path } else { "" }
         response_text = if ($ConversationState.PSObject.Properties.Name -contains "response_text") { Get-PDASafeString $ConversationState.response_text } else { "" }
         next_action = if ($ConversationState.PSObject.Properties.Name -contains "next_action") { Get-PDASafeString $ConversationState.next_action } else { "" }
-        tasks = if ($ConversationState.PSObject.Properties.Name -contains "tasks") { @($ConversationState.tasks) } else { @() }
-        pending_approvals = if ($ConversationState.PSObject.Properties.Name -contains "pending_approvals") { @($ConversationState.pending_approvals) } else { @() }
-        completed_tasks = if ($ConversationState.PSObject.Properties.Name -contains "completed_tasks") { @($ConversationState.completed_tasks) } else { @() }
-        latest_task = if ($ConversationState.PSObject.Properties.Name -contains "latest_task") { $ConversationState.latest_task } else { $null }
-        latest_result = if ($ConversationState.PSObject.Properties.Name -contains "latest_result") { $ConversationState.latest_result } else { $null }
     }
 
     $TaskResultSummary = [pscustomobject]@{
@@ -753,6 +752,35 @@ $ArtifactSnapshot = Get-PDAArtifactSnapshot -RootPath $Root
 $MemorySnapshot = Get-PDAMemorySnapshot -RootPath $Root
 $ModelSnapshot = Get-PDAModelStatus -RootPath $Root
 $FabricHealthScript = Join-Path $PSScriptRoot "Invoke-PDAFabricHealthCheck.ps1"
+$CapabilityRouterScript = Join-Path $PSScriptRoot "PDA_CapabilityRouter.ps1"
+$CapabilityRouter = if (Test-Path -LiteralPath $CapabilityRouterScript -PathType Leaf) {
+    try {
+        if (-not (Get-Command -Name Get-PDACapabilityMatrix -ErrorAction SilentlyContinue)) {
+            . $CapabilityRouterScript
+        }
+
+        Get-PDACapabilityMatrix -Root $Root
+    }
+    catch {
+        [pscustomobject]@{
+            status              = "error"
+            matrix_path         = $CapabilityRouterScript
+            route_count         = 0
+            local_only_count    = 0
+            cloud_allowed_count = 0
+            error               = $_.Exception.Message
+        }
+    }
+}
+else {
+    [pscustomobject]@{
+        status              = "skipped"
+        matrix_path         = $CapabilityRouterScript
+        route_count         = 0
+        local_only_count    = 0
+        cloud_allowed_count = 0
+    }
+}
 $FabricHealth = if (Test-Path -Path $FabricHealthScript -PathType Leaf) {
     try {
         Invoke-PDAJsonScript -Path $FabricHealthScript -Arguments @("-AsJson", "-NoThrow") -SourceName "PDA Fabric health check"
@@ -852,6 +880,7 @@ foreach ($Candidate in @(
     $CommanderSnapshot.status,
     $ModelSnapshot.provider_validation.status,
     $ModelSnapshot.env_validation.status,
+    $CapabilityRouter.status,
     $FabricHealth.status,
     $CommanderSnapshot.command_interpreter.status,
     $CommanderSnapshot.command_handoff.status,
@@ -907,6 +936,13 @@ $Report = [pscustomobject]@{
         routing_policy = $ModelSnapshot.routing_policy
         provider_validation = $ModelSnapshot.provider_validation
         env_validation = $ModelSnapshot.env_validation
+    }
+    capability_router = [pscustomobject]@{
+        status = Get-PDASafeString $CapabilityRouter.status
+        matrix_path = Get-PDASafeString $CapabilityRouter.matrix_path
+        route_count = if ($CapabilityRouter.PSObject.Properties.Name -contains "route_count") { [int]$CapabilityRouter.route_count } else { 0 }
+        local_only_count = if ($CapabilityRouter.PSObject.Properties.Name -contains "local_only_count") { [int]$CapabilityRouter.local_only_count } else { 0 }
+        cloud_allowed_count = if ($CapabilityRouter.PSObject.Properties.Name -contains "cloud_allowed_count") { [int]$CapabilityRouter.cloud_allowed_count } else { 0 }
     }
     fabric_status = $FabricHealth
     commander_integration = [pscustomobject]@{

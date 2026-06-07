@@ -1,0 +1,264 @@
+{
+  "schema_version": "1.0",
+  "updated_at": "2026-06-06",
+  "matrix": [
+    {
+      "task_type": "research",
+      "sensitivity_category": "category_1",
+      "preferred_tool": "Open WebUI + Gemini via LiteLLM",
+      "backup_tool": "Perplexity manual search or Fabric research pattern",
+      "output_location": [
+        "04_Resources/Research/",
+        "05_Reports/Research/"
+      ],
+      "automation_readiness": "assisted",
+      "cloud_allowed": true,
+      "route_alias": "/research",
+      "notes": "Use sanitized source sets and keep Obsidian as the durable capture layer."
+    },
+    {
+      "task_type": "research",
+      "sensitivity_category": "category_2",
+      "preferred_tool": "Fabric research-synthesis local",
+      "backup_tool": "Ollama local",
+      "output_location": [
+        "04_Resources/Research/",
+        "05_Reports/Research/"
+      ],
+      "automation_readiness": "semi_automated",
+      "cloud_allowed": false,
+      "route_alias": "/research",
+      "notes": "Category 2 research must remain local."
+    },
+    {
+      "task_type": "reporting",
+      "sensitivity_category": "category_1",
+      "preferred_tool": "Fabric report-summary",
+      "backup_tool": "Open WebUI + Claude via LiteLLM",
+      "output_location": [
+        "05_Reports/"
+      ],
+      "automation_readiness": "semi_automated",
+      "cloud_allowed": true,
+      "route_alias": "/report",
+      "notes": "Prefer repeatable local report generation when the source set is already sanitized."
+    },
+    {
+      "task_type": "reporting",
+      "sensitivity_category": "category_2",
+      "preferred_tool": "Fabric report-summary local",
+      "backup_tool": "PowerShell or Python report generator",
+      "output_location": [
+        "05_Reports/"
+      ],
+      "automation_readiness": "automated",
+      "cloud_allowed": false,
+      "route_alias": "/report",
+      "notes": "Category 2 reporting must remain local."
+    },
+    {
+      "task_type": "learning",
+      "sensitivity_category": "category_1",
+      "preferred_tool": "NotebookLM package generation",
+      "backup_tool": "Obsidian notes + Fabric summary",
+      "output_location": [
+        "04_Resources/Learning/",
+        "08_Prompts/",
+        "05_Reports/Learning/"
+      ],
+      "automation_readiness": "assisted",
+      "cloud_allowed": true,
+      "route_alias": "/notebooklm",
+      "notes": "NotebookLM only receives sanitized Category 1 material."
+    },
+    {
+      "task_type": "learning",
+      "sensitivity_category": "category_2",
+      "preferred_tool": "Obsidian local synthesis + Fabric summary",
+      "backup_tool": "Ollama local",
+      "output_location": [
+        "04_Resources/Learning/",
+        "10_Archive/"
+      ],
+      "automation_readiness": "manual",
+      "cloud_allowed": false,
+      "route_alias": "",
+      "notes": "Keep raw learning content local and do not upload it to NotebookLM."
+    },
+    {
+      "task_type": "summarization",
+      "sensitivity_category": "category_1",
+      "preferred_tool": "Fabric report-summary",
+      "backup_tool": "Open WebUI + Claude via LiteLLM",
+      "output_location": [
+        "05_Reports/Summaries/"
+      ],
+      "automation_readiness": "automated",
+      "cloud_allowed": true,
+      "route_alias": "/summarize",
+      "notes": "Use the local summarizer first when the input is already sanitized."
+    },
+    {
+      "task_type": "summarization",
+      "sensitivity_category": "category_2",
+      "preferred_tool": "Fabric report-summary local",
+      "backup_tool": "PowerShell or Python summary helper",
+      "output_location": [
+        "05_Reports/Summaries/"
+      ],
+      "automation_readiness": "automated",
+      "cloud_allowed": false,
+      "route_alias": "/summarize",
+      "notes": "Do not send Category 2 summaries to cloud-backed tools."
+    },
+    {
+      "task_type": "review",
+      "sensitivity_category": "category_1",
+      "preferred_tool": "Fabric review-checklist",
+      "backup_tool": "Open WebUI + Claude via LiteLLM",
+      "output_location": [
+        "05_Reports/Reviews/"
+      ],
+      "automation_readiness": "semi_automated",
+      "cloud_allowed": true,
+      "route_alias": "/review",
+      "notes": "Review tasks should default to the local checklist pattern."
+    },
+    {
+      "task_type": "review",
+      "sensitivity_category": "category_2",
+      "preferred_tool": "Fabric review-checklist local",
+      "backup_tool": "PowerShell or Python checklist helper",
+      "output_location": [
+        "05_Reports/Reviews/"
+      ],
+      "automation_readiness": "automated",
+      "cloud_allowed": false,
+      "route_alias": "/review",
+      "notes": "Keep review outputs local for restricted work."
+    },
+    {
+      "task_type": "security_triage",
+      "sensitivity_category": "category_1",
+      "preferred_tool": "Fabric security-triage",
+      "backup_tool": "PowerShell or Python static checks",
+      "output_location": [
+        "06_AI-Systems/Security/Reports/"
+      ],
+      "automation_readiness": "local_only",
+      "cloud_allowed": false,
+      "route_alias": "/fabric security",
+      "notes": "Security triage stays local even when inputs are sanitized."
+    },
+    {
+      "task_type": "security_triage",
+      "sensitivity_category": "category_2",
+      "preferred_tool": "Fabric security-triage local",
+      "backup_tool": "PowerShell or Python static checks",
+      "output_location": [
+        "06_AI-Systems/Security/Reports/"
+      ],
+      "automation_readiness": "local_only",
+      "cloud_allowed": false,
+      "route_alias": "/fabric security",
+      "notes": "Do not route security triage to cloud-backed tools."
+    },
+    {
+      "task_type": "coding",
+      "sensitivity_category": "category_1",
+      "preferred_tool": "PowerShell or Python local-first",
+      "backup_tool": "Open WebUI + ChatGPT or Claude for design review only",
+      "output_location": [
+        "Repo workspace",
+        "06_AI-Systems/Coding/"
+      ],
+      "automation_readiness": "semi_automated",
+      "cloud_allowed": true,
+      "route_alias": "/execute",
+      "notes": "Use cloud tools only for design review, not for secret-bearing source handling."
+    },
+    {
+      "task_type": "coding",
+      "sensitivity_category": "category_2",
+      "preferred_tool": "PowerShell or Python local-only",
+      "backup_tool": "Ollama local",
+      "output_location": [
+        "Repo workspace",
+        "06_AI-Systems/Coding/"
+      ],
+      "automation_readiness": "local_only",
+      "cloud_allowed": false,
+      "route_alias": "/execute",
+      "notes": "Category 2 coding stays local."
+    },
+    {
+      "task_type": "automation",
+      "sensitivity_category": "category_1",
+      "preferred_tool": "n8n + PowerShell + Python",
+      "backup_tool": "Open WebUI + Gemini for workflow design",
+      "output_location": [
+        "06_AI-Systems/Automation/",
+        "n8n Workflow/"
+      ],
+      "automation_readiness": "semi_automated",
+      "cloud_allowed": true,
+      "route_alias": "/automation",
+      "notes": "n8n owns the orchestration layer; PowerShell and Python handle local glue."
+    },
+    {
+      "task_type": "automation",
+      "sensitivity_category": "category_2",
+      "preferred_tool": "n8n + PowerShell + Python local-only",
+      "backup_tool": "Ollama local",
+      "output_location": [
+        "06_AI-Systems/Automation/",
+        "n8n Workflow/"
+      ],
+      "automation_readiness": "local_only",
+      "cloud_allowed": false,
+      "route_alias": "/automation",
+      "notes": "Category 2 automation must not leave the local stack."
+    },
+    {
+      "task_type": "planning",
+      "sensitivity_category": "category_1",
+      "preferred_tool": "PowerShell or Python local-first",
+      "backup_tool": "Open WebUI + Gemini for workflow design",
+      "output_location": [
+        "06_AI-Systems/Planning/",
+        "05_Reports/Plans/"
+      ],
+      "automation_readiness": "assisted",
+      "cloud_allowed": false,
+      "route_alias": "/planner",
+      "notes": "Planning should stay local-first and produce implementation-focused plan markdown."
+    },
+    {
+      "task_type": "planning",
+      "sensitivity_category": "category_2",
+      "preferred_tool": "PowerShell or Python local-first",
+      "backup_tool": "Open WebUI + Gemini for workflow design",
+      "output_location": [
+        "06_AI-Systems/Planning/",
+        "05_Reports/Plans/"
+      ],
+      "automation_readiness": "assisted",
+      "cloud_allowed": false,
+      "route_alias": "/planner",
+      "notes": "Category 2 planning remains local-first with no cloud requirement."
+    },
+    {
+      "task_type": "local_only_restricted",
+      "sensitivity_category": "restricted_local",
+      "preferred_tool": "PowerShell + Python + Ollama + Fabric local",
+      "backup_tool": "Same local tools",
+      "output_location": [
+        "Local workspace only"
+      ],
+      "automation_readiness": "local_only",
+      "cloud_allowed": false,
+      "route_alias": "",
+      "notes": "Never route restricted-local work to NotebookLM or cloud-backed chat models."
+    }
+  ]
+}

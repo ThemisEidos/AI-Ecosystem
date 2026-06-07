@@ -1,6 +1,6 @@
 # PDA Dashboard v2
 
-Updated: 2026-06-06 19:08:06 -07:00
+Updated: 2026-06-06 23:19:17 -07:00
 Overall health: degraded
 
 ## System Health
@@ -22,22 +22,22 @@ Overall health: degraded
 
 | metric | value |
 | --- | --- |
-| Queue depth | 468 |
-| Pending | 468 |
+| Queue depth | 577 |
+| Pending | 577 |
 | Running | 0 |
 | Completed | 41 |
 | Failed | 244 |
-| Results | 533 |
+| Results | 541 |
 | Pending approvals | 27 |
 
 ### Latest Queue Files
 
 | queue | task_id | command | status | updated_at |
 | --- | --- | --- | --- | --- |
-| pending | 8ac1559b-e654-4c58-9822-a9a74567918a | /review | queued | 06/07/2026 02:05:35 |
+| pending | 4d945bb9-3b8c-43dd-9f1d-72f241f7c5a4 | /fabric research | pending | 06/07/2026 05:51:55 |
 | completed | b4486b1b-8663-4068-b110-b4f215ea418f | /research | success | 06/06/2026 03:47:41 |
 | failed | 881c700e-d685-42e6-b7fa-39ca8d904501 | /research | failed | 06/06/2026 03:44:44 |
-| results | 1394ef67-5e9f-4086-a32e-ec8112ea66b2 | /fabric | completed | 06/07/2026 01:56:00 |
+| results | cf20b3bf-0b72-46e7-a0fe-4bb92c0c065c | /fabric security | completed | 06/07/2026 03:40:10 |
 
 ## Worker Status
 
@@ -65,7 +65,7 @@ Overall health: degraded
 
 | worker_name | status | state | age_minutes | process_live |
 | --- | --- | --- | --- | --- |
-| test-worker | running | STALE | 6018.94 | no |
+| test-worker | running | STALE | 6270.81 | no |
 
 ## Pending Approvals
 
@@ -86,31 +86,31 @@ Overall health: degraded
 
 | task_id | command | worker | category | queue | status | updated_at |
 | --- | --- | --- | --- | --- | --- | --- |
-| 8ac1559b-e654-4c58-9822-a9a74567918a | /review | review-worker | category_1 | pending | queued | 06/07/2026 02:05:35 |
-| 0cc3d311-ec60-4e66-b49d-b4ed0f277b6c | /review | review-worker | category_1 | pending | queued | 06/07/2026 02:05:08 |
-| ee1c040a-a000-4aa0-9152-3b8a60c8f4b0 | /review | review-worker | category_1 | pending | queued | 06/07/2026 02:04:52 |
-| 2da0a1c0-0e67-4619-9f0c-14e41565ddd7 | /reporter | reporter-worker | category_1 | pending | queued | 06/07/2026 02:04:25 |
-| a707bdfa-51fe-4ff7-807a-4a3e0cff446e | /reporter | reporter-worker | category_1 | pending | queued | 06/07/2026 02:04:09 |
-| f67a0fe1-68a5-4e43-b1f2-f0056c28fbe8 | /fabric research | fabric-worker | category_1 | pending | pending | 06/07/2026 02:04:04 |
-| 6ad0a462-538f-44a6-8bd2-8b961acfcc60 | /planner | planner-worker | category_1 | pending | queued | 06/07/2026 02:03:58 |
-| ac9bc96c-c68b-4f9f-b365-a96aff0eb839 | /fabric research | fabric-worker | category_1 | pending | pending | 06/07/2026 02:03:48 |
-| 1b8d8880-4350-4690-a41d-9dbffeae99df | /planner | planner-worker | category_1 | pending | queued | 06/07/2026 02:03:43 |
-| 93fdc64e-9648-4106-a4ea-e7d6e7922d91 | /review | review-worker | category_1 | pending | queued | 06/07/2026 02:03:20 |
+| 4d945bb9-3b8c-43dd-9f1d-72f241f7c5a4 | /fabric research | fabric-worker | category_1 | pending | pending | 06/07/2026 05:51:55 |
+| 20cd9f2d-e41e-4cb8-afbe-693f44c1bb7a | /planner | planner-worker | category_1 | pending | queued | 06/07/2026 05:51:00 |
+| 13e82668-ed29-4e4b-8a82-465cc4a6f59a | /review | review-worker | category_1 | pending | queued | 06/07/2026 05:31:20 |
+| e6bb68b9-6331-44b3-93a6-819662644c08 | /review | review-worker | category_1 | pending | queued | 06/07/2026 05:30:56 |
+| b506edb4-af90-4950-bb43-11c64bacd8cd | /review | review-worker | category_1 | pending | queued | 06/07/2026 05:28:56 |
+| 6bbe6b8b-5e46-4b4e-a23e-2f2ac1d52365 | /review | review-worker | category_1 | pending | queued | 06/07/2026 05:28:53 |
+| 6fae85bb-fe96-4606-bee3-e1c7bd73964e | /fabric research | fabric-worker | category_1 | pending | pending | 06/07/2026 05:28:03 |
+| a5842ce7-d911-44ca-89c8-272739db712e | /planner | planner-worker | category_1 | pending | queued | 06/07/2026 05:26:46 |
+| 69d49370-85ce-426b-b2af-48703e64745d | /review | review-worker | category_1 | pending | queued | 06/07/2026 05:26:05 |
+| 3d78a586-0a57-470d-8df9-7626d755ca34 | /review | review-worker | category_1 | pending | queued | 06/07/2026 05:25:14 |
 
 ## Recent Reports / Artifacts
 
 | artifact_id | created_at | worker_name | category | artifact_type | summary |
 | --- | --- | --- | --- | --- | --- |
+| artifact-a542509e-adaf-41fb-b97e-4e8b669639db | 06/06/2026 20:40:10 | fabric-worker | category_1 | fabric_markdown | Fabric worker artifact output |
+| artifact-36b337b2-c1f4-45a3-b995-b44909a3b2d0 | 06/06/2026 20:39:31 | fabric-worker | category_1 | fabric_markdown | Fabric worker artifact output |
+| artifact-a1c45cbd-2daf-426c-886b-a66443131268 | 06/06/2026 20:38:22 | fabric-worker | category_1 | fabric_markdown | Fabric worker artifact output |
+| artifact-ed7a28e4-f060-4da8-9129-0f32c91c37d7 | 06/06/2026 20:37:18 | fabric-worker | category_1 | fabric_markdown | Fabric worker artifact output |
+| artifact-47b7e178-374d-413b-8b51-066ca08477f6 | 06/06/2026 20:36:16 | fabric-worker | category_1 | fabric_markdown | Fabric worker artifact output |
+| artifact-b78f9dc3-f0b1-4502-aff3-7ea9a0a281f4 | 06/06/2026 20:35:42 | fabric-worker | category_1 | fabric_markdown | Fabric worker artifact output |
+| artifact-6656fab3-413f-43c5-a2ee-b8ed6042c862 | 06/06/2026 20:35:08 | fabric-worker | category_1 | fabric_markdown | Fabric worker artifact output |
+| artifact-71dfdab7-50d8-42f4-ba97-c9e2b0461cfa | 06/06/2026 20:34:29 | fabric-worker | category_1 | fabric_markdown | Fabric worker artifact output |
 | artifact-40920de6-eb56-4f4f-aab5-e8e518fb5403 | 06/06/2026 18:56:00 | fabric-worker | category_2 | fabric_markdown | Fabric worker artifact output |
 | artifact-61ffa5fc-54b9-427a-b122-c130eb86b976 | 06/06/2026 18:55:49 | fabric-worker | category_1 | fabric_markdown | Fabric worker artifact output |
-| artifact-726495de-de46-4f78-bc27-bf920f608aa7 | 06/06/2026 18:54:54 | fabric-worker | category_1 | fabric_markdown | Fabric worker artifact output |
-| artifact-74af87ea-d980-4d77-b21e-2bc57c77276e | 06/06/2026 18:53:58 | fabric-worker | category_1 | fabric_markdown | Fabric worker artifact output |
-| artifact-87492c49-463e-422a-9d7b-89039a9748c2 | 06/06/2026 18:53:21 | fabric-worker | category_1 | fabric_markdown | Fabric worker artifact output |
-| artifact-615e693f-e0bb-4c30-87ed-3d1245cd6996 | 06/06/2026 18:52:00 | fabric-worker | category_1 | fabric_markdown | Fabric worker artifact output |
-| artifact-cb1f54b6-9f2b-4fea-8f68-bef676c9338c | 06/06/2026 18:50:39 | fabric-worker | category_1 | fabric_markdown | Fabric worker artifact output |
-| artifact-105a695f-646e-47d2-ac24-942e7fe5e319 | 06/06/2026 18:50:39 | fabric-worker | category_1 | fabric_markdown | Fabric worker artifact output |
-| artifact-10f12fc9-9ee3-4fa4-a951-7d401e859e00 | 06/06/2026 18:49:13 | fabric-worker | category_1 | fabric_markdown | Fabric worker artifact output |
-| artifact-50a071c9-4b23-4cf4-b181-1e508f30a775 | 06/06/2026 18:49:12 | fabric-worker | category_1 | fabric_markdown | Fabric worker artifact output |
 
 ## Model Status
 
@@ -133,6 +133,16 @@ Overall health: degraded
 
 - No provider rows found.
 
+## Capability Router
+
+| metric | value |
+| --- | --- |
+| Status | pass |
+| Matrix path | C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\Scripts\PDA_CapabilityMatrix.json |
+| Route count | 19 |
+| Local-only routes | 12 |
+| Cloud-allowed routes | 7 |
+
 ### Fabric CLI Status
 
 | metric | value |
@@ -148,10 +158,10 @@ Overall health: degraded
 
 | component | status | passed | failed | details |
 | --- | --- | --- | --- | --- |
-| Command Interpreter | pass | 11 | 0 | mapped / ambiguous / unknown routing |
-| Governed Handoff | pass | 6 | 0 | confirmation gate |
-| Chat Bridge | pass | 6 | 0 | Open WebUI / n8n bridge |
-| Webhook Bridge | pass | 4 | 0 | webhook transport wrapper |
+| Command Interpreter | pass | 12 | 0 | mapped / ambiguous / unknown routing |
+| Governed Handoff | pass | 4 | 0 | confirmation gate |
+| Chat Bridge | pass | 4 | 0 | Open WebUI / n8n bridge |
+| Webhook Bridge | pass | 3 | 0 | webhook transport wrapper |
 
 ### Conversation Snapshot
 
@@ -159,9 +169,9 @@ Overall health: degraded
 | --- | --- |
 | Conversation status | pass |
 | Conversation ID | default |
-| Active tasks | 7 |
-| Pending approvals | 0 |
-| Submitted tasks | 7 |
+| Active tasks | 0 |
+| Pending approvals | 1 |
+| Submitted tasks | 0 |
 | Completed tasks | 0 |
 | Latest task ID | - |
 | Latest result path | - |

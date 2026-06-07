@@ -11,6 +11,10 @@ $ErrorActionPreference = "Stop"
 
 $Root = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot "PDA_TaskOntology.ps1")
+$CapabilityRouterScript = Join-Path $PSScriptRoot "PDA_CapabilityRouter.ps1"
+if (Test-Path -LiteralPath $CapabilityRouterScript -PathType Leaf) {
+    . $CapabilityRouterScript
+}
 
 function Normalize-PDACommandInterpreterText {
     param([string]$Value)
@@ -335,10 +339,16 @@ function Resolve-PDACommandInterpretation {
         $Second = if ($SortedCandidates.Count -gt 1) { $SortedCandidates[1] } else { $null }
         $AmbiguousWindow = 25
         $ConjunctionSignal = $NormalizedText -match '\b(and|or|plus)\b'
+        $ExactCommandInput = $KnownCommands -contains $NormalizedText
         $Tie = $null -ne $Second -and (
             (($Top.score - $Second.score) -le $AmbiguousWindow) -or
             ($ConjunctionSignal -and $SortedCandidates.Count -gt 1)
         )
+
+        if ($Tie -and $ExactCommandInput -and ([string]$Top.command -eq $NormalizedText)) {
+            $Tie = $false
+            $Reason = "Exact command match resolved deterministically to the canonical workflow."
+        }
 
         $Recommendations = @($SortedCandidates | Select-Object -First 3 | ForEach-Object {
             [pscustomobject]@{
@@ -398,6 +408,38 @@ function Resolve-PDACommandInterpretation {
 }
 
 $Result = Resolve-PDACommandInterpretation -Text $Text -Root $Root
+
+$CapabilityMatrixSummary = [pscustomobject]@{
+    status            = "skipped"
+    matrix_path       = ""
+    route_count       = 0
+    local_only_count  = 0
+    cloud_allowed_count = 0
+}
+if (Get-Command -Name Get-PDACapabilityMatrix -ErrorAction SilentlyContinue) {
+    try {
+        $CapabilityMatrix = Get-PDACapabilityMatrix -Root $Root
+        $CapabilityMatrixSummary = [pscustomobject]@{
+            status            = [string]$CapabilityMatrix.status
+            matrix_path       = [string]$CapabilityMatrix.matrix_path
+            route_count       = [int]$CapabilityMatrix.route_count
+            local_only_count  = [int]$CapabilityMatrix.local_only_count
+            cloud_allowed_count = [int]$CapabilityMatrix.cloud_allowed_count
+        }
+    }
+    catch {
+        $CapabilityMatrixSummary = [pscustomobject]@{
+            status            = "error"
+            matrix_path       = [string]$CapabilityRouterScript
+            route_count       = 0
+            local_only_count  = 0
+            cloud_allowed_count = 0
+            error             = $_.Exception.Message
+        }
+    }
+}
+
+$Result | Add-Member -NotePropertyName capability_matrix -NotePropertyValue $CapabilityMatrixSummary -Force
 
 if ($AsJson) {
     $Result | ConvertTo-Json -Depth 20

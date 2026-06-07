@@ -129,6 +129,15 @@ $TestCases = @(
         source_check     = $true
     }
     [pscustomobject]@{
+        name             = "exact research command"
+        input            = "/research"
+        expected_status  = "mapped"
+        expected_intent  = "research_synthesis"
+        expected_task    = "research"
+        expected_command = "/research"
+        source_check     = $true
+    }
+    [pscustomobject]@{
         name             = "research task"
         input            = "create a test research task"
         expected_status  = "mapped"
@@ -268,6 +277,17 @@ foreach ($Case in $TestCases) {
             elseif ([string]$Resolved.command -ne $ResultCommand) {
                 $CasePassed = $false
                 $CaseIssues.Add("Ontology lookup returned '$($Resolved.command)' instead of '$ResultCommand'.")
+            }
+
+            if ($Result.PSObject.Properties.Name -contains "capability_matrix") {
+                if ([string]$Result.capability_matrix.status -ne "pass") {
+                    $CasePassed = $false
+                    $CaseIssues.Add("Capability matrix should load successfully when available.")
+                }
+                elseif ([int]$Result.capability_matrix.route_count -le 0) {
+                    $CasePassed = $false
+                    $CaseIssues.Add("Capability matrix route count should be greater than zero.")
+                }
             }
         }
 

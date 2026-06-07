@@ -7,7 +7,13 @@ param(
     [switch]$NoThrow,
 
     [Parameter(Mandatory = $false)]
-    [switch]$SkipOperatorConsole
+    [switch]$SkipOperatorConsole,
+
+    [Parameter(Mandatory = $false)]
+    [switch]$SkipDispatch,
+
+    [Parameter(Mandatory = $false)]
+    [switch]$DashboardMode
 )
 
 $ErrorActionPreference = "Stop"
@@ -245,106 +251,118 @@ if ($SkipOperatorConsole) {
     $Cases = @($Cases | Where-Object { [string]$_.name -notlike "operator *" })
 }
 
-$ConfirmationConversationId = "conv-confirm-$([guid]::NewGuid().ToString('N').Substring(0, 12))"
-$ConfirmationSessionId = "sess-confirm-$([guid]::NewGuid().ToString('N').Substring(0, 12))"
-$ConfirmationMarker = "confirm-flow-$([guid]::NewGuid().ToString())"
-
-$ConfirmationRequest = Invoke-JsonScript -Path $BridgeScript -Arguments @(
-    "-Message", "generate a report [$ConfirmationMarker]",
-    "-ConversationId", $ConfirmationConversationId,
-    "-SessionId", $ConfirmationSessionId,
-    "-AsJson"
-)
-
-$ConfirmationStateAfterRequest = Invoke-JsonScript -Path $StateScript -Arguments @(
-    "-ConversationId", $ConfirmationConversationId,
-    "-SessionId", $ConfirmationSessionId,
-    "-AsJson"
-)
-
-$ConfirmationRequestIssues = New-Object System.Collections.Generic.List[string]
-if ($ConfirmationRequest.recommended_command -ne "/reporter") {
-    $ConfirmationRequestIssues.Add("Expected /reporter recommendation for report request.")
-}
-if (-not [bool]$ConfirmationRequest.requires_confirmation) {
-    $ConfirmationRequestIssues.Add("Report request should require confirmation.")
-}
-if ($ConfirmationRequest.dispatch_status -ne "not_dispatched") {
-    $ConfirmationRequestIssues.Add("Report request should not dispatch before confirmation.")
-}
-if ($ConfirmationStateAfterRequest.conversation.pending_recommended_command -ne "/reporter") {
-    $ConfirmationRequestIssues.Add("Pending confirmation command was not stored in conversation state.")
-}
-if ($ConfirmationStateAfterRequest.conversation.pending_dispatch_category -eq "") {
-    $ConfirmationRequestIssues.Add("Pending dispatch category was not stored in conversation state.")
-}
-if ($ConfirmationStateAfterRequest.pending_approval_count -lt 1) {
-    $ConfirmationRequestIssues.Add("Pending approval count should be at least one after request.")
+if ($SkipDispatch) {
+    $Cases = @($Cases | Where-Object { -not [bool]$_.expected_dispatch })
 }
 
-$ConfirmationDispatchBefore = Get-QueueArtifactCountByMarker -Marker $ConfirmationMarker
-$ConfirmationDispatch = Invoke-JsonScript -Path $BridgeScript -Arguments @(
-    "-Message", "confirm [$ConfirmationMarker]",
-    "-ConversationId", $ConfirmationConversationId,
-    "-SessionId", $ConfirmationSessionId,
-    "-AsJson"
-)
-$ConfirmationDispatchAfter = Get-QueueArtifactCountByMarker -Marker $ConfirmationMarker
-$ConfirmationStateAfterDispatch = Invoke-JsonScript -Path $StateScript -Arguments @(
-    "-ConversationId", $ConfirmationConversationId,
-    "-SessionId", $ConfirmationSessionId,
-    "-AsJson"
-)
-
-if ($ConfirmationDispatch.dispatch_status -ne "submitted") {
-    $ConfirmationRequestIssues.Add("Confirmation should dispatch through the governed submitter.")
-}
-if ($ConfirmationDispatchBefore -ge $ConfirmationDispatchAfter) {
-    $ConfirmationRequestIssues.Add("Confirmation did not create a new queue artifact.")
-}
-if (-not [string]::IsNullOrWhiteSpace([string]$ConfirmationStateAfterDispatch.conversation.pending_recommended_command)) {
-    $ConfirmationRequestIssues.Add("Pending confirmation state should be cleared after dispatch.")
-}
-if ($ConfirmationStateAfterDispatch.pending_approval_count -ne 0) {
-    $ConfirmationRequestIssues.Add("Pending approval count should be zero after dispatch.")
+if ($DashboardMode) {
+    $Cases = @($Cases | Where-Object { [string]$_.name -in @("known message", "ambiguous message", "unknown message", "research request") })
 }
 
-$DuplicateDispatchBefore = Get-QueueArtifactCountByMarker -Marker $ConfirmationMarker
-$DuplicateConfirmation = Invoke-JsonScript -Path $BridgeScript -Arguments @(
-    "-Message", "dispatch [$ConfirmationMarker]",
-    "-ConversationId", $ConfirmationConversationId,
-    "-SessionId", $ConfirmationSessionId,
-    "-AsJson"
-)
-$DuplicateDispatchAfter = Get-QueueArtifactCountByMarker -Marker $ConfirmationMarker
-if ($DuplicateConfirmation.dispatch_status -eq "submitted") {
-    $ConfirmationRequestIssues.Add("Duplicate confirmation should not dispatch a second time.")
-}
-if ($DuplicateDispatchAfter -ne $DuplicateDispatchBefore) {
-    $ConfirmationRequestIssues.Add("Duplicate confirmation should not create another queue artifact.")
-}
+if (-not $SkipDispatch -and -not $DashboardMode) {
+    $ConfirmationConversationId = "conv-confirm-$([guid]::NewGuid().ToString('N').Substring(0, 12))"
+    $ConfirmationSessionId = "sess-confirm-$([guid]::NewGuid().ToString('N').Substring(0, 12))"
+    $ConfirmationMarker = "confirm-flow-$([guid]::NewGuid().ToString())"
 
-$Results += [pscustomobject]@{
-    name = "confirmation replay"
-    passed = ($ConfirmationRequestIssues.Count -eq 0)
-    status = $ConfirmationDispatch.dispatch_status
-    response_text = $ConfirmationDispatch.response_text
-    dispatch_status = $ConfirmationDispatch.dispatch_status
-    dispatch_ready = $ConfirmationDispatch.dispatch_ready
-    issues = @($ConfirmationRequestIssues)
-}
+    $ConfirmationRequest = Invoke-JsonScript -Path $BridgeScript -Arguments @(
+        "-Message", "generate a report [$ConfirmationMarker]",
+        "-ConversationId", $ConfirmationConversationId,
+        "-SessionId", $ConfirmationSessionId,
+        "-AsJson"
+    )
 
-if ($ConfirmationRequestIssues.Count -eq 0) {
-    $Passed++
-}
-else {
-    $Failed++
+    $ConfirmationStateAfterRequest = Invoke-JsonScript -Path $StateScript -Arguments @(
+        "-ConversationId", $ConfirmationConversationId,
+        "-SessionId", $ConfirmationSessionId,
+        "-AsJson"
+    )
+
+    $ConfirmationRequestIssues = New-Object System.Collections.Generic.List[string]
+    if ($ConfirmationRequest.recommended_command -ne "/reporter") {
+        $ConfirmationRequestIssues.Add("Expected /reporter recommendation for report request.")
+    }
+    if (-not [bool]$ConfirmationRequest.requires_confirmation) {
+        $ConfirmationRequestIssues.Add("Report request should require confirmation.")
+    }
+    if ($ConfirmationRequest.dispatch_status -ne "not_dispatched") {
+        $ConfirmationRequestIssues.Add("Report request should not dispatch before confirmation.")
+    }
+    if ($ConfirmationStateAfterRequest.conversation.pending_recommended_command -ne "/reporter") {
+        $ConfirmationRequestIssues.Add("Pending confirmation command was not stored in conversation state.")
+    }
+    if ($ConfirmationStateAfterRequest.conversation.pending_dispatch_category -eq "") {
+        $ConfirmationRequestIssues.Add("Pending dispatch category was not stored in conversation state.")
+    }
+    if ($ConfirmationStateAfterRequest.pending_approval_count -lt 1) {
+        $ConfirmationRequestIssues.Add("Pending approval count should be at least one after request.")
+    }
+
+    $ConfirmationDispatchBefore = Get-QueueArtifactCountByMarker -Marker $ConfirmationMarker
+    $ConfirmationDispatch = Invoke-JsonScript -Path $BridgeScript -Arguments @(
+        "-Message", "confirm [$ConfirmationMarker]",
+        "-ConversationId", $ConfirmationConversationId,
+        "-SessionId", $ConfirmationSessionId,
+        "-AsJson"
+    )
+    $ConfirmationDispatchAfter = Get-QueueArtifactCountByMarker -Marker $ConfirmationMarker
+    $ConfirmationStateAfterDispatch = Invoke-JsonScript -Path $StateScript -Arguments @(
+        "-ConversationId", $ConfirmationConversationId,
+        "-SessionId", $ConfirmationSessionId,
+        "-AsJson"
+    )
+
+    if ($ConfirmationDispatch.dispatch_status -ne "submitted") {
+        $ConfirmationRequestIssues.Add("Confirmation should dispatch through the governed submitter.")
+    }
+    if ($ConfirmationDispatchBefore -ge $ConfirmationDispatchAfter) {
+        $ConfirmationRequestIssues.Add("Confirmation did not create a new queue artifact.")
+    }
+    if (-not [string]::IsNullOrWhiteSpace([string]$ConfirmationStateAfterDispatch.conversation.pending_recommended_command)) {
+        $ConfirmationRequestIssues.Add("Pending confirmation state should be cleared after dispatch.")
+    }
+    if ($ConfirmationStateAfterDispatch.pending_approval_count -ne 0) {
+        $ConfirmationRequestIssues.Add("Pending approval count should be zero after dispatch.")
+    }
+
+    $DuplicateDispatchBefore = Get-QueueArtifactCountByMarker -Marker $ConfirmationMarker
+    $DuplicateConfirmation = Invoke-JsonScript -Path $BridgeScript -Arguments @(
+        "-Message", "dispatch [$ConfirmationMarker]",
+        "-ConversationId", $ConfirmationConversationId,
+        "-SessionId", $ConfirmationSessionId,
+        "-AsJson"
+    )
+    $DuplicateDispatchAfter = Get-QueueArtifactCountByMarker -Marker $ConfirmationMarker
+    if ($DuplicateConfirmation.dispatch_status -eq "submitted") {
+        $ConfirmationRequestIssues.Add("Duplicate confirmation should not dispatch a second time.")
+    }
+    if ($DuplicateDispatchAfter -ne $DuplicateDispatchBefore) {
+        $ConfirmationRequestIssues.Add("Duplicate confirmation should not create another queue artifact.")
+    }
+
+    $Results += [pscustomobject]@{
+        name = "confirmation replay"
+        passed = ($ConfirmationRequestIssues.Count -eq 0)
+        status = $ConfirmationDispatch.dispatch_status
+        response_text = $ConfirmationDispatch.response_text
+        dispatch_status = $ConfirmationDispatch.dispatch_status
+        dispatch_ready = $ConfirmationDispatch.dispatch_ready
+        issues = @($ConfirmationRequestIssues)
+    }
+
+    if ($ConfirmationRequestIssues.Count -eq 0) {
+        $Passed++
+    }
+    else {
+        $Failed++
+    }
 }
 
 foreach ($Case in $Cases) {
-    $Before = Find-QueueArtifactByMarker -Marker $Case.marker
-    if ($Before) {
-        throw "Test marker already existed in pending queue: $($Case.marker)"
+    if (-not $DashboardMode) {
+        $Before = Find-QueueArtifactByMarker -Marker $Case.marker
+        if ($Before) {
+            throw "Test marker already existed in pending queue: $($Case.marker)"
+        }
     }
 
     $CaseConversationId = "conv-$([guid]::NewGuid().ToString('N').Substring(0, 12))"
@@ -407,13 +425,13 @@ foreach ($Case in $Cases) {
         $Issues.Add("Original message did not round-trip through the bridge output.")
     }
 
-    if ($Result.dispatch_status -eq "submitted") {
+    if (-not $DashboardMode -and $Result.dispatch_status -eq "submitted") {
         if ([string]::IsNullOrWhiteSpace([string]$Result.dispatch_path) -or -not (Test-Path -Path $Result.dispatch_path -PathType Leaf)) {
             $CasePassed = $false
             $Issues.Add("Confirmed bridge dispatch did not return a valid dispatch path.")
         }
     }
-    else {
+    elseif (-not $DashboardMode) {
         $Match = Find-QueueArtifactByMarker -Marker $Case.marker
         if ($Match) {
             $CasePassed = $false

@@ -7,7 +7,13 @@ param(
     [switch]$NoThrow,
 
     [Parameter(Mandatory = $false)]
-    [switch]$SkipOperatorConsole
+    [switch]$SkipOperatorConsole,
+
+    [Parameter(Mandatory = $false)]
+    [switch]$SkipDispatch,
+
+    [Parameter(Mandatory = $false)]
+    [switch]$DashboardMode
 )
 
 $ErrorActionPreference = "Stop"
@@ -203,6 +209,18 @@ $Cases = @(
         marker = "handoff-help-$([guid]::NewGuid().ToString())"
     }
     [pscustomobject]@{
+        name = "exact research command"
+        input = "/research"
+        confirm = $false
+        expect_status = "mapped"
+        expect_ready = $true
+        expect_confirm = $true
+        expect_dispatch = $false
+        expect_command = "/research"
+        use_marker_suffix = $false
+        marker = "handoff-research-exact-$([guid]::NewGuid().ToString())"
+    }
+    [pscustomobject]@{
         name = "research request"
         input = "create a test research task"
         confirm = $false
@@ -230,11 +248,30 @@ if ($SkipOperatorConsole) {
     $Cases = @($Cases | Where-Object { [string]$_.name -notlike "operator *" })
 }
 
+if ($SkipDispatch) {
+    $Cases = @($Cases | Where-Object { -not [bool]$_.expect_dispatch })
+}
+
+if ($DashboardMode) {
+    $Cases = @($Cases | Where-Object { [string]$_.name -in @("known recommendation", "ambiguous clarification", "unknown closed", "exact research command") })
+}
+
 foreach ($Case in $Cases) {
-    $MarkerInput = "$($Case.input) [$($Case.marker)]"
-    $Before = Find-QueueArtifactByMarker -Marker $Case.marker
-    if ($Before) {
-        throw "Test marker already existed in pending queue: $($Case.marker)"
+    $UseMarkerSuffix = $true
+    if ($Case.PSObject.Properties.Name -contains "use_marker_suffix") {
+        $UseMarkerSuffix = [bool]$Case.use_marker_suffix
+    }
+
+    if ($UseMarkerSuffix -and -not $DashboardMode) {
+        $MarkerInput = "$($Case.input) [$($Case.marker)]"
+        $Before = Find-QueueArtifactByMarker -Marker $Case.marker
+        if ($Before) {
+            throw "Test marker already existed in pending queue: $($Case.marker)"
+        }
+    }
+    else {
+        $MarkerInput = $Case.input
+        $Before = $null
     }
 
     $Args = @(
@@ -295,9 +332,18 @@ foreach ($Case in $Cases) {
         }
     }
 
-    if ($Result.original_input -notlike "*$($Case.marker)*") {
+    if ($DashboardMode) {
+        # Dashboard smoke mode intentionally avoids queue marker round-trips.
+    }
+    elseif ($UseMarkerSuffix) {
+        if ($Result.original_input -notlike "*$($Case.marker)*") {
+            $CasePassed = $false
+            $Issues.Add("Original input did not round-trip through the handoff output.")
+        }
+    }
+    elseif ([string]$Result.original_input -ne [string]$Case.input) {
         $CasePassed = $false
-        $Issues.Add("Original input did not round-trip through the handoff output.")
+        $Issues.Add("Exact input did not round-trip through the handoff output.")
     }
 
     if ($Result.interpreter_status -in @("ambiguous", "unknown") -and [bool]$Result.dispatch_ready) {
@@ -305,7 +351,18 @@ foreach ($Case in $Cases) {
         $Issues.Add("Ambiguous/unknown input should not be dispatch ready.")
     }
 
-    if ($Result.dispatch_status -eq "submitted") {
+    if ($Result.PSObject.Properties.Name -contains "capability_route" -and $Result.interpreter_status -eq "mapped" -and -not [string]::IsNullOrWhiteSpace([string]$Result.recommended_command) -and [string]$Result.dispatch_status -ne "not_applicable") {
+        if ($null -eq $Result.capability_route) {
+            $CasePassed = $false
+            $Issues.Add("Mapped handoff should include a capability route.")
+        }
+        elseif ([string]::IsNullOrWhiteSpace([string]$Result.capability_route.selected_tool)) {
+            $CasePassed = $false
+            $Issues.Add("Mapped handoff should include a selected tool.")
+        }
+    }
+
+    if (-not $DashboardMode -and $Result.dispatch_status -eq "submitted") {
         $PendingMatch = Find-QueueArtifactByMarker -Marker $Case.marker
         if (-not $PendingMatch) {
             $CasePassed = $false
@@ -324,7 +381,7 @@ foreach ($Case in $Cases) {
             }
         }
     }
-    else {
+    elseif (-not $DashboardMode) {
         $PendingMatch = Find-QueueArtifactByMarker -Marker $Case.marker
         if ($PendingMatch) {
             $CasePassed = $false

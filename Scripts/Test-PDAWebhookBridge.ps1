@@ -4,7 +4,13 @@ param(
     [switch]$AsJson,
 
     [Parameter(Mandatory = $false)]
-    [switch]$NoThrow
+    [switch]$NoThrow,
+
+    [Parameter(Mandatory = $false)]
+    [switch]$SkipDispatch,
+
+    [Parameter(Mandatory = $false)]
+    [switch]$DashboardMode
 )
 
 $ErrorActionPreference = "Stop"
@@ -93,11 +99,21 @@ $Cases = @(
     }
 )
 
+if ($SkipDispatch) {
+    $Cases = @($Cases | Where-Object { -not [bool]$_.confirm })
+}
+
+if ($DashboardMode) {
+    $Cases = @($Cases | Where-Object { [string]$_.name -in @("valid request", "ambiguous request", "unknown request") })
+}
+
 foreach ($Case in $Cases) {
     $MarkerMessage = "$($Case.message) [$($Case.marker)]"
-    $Before = Find-QueueArtifactByMarker -Marker $Case.marker
-    if ($Before) {
-        throw "Test marker already existed in pending queue: $($Case.marker)"
+    if (-not $DashboardMode) {
+        $Before = Find-QueueArtifactByMarker -Marker $Case.marker
+        if ($Before) {
+            throw "Test marker already existed in pending queue: $($Case.marker)"
+        }
     }
 
     $Args = @(
@@ -153,13 +169,13 @@ foreach ($Case in $Cases) {
         $Issues.Add("Webhook bridge output did not round-trip as JSON.")
     }
 
-    if ($Case.confirm -and $Result.dispatch_status -eq "submitted") {
+    if (-not $DashboardMode -and $Case.confirm -and $Result.dispatch_status -eq "submitted") {
         if ([string]::IsNullOrWhiteSpace([string]$Result.dispatch_path) -or -not (Test-Path -Path $Result.dispatch_path -PathType Leaf)) {
             $CasePassed = $false
             $Issues.Add("Confirmed webhook bridge dispatch did not return a valid dispatch path.")
         }
     }
-    elseif (-not $Case.confirm) {
+    elseif (-not $DashboardMode -and -not $Case.confirm) {
         $Match = Find-QueueArtifactByMarker -Marker $Case.marker
         if ($Match) {
             $CasePassed = $false

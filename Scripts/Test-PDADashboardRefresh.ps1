@@ -44,14 +44,13 @@ try {
         throw "Dashboard update script missing: $UpdateScript"
     }
 
-    $StatusReport = Invoke-PDAJsonScript -Path $StatusScript -Arguments @("-AsJson", "-NoThrow", "-RootPath", $Root) -SourceName "dashboard status"
     $UpdateReport = Invoke-PDAJsonScript -Path $UpdateScript -Arguments @("-AsJson", "-NoThrow", "-RootPath", $Root) -SourceName "dashboard refresh"
 
-    if ($StatusReport.status -ne "pass") {
-        $Issues.Add("Dashboard status collection did not return pass.")
-    }
     if ($UpdateReport.status -ne "pass") {
         $Issues.Add("Dashboard refresh did not return pass.")
+    }
+    elseif ($UpdateReport.PSObject.Properties.Name -contains "status_report" -and $UpdateReport.status_report.status -ne "pass") {
+        $Issues.Add("Dashboard refresh embedded status report did not return pass.")
     }
 
     if (-not (Test-Path -LiteralPath $DashboardPath -PathType Leaf)) {
@@ -72,6 +71,8 @@ try {
             "## Recent Tasks",
             "## Recent Reports / Artifacts",
             "## Model Status",
+            "## Capability Router",
+            "### Fabric CLI Status",
             "## PDA Commander Integration",
             "## Memory Summary"
         )) {
@@ -88,10 +89,8 @@ try {
     $Report = [pscustomobject]@{
         status = if ($Issues.Count -eq 0) { "pass" } else { "fail" }
         dashboard_script = $UpdateScript
-        status_script = $StatusScript
         dashboard_path = $DashboardPath
         issues = @($Issues)
-        status_report = $StatusReport
         update_report = $UpdateReport
     }
 }
@@ -100,7 +99,6 @@ catch {
     $Report = [pscustomobject]@{
         status = "fail"
         dashboard_script = $UpdateScript
-        status_script = $StatusScript
         dashboard_path = $DashboardPath
         issues = @($Issues)
     }
