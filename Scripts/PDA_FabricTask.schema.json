@@ -12,9 +12,10 @@
   ],
   "properties": {
     "task_id": { "type": "string" },
-    "command": { "type": "string", "const": "/fabric" },
+    "command": { "type": "string" },
     "assigned_worker": { "type": "string", "const": "fabric-worker" },
     "pattern": { "type": "string" },
+    "pattern_alias": { "type": "string" },
     "message": { "type": "string" },
     "source_path": { "type": "string" },
     "category": {

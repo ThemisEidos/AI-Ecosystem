@@ -58,7 +58,10 @@ function Find-PDATaskTypes {
     $TaskTypes = @($Ontology.task_intents)
 
     if (-not [string]::IsNullOrWhiteSpace($Command)) {
-        $TaskTypes = @($TaskTypes | Where-Object { [string]$_.command -eq $Command })
+        $TaskTypes = @($TaskTypes | Where-Object {
+            [string]$_.command -eq $Command -or
+            (@($_.aliases) -contains $Command)
+        })
     }
 
     if (-not [string]::IsNullOrWhiteSpace($Intent)) {
@@ -128,7 +131,10 @@ function Get-PDATaskWorkerEligibility {
 
     $MatchedTaskType = $null
     if (-not [string]::IsNullOrWhiteSpace($Command)) {
-        $MatchedTaskType = @($TaskTypes | Where-Object { [string]$_.command -eq $Command } | Select-Object -First 1)[0]
+        $MatchedTaskType = @($TaskTypes | Where-Object {
+            [string]$_.command -eq $Command -or
+            (@($_.aliases) -contains $Command)
+        } | Select-Object -First 1)[0]
     }
 
     if (-not $MatchedTaskType -and $Task -and $Task.PSObject.Properties.Name -contains "intent" -and -not [string]::IsNullOrWhiteSpace([string]$Task.intent)) {

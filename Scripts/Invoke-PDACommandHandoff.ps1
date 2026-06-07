@@ -30,7 +30,10 @@ $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
 $InterpreterScript = Join-Path $PSScriptRoot "PDA_CommandInterpreter.ps1"
 $SubmitScript = Join-Path $PSScriptRoot "Submit-PDATask.ps1"
+$FabricSubmitScript = Join-Path $PSScriptRoot "Submit-PDAFabricTask.ps1"
+$NotebookLMCommandScript = Join-Path $PSScriptRoot "Invoke-PDANotebookLMCommand.ps1"
 . (Join-Path $PSScriptRoot "PDA_OutputParsing.ps1")
+. (Join-Path $PSScriptRoot "PDA_Fabric.ps1")
 . (Join-Path $PSScriptRoot "PDA_TaskOntology.ps1")
 $DashboardStatusScript = Join-Path $PSScriptRoot "Get-PDADashboardStatus.ps1"
 $WorkerStatusScript = Join-Path $PSScriptRoot "Get-PDAWorkerStatus.ps1"
@@ -92,6 +95,28 @@ function Invoke-PDACommandScriptText {
     }
     catch {
         return "Command failed: $($_.Exception.Message)"
+    }
+}
+
+function Invoke-PDACommandScriptJson {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path,
+
+        [Parameter(Mandatory = $false)]
+        [string[]]$Arguments = @()
+    )
+
+    $TextOutput = Invoke-PDACommandScriptText -Path $Path -Arguments $Arguments
+    if ([string]::IsNullOrWhiteSpace($TextOutput)) {
+        throw "Command produced no JSON output: $Path"
+    }
+
+    try {
+        return ConvertFrom-PDAMixedJson -Text $TextOutput -SourceName $Path
+    }
+    catch {
+        throw "Failed to parse JSON output from ${Path}: $($_.Exception.Message)"
     }
 }
 
@@ -184,10 +209,12 @@ function Get-PDAOperatorConsoleResponse {
                     "/tasks - latest tracked task summary"
                     "/approvals - pending approval summary"
                     "/workers - worker registry and runtime status"
-                    "/reports - recent artifacts and reports"
-                    "/memory - memory index and recent records"
-                    "/help - show this command list"
-                    "Read-only console commands do not require approval."
+                "/reports - recent artifacts and reports"
+                "/memory - memory index and recent records"
+                "/fabric research|report|review|security - local Fabric CLI runs from sanitized inputs only"
+                "/notebooklm - sanitized NotebookLM package creation from Category 1 notes only"
+                "/help - show this command list"
+                "Read-only console commands do not require approval."
                 ) -join "`n"
                 next_action = "Use one of the operator commands above, or submit a governed task command when you need work dispatched."
             }
@@ -202,7 +229,7 @@ function Get-PDAOperatorConsoleResponse {
 }
 
 $InterpreterRaw = & pwsh -NoProfile -File $InterpreterScript -Text $Text -AsJson
-$Interpreter = $InterpreterRaw | ConvertFrom-Json
+$Interpreter = ConvertFrom-PDAMixedJson -Text ([string]($InterpreterRaw -join "`n")) -SourceName $InterpreterScript
 
 $RecommendedCommand = [string]$Interpreter.command
 $DispatchCategory = ""
@@ -212,6 +239,9 @@ $AmbiguityReason = [string]$Interpreter.reason
 $DispatchPath = ""
 $DispatchStatus = "not_dispatched"
 $DispatchOutput = @()
+$DispatchResponseText = ""
+$DispatchNextAction = ""
+$DispatchTaskId = ""
 $Eligibility = $null
 $OperatorConsoleResponse = $null
 $OperatorCommands = @("/status", "/tasks", "/approvals", "/workers", "/reports", "/memory", "/help")
@@ -239,19 +269,76 @@ else {
 }
 
 if ($ConfirmDispatch -and $Interpreter.status -eq "mapped" -and $DispatchReady) {
-    $DispatchStatus = "submitted"
-    $SubmitOutput = & pwsh -NoProfile -File $SubmitScript -Command $RecommendedCommand -Target $Text -Project $Project -Category $DispatchCategory -Approved:$true 2>&1
-    $DispatchOutput = @($SubmitOutput | ForEach-Object { [string]$_ })
+    if ($RecommendedCommand -eq "/notebooklm") {
+        if (-not (Test-Path -Path $NotebookLMCommandScript -PathType Leaf)) {
+            throw "NotebookLM command helper missing: $NotebookLMCommandScript"
+        }
 
-    if ($LASTEXITCODE -ne 0) {
-        throw "Governed dispatch failed with exit code $LASTEXITCODE"
+        $NotebookLMArgs = @(
+            "-Text", $Text,
+            "-Project", $Project,
+            "-ConversationId", $(if ($ConversationId) { $ConversationId } else { "" }),
+            "-SessionId", $(if ($SessionId) { $SessionId } else { "" }),
+            "-UserId", $(if ($UserId) { $UserId } else { "" }),
+            "-ConversationTitle", $(if ($ConversationTitle) { $ConversationTitle } else { "" }),
+            "-AsJson"
+        )
+
+        $NotebookLMResult = Invoke-PDACommandScriptJson -Path $NotebookLMCommandScript -Arguments $NotebookLMArgs
+        $DispatchStatus = [string]$NotebookLMResult.dispatch_status
+        $DispatchOutput = @($NotebookLMResult | ConvertTo-Json -Depth 40)
+        $DispatchPath = [string]$NotebookLMResult.result_path
+        $DispatchResponseText = [string]$NotebookLMResult.response_text
+        $DispatchNextAction = [string]$NotebookLMResult.next_action
+        $DispatchTaskId = [string]$NotebookLMResult.task_id
     }
+    elseif ($RecommendedCommand -like "/fabric*") {
+        if (-not (Test-Path -Path $FabricSubmitScript -PathType Leaf)) {
+            throw "Fabric submitter missing: $FabricSubmitScript"
+        }
 
-    $SubmitLines = @($DispatchOutput | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
-    $DispatchPath = [string]($SubmitLines | Select-Object -Last 1)
+        $FabricAlias = Resolve-PDAFabricPatternAlias -Text $Text -Command $RecommendedCommand
+        $FabricPattern = Resolve-PDAFabricPatternName -Alias $FabricAlias
+        $SubmitOutput = & pwsh -NoProfile -File $FabricSubmitScript -Command $RecommendedCommand -Pattern $FabricPattern -PatternAlias $FabricAlias -Message $Text -Category $DispatchCategory -Approved:$true 2>&1
+        $DispatchOutput = @($SubmitOutput | ForEach-Object { [string]$_ })
+
+        if ($LASTEXITCODE -ne 0) {
+            throw "Fabric dispatch failed with exit code $LASTEXITCODE"
+        }
+
+        $SubmitLines = @($DispatchOutput | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+        $DispatchPath = [string]($SubmitLines | Select-Object -Last 1)
+        $DispatchStatus = "submitted"
+        if (-not [string]::IsNullOrWhiteSpace($FabricAlias)) {
+            $DispatchResponseText = "Dispatched Fabric pattern '$FabricAlias' via governed PDA handoff."
+        }
+        else {
+            $DispatchResponseText = "Dispatched Fabric pattern via governed PDA handoff."
+        }
+        $DispatchNextAction = "Await queue processing for the Fabric worker result."
+    }
+    else {
+        $DispatchStatus = "submitted"
+        $SubmitOutput = & pwsh -NoProfile -File $SubmitScript -Command $RecommendedCommand -Target $Text -Project $Project -Category $DispatchCategory -Approved:$true 2>&1
+        $DispatchOutput = @($SubmitOutput | ForEach-Object { [string]$_ })
+
+        if ($LASTEXITCODE -ne 0) {
+            throw "Governed dispatch failed with exit code $LASTEXITCODE"
+        }
+
+        $SubmitLines = @($DispatchOutput | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+        $DispatchPath = [string]($SubmitLines | Select-Object -Last 1)
+    }
 }
 elseif ($ConfirmDispatch -and $Interpreter.status -ne "mapped") {
     $DispatchStatus = "blocked"
+}
+
+if ([string]::IsNullOrWhiteSpace($DispatchTaskId) -and $DispatchOutput.Count -gt 0) {
+    $TaskIdLine = @($DispatchOutput | Where-Object { [string]$_ -match 'Task ID:\s*(.+)$' } | Select-Object -Last 1)
+    if ($TaskIdLine.Count -gt 0) {
+        $DispatchTaskId = ([string]$TaskIdLine[-1] -replace '^.*Task ID:\s*', '').Trim()
+    }
 }
 
 $Result = [pscustomobject]@{
@@ -266,11 +353,13 @@ $Result = [pscustomobject]@{
     dispatch_status     = $DispatchStatus
     dispatch_path       = $DispatchPath
     dispatch_category   = $DispatchCategory
-    response_text       = if ($OperatorConsoleResponse) { [string]$OperatorConsoleResponse.response_text } else { "" }
-    next_action         = if ($OperatorConsoleResponse) { [string]$OperatorConsoleResponse.next_action } else { "" }
+    task_id             = $DispatchTaskId
+    response_text       = if ($DispatchResponseText) { [string]$DispatchResponseText } elseif ($OperatorConsoleResponse) { [string]$OperatorConsoleResponse.response_text } else { "" }
+    next_action         = if ($DispatchNextAction) { [string]$DispatchNextAction } elseif ($OperatorConsoleResponse) { [string]$OperatorConsoleResponse.next_action } else { "" }
     source_of_truth     = [string]$Interpreter.source_of_truth
     ontology_version    = [string]$Interpreter.ontology_version
-    approved_via_gate   = ($DispatchStatus -eq "submitted")
+    bridge_status       = if ($DispatchStatus -eq "completed") { "completed" } elseif ($DispatchStatus -eq "submitted") { "submitted" } else { "ready" }
+    approved_via_gate   = ($DispatchStatus -in @("submitted", "completed"))
     dispatch_output     = @($DispatchOutput)
 }
 

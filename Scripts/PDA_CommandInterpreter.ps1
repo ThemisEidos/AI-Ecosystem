@@ -125,6 +125,23 @@ function Get-PDACommandInterpreterRules {
             recommendation = "Use /help for a read-only list of PDA Commander operator commands."
         }
         [pscustomobject]@{
+            rule_id        = "notebooklm_package"
+            intent         = "notebooklm_package"
+            task_type      = "notebooklm_package"
+            command        = "/notebooklm"
+            priority       = 93
+            exact_phrases  = @(
+                "create a notebooklm package",
+                "create notebooklm package",
+                "generate a notebooklm package",
+                "generate notebooklm package",
+                "notebooklm package",
+                "prepare notebooklm sources"
+            )
+            keywords       = @("notebooklm", "sanitized", "package", "sources", "upload package")
+            recommendation = "Use /notebooklm to build a sanitized NotebookLM package from Category 1 Obsidian sources."
+        }
+        [pscustomobject]@{
             rule_id        = "research_task_requests"
             intent         = "research_synthesis"
             task_type      = "research_synthesis"
@@ -160,6 +177,46 @@ function Get-PDACommandInterpreterRules {
             exact_phrases  = @("research this", "investigate this", "find sources", "research sources", "gather evidence")
             keywords       = @("research", "investigate", "sources", "evidence", "study", "synthesis", "lookup")
             recommendation = "Use /research for evidence gathering and synthesis requests."
+        }
+        [pscustomobject]@{
+            rule_id        = "fabric_research_pattern"
+            intent         = "fabric_research_pattern"
+            task_type      = "fabric_research_pattern"
+            command        = "/fabric research"
+            priority       = 75
+            exact_phrases  = @("fabric research", "run fabric research", "research with fabric", "fabric research pattern")
+            keywords       = @("fabric", "research", "evidence", "synthesis", "sources")
+            recommendation = "Use /fabric research for local research synthesis with the Fabric CLI."
+        }
+        [pscustomobject]@{
+            rule_id        = "fabric_report_pattern"
+            intent         = "fabric_report_pattern"
+            task_type      = "fabric_report_pattern"
+            command        = "/fabric report"
+            priority       = 74
+            exact_phrases  = @("fabric report", "run fabric report", "report with fabric", "fabric report pattern")
+            keywords       = @("fabric", "report", "summary", "brief", "reporting")
+            recommendation = "Use /fabric report for local report-style Fabric runs."
+        }
+        [pscustomobject]@{
+            rule_id        = "fabric_review_pattern"
+            intent         = "fabric_review_pattern"
+            task_type      = "fabric_review_pattern"
+            command        = "/fabric review"
+            priority       = 73
+            exact_phrases  = @("fabric review", "run fabric review", "review with fabric", "fabric review pattern")
+            keywords       = @("fabric", "review", "checklist", "audit", "verification")
+            recommendation = "Use /fabric review for local review-checklist Fabric runs."
+        }
+        [pscustomobject]@{
+            rule_id        = "fabric_security_pattern"
+            intent         = "fabric_security_pattern"
+            task_type      = "fabric_security_pattern"
+            command        = "/fabric security"
+            priority       = 72
+            exact_phrases  = @("fabric security", "run fabric security", "security with fabric", "fabric security pattern")
+            keywords       = @("fabric", "security", "triage", "risk", "local-only")
+            recommendation = "Use /fabric security for local security-triage Fabric runs."
         }
         [pscustomobject]@{
             rule_id        = "fabric_pattern"

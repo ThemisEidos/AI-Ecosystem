@@ -297,6 +297,36 @@
       "notes": "Help is a read-only operator console command and does not submit work."
     },
     {
+      "task_type": "notebooklm_package",
+      "intent": "notebooklm_package",
+      "command": "/notebooklm",
+      "title": "NotebookLM package generation",
+      "description": "Create sanitized NotebookLM upload packages from Category 1 Obsidian sources.",
+      "supported_categories": [
+        "category_1"
+      ],
+      "sensitivity_category": "standard",
+      "required_approvals": {
+        "category_1": "none"
+      },
+      "input_types": [
+        "message-only-test",
+        "file-based"
+      ],
+      "output_types": [
+        "notebooklm_package",
+        "result_json"
+      ],
+      "allowed_workers": [
+        "notebooklm-worker"
+      ],
+      "routing_constraints": [
+        "local-only",
+        "sanitized-only"
+      ],
+      "notes": "NotebookLM packages are generated locally from sanitized Category 1 material. No NotebookLM login or upload automation is performed."
+    },
+    {
       "task_type": "research",
       "intent": "research_synthesis",
       "command": "/research",
@@ -450,6 +480,146 @@
         "category_2-blocked"
       ],
       "notes": "Category 2 Fabric requests are not eligible for routing in this phase."
+    },
+    {
+      "task_type": "fabric_research_pattern",
+      "intent": "fabric_research_pattern",
+      "command": "/fabric research",
+      "title": "Fabric research pattern run",
+      "description": "Run the Fabric research synthesis pattern locally through PDA orchestration.",
+      "supported_categories": [
+        "category_1"
+      ],
+      "sensitivity_category": "standard",
+      "required_approvals": {
+        "category_1": "none",
+        "category_2": "blocked"
+      },
+      "input_types": [
+        "message-only-test",
+        "file"
+      ],
+      "output_types": [
+        "fabric_markdown",
+        "result_json"
+      ],
+      "allowed_workers": [
+        "fabric-worker"
+      ],
+      "routing_constraints": [
+        "local-only-for-category_1",
+        "category_2-blocked"
+      ],
+      "aliases": [
+        "/fabric",
+        "/fabric research"
+      ],
+      "notes": "Local research synthesis pattern alias."
+    },
+    {
+      "task_type": "fabric_report_pattern",
+      "intent": "fabric_report_pattern",
+      "command": "/fabric report",
+      "title": "Fabric report pattern run",
+      "description": "Run the Fabric report-summary pattern locally through PDA orchestration.",
+      "supported_categories": [
+        "category_1"
+      ],
+      "sensitivity_category": "standard",
+      "required_approvals": {
+        "category_1": "none",
+        "category_2": "blocked"
+      },
+      "input_types": [
+        "message-only-test",
+        "file"
+      ],
+      "output_types": [
+        "fabric_markdown",
+        "result_json"
+      ],
+      "allowed_workers": [
+        "fabric-worker"
+      ],
+      "routing_constraints": [
+        "local-only-for-category_1",
+        "category_2-blocked"
+      ],
+      "aliases": [
+        "/fabric",
+        "/fabric report"
+      ],
+      "notes": "Local report summary pattern alias."
+    },
+    {
+      "task_type": "fabric_review_pattern",
+      "intent": "fabric_review_pattern",
+      "command": "/fabric review",
+      "title": "Fabric review pattern run",
+      "description": "Run the Fabric review checklist pattern locally through PDA orchestration.",
+      "supported_categories": [
+        "category_1"
+      ],
+      "sensitivity_category": "standard",
+      "required_approvals": {
+        "category_1": "none",
+        "category_2": "blocked"
+      },
+      "input_types": [
+        "message-only-test",
+        "file"
+      ],
+      "output_types": [
+        "fabric_markdown",
+        "result_json"
+      ],
+      "allowed_workers": [
+        "fabric-worker"
+      ],
+      "routing_constraints": [
+        "local-only-for-category_1",
+        "category_2-blocked"
+      ],
+      "aliases": [
+        "/fabric",
+        "/fabric review"
+      ],
+      "notes": "Local review checklist pattern alias."
+    },
+    {
+      "task_type": "fabric_security_pattern",
+      "intent": "fabric_security_pattern",
+      "command": "/fabric security",
+      "title": "Fabric security pattern run",
+      "description": "Run the Fabric security triage pattern locally through PDA orchestration.",
+      "supported_categories": [
+        "category_1"
+      ],
+      "sensitivity_category": "standard",
+      "required_approvals": {
+        "category_1": "none",
+        "category_2": "blocked"
+      },
+      "input_types": [
+        "message-only-test",
+        "file"
+      ],
+      "output_types": [
+        "fabric_markdown",
+        "result_json"
+      ],
+      "allowed_workers": [
+        "fabric-worker"
+      ],
+      "routing_constraints": [
+        "local-only-for-category_1",
+        "category_2-blocked"
+      ],
+      "aliases": [
+        "/fabric",
+        "/fabric security"
+      ],
+      "notes": "Local security triage pattern alias."
     }
   ],
   "registry_integration": {

@@ -154,6 +154,50 @@
       "status": "active"
     },
     {
+      "worker_name": "notebooklm-worker",
+      "command": "/notebooklm",
+      "purpose": "Create sanitized NotebookLM upload packages from Category 1 Obsidian sources only.",
+      "accepted_input_modes": [
+        "message-only-test",
+        "file-based"
+      ],
+      "required_fields": [
+        "task_id",
+        "command",
+        "project",
+        "classification"
+      ],
+      "optional_fields": [
+        "message",
+        "target",
+        "source_path",
+        "approved",
+        "category",
+        "requested_output",
+        "source",
+        "route",
+        "learning_area",
+        "topic",
+        "source_paths"
+      ],
+      "output_locations": [
+        "PDA-Tasks/results",
+        "PDA-Backups/notebooklm",
+        "Obsidian Vault/02_Projects/AI Tool Ecosystem/NotebookLM"
+      ],
+      "routing_surface": "local-only",
+      "cloud_capable": false,
+      "category_support": [
+        "category_1"
+      ],
+      "safety_constraints": [
+        "Category 2 material must never be used.",
+        "No NotebookLM login or upload automation.",
+        "Sanitized source material only."
+      ],
+      "status": "active"
+    },
+    {
       "worker_name": "research-worker",
       "command": "/research",
       "purpose": "Produce concise operational research synthesis for a topic or source text.",

@@ -58,8 +58,10 @@ PDA Commander now supports explicit read-only operator console commands in addit
 - `/reports` - recent report and artifact index summary
 - `/memory` - memory index summary
 - `/help` - command reference
+- `/fabric research|report|review|security` - local Fabric CLI runs from sanitized inputs only
+- `/notebooklm` - sanitized NotebookLM package creation from Category 1 notes only
 
-These commands are read-only and do not require approval. They should return human-readable summaries, not raw JSON.
+These commands are read-only and do not require approval. They should return human-readable summaries, not raw JSON. `/notebooklm` is a governed local command that still requires explicit confirmation before it creates the package.
 
 ## Recommended Open WebUI Method
 
@@ -81,6 +83,65 @@ Use a **Pipe Function**.
 6. Set the Pipe Function's `N8N_WEBHOOK_URL` valve to `http://host.docker.internal:5678/webhook/pda-chat-bridge-http` if Open WebUI runs in Docker, or `http://localhost:5678/webhook/pda-chat-bridge-http` if it runs on the host.
 7. Enable the Pipe Function and select `PDA Commander` as the active model in the chat sidebar.
 8. Confirm that the Open WebUI model points to the PDA Commander Pipe, not to queue files or workers.
+
+## NotebookLM Command Flow
+
+Use `/notebooklm` to generate a sanitized NotebookLM upload package without automating NotebookLM login or upload.
+
+Example usage: `/notebooklm LearningArea: Research Topic: NotebookLM Command Integration Test SourcePaths: ...`
+
+Example message:
+
+```text
+/notebooklm
+LearningArea: Research
+Topic: NotebookLM Command Integration Test
+SourcePaths:
+- Obsidian Vault\02_Projects\AI Tool Ecosystem\NotebookLM\NotebookLM-Integration-Guide.md
+- Obsidian Vault\02_Projects\AI Tool Ecosystem\NotebookLM\NotebookLM-Sanitization-Checklist.md
+Summary:
+Sanitized NotebookLM package for local learning validation.
+Questions:
+- What are the main steps?
+- Which notes are safe to upload?
+```
+
+The command flow remains local-first:
+
+1. Open WebUI sends the message through the PDA bridge.
+2. The interpreter maps it to `/notebooklm`.
+3. The governed handoff calls `Scripts/Invoke-PDANotebookLMCommand.ps1`.
+4. The helper calls `Scripts/New-PDANotebookLMPackage.ps1`.
+5. The result is logged in `PDA-Tasks/results` and the package is written under `PDA-Backups/notebooklm/`.
+6. You manually upload the generated package to NotebookLM.
+
+## Fabric CLI Command Flow
+
+Use `/fabric` aliases for local-only Fabric CLI pattern runs on sanitized inputs.
+
+Example usage:
+
+```text
+/fabric research
+/fabric report
+/fabric review
+/fabric security
+```
+
+Routing summary:
+
+1. Open WebUI sends the message through the PDA bridge.
+2. The interpreter maps it to a governed `/fabric` alias.
+3. The governed handoff submits a Fabric task with the matching local pattern.
+4. The Fabric worker invokes the local CLI against the synced PDA pattern directory.
+5. The result is logged in `PDA-Tasks/results` and the artifact lands in the Fabric findings folder.
+
+Pattern setup:
+
+1. Install Fabric CLI with `Scripts/Install-PDAFabricHelper.ps1`.
+2. Confirm `fabric --version` and `fabric --listpatterns` work.
+3. Sync the PDA Fabric pattern files into the Fabric config patterns directory.
+4. Keep Category 2 inputs local and sanitized only.
 
 ## Configuration Instructions
 
