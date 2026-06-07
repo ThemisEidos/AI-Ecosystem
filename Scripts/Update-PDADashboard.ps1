@@ -256,6 +256,18 @@ else {
 }
 $Lines.Add("")
 
+$Lines.Add("### Fabric CLI Status")
+$Lines.Add("")
+$Lines.Add((ConvertTo-PDAMarkdownTable -Rows @(
+    [pscustomobject]@{ metric = "Status"; value = $StatusReport.fabric_status.status }
+    [pscustomobject]@{ metric = "Message"; value = $StatusReport.fabric_status.message }
+    [pscustomobject]@{ metric = "Executable path"; value = $StatusReport.fabric_status.executable_path }
+    [pscustomobject]@{ metric = "Version"; value = $StatusReport.fabric_status.version }
+    [pscustomobject]@{ metric = "Pattern count"; value = $StatusReport.fabric_status.pattern_count }
+    [pscustomobject]@{ metric = "Pattern listing"; value = $StatusReport.fabric_status.pattern_list_status }
+) -Columns @("metric", "value")))
+$Lines.Add("")
+
 $Lines.Add("## PDA Commander Integration")
 $Lines.Add("")
 $Lines.Add((ConvertTo-PDAMarkdownTable -Rows @(

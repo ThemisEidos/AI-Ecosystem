@@ -19,6 +19,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 $Root = Split-Path $PSScriptRoot -Parent
+$null = . (Join-Path $PSScriptRoot "PDA_Fabric.ps1")
 $OutputDir = Join-Path $Root "Obsidian Vault\02_Projects\AI Tool Ecosystem\Agent Findings\Fabric"
 New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
 
@@ -52,7 +53,8 @@ if (-not (Test-Path $InputPath)) {
     throw "InputPath not found: $InputPath"
 }
 
-if (-not (Get-Command fabric -ErrorAction SilentlyContinue)) {
+$FabricExe = Get-PDAFabricExecutablePath -Root $Root
+if ([string]::IsNullOrWhiteSpace($FabricExe)) {
     throw "Fabric is not installed or not in PATH."
 }
 
@@ -116,8 +118,13 @@ if ([string]::IsNullOrWhiteSpace($Content)) {
 }
 
 # Fabric CLI model flags vary by version/provider. Keep model enforcement external for now.
-# Safe default: pipe content into Fabric pattern.
-$Content | fabric --pattern $Pattern | Set-Content $OutputPath -Encoding UTF8
+if (Test-PDAFabricCustomPattern -Pattern $Pattern) {
+    $PatternArgs = Get-PDAFabricVariableArguments -Pattern $Pattern -ContentInput $Content
+    & $FabricExe --pattern $Pattern @PatternArgs | Set-Content $OutputPath -Encoding UTF8
+}
+else {
+    $Content | & $FabricExe --pattern $Pattern | Set-Content $OutputPath -Encoding UTF8
+}
 
 $InputName = Split-Path $InputPath -Leaf
 Register-PDAWorkerArtifact -ArtifactPath $OutputPath -TaskId "fabric-input:$InputName" -WorkerName "fabric" -Command "fabric --pattern $Pattern" -Category $Category -ArtifactType "fabric_markdown" -Summary "Fabric output"

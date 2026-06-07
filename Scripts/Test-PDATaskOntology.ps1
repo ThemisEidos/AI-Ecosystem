@@ -24,6 +24,16 @@ if (@($Category2Fabric.eligible_workers).Count -gt 0) {
     throw "Fabric returned eligible Category 2 workers."
 }
 
+foreach ($FabricAlias in @("/fabric research", "/fabric report", "/fabric review", "/fabric security")) {
+    $FabricAliasEligibility = Get-PDATaskWorkerEligibility -Root $Root -Command $FabricAlias -Classification "category_1" -Approved $true
+    if (@($FabricAliasEligibility.eligible_workers).Count -eq 0) {
+        throw "Fabric alias '$FabricAlias' did not resolve to an eligible Category 1 worker."
+    }
+    if (($FabricAliasEligibility.eligible_workers | Select-Object -First 1).worker_name -ne "fabric-worker") {
+        throw "Fabric alias '$FabricAlias' did not resolve to fabric-worker."
+    }
+}
+
 Write-Host "[OK] PDA task ontology tests passed."
 Write-Host ("Intents   : {0}" -f $Contract.intent_count)
 Write-Host ("Categories: {0}" -f $Contract.category_count)

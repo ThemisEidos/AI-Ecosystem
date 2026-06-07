@@ -43,6 +43,26 @@
       "command": "/fabric",
       "categories": ["category_1"],
       "reason": "Category 1 Fabric pattern task."
+    },
+    {
+      "command": "/fabric research",
+      "categories": ["category_1"],
+      "reason": "Category 1 Fabric research pattern task."
+    },
+    {
+      "command": "/fabric report",
+      "categories": ["category_1"],
+      "reason": "Category 1 Fabric report pattern task."
+    },
+    {
+      "command": "/fabric review",
+      "categories": ["category_1"],
+      "reason": "Category 1 Fabric review pattern task."
+    },
+    {
+      "command": "/fabric security",
+      "categories": ["category_1"],
+      "reason": "Category 1 Fabric security pattern task."
     }
   ],
   "hard_block": [

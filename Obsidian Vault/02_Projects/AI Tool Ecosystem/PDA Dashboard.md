@@ -1,7 +1,7 @@
 # PDA Dashboard v2
 
-Updated: 2026-06-05 23:07:00 -07:00
-Overall health: pass
+Updated: 2026-06-06 19:08:06 -07:00
+Overall health: degraded
 
 ## System Health
 
@@ -22,22 +22,22 @@ Overall health: pass
 
 | metric | value |
 | --- | --- |
-| Queue depth | 71 |
-| Pending | 71 |
+| Queue depth | 468 |
+| Pending | 468 |
 | Running | 0 |
 | Completed | 41 |
 | Failed | 244 |
-| Results | 521 |
+| Results | 533 |
 | Pending approvals | 27 |
 
 ### Latest Queue Files
 
 | queue | task_id | command | status | updated_at |
 | --- | --- | --- | --- | --- |
-| pending | 7fed2f49-eb17-41f5-9443-be7cc525b9b2 | /review | queued | 06/06/2026 06:05:01 |
+| pending | 8ac1559b-e654-4c58-9822-a9a74567918a | /review | queued | 06/07/2026 02:05:35 |
 | completed | b4486b1b-8663-4068-b110-b4f215ea418f | /research | success | 06/06/2026 03:47:41 |
 | failed | 881c700e-d685-42e6-b7fa-39ca8d904501 | /research | failed | 06/06/2026 03:44:44 |
-| results | 8830e146-9624-4700-8a42-3cd5858b9eeb | - | completed | 06/06/2026 04:56:12 |
+| results | 1394ef67-5e9f-4086-a32e-ec8112ea66b2 | /fabric | completed | 06/07/2026 01:56:00 |
 
 ## Worker Status
 
@@ -45,6 +45,8 @@ Overall health: pass
 | --- | --- | --- | --- | --- | --- |
 | reporter-worker | /reporter | active | local-only | no | staged-json, queue-json |
 | planner-worker | /planner | active | local-only | no | queue-json, staged-json, message-only-test |
+| operator-console-worker | /status | active | local-only | no | message-only-test |
+| notebooklm-worker | /notebooklm | active | local-only | no | message-only-test, file-based |
 | research-worker | /research | active | local-only | no | queue-json, staged-json, message-only-test |
 | draft-worker | /draft | active | local-or-cloud | yes | file-based, message-only-test |
 | review-worker | /review | active | local-only | no | file-based, message-only-test |
@@ -63,7 +65,7 @@ Overall health: pass
 
 | worker_name | status | state | age_minutes | process_live |
 | --- | --- | --- | --- | --- |
-| test-worker | running | STALE | 4818.34 | no |
+| test-worker | running | STALE | 6018.94 | no |
 
 ## Pending Approvals
 
@@ -84,38 +86,38 @@ Overall health: pass
 
 | task_id | command | worker | category | queue | status | updated_at |
 | --- | --- | --- | --- | --- | --- | --- |
-| 7fed2f49-eb17-41f5-9443-be7cc525b9b2 | /review | review-worker | category_1 | pending | queued | 06/06/2026 06:05:01 |
-| d47d67b9-3071-4bfe-84d0-78d273b4ace2 | /review | review-worker | category_1 | pending | queued | 06/06/2026 06:04:28 |
-| e050c7c2-30cd-42c6-9a50-e389455e7caf | /reporter | reporter-worker | category_1 | pending | queued | 06/06/2026 06:03:55 |
-| 87d8b47f-3747-4256-87c2-f08649335b7f | /planner | planner-worker | category_1 | pending | queued | 06/06/2026 06:03:37 |
-| 1f33ea4f-4981-4e8e-b8a9-1a29e915604b | /review | review-worker | category_1 | pending | queued | 06/06/2026 06:02:59 |
-| 74333a35-507a-4601-9402-619449dfc22a | /review | review-worker | category_1 | pending | queued | 06/06/2026 06:02:29 |
-| 0bd26de3-ea5b-404f-9e13-05834c1fec87 | /review | review-worker | category_1 | pending | queued | 06/06/2026 06:02:26 |
-| 3e16aa88-7ea5-4730-bc2d-809ed51c26b8 | /review | review-worker | category_1 | pending | queued | 06/06/2026 06:01:54 |
-| 17bde713-f10a-48d9-b061-e74e921ce082 | /reporter | reporter-worker | category_1 | pending | queued | 06/06/2026 06:01:51 |
-| 9e4ea66a-7aef-4179-bdf3-cb28905f4ed2 | /planner | planner-worker | category_1 | pending | queued | 06/06/2026 06:01:31 |
+| 8ac1559b-e654-4c58-9822-a9a74567918a | /review | review-worker | category_1 | pending | queued | 06/07/2026 02:05:35 |
+| 0cc3d311-ec60-4e66-b49d-b4ed0f277b6c | /review | review-worker | category_1 | pending | queued | 06/07/2026 02:05:08 |
+| ee1c040a-a000-4aa0-9152-3b8a60c8f4b0 | /review | review-worker | category_1 | pending | queued | 06/07/2026 02:04:52 |
+| 2da0a1c0-0e67-4619-9f0c-14e41565ddd7 | /reporter | reporter-worker | category_1 | pending | queued | 06/07/2026 02:04:25 |
+| a707bdfa-51fe-4ff7-807a-4a3e0cff446e | /reporter | reporter-worker | category_1 | pending | queued | 06/07/2026 02:04:09 |
+| f67a0fe1-68a5-4e43-b1f2-f0056c28fbe8 | /fabric research | fabric-worker | category_1 | pending | pending | 06/07/2026 02:04:04 |
+| 6ad0a462-538f-44a6-8bd2-8b961acfcc60 | /planner | planner-worker | category_1 | pending | queued | 06/07/2026 02:03:58 |
+| ac9bc96c-c68b-4f9f-b365-a96aff0eb839 | /fabric research | fabric-worker | category_1 | pending | pending | 06/07/2026 02:03:48 |
+| 1b8d8880-4350-4690-a41d-9dbffeae99df | /planner | planner-worker | category_1 | pending | queued | 06/07/2026 02:03:43 |
+| 93fdc64e-9648-4106-a4ea-e7d6e7922d91 | /review | review-worker | category_1 | pending | queued | 06/07/2026 02:03:20 |
 
 ## Recent Reports / Artifacts
 
 | artifact_id | created_at | worker_name | category | artifact_type | summary |
 | --- | --- | --- | --- | --- | --- |
-| artifact-e411c055-55e8-418c-a219-08a96a346d91 | 06/05/2026 21:56:13 | review-worker | category_2 | worker_result_json | Review worker canonical result contract |
-| artifact-7c8f9604-e9a2-4119-abc8-1907da2e35da | 06/05/2026 21:56:12 | review-worker | category_2 | worker_result_json | Review worker canonical result contract |
-| artifact-3d5464ec-d37f-41a2-8bc1-20271f21fec1 | 06/05/2026 21:56:12 | review-worker | category_2 | review_markdown | Review worker markdown output |
-| artifact-cd57c999-5e1a-4546-9a6d-d23997d5b61e | 06/05/2026 21:55:11 | draft-worker | category_1 | worker_result_json | Draft worker canonical result contract |
-| artifact-618843e4-fa0b-4fda-993d-dcb7bf58aa1a | 06/05/2026 21:55:10 | draft-worker | category_1 | draft_markdown | Draft worker markdown output |
-| artifact-2f9b138a-1af2-4a67-b279-aa42286c4016 | 06/05/2026 21:55:10 | draft-worker | category_1 | worker_result_json | Draft worker canonical result contract |
-| artifact-3a4fc72e-a00a-44d1-9a1a-81e205da7fb4 | 06/05/2026 21:55:04 | draft-worker | category_1 | draft_markdown | Draft worker markdown output |
-| artifact-701edbba-e641-44b7-bcea-bbec1ce76300 | 06/05/2026 21:55:04 | draft-worker | category_1 | worker_result_json | Draft worker canonical result contract |
-| artifact-f7287e2c-d766-446c-ad78-5e6eaf457502 | 06/05/2026 21:54:58 | research-worker | category_3 | worker_result_json | Research worker canonical result contract |
-| artifact-bd0d5b4e-c180-47d4-8411-92a3ffba941b | 06/05/2026 21:54:57 | research-worker | category_3 | worker_result_json | Research worker canonical result contract |
+| artifact-40920de6-eb56-4f4f-aab5-e8e518fb5403 | 06/06/2026 18:56:00 | fabric-worker | category_2 | fabric_markdown | Fabric worker artifact output |
+| artifact-61ffa5fc-54b9-427a-b122-c130eb86b976 | 06/06/2026 18:55:49 | fabric-worker | category_1 | fabric_markdown | Fabric worker artifact output |
+| artifact-726495de-de46-4f78-bc27-bf920f608aa7 | 06/06/2026 18:54:54 | fabric-worker | category_1 | fabric_markdown | Fabric worker artifact output |
+| artifact-74af87ea-d980-4d77-b21e-2bc57c77276e | 06/06/2026 18:53:58 | fabric-worker | category_1 | fabric_markdown | Fabric worker artifact output |
+| artifact-87492c49-463e-422a-9d7b-89039a9748c2 | 06/06/2026 18:53:21 | fabric-worker | category_1 | fabric_markdown | Fabric worker artifact output |
+| artifact-615e693f-e0bb-4c30-87ed-3d1245cd6996 | 06/06/2026 18:52:00 | fabric-worker | category_1 | fabric_markdown | Fabric worker artifact output |
+| artifact-cb1f54b6-9f2b-4fea-8f68-bef676c9338c | 06/06/2026 18:50:39 | fabric-worker | category_1 | fabric_markdown | Fabric worker artifact output |
+| artifact-105a695f-646e-47d2-ac24-942e7fe5e319 | 06/06/2026 18:50:39 | fabric-worker | category_1 | fabric_markdown | Fabric worker artifact output |
+| artifact-10f12fc9-9ee3-4fa4-a951-7d401e859e00 | 06/06/2026 18:49:13 | fabric-worker | category_1 | fabric_markdown | Fabric worker artifact output |
+| artifact-50a071c9-4b23-4cf4-b181-1e508f30a775 | 06/06/2026 18:49:12 | fabric-worker | category_1 | fabric_markdown | Fabric worker artifact output |
 
 ## Model Status
 
 | metric | status | path | count | passed | failed | loaded | blank | missing |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Routing policy | pass | C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\Scripts\PDA_ModelRouting.json | 1 | - | - | - | - | - |
-| Provider validation | pass | - | 5 | 5 | 0 | - | - | - |
+| Provider validation | fail | - | 0 | 0 | 0 | - | - | - |
 | Env validation | pass | - | 1 | - | - | 5 | 0 | 0 |
 
 ### Command Routes
@@ -129,24 +131,27 @@ Overall health: pass
 
 ### Provider Availability
 
-| name | configured | env_reference_ok | host_env_present | live_available | api_provider |
-| --- | --- | --- | --- | --- | --- |
-| openai | yes | yes | yes | yes | openai/gpt-4o-mini |
-| claude | yes | yes | yes | yes | anthropic/claude-sonnet-4-5-20250929 |
-| gemini | yes | yes | yes | yes | gemini/gemini-2.0-flash |
-| openrouter | yes | yes | yes | yes | openrouter/openai/gpt-4o-mini |
-| local-llama | yes | yes | yes | yes | ollama/llama3.2 |
+- No provider rows found.
+
+### Fabric CLI Status
+
+| metric | value |
+| --- | --- |
+| Status | pass |
+| Message | Fabric CLI is installed and PDA patterns are synced. |
+| Executable path | C:\Users\earth\.local\bin\fabric.exe |
+| Version | 1.4.454 |
+| Pattern count | 258 |
+| Pattern listing | pass |
 
 ## PDA Commander Integration
 
 | component | status | passed | failed | details |
 | --- | --- | --- | --- | --- |
-| Command Interpreter | pass | 7 | 0 | mapped / ambiguous / unknown routing |
-| Governed Handoff | pass | 5 | 0 | confirmation gate |
+| Command Interpreter | pass | 11 | 0 | mapped / ambiguous / unknown routing |
+| Governed Handoff | pass | 6 | 0 | confirmation gate |
 | Chat Bridge | pass | 6 | 0 | Open WebUI / n8n bridge |
 | Webhook Bridge | pass | 4 | 0 | webhook transport wrapper |
-
-> Build Runner entrypoint: `pda-go` starts the on-demand, time-agnostic build runner while preserving the same governed handoff, backup, and approval gates.
 
 ### Conversation Snapshot
 
@@ -154,16 +159,16 @@ Overall health: pass
 | --- | --- |
 | Conversation status | pass |
 | Conversation ID | default |
-| Active tasks | 18 |
+| Active tasks | 7 |
 | Pending approvals | 0 |
-| Submitted tasks | 18 |
+| Submitted tasks | 7 |
 | Completed tasks | 0 |
 | Latest task ID | - |
 | Latest result path | - |
 
-> Task e050c7c2-30cd-42c6-9a50-e389455e7caf for /reporter has been submitted and is waiting in the queue.
+> No tracked PDA task found for this conversation.
 
-> Next: Wait for the queue worker to finish, then ask again for the latest status.
+> Next: Ask the PDA to start a new task or confirm a queued request.
 
 ## Memory Summary
 

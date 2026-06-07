@@ -9,6 +9,15 @@ param(
     [string]$Pattern = "summarize",
 
     [Parameter(Mandatory = $false)]
+    [string]$PatternAlias = "",
+
+    [Parameter(Mandatory = $false)]
+    [string]$Command = "/fabric",
+
+    [Parameter(Mandatory = $false)]
+    [bool]$Approved = $true,
+
+    [Parameter(Mandatory = $false)]
     [ValidateSet("category_1", "category_2")]
     [string]$Category = "category_1",
 
@@ -22,13 +31,32 @@ param(
 $ErrorActionPreference = "Stop"
 
 $Root = Split-Path $PSScriptRoot -Parent
+$null = . (Join-Path $PSScriptRoot "PDA_Fabric.ps1")
 $QueueRoot = Join-Path $Root "PDA-Tasks"
 $PendingDir = Join-Path $QueueRoot "pending"
 $ApprovalGate = Join-Path $PSScriptRoot "Invoke-PDAApprovalGate.ps1"
 
 . (Join-Path $PSScriptRoot "PDA_TaskOntology.ps1")
 
-$DispatchContext = Resolve-PDATaskDispatchContext -Root $Root -Command "/fabric" -Classification $Category -Approved $true
+$ResolvedFabricAlias = if (-not [string]::IsNullOrWhiteSpace($PatternAlias)) {
+    [string]$PatternAlias
+}
+else {
+    Resolve-PDAFabricPatternAlias -Text $Message -Command $Command
+}
+
+$ResolvedPattern = if (-not [string]::IsNullOrWhiteSpace($PatternAlias)) {
+    Resolve-PDAFabricPatternName -Alias $PatternAlias -DefaultPattern $Pattern
+}
+elseif (-not [string]::IsNullOrWhiteSpace($ResolvedFabricAlias)) {
+    Resolve-PDAFabricPatternName -Alias $ResolvedFabricAlias -DefaultPattern $Pattern
+}
+else {
+    $Pattern
+}
+
+$ResolvedCommand = if ([string]::IsNullOrWhiteSpace($Command)) { "/fabric" } else { $Command }
+$DispatchContext = Resolve-PDATaskDispatchContext -Root $Root -Command $ResolvedCommand -Classification $Category -Approved $true
 
 New-Item -ItemType Directory -Force -Path $PendingDir | Out-Null
 
@@ -38,12 +66,13 @@ $TaskPath = Join-Path $PendingDir "$TaskId-fabric-task.json"
 
 $Task = @{
     task_id           = $TaskId
-    command           = "/fabric"
+    command           = $ResolvedCommand
     route             = "fabric"
     assigned_worker   = $DispatchContext.assigned_worker
     worker            = $DispatchContext.assigned_worker
     routing_surface   = $DispatchContext.routing_surface
-    pattern           = $Pattern
+    pattern           = $ResolvedPattern
+    pattern_alias     = $ResolvedFabricAlias
     message           = $Message
     source_path       = $SourcePath
     category          = $Category
@@ -51,7 +80,7 @@ $Task = @{
     model             = $Model
     input_mode        = $InputMode
     dry_run           = [bool]$DryRun
-    approved          = $true
+    approved          = $Approved
     status            = "pending"
     created_at        = (Get-Date).ToString("s")
     task_type         = $DispatchContext.task_type
@@ -76,5 +105,5 @@ if (Test-Path $ApprovalGate) {
 }
 
 Write-Host "[OK] Fabric task submitted:"
-Write-Host $TaskPath
 Write-Host "[INFO] Task ID: $TaskId"
+Write-Host $TaskPath

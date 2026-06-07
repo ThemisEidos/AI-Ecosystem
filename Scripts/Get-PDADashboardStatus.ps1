@@ -752,6 +752,40 @@ $WorkerSnapshot = Get-PDAWorkerSnapshot -RootPath $Root
 $ArtifactSnapshot = Get-PDAArtifactSnapshot -RootPath $Root
 $MemorySnapshot = Get-PDAMemorySnapshot -RootPath $Root
 $ModelSnapshot = Get-PDAModelStatus -RootPath $Root
+$FabricHealthScript = Join-Path $PSScriptRoot "Invoke-PDAFabricHealthCheck.ps1"
+$FabricHealth = if (Test-Path -Path $FabricHealthScript -PathType Leaf) {
+    try {
+        Invoke-PDAJsonScript -Path $FabricHealthScript -Arguments @("-AsJson", "-NoThrow") -SourceName "PDA Fabric health check"
+    }
+    catch {
+        [pscustomobject]@{
+            status = "error"
+            message = $_.Exception.Message
+            executable_path = ""
+            version = ""
+            config_path = ""
+            config_exists = $false
+            pattern_list_status = "error"
+            pattern_count = 0
+            available_patterns = @()
+            checked_at = (Get-Date).ToUniversalTime().ToString("o")
+        }
+    }
+}
+else {
+    [pscustomobject]@{
+        status = "skipped"
+        message = "Fabric health check unavailable."
+        executable_path = ""
+        version = ""
+        config_path = ""
+        config_exists = $false
+        pattern_list_status = "skipped"
+        pattern_count = 0
+        available_patterns = @()
+        checked_at = (Get-Date).ToUniversalTime().ToString("o")
+    }
+}
 $CommanderSnapshot = if ($SkipCoreIntegration) {
     [pscustomobject]@{
         status = "skipped"
@@ -818,6 +852,7 @@ foreach ($Candidate in @(
     $CommanderSnapshot.status,
     $ModelSnapshot.provider_validation.status,
     $ModelSnapshot.env_validation.status,
+    $FabricHealth.status,
     $CommanderSnapshot.command_interpreter.status,
     $CommanderSnapshot.command_handoff.status,
     $CommanderSnapshot.chat_bridge.status,
@@ -873,6 +908,7 @@ $Report = [pscustomobject]@{
         provider_validation = $ModelSnapshot.provider_validation
         env_validation = $ModelSnapshot.env_validation
     }
+    fabric_status = $FabricHealth
     commander_integration = [pscustomobject]@{
         status = Get-PDASafeString $CommanderSnapshot.status
         conversation_state = $CommanderSnapshot.conversation_state

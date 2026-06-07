@@ -138,6 +138,42 @@ $TestCases = @(
         source_check     = $true
     }
     [pscustomobject]@{
+        name             = "fabric research alias"
+        input            = "run fabric research on this note"
+        expected_status  = "mapped"
+        expected_intent  = "fabric_research_pattern"
+        expected_task    = "fabric_research_pattern"
+        expected_command = "/fabric research"
+        source_check     = $true
+    }
+    [pscustomobject]@{
+        name             = "fabric report alias"
+        input            = "run fabric report on this note"
+        expected_status  = "mapped"
+        expected_intent  = "fabric_report_pattern"
+        expected_task    = "fabric_report_pattern"
+        expected_command = "/fabric report"
+        source_check     = $true
+    }
+    [pscustomobject]@{
+        name             = "fabric review alias"
+        input            = "run fabric review on this note"
+        expected_status  = "mapped"
+        expected_intent  = "fabric_review_pattern"
+        expected_task    = "fabric_review_pattern"
+        expected_command = "/fabric review"
+        source_check     = $true
+    }
+    [pscustomobject]@{
+        name             = "fabric security alias"
+        input            = "run fabric security on this note"
+        expected_status  = "mapped"
+        expected_intent  = "fabric_security_pattern"
+        expected_task    = "fabric_security_pattern"
+        expected_command = "/fabric security"
+        source_check     = $true
+    }
+    [pscustomobject]@{
         name             = "workflow run"
         input            = "run the workflow"
         expected_status  = "mapped"

@@ -213,6 +213,17 @@ $Cases = @(
         expect_command = "/research"
         marker = "handoff-research-$([guid]::NewGuid().ToString())"
     }
+    [pscustomobject]@{
+        name = "fabric research alias"
+        input = "run fabric research on this note"
+        confirm = $true
+        expect_status = "mapped"
+        expect_ready = $true
+        expect_confirm = $false
+        expect_dispatch = $true
+        expect_command = "/fabric research"
+        marker = "handoff-fabric-research-$([guid]::NewGuid().ToString())"
+    }
 )
 
 if ($SkipOperatorConsole) {

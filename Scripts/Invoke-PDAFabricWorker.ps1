@@ -6,6 +6,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 $Root = Split-Path $PSScriptRoot -Parent
+$null = . (Join-Path $PSScriptRoot "PDA_Fabric.ps1")
 
 function Register-PDAWorkerArtifact {
     param(
@@ -129,13 +130,20 @@ $InputText
 "@ | Set-Content $ArtifactPath -Encoding UTF8
 }
 else {
-    if (-not (Get-Command fabric -ErrorAction SilentlyContinue)) {
+    $FabricExe = Get-PDAFabricExecutablePath -Root $Root
+    if ([string]::IsNullOrWhiteSpace($FabricExe)) {
         throw "Fabric is not installed or not in PATH."
     }
 
     # Keep execution simple and version-tolerant.
     # Model routing is enforced by category policy and Fabric setup.
-    $InputText | fabric --pattern $Pattern | Set-Content $ArtifactPath -Encoding UTF8
+    if (Test-PDAFabricCustomPattern -Pattern $Pattern) {
+        $PatternArgs = Get-PDAFabricVariableArguments -Pattern $Pattern -ContentInput $InputText
+        & $FabricExe --pattern $Pattern @PatternArgs | Set-Content $ArtifactPath -Encoding UTF8
+    }
+    else {
+        $InputText | & $FabricExe --pattern $Pattern | Set-Content $ArtifactPath -Encoding UTF8
+    }
 }
 
 $CommandText = if ($Task.command) { [string]$Task.command } else { "fabric worker execution" }
@@ -144,10 +152,11 @@ Register-PDAWorkerArtifact -ArtifactPath $ArtifactPath -TaskId $TaskId -WorkerNa
 
 $Result = @{
     task_id = $TaskId
-    command = "/fabric"
+    command = $CommandText
     assigned_worker = "fabric-worker"
     status = "success"
     pattern = $Pattern
+    pattern_alias = if ($Task.PSObject.Properties.Name -contains "pattern_alias") { [string]$Task.pattern_alias } else { "" }
     category = $Category
     model = $Model
     input_mode = $InputMode

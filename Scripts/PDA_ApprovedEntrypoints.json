@@ -51,6 +51,21 @@
       "notes": "Fabric task submitter."
     },
     {
+      "path": "Scripts\\Install-PDAFabricHelper.ps1",
+      "governance_class": "maintenance_writer",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "Install directory",
+        "FabricPatternsRoot"
+      ],
+      "required_tokens": [
+        "Get-PDAFabricExecutablePath",
+        "Copy-Item",
+        "Set-Content"
+      ],
+      "notes": "Fabric CLI installer and local pattern sync helper."
+    },
+    {
       "path": "Scripts\\New-PDAWorkflowTask.ps1",
       "governance_class": "ontology_gated",
       "scan_mode": "direct_path",
@@ -214,6 +229,61 @@
       "notes": "Fabric worker output writer."
     },
     {
+      "path": "Scripts\\Invoke-PDAFabricHealthCheck.ps1",
+      "governance_class": "maintenance_writer",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "executable_path",
+        "pattern_list_status"
+      ],
+      "required_tokens": [
+        "Get-PDAFabricExecutablePath",
+        "Set-Content"
+      ],
+      "notes": "Fabric CLI health check."
+    },
+    {
+      "path": "Scripts\\Test-PDAFabricInstall.ps1",
+      "governance_class": "test_writer",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "Health",
+        "Result"
+      ],
+      "required_tokens": [
+        "Invoke-PDAFabricHealthCheck.ps1"
+      ],
+      "notes": "Fabric install verification test."
+    },
+    {
+      "path": "Scripts\\Test-PDAFabricHealthCheck.ps1",
+      "governance_class": "test_writer",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "Health",
+        "MissingPatterns"
+      ],
+      "required_tokens": [
+        "Invoke-PDAFabricHealthCheck.ps1"
+      ],
+      "notes": "Fabric health validation test."
+    },
+    {
+      "path": "Scripts\\Test-PDAFabricAliasCommands.ps1",
+      "governance_class": "test_writer",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "TempRoot",
+        "TaskPath",
+        "ResultPath"
+      ],
+      "required_tokens": [
+        "Invoke-PDAFabricWorker.ps1",
+        "Set-Content"
+      ],
+      "notes": "Fabric alias execution validation test."
+    },
+    {
       "path": "Scripts\\Invoke-PDAReporterWorker.ps1",
       "governance_class": "worker_output",
       "scan_mode": "direct_path",
@@ -289,6 +359,37 @@
         "Register-PDAArtifact.ps1"
       ],
       "notes": "Review worker output writer."
+    },
+    {
+      "path": "Scripts\\Invoke-PDANotebookLMCommand.ps1",
+      "governance_class": "worker_output",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "ResultsRoot",
+        "ReportPath",
+        "ResultPath"
+      ],
+      "required_tokens": [
+        "New-PDANotebookLMPackage.ps1",
+        "Set-Content"
+      ],
+      "notes": "NotebookLM package command writer."
+    },
+    {
+      "path": "Scripts\\New-PDANotebookLMPackage.ps1",
+      "governance_class": "worker_output",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "OutputRoot",
+        "ManifestPath",
+        "SummaryPath",
+        "QuestionsPath"
+      ],
+      "required_tokens": [
+        "Copy-Item",
+        "Set-Content"
+      ],
+      "notes": "NotebookLM package generator."
     },
     {
       "path": "Scripts\\Invoke-PDAFindingsWorker.ps1",
@@ -716,6 +817,21 @@
         "Test-PDAAssertions.ps1"
       ],
       "notes": "Review worker validation harness."
+    },
+    {
+      "path": "Scripts\\Test-PDANotebookLMCommand.ps1",
+      "governance_class": "test_writer",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "ConversationId",
+        "SessionId",
+        "ChatBridgeScript"
+      ],
+      "required_tokens": [
+        "Invoke-PDAChatBridge.ps1",
+        "Get-PDATaskResult.ps1"
+      ],
+      "notes": "NotebookLM command validation harness."
     },
     {
       "path": "Scripts\\Test-PDATaskResult.ps1",
