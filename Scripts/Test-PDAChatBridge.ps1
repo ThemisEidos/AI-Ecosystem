@@ -86,7 +86,8 @@ function Invoke-JsonScript {
         [Parameter(Mandatory = $true)][string[]]$Arguments
     )
 
-    $Raw = & pwsh -NoProfile -File $Path @Arguments 2>&1
+    $ScriptArgs = @($Arguments | Where-Object { $_ -ne $null -and -not [string]::IsNullOrWhiteSpace([string]$_) })
+    $Raw = & $Path @ScriptArgs 2>&1
     if ($LASTEXITCODE -ne 0) {
         throw "Script failed: $Path"
     }
@@ -129,7 +130,7 @@ $Cases = @(
         message = "review and analyze this project"
         confirm = $false
         expected_handoff = "ambiguous"
-        expected_response_contains = "Clarification required"
+        expected_response_contains = "one action at a time"
         expected_dispatch_ready = $false
         expected_dispatch = $false
         expected_command = ""
@@ -139,8 +140,8 @@ $Cases = @(
         name = "unknown message"
         message = "blorf glarb frobnicate"
         confirm = $false
-        expected_handoff = "unknown"
-        expected_response_contains = "No governed command matched"
+        expected_handoff = "fallback"
+        expected_response_contains = "I can help with status"
         expected_dispatch_ready = $false
         expected_dispatch = $false
         expected_command = ""
@@ -167,6 +168,72 @@ $Cases = @(
         expected_dispatch = $false
         expected_command = "/research"
         marker = "chat-research-$([guid]::NewGuid().ToString())"
+    }
+    [pscustomobject]@{
+        name = "natural status"
+        message = "How is the PDA doing?"
+        confirm = $false
+        expected_handoff = "direct_status"
+        expected_response_contains = "PDA status is available"
+        expected_dispatch_ready = $false
+        expected_dispatch = $false
+        expected_command = "/status"
+        marker = "chat-natural-status-$([guid]::NewGuid().ToString())"
+    }
+    [pscustomobject]@{
+        name = "natural help"
+        message = "What can you do?"
+        confirm = $false
+        expected_handoff = "direct_help"
+        expected_response_contains = "I can check status"
+        expected_dispatch_ready = $false
+        expected_dispatch = $false
+        expected_command = "/help"
+        marker = "chat-natural-help-$([guid]::NewGuid().ToString())"
+    }
+    [pscustomobject]@{
+        name = "status summary"
+        message = "Summarize the ecosystem status."
+        confirm = $false
+        expected_handoff = "direct_status"
+        expected_response_contains = "PDA status is available"
+        expected_dispatch_ready = $false
+        expected_dispatch = $false
+        expected_command = "/status"
+        marker = "chat-status-summary-$([guid]::NewGuid().ToString())"
+    }
+    [pscustomobject]@{
+        name = "roadmap request"
+        message = "Build me a roadmap."
+        confirm = $false
+        expected_handoff = "mapped"
+        expected_response_contains = "Recommended command"
+        expected_dispatch_ready = $true
+        expected_dispatch = $false
+        expected_command = "/planner"
+        marker = "chat-roadmap-$([guid]::NewGuid().ToString())"
+    }
+    [pscustomobject]@{
+        name = "ambiguous request"
+        message = "Review and run this."
+        confirm = $false
+        expected_handoff = "ambiguous"
+        expected_response_contains = "I can help with one action at a time"
+        expected_dispatch_ready = $false
+        expected_dispatch = $false
+        expected_command = ""
+        marker = "chat-ambiguous-natural-$([guid]::NewGuid().ToString())"
+    }
+    [pscustomobject]@{
+        name = "task lookup"
+        message = "What happened to my last task?"
+        confirm = $false
+        expected_handoff = "task_lookup"
+        expected_response_contains = "tracked PDA task"
+        expected_dispatch_ready = $false
+        expected_dispatch = $false
+        expected_command = ""
+        marker = "chat-task-lookup-$([guid]::NewGuid().ToString())"
     }
     [pscustomobject]@{
         name = "slash fabric report with status wording"
@@ -275,18 +342,11 @@ if (-not $SkipDispatch -and -not $DashboardMode) {
     $ConfirmationSessionId = "sess-confirm-$([guid]::NewGuid().ToString('N').Substring(0, 12))"
     $ConfirmationMarker = "confirm-flow-$([guid]::NewGuid().ToString())"
 
-    $ConfirmationRequest = Invoke-JsonScript -Path $BridgeScript -Arguments @(
-        "-Message", "generate a report [$ConfirmationMarker]",
-        "-ConversationId", $ConfirmationConversationId,
-        "-SessionId", $ConfirmationSessionId,
-        "-AsJson"
-    )
+    $ConfirmationRequestRaw = & $BridgeScript -Message "generate a report [$ConfirmationMarker]" -ConversationId $ConfirmationConversationId -SessionId $ConfirmationSessionId -AsJson 2>&1
+    $ConfirmationRequest = ConvertFrom-PDAMixedJson -Text ([string]($ConfirmationRequestRaw -join "`n")) -SourceName $BridgeScript
 
-    $ConfirmationStateAfterRequest = Invoke-JsonScript -Path $StateScript -Arguments @(
-        "-ConversationId", $ConfirmationConversationId,
-        "-SessionId", $ConfirmationSessionId,
-        "-AsJson"
-    )
+    $ConfirmationStateRaw = & $StateScript -ConversationId $ConfirmationConversationId -SessionId $ConfirmationSessionId -AsJson 2>&1
+    $ConfirmationStateAfterRequest = ConvertFrom-PDAMixedJson -Text ([string]($ConfirmationStateRaw -join "`n")) -SourceName $StateScript
 
     $ConfirmationRequestIssues = New-Object System.Collections.Generic.List[string]
     if ($ConfirmationRequest.recommended_command -ne "/reporter") {
@@ -309,18 +369,11 @@ if (-not $SkipDispatch -and -not $DashboardMode) {
     }
 
     $ConfirmationDispatchBefore = Get-QueueArtifactCountByMarker -Marker $ConfirmationMarker
-    $ConfirmationDispatch = Invoke-JsonScript -Path $BridgeScript -Arguments @(
-        "-Message", "confirm [$ConfirmationMarker]",
-        "-ConversationId", $ConfirmationConversationId,
-        "-SessionId", $ConfirmationSessionId,
-        "-AsJson"
-    )
+    $ConfirmationDispatchRaw = & $BridgeScript -Message "confirm [$ConfirmationMarker]" -ConversationId $ConfirmationConversationId -SessionId $ConfirmationSessionId -AsJson 2>&1
+    $ConfirmationDispatch = ConvertFrom-PDAMixedJson -Text ([string]($ConfirmationDispatchRaw -join "`n")) -SourceName $BridgeScript
     $ConfirmationDispatchAfter = Get-QueueArtifactCountByMarker -Marker $ConfirmationMarker
-    $ConfirmationStateAfterDispatch = Invoke-JsonScript -Path $StateScript -Arguments @(
-        "-ConversationId", $ConfirmationConversationId,
-        "-SessionId", $ConfirmationSessionId,
-        "-AsJson"
-    )
+    $ConfirmationStateAfterDispatchRaw = & $StateScript -ConversationId $ConfirmationConversationId -SessionId $ConfirmationSessionId -AsJson 2>&1
+    $ConfirmationStateAfterDispatch = ConvertFrom-PDAMixedJson -Text ([string]($ConfirmationStateAfterDispatchRaw -join "`n")) -SourceName $StateScript
 
     if ($ConfirmationDispatch.dispatch_status -ne "submitted") {
         $ConfirmationRequestIssues.Add("Confirmation should dispatch through the governed submitter.")
@@ -336,12 +389,8 @@ if (-not $SkipDispatch -and -not $DashboardMode) {
     }
 
     $DuplicateDispatchBefore = Get-QueueArtifactCountByMarker -Marker $ConfirmationMarker
-    $DuplicateConfirmation = Invoke-JsonScript -Path $BridgeScript -Arguments @(
-        "-Message", "dispatch [$ConfirmationMarker]",
-        "-ConversationId", $ConfirmationConversationId,
-        "-SessionId", $ConfirmationSessionId,
-        "-AsJson"
-    )
+    $DuplicateConfirmationRaw = & $BridgeScript -Message "dispatch [$ConfirmationMarker]" -ConversationId $ConfirmationConversationId -SessionId $ConfirmationSessionId -AsJson 2>&1
+    $DuplicateConfirmation = ConvertFrom-PDAMixedJson -Text ([string]($DuplicateConfirmationRaw -join "`n")) -SourceName $BridgeScript
     $DuplicateDispatchAfter = Get-QueueArtifactCountByMarker -Marker $ConfirmationMarker
     if ($DuplicateConfirmation.dispatch_status -eq "submitted") {
         $ConfirmationRequestIssues.Add("Duplicate confirmation should not dispatch a second time.")
@@ -379,17 +428,12 @@ foreach ($Case in $Cases) {
     $CaseConversationId = "conv-$([guid]::NewGuid().ToString('N').Substring(0, 12))"
     $CaseSessionId = "sess-$([guid]::NewGuid().ToString('N').Substring(0, 12))"
 
-    $BridgeArgs = @(
-        "-Message", "$($Case.message) [$($Case.marker)]",
-        "-ConversationId", $CaseConversationId,
-        "-SessionId", $CaseSessionId,
-        "-AsJson"
-    )
-    if ($Case.confirm) {
-        $BridgeArgs += "-ConfirmDispatch"
+    $Raw = if ($Case.confirm) {
+        & $BridgeScript -Message "$($Case.message) [$($Case.marker)]" -ConversationId $CaseConversationId -SessionId $CaseSessionId -ConfirmDispatch -AsJson
     }
-
-    $Raw = & pwsh -NoProfile -File $BridgeScript @BridgeArgs
+    else {
+        & $BridgeScript -Message "$($Case.message) [$($Case.marker)]" -ConversationId $CaseConversationId -SessionId $CaseSessionId -AsJson
+    }
     $Result = ConvertFrom-PDAMixedJson -Text ([string]($Raw -join "`n")) -SourceName $BridgeScript
 
     $CasePassed = $true

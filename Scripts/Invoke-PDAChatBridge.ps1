@@ -29,7 +29,11 @@ $HandoffScript = Join-Path $PSScriptRoot "Invoke-PDACommandHandoff.ps1"
 $ConversationStateScript = Join-Path $PSScriptRoot "Get-PDAConversationState.ps1"
 $TaskResultScript = Join-Path $PSScriptRoot "Get-PDATaskResult.ps1"
 $UpdateConversationStateScript = Join-Path $PSScriptRoot "Update-PDAConversationState.ps1"
+$ConversationalRouterScript = Join-Path $PSScriptRoot "PDA_ConversationalRouter.ps1"
 . (Join-Path $PSScriptRoot "PDA_OutputParsing.ps1")
+if (Test-Path -Path $ConversationalRouterScript -PathType Leaf) {
+    . $ConversationalRouterScript
+}
 
 if (-not (Test-Path -Path $HandoffScript -PathType Leaf)) {
     throw "Command handoff missing: $HandoffScript"
@@ -119,19 +123,19 @@ function Invoke-PDAConversationStateQuery {
         return $null
     }
 
-    $Args = @("-AsJson")
+    $StateArgs = @("-AsJson")
     if (-not [string]::IsNullOrWhiteSpace($ConversationId)) {
-        $Args += @("-ConversationId", $ConversationId)
+        $StateArgs += @("-ConversationId", $ConversationId)
     }
     if (-not [string]::IsNullOrWhiteSpace($SessionId)) {
-        $Args += @("-SessionId", $SessionId)
+        $StateArgs += @("-SessionId", $SessionId)
     }
     if (-not [string]::IsNullOrWhiteSpace($Message)) {
-        $Args += @("-UserMessage", $Message)
+        $StateArgs += @("-UserMessage", $Message)
     }
 
     try {
-        $Raw = & pwsh -NoProfile -File $ConversationStateScript @Args 2>&1
+        $Raw = & pwsh -NoProfile -File $ConversationStateScript @StateArgs 2>&1
         if ($LASTEXITCODE -ne 0) {
             return $null
         }
@@ -141,7 +145,66 @@ function Invoke-PDAConversationStateQuery {
             return $null
         }
 
-        return ConvertFrom-PDAMixedJson -Text $JsonText -SourceName $ConversationStateScript
+        $Parsed = ConvertFrom-PDAMixedJson -Text $JsonText -SourceName $ConversationStateScript
+        if ($Parsed -and ($Parsed.conversation -or $Parsed.pending_action -or $Parsed.pending_approval_count -gt 0)) {
+            return $Parsed
+        }
+    }
+    catch {
+        $Parsed = $null
+    }
+
+    try {
+        $StatePath = Join-Path $Root "PDA-Runtime\data\conversation-state.json"
+        if (-not (Test-Path -Path $StatePath -PathType Leaf)) {
+            return $null
+        }
+
+        # Fallback directly to the persisted state file when the query helper
+        # returns partial/empty output for confirmation-only conversations.
+        $StateJson = Get-Content -Path $StatePath -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+        $ConversationEntry = $null
+        if ($StateJson.PSObject.Properties.Name -contains "conversations") {
+            $ConversationEntry = @($StateJson.conversations.PSObject.Properties | Where-Object { [string]$_.Name -eq $ConversationId } | Select-Object -First 1).Value
+        }
+
+        if (-not $ConversationEntry) {
+            return $null
+        }
+
+        $PendingApprovalCount = 0
+        if ($ConversationEntry.pending_status -eq "awaiting_confirmation" -or -not [string]::IsNullOrWhiteSpace([string]$ConversationEntry.pending_recommended_command)) {
+            $PendingApprovalCount = 1
+        }
+
+        return [pscustomobject]@{
+            status = "pass"
+            registry_path = $StatePath
+            conversation_id = [string]$ConversationId
+            session_id = [string]$SessionId
+            task_id = ""
+            conversation = $ConversationEntry
+            pending_action = if (-not [string]::IsNullOrWhiteSpace([string]$ConversationEntry.pending_recommended_command)) {
+                [pscustomobject]@{
+                    recommended_command = [string]$ConversationEntry.pending_recommended_command
+                    dispatch_category    = [string]$ConversationEntry.pending_dispatch_category
+                    original_message     = [string]$ConversationEntry.pending_original_message
+                    timestamp            = [string]$ConversationEntry.pending_timestamp
+                    expires_at           = [string]$ConversationEntry.pending_expires_at
+                    status               = [string]$ConversationEntry.pending_status
+                    is_expired           = [bool]$ConversationEntry.pending_is_expired
+                }
+            }
+            else {
+                $null
+            }
+            response_text = if ($ConversationEntry.last_response_text) { [string]$ConversationEntry.last_response_text } else { "" }
+            next_action = if ($ConversationEntry.last_next_action) { [string]$ConversationEntry.last_next_action } else { "" }
+            pending_approval_count = $PendingApprovalCount
+            active_task_count = if ($ConversationEntry.active_task_count) { [int]$ConversationEntry.active_task_count } else { 0 }
+            submitted_task_count = if ($ConversationEntry.submitted_task_count) { [int]$ConversationEntry.submitted_task_count } else { 0 }
+            completed_task_count = if ($ConversationEntry.completed_task_count) { [int]$ConversationEntry.completed_task_count } else { 0 }
+        }
     }
     catch {
         return $null
@@ -159,19 +222,19 @@ function Invoke-PDATaskResultQuery {
         return $null
     }
 
-    $Args = @("-AsJson")
+    $TaskArgs = @("-AsJson")
     if (-not [string]::IsNullOrWhiteSpace($ConversationId)) {
-        $Args += @("-ConversationId", $ConversationId)
+        $TaskArgs += @("-ConversationId", $ConversationId)
     }
     if (-not [string]::IsNullOrWhiteSpace($SessionId)) {
-        $Args += @("-SessionId", $SessionId)
+        $TaskArgs += @("-SessionId", $SessionId)
     }
     if (-not [string]::IsNullOrWhiteSpace($Message)) {
-        $Args += @("-UserMessage", $Message)
+        $TaskArgs += @("-UserMessage", $Message)
     }
 
     try {
-        $Raw = & pwsh -NoProfile -File $TaskResultScript @Args 2>&1
+        $Raw = & pwsh -NoProfile -File $TaskResultScript @TaskArgs 2>&1
         if ($LASTEXITCODE -ne 0) {
             return $null
         }
@@ -190,6 +253,11 @@ function Invoke-PDATaskResultQuery {
 
 function Invoke-PDAConversationStateUpdate {
     param(
+        [string]$ConversationId,
+        [string]$SessionId,
+        [string]$UserId,
+        [string]$ConversationTitle,
+        [string]$Message,
         [string]$TaskId,
         [string]$TaskStatus,
         [string]$TaskFilePath,
@@ -221,7 +289,7 @@ function Invoke-PDAConversationStateUpdate {
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $LogPath) | Out-Null
     Add-Content -Path $LogPath -Value ("{0} update-start conversation={1} session={2} task={3}" -f (Get-Date -Format o), $(if ($ConversationId) { $ConversationId } else { "default" }), $(if ($SessionId) { $SessionId } else { "" }), $(if ($TaskId) { $TaskId } else { "" }))
 
-    $Args = @(
+    $UpdateArgs = @(
         "-ConversationId", $(if ([string]::IsNullOrWhiteSpace($ConversationId)) { "default" } else { $ConversationId }),
         "-SessionId", $SessionId,
         "-UserId", $UserId,
@@ -238,47 +306,47 @@ function Invoke-PDAConversationStateUpdate {
     )
 
     if (-not [string]::IsNullOrWhiteSpace($TaskId)) {
-        $Args += @("-TaskId", $TaskId)
+        $UpdateArgs += @("-TaskId", $TaskId)
     }
     if (-not [string]::IsNullOrWhiteSpace($TaskStatus)) {
-        $Args += @("-TaskStatus", $TaskStatus)
+        $UpdateArgs += @("-TaskStatus", $TaskStatus)
     }
     if (-not [string]::IsNullOrWhiteSpace($TaskFilePath)) {
-        $Args += @("-TaskFilePath", $TaskFilePath)
+        $UpdateArgs += @("-TaskFilePath", $TaskFilePath)
     }
     if (-not [string]::IsNullOrWhiteSpace($ApprovalFilePath)) {
-        $Args += @("-ApprovalFilePath", $ApprovalFilePath)
+        $UpdateArgs += @("-ApprovalFilePath", $ApprovalFilePath)
     }
     if (-not [string]::IsNullOrWhiteSpace($ResultPath)) {
-        $Args += @("-ResultPath", $ResultPath)
+        $UpdateArgs += @("-ResultPath", $ResultPath)
     }
     if (-not [string]::IsNullOrWhiteSpace($ResultSummary)) {
-        $Args += @("-ResultSummary", $ResultSummary)
+        $UpdateArgs += @("-ResultSummary", $ResultSummary)
     }
     if (-not [string]::IsNullOrWhiteSpace($PendingRecommendedCommand)) {
-        $Args += @("-PendingRecommendedCommand", $PendingRecommendedCommand)
+        $UpdateArgs += @("-PendingRecommendedCommand", $PendingRecommendedCommand)
     }
     if (-not [string]::IsNullOrWhiteSpace($PendingDispatchCategory)) {
-        $Args += @("-PendingDispatchCategory", $PendingDispatchCategory)
+        $UpdateArgs += @("-PendingDispatchCategory", $PendingDispatchCategory)
     }
     if (-not [string]::IsNullOrWhiteSpace($PendingOriginalMessage)) {
-        $Args += @("-PendingOriginalMessage", $PendingOriginalMessage)
+        $UpdateArgs += @("-PendingOriginalMessage", $PendingOriginalMessage)
     }
     if (-not [string]::IsNullOrWhiteSpace($PendingTimestamp)) {
-        $Args += @("-PendingTimestamp", $PendingTimestamp)
+        $UpdateArgs += @("-PendingTimestamp", $PendingTimestamp)
     }
     if (-not [string]::IsNullOrWhiteSpace($PendingExpiresAt)) {
-        $Args += @("-PendingExpiresAt", $PendingExpiresAt)
+        $UpdateArgs += @("-PendingExpiresAt", $PendingExpiresAt)
     }
     if (-not [string]::IsNullOrWhiteSpace($PendingStatus)) {
-        $Args += @("-PendingStatus", $PendingStatus)
+        $UpdateArgs += @("-PendingStatus", $PendingStatus)
     }
     if ($ClearPendingAction) {
-        $Args += "-ClearPendingAction"
+        $UpdateArgs += "-ClearPendingAction"
     }
 
     try {
-        $Raw = & pwsh -NoProfile -File $UpdateConversationStateScript @Args -AsJson 2>&1
+        $Raw = & pwsh -NoProfile -File $UpdateConversationStateScript @UpdateArgs -AsJson 2>&1
         $Text = [string]($Raw -join "`n").Trim()
         if (-not [string]::IsNullOrWhiteSpace($Text)) {
             Add-Content -Path $LogPath -Value ("{0} update-output {1}" -f (Get-Date -Format o), $Text.Replace("`r", " ").Replace("`n", " "))
@@ -342,18 +410,140 @@ function Get-PDATaskIdFromFile {
     return ""
 }
 
-$ConversationState = Invoke-PDAConversationStateQuery -ConversationId $ConversationId -SessionId $SessionId -Message $Message
-$PendingAction = Get-PDAConversationPendingActionFromSummary -ConversationState $ConversationState
-$HasPendingAction = $PendingAction -and -not [bool]$PendingAction.is_expired
 $IsConfirmationMessage = Test-PDAConfirmationMessage -Text $Message
 $IsStatusLookup = Test-PDAStatusLookupMessage -Text $Message
 $IsOperatorConsoleCommand = Test-PDAOperatorConsoleMessage -Text $Message
 $NormalizedMessage = [string]$Message.Trim()
 $IsSlashCommandMessage = $NormalizedMessage.StartsWith("/")
+$UseLegacyStatusLookup = $true
+$HandoffInputMessage = $Message
+
+$ConversationState = $null
+if ($IsConfirmationMessage -or $ConfirmDispatch) {
+    $ConversationState = Invoke-PDAConversationStateQuery -ConversationId $ConversationId -SessionId $SessionId -Message $Message
+}
+
+$PendingAction = Get-PDAConversationPendingActionFromSummary -ConversationState $ConversationState
+$HasPendingAction = $PendingAction -and -not [bool]$PendingAction.is_expired
+
+$ConversationRoute = $null
+if (Get-Command -Name Resolve-PDAConversationalRoute -ErrorAction SilentlyContinue) {
+    $ConversationRoute = Resolve-PDAConversationalRoute -Text $Message -Root $Root
+    if ($ConversationRoute -and -not ($IsConfirmationMessage -and $HasPendingAction)) {
+        switch ([string]$ConversationRoute.route_type) {
+            "direct_status" {
+                $DirectResult = Get-PDAConversationalNaturalResponse -Route $ConversationRoute -ConversationId $ConversationId -SessionId $SessionId -UserId $UserId -ConversationTitle $ConversationTitle -Text $Message -Root $Root
+                Invoke-PDAConversationStateUpdate -ConversationId $ConversationId -SessionId $SessionId -UserId $UserId -ConversationTitle $ConversationTitle -Message $Message -TaskId ([string]$DirectResult.latest_task_id) -TaskStatus ([string]$DirectResult.latest_task_status) -TaskFilePath "" -ApprovalFilePath "" -ResultPath ([string]$DirectResult.latest_result_path) -ResultSummary "" -BridgeStatus ([string]$DirectResult.bridge_status) -DispatchStatus ([string]$DirectResult.dispatch_status) -NextAction ([string]$DirectResult.next_action) -ResponseText ([string]$DirectResult.response_text) -RecommendedCommand ([string]$DirectResult.recommended_command) -Intent ([string]$DirectResult.intent) -Confidence ([double]$DirectResult.confidence) -RequiresConfirmation:$false | Out-Null
+
+                if ($AsJson) {
+                    $DirectResult | ConvertTo-Json -Depth 20
+                    return
+                }
+
+                Write-Host "[OK] PDA chat bridge result:"
+                Write-Host ("Response text        : {0}" -f $DirectResult.response_text)
+                Write-Host ("Recommended command  : {0}" -f $(if ($DirectResult.recommended_command) { $DirectResult.recommended_command } else { "(none)" }))
+                Write-Host ("Intent               : {0}" -f $(if ($DirectResult.intent) { $DirectResult.intent } else { "(none)" }))
+                Write-Host ("Confidence           : {0}" -f $DirectResult.confidence)
+                Write-Host ("Dispatch ready       : {0}" -f $DirectResult.dispatch_ready)
+                Write-Host ("Dispatch status      : {0}" -f $DirectResult.dispatch_status)
+                Write-Host ("Next action          : {0}" -f $DirectResult.next_action)
+                return
+            }
+            "direct_help" {
+                $DirectResult = Get-PDAConversationalNaturalResponse -Route $ConversationRoute -ConversationId $ConversationId -SessionId $SessionId -UserId $UserId -ConversationTitle $ConversationTitle -Text $Message -Root $Root
+                Invoke-PDAConversationStateUpdate -ConversationId $ConversationId -SessionId $SessionId -UserId $UserId -ConversationTitle $ConversationTitle -Message $Message -TaskId ([string]$DirectResult.latest_task_id) -TaskStatus ([string]$DirectResult.latest_task_status) -TaskFilePath "" -ApprovalFilePath "" -ResultPath ([string]$DirectResult.latest_result_path) -ResultSummary "" -BridgeStatus ([string]$DirectResult.bridge_status) -DispatchStatus ([string]$DirectResult.dispatch_status) -NextAction ([string]$DirectResult.next_action) -ResponseText ([string]$DirectResult.response_text) -RecommendedCommand ([string]$DirectResult.recommended_command) -Intent ([string]$DirectResult.intent) -Confidence ([double]$DirectResult.confidence) -RequiresConfirmation:$false | Out-Null
+
+                if ($AsJson) {
+                    $DirectResult | ConvertTo-Json -Depth 20
+                    return
+                }
+
+                Write-Host "[OK] PDA chat bridge result:"
+                Write-Host ("Response text        : {0}" -f $DirectResult.response_text)
+                Write-Host ("Recommended command  : {0}" -f $(if ($DirectResult.recommended_command) { $DirectResult.recommended_command } else { "(none)" }))
+                Write-Host ("Intent               : {0}" -f $(if ($DirectResult.intent) { $DirectResult.intent } else { "(none)" }))
+                Write-Host ("Confidence           : {0}" -f $DirectResult.confidence)
+                Write-Host ("Dispatch ready       : {0}" -f $DirectResult.dispatch_ready)
+                Write-Host ("Dispatch status      : {0}" -f $DirectResult.dispatch_status)
+                Write-Host ("Next action          : {0}" -f $DirectResult.next_action)
+                return
+            }
+            "task_lookup" {
+                $DirectResult = Get-PDAConversationalNaturalResponse -Route $ConversationRoute -ConversationId $ConversationId -SessionId $SessionId -UserId $UserId -ConversationTitle $ConversationTitle -Text $Message -Root $Root
+                Invoke-PDAConversationStateUpdate -ConversationId $ConversationId -SessionId $SessionId -UserId $UserId -ConversationTitle $ConversationTitle -Message $Message -TaskId ([string]$DirectResult.latest_task_id) -TaskStatus ([string]$DirectResult.latest_task_status) -TaskFilePath "" -ApprovalFilePath "" -ResultPath ([string]$DirectResult.latest_result_path) -ResultSummary "" -BridgeStatus ([string]$DirectResult.bridge_status) -DispatchStatus ([string]$DirectResult.dispatch_status) -NextAction ([string]$DirectResult.next_action) -ResponseText ([string]$DirectResult.response_text) -RecommendedCommand ([string]$DirectResult.recommended_command) -Intent ([string]$DirectResult.intent) -Confidence ([double]$DirectResult.confidence) -RequiresConfirmation:$false | Out-Null
+
+                if ($AsJson) {
+                    $DirectResult | ConvertTo-Json -Depth 20
+                    return
+                }
+
+                Write-Host "[OK] PDA chat bridge result:"
+                Write-Host ("Response text        : {0}" -f $DirectResult.response_text)
+                Write-Host ("Recommended command  : {0}" -f $(if ($DirectResult.recommended_command) { $DirectResult.recommended_command } else { "(none)" }))
+                Write-Host ("Intent               : {0}" -f $(if ($DirectResult.intent) { $DirectResult.intent } else { "(none)" }))
+                Write-Host ("Confidence           : {0}" -f $DirectResult.confidence)
+                Write-Host ("Dispatch ready       : {0}" -f $DirectResult.dispatch_ready)
+                Write-Host ("Dispatch status      : {0}" -f $DirectResult.dispatch_status)
+                Write-Host ("Next action          : {0}" -f $DirectResult.next_action)
+                return
+            }
+            "ambiguous" {
+                $DirectResult = Get-PDAConversationalNaturalResponse -Route $ConversationRoute -ConversationId $ConversationId -SessionId $SessionId -UserId $UserId -ConversationTitle $ConversationTitle -Text $Message -Root $Root
+                Invoke-PDAConversationStateUpdate -ConversationId $ConversationId -SessionId $SessionId -UserId $UserId -ConversationTitle $ConversationTitle -Message $Message -TaskId "" -TaskStatus "" -TaskFilePath "" -ApprovalFilePath "" -ResultPath "" -ResultSummary "" -BridgeStatus ([string]$DirectResult.bridge_status) -DispatchStatus ([string]$DirectResult.dispatch_status) -NextAction ([string]$DirectResult.next_action) -ResponseText ([string]$DirectResult.response_text) -RecommendedCommand ([string]$DirectResult.recommended_command) -Intent ([string]$DirectResult.intent) -Confidence ([double]$DirectResult.confidence) -RequiresConfirmation:$false | Out-Null
+
+                if ($AsJson) {
+                    $DirectResult | ConvertTo-Json -Depth 20
+                    return
+                }
+
+                Write-Host "[OK] PDA chat bridge result:"
+                Write-Host ("Response text        : {0}" -f $DirectResult.response_text)
+                Write-Host ("Recommended command  : {0}" -f $(if ($DirectResult.recommended_command) { $DirectResult.recommended_command } else { "(none)" }))
+                Write-Host ("Intent               : {0}" -f $(if ($DirectResult.intent) { $DirectResult.intent } else { "(none)" }))
+                Write-Host ("Confidence           : {0}" -f $DirectResult.confidence)
+                Write-Host ("Dispatch ready       : {0}" -f $DirectResult.dispatch_ready)
+                Write-Host ("Dispatch status      : {0}" -f $DirectResult.dispatch_status)
+                Write-Host ("Next action          : {0}" -f $DirectResult.next_action)
+                return
+            }
+            "fallback" {
+                $DirectResult = Get-PDAConversationalNaturalResponse -Route $ConversationRoute -ConversationId $ConversationId -SessionId $SessionId -UserId $UserId -ConversationTitle $ConversationTitle -Text $Message -Root $Root
+                Invoke-PDAConversationStateUpdate -TaskId "" -TaskStatus "" -TaskFilePath "" -ApprovalFilePath "" -ResultPath "" -ResultSummary "" -BridgeStatus ([string]$DirectResult.bridge_status) -DispatchStatus ([string]$DirectResult.dispatch_status) -NextAction ([string]$DirectResult.next_action) -ResponseText ([string]$DirectResult.response_text) -RecommendedCommand ([string]$DirectResult.recommended_command) -Intent ([string]$DirectResult.intent) -Confidence ([double]$DirectResult.confidence) -RequiresConfirmation:$false | Out-Null
+
+                if ($AsJson) {
+                    $DirectResult | ConvertTo-Json -Depth 20
+                    return
+                }
+
+                Write-Host "[OK] PDA chat bridge result:"
+                Write-Host ("Response text        : {0}" -f $DirectResult.response_text)
+                Write-Host ("Recommended command  : {0}" -f $(if ($DirectResult.recommended_command) { $DirectResult.recommended_command } else { "(none)" }))
+                Write-Host ("Intent               : {0}" -f $(if ($DirectResult.intent) { $DirectResult.intent } else { "(none)" }))
+                Write-Host ("Confidence           : {0}" -f $DirectResult.confidence)
+                Write-Host ("Dispatch ready       : {0}" -f $DirectResult.dispatch_ready)
+                Write-Host ("Dispatch status      : {0}" -f $DirectResult.dispatch_status)
+                Write-Host ("Next action          : {0}" -f $DirectResult.next_action)
+                return
+            }
+            "slash_command" {
+                $HandoffInputMessage = $Message
+                $UseLegacyStatusLookup = $false
+            }
+            "governed_request" {
+                $HandoffInputMessage = if (-not [string]::IsNullOrWhiteSpace([string]$ConversationRoute.synthetic_text)) { [string]$ConversationRoute.synthetic_text } else { $Message }
+                $UseLegacyStatusLookup = $false
+            }
+            default {
+                $UseLegacyStatusLookup = $false
+            }
+        }
+    }
+}
 
 if ($IsConfirmationMessage -and -not $HasPendingAction) {
     if ($PendingAction -and [bool]$PendingAction.is_expired) {
-        Invoke-PDAConversationStateUpdate -TaskId "" -TaskStatus "" -ResultPath "" -BridgeStatus "ready" -DispatchStatus "not_dispatched" -NextAction "Start a new request or ask for a status refresh." -ResponseText "Pending confirmation expired for this conversation." -RecommendedCommand "" -Intent "confirmation" -Confidence 1 -RequiresConfirmation:$false -ClearPendingAction | Out-Null
+        Invoke-PDAConversationStateUpdate -ConversationId $ConversationId -SessionId $SessionId -UserId $UserId -ConversationTitle $ConversationTitle -Message $Message -TaskId "" -TaskStatus "" -ResultPath "" -BridgeStatus "ready" -DispatchStatus "not_dispatched" -NextAction "Start a new request or ask for a status refresh." -ResponseText "Pending confirmation expired for this conversation." -RecommendedCommand "" -Intent "confirmation" -Confidence 1 -RequiresConfirmation:$false -ClearPendingAction | Out-Null
     }
 
     $Result = [pscustomobject]@{
@@ -481,7 +671,7 @@ if ($HasPendingAction -and ($IsConfirmationMessage -or $ConfirmDispatch)) {
     }
 
     if ($Handoff.dispatch_status -in @("submitted", "completed")) {
-        Invoke-PDAConversationStateUpdate -TaskId $TaskId -TaskStatus $TaskStatus -TaskFilePath $(if ($TaskFile) { $TaskFile.FullName } else { "" }) -ApprovalFilePath $ApprovalPath -ResultPath $ResultPath -BridgeStatus $(if ($Handoff.bridge_status) { [string]$Handoff.bridge_status } else { "submitted" }) -DispatchStatus $Handoff.dispatch_status -NextAction $NextAction -ResponseText $ResponseText -RecommendedCommand $Handoff.recommended_command -Intent $Handoff.intent -Confidence $Handoff.confidence -RequiresConfirmation:([bool]$Handoff.requires_confirmation) -PendingRecommendedCommand ([string]$PendingAction.recommended_command) -PendingDispatchCategory ([string]$PendingAction.dispatch_category) -PendingOriginalMessage ([string]$PendingAction.original_message) -PendingTimestamp ([string]$PendingAction.timestamp) -PendingExpiresAt ([string]$PendingAction.expires_at) -PendingStatus "dispatched" -ClearPendingAction | Out-Null
+        Invoke-PDAConversationStateUpdate -ConversationId $ConversationId -SessionId $SessionId -UserId $UserId -ConversationTitle $ConversationTitle -Message $Message -TaskId $TaskId -TaskStatus $TaskStatus -TaskFilePath $(if ($TaskFile) { $TaskFile.FullName } else { "" }) -ApprovalFilePath $ApprovalPath -ResultPath $ResultPath -BridgeStatus $(if ($Handoff.bridge_status) { [string]$Handoff.bridge_status } else { "submitted" }) -DispatchStatus $Handoff.dispatch_status -NextAction $NextAction -ResponseText $ResponseText -RecommendedCommand $Handoff.recommended_command -Intent $Handoff.intent -Confidence $Handoff.confidence -RequiresConfirmation:([bool]$Handoff.requires_confirmation) -PendingRecommendedCommand ([string]$PendingAction.recommended_command) -PendingDispatchCategory ([string]$PendingAction.dispatch_category) -PendingOriginalMessage ([string]$PendingAction.original_message) -PendingTimestamp ([string]$PendingAction.timestamp) -PendingExpiresAt ([string]$PendingAction.expires_at) -PendingStatus "dispatched" -ClearPendingAction | Out-Null
     }
 
     $Result = [pscustomobject]@{
@@ -526,7 +716,7 @@ if ($HasPendingAction -and ($IsConfirmationMessage -or $ConfirmDispatch)) {
     return
 }
 
-if ($IsStatusLookup -and -not $IsOperatorConsoleCommand -and -not $IsSlashCommandMessage) {
+if ($UseLegacyStatusLookup -and $IsStatusLookup -and -not $IsOperatorConsoleCommand -and -not $IsSlashCommandMessage) {
     $TaskResult = Invoke-PDATaskResultQuery -ConversationId $ConversationId -SessionId $SessionId -Message $Message
     if (-not $TaskResult) {
         $TaskResult = Invoke-PDAConversationStateQuery -ConversationId $ConversationId -SessionId $SessionId -Message $Message
@@ -590,7 +780,7 @@ if ($IsStatusLookup -and -not $IsOperatorConsoleCommand -and -not $IsSlashComman
         bridge_mode              = "status_lookup"
     }
 
-    Invoke-PDAConversationStateUpdate -TaskId $LatestTaskId -TaskStatus $LatestTaskStatus -ResultPath $LatestResultPath -BridgeStatus "ready" -DispatchStatus "not_dispatched" -NextAction $NextAction -ResponseText $ResponseText -RecommendedCommand $RecommendedCommand -Intent $Intent -Confidence $Confidence -RequiresConfirmation:$false | Out-Null
+    Invoke-PDAConversationStateUpdate -ConversationId $ConversationId -SessionId $SessionId -UserId $UserId -ConversationTitle $ConversationTitle -Message $Message -TaskId $LatestTaskId -TaskStatus $LatestTaskStatus -ResultPath $LatestResultPath -BridgeStatus "ready" -DispatchStatus "not_dispatched" -NextAction $NextAction -ResponseText $ResponseText -RecommendedCommand $RecommendedCommand -Intent $Intent -Confidence $Confidence -RequiresConfirmation:$false | Out-Null
 
     if ($AsJson) {
         $Result | ConvertTo-Json -Depth 20
@@ -609,7 +799,7 @@ if ($IsStatusLookup -and -not $IsOperatorConsoleCommand -and -not $IsSlashComman
 }
 
 $HandoffArgs = @(
-    "-Text", $Message,
+    "-Text", $HandoffInputMessage,
     "-AsJson",
     "-ConversationId", $(if ($ConversationId) { $ConversationId } else { "" }),
     "-SessionId", $(if ($SessionId) { $SessionId } else { "" }),
@@ -666,7 +856,7 @@ $PendingExpiresAt = ""
 if ($Handoff.interpreter_status -eq "mapped" -and $Handoff.requires_confirmation) {
     $PendingTimestamp = (Get-Date).ToUniversalTime().ToString("o")
     $PendingExpiresAt = (Get-Date).ToUniversalTime().AddMinutes((Get-PDAPendingConfirmationTimeoutMinutes)).ToString("o")
-    Invoke-PDAConversationStateUpdate -TaskId "" -TaskStatus "pending_confirmation" -TaskFilePath "" -ApprovalFilePath "" -ResultPath "" -ResultSummary "" -BridgeStatus "ready" -DispatchStatus "not_dispatched" -NextAction $NextAction -ResponseText $ResponseText -RecommendedCommand $Handoff.recommended_command -Intent $Handoff.intent -Confidence $Handoff.confidence -RequiresConfirmation:([bool]$Handoff.requires_confirmation) -PendingRecommendedCommand ([string]$Handoff.recommended_command) -PendingDispatchCategory ([string]$Handoff.dispatch_category) -PendingOriginalMessage $Message -PendingTimestamp $PendingTimestamp -PendingExpiresAt $PendingExpiresAt -PendingStatus "awaiting_confirmation" | Out-Null
+    Invoke-PDAConversationStateUpdate -ConversationId $ConversationId -SessionId $SessionId -UserId $UserId -ConversationTitle $ConversationTitle -Message $Message -TaskId "" -TaskStatus "pending_confirmation" -TaskFilePath "" -ApprovalFilePath "" -ResultPath "" -ResultSummary "" -BridgeStatus "ready" -DispatchStatus "not_dispatched" -NextAction $NextAction -ResponseText $ResponseText -RecommendedCommand $Handoff.recommended_command -Intent $Handoff.intent -Confidence $Handoff.confidence -RequiresConfirmation:([bool]$Handoff.requires_confirmation) -PendingRecommendedCommand ([string]$Handoff.recommended_command) -PendingDispatchCategory ([string]$Handoff.dispatch_category) -PendingOriginalMessage $Message -PendingTimestamp $PendingTimestamp -PendingExpiresAt $PendingExpiresAt -PendingStatus "awaiting_confirmation" | Out-Null
 }
 
 $DispatchPath = [string]$Handoff.dispatch_path

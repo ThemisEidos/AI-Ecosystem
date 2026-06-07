@@ -1,0 +1,411 @@
+[CmdletBinding()]
+param(
+    [Parameter(Mandatory = $false)]
+    [string]$Text,
+
+    [Parameter(Mandatory = $false)]
+    [string]$Root,
+
+    [Parameter(Mandatory = $false)]
+    [Alias("AsJson")]
+    [switch]$OutputJson
+)
+
+$ErrorActionPreference = "Stop"
+
+if ([string]::IsNullOrWhiteSpace($Root)) {
+    $Root = Split-Path -Parent $PSScriptRoot
+}
+
+$InterpreterScript = Join-Path $PSScriptRoot "PDA_CommandInterpreter.ps1"
+$DashboardStatusScript = Join-Path $PSScriptRoot "Get-PDADashboardStatus.ps1"
+$TaskResultScript = Join-Path $PSScriptRoot "Get-PDATaskResult.ps1"
+$ParserPath = Join-Path $PSScriptRoot "PDA_OutputParsing.ps1"
+if (Test-Path -LiteralPath $ParserPath -PathType Leaf) {
+    . $ParserPath
+}
+
+function Normalize-PDAConversationalText {
+    param([Parameter(Mandatory = $true)][string]$Value)
+
+    $Normalized = [string]$Value
+    $Normalized = $Normalized.ToLowerInvariant()
+    $Normalized = $Normalized -replace '[^a-z0-9/\s]+', ' '
+    $Normalized = $Normalized -replace '\s+', ' '
+    return $Normalized.Trim()
+}
+
+function Invoke-PDAConversationalJsonScript {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path,
+
+        [Parameter(Mandatory = $true)]
+        [object[]]$Arguments,
+
+        [Parameter(Mandatory = $true)]
+        [string]$SourceName
+    )
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        return $null
+    }
+
+    try {
+        $SafeArguments = @(
+            $Arguments | Where-Object {
+                $_ -ne $null -and -not [string]::IsNullOrWhiteSpace([string]$_)
+            }
+        )
+
+        $Raw = & $Path @SafeArguments 2>&1
+        $TextOutput = [string]($Raw -join "`n").Trim()
+        if ([string]::IsNullOrWhiteSpace($TextOutput)) {
+            return $null
+        }
+
+        return ConvertFrom-PDAMixedJson -Text $TextOutput -SourceName $SourceName
+    }
+    catch {
+        return $null
+    }
+}
+
+function Test-PDAConversationalSlashCommand {
+    param([Parameter(Mandatory = $true)][string]$NormalizedText)
+
+    return [bool]($NormalizedText.StartsWith("/"))
+}
+
+function Test-PDAConversationalDirectHelp {
+    param([Parameter(Mandatory = $true)][string]$NormalizedText)
+
+    return [bool](
+        $NormalizedText -match '(?i)\b(what can you do|what do you do|help|what commands|available commands|show me help|show the command list)\b'
+    )
+}
+
+function Test-PDAConversationalDirectStatus {
+    param([Parameter(Mandatory = $true)][string]$NormalizedText)
+
+    return [bool](
+        $NormalizedText -match '(?i)\b(how is the pda doing|how is the ecosystem|summarize the ecosystem status|summarise the ecosystem status|show me the current status|current status|system status|how are things|pda status|how is everything)\b'
+    )
+}
+
+function Test-PDAConversationalTaskLookup {
+    param([Parameter(Mandatory = $true)][string]$NormalizedText)
+
+    return [bool](
+        $NormalizedText -match '(?i)\b(what happened to my last task|what happened to my task|latest result|latest task|task status|where is my result|result location|what happened)\b'
+    )
+}
+
+function Test-PDAConversationalAmbiguous {
+    param([Parameter(Mandatory = $true)][string]$NormalizedText)
+
+    return [bool](
+        $NormalizedText -match '(?i)\breview\b.*\brun\b|\brun\b.*\breview\b|\breport\b.*\brun\b|\brun\b.*\breport\b|\bresearch\b.*\brun\b|\brun\b.*\bresearch\b|\bexecute\b.*\breview\b|\breview\b.*\bexecute\b'
+    )
+}
+
+function Get-PDAConversationalInterpreterResult {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Text
+    )
+
+    if (-not (Test-Path -LiteralPath $InterpreterScript -PathType Leaf)) {
+        return $null
+    }
+
+    try {
+        $Raw = & $InterpreterScript -Text $Text -AsJson 2>&1
+        $JsonText = [string]($Raw -join "`n").Trim()
+        if ([string]::IsNullOrWhiteSpace($JsonText)) {
+            return $null
+        }
+
+        return ConvertFrom-PDAMixedJson -Text $JsonText -SourceName $InterpreterScript
+    }
+    catch {
+        return $null
+    }
+}
+
+function Resolve-PDAConversationalRoute {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Text,
+
+        [Parameter(Mandatory = $false)]
+        [string]$Root = (Split-Path -Parent $PSScriptRoot)
+    )
+
+    $Normalized = Normalize-PDAConversationalText -Value $Text
+    $Route = [ordered]@{
+        route_type           = "fallback"
+        response_mode        = "direct_answer"
+        recommended_command  = ""
+        requires_confirmation = $false
+        confidence           = 0
+        reason               = "No conversational rule matched."
+        ambiguity_reason     = ""
+        synthetic_text       = ""
+        intent               = ""
+        task_type            = ""
+        command              = ""
+        source_of_truth      = "Scripts/PDA_ConversationalRouter.ps1"
+        root_path            = $Root
+    }
+
+    if ([string]::IsNullOrWhiteSpace($Normalized)) {
+        $Route.reason = "Empty input."
+        return [pscustomobject]$Route
+    }
+
+    if (Test-PDAConversationalSlashCommand -NormalizedText $Normalized) {
+        $InterpreterResult = Get-PDAConversationalInterpreterResult -Text $Text
+        if ($InterpreterResult -and [string]$InterpreterResult.status -eq "mapped") {
+            $Route.route_type = "slash_command"
+            $Route.response_mode = "governed_command"
+            $Route.recommended_command = [string]$InterpreterResult.command
+            $Route.requires_confirmation = [bool]$InterpreterResult.requires_confirmation
+            $Route.confidence = [double]$InterpreterResult.confidence
+            $Route.reason = [string]$InterpreterResult.reason
+            $Route.ambiguity_reason = [string]$InterpreterResult.reason
+            $Route.intent = [string]$InterpreterResult.intent
+            $Route.task_type = [string]$InterpreterResult.task_type
+            $Route.command = [string]$InterpreterResult.command
+            return [pscustomobject]$Route
+        }
+
+        $Route.route_type = "slash_command"
+        $Route.response_mode = "governed_command"
+        $Route.recommended_command = [string]($Normalized.Split(' ', [System.StringSplitOptions]::RemoveEmptyEntries)[0])
+        $Route.requires_confirmation = $false
+        $Route.confidence = 1
+        $Route.reason = "Explicit slash command."
+        $Route.ambiguity_reason = "Explicit slash command."
+        $Route.command = $Route.recommended_command
+        return [pscustomobject]$Route
+    }
+
+    if (Test-PDAConversationalDirectHelp -NormalizedText $Normalized) {
+        $Route.route_type = "direct_help"
+        $Route.response_mode = "direct_answer"
+        $Route.recommended_command = "/help"
+        $Route.reason = "Direct help request."
+        $Route.confidence = 1
+        return [pscustomobject]$Route
+    }
+
+    if (Test-PDAConversationalDirectStatus -NormalizedText $Normalized) {
+        $Route.route_type = "direct_status"
+        $Route.response_mode = "direct_answer"
+        $Route.recommended_command = "/status"
+        $Route.reason = "Direct status request."
+        $Route.confidence = 1
+        return [pscustomobject]$Route
+    }
+
+    if (Test-PDAConversationalTaskLookup -NormalizedText $Normalized) {
+        $Route.route_type = "task_lookup"
+        $Route.response_mode = "direct_answer"
+        $Route.recommended_command = ""
+        $Route.reason = "Direct task lookup request."
+        $Route.confidence = 1
+        return [pscustomobject]$Route
+    }
+
+    if (Test-PDAConversationalAmbiguous -NormalizedText $Normalized) {
+        $Route.route_type = "ambiguous"
+        $Route.response_mode = "clarification"
+        $Route.reason = "Multiple governed actions were requested in one message."
+        $Route.ambiguity_reason = "Multiple governed actions were requested in one message."
+        $Route.confidence = 0.5
+        return [pscustomobject]$Route
+    }
+
+    if ($Normalized -match '(?i)\b(roadmap|road map)\b') {
+        $Route.route_type = "governed_request"
+        $Route.response_mode = "governed_command"
+        $Route.recommended_command = "/planner"
+        $Route.requires_confirmation = $true
+        $Route.confidence = 0.95
+        $Route.reason = "Roadmap language maps to the planner workflow."
+        $Route.synthetic_text = "/planner $Text"
+        $Route.intent = "planning"
+        $Route.task_type = "planning"
+        $Route.command = "/planner"
+        return [pscustomobject]$Route
+    }
+
+    $InterpreterResult = Get-PDAConversationalInterpreterResult -Text $Text
+    if ($InterpreterResult -and [string]$InterpreterResult.status -eq "mapped") {
+        $Route.route_type = "governed_request"
+        $Route.response_mode = "governed_command"
+        $Route.recommended_command = [string]$InterpreterResult.command
+        $Route.requires_confirmation = [bool]$InterpreterResult.requires_confirmation
+        $Route.confidence = [double]$InterpreterResult.confidence
+        $Route.reason = [string]$InterpreterResult.reason
+        $Route.ambiguity_reason = [string]$InterpreterResult.reason
+        $Route.intent = [string]$InterpreterResult.intent
+        $Route.task_type = [string]$InterpreterResult.task_type
+        $Route.command = [string]$InterpreterResult.command
+        $Route.synthetic_text = if ($Route.recommended_command -and -not $Normalized.StartsWith($Route.recommended_command.ToLowerInvariant())) {
+            "$($Route.recommended_command) $Text"
+        }
+        else {
+            $Text
+        }
+        return [pscustomobject]$Route
+    }
+
+    if ($InterpreterResult -and [string]$InterpreterResult.status -eq "ambiguous") {
+        $Route.route_type = "ambiguous"
+        $Route.response_mode = "clarification"
+        $Route.reason = [string]$InterpreterResult.reason
+        $Route.ambiguity_reason = [string]$InterpreterResult.reason
+        $Route.confidence = 0.5
+        return [pscustomobject]$Route
+    }
+
+    $Route.route_type = "fallback"
+    $Route.response_mode = "direct_answer"
+    $Route.reason = if ($InterpreterResult) { [string]$InterpreterResult.reason } else { "No conversational rule matched." }
+    $Route.ambiguity_reason = $Route.reason
+    $Route.confidence = 0
+    return [pscustomobject]$Route
+}
+
+function Get-PDAConversationalNaturalResponse {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [psobject]$Route,
+
+        [Parameter(Mandatory = $false)]
+        [string]$ConversationId,
+
+        [Parameter(Mandatory = $false)]
+        [string]$SessionId,
+
+        [Parameter(Mandatory = $false)]
+        [string]$UserId,
+
+        [Parameter(Mandatory = $false)]
+        [string]$ConversationTitle,
+
+        [Parameter(Mandatory = $false)]
+        [string]$Text,
+
+        [Parameter(Mandatory = $false)]
+        [string]$Root = (Split-Path -Parent $PSScriptRoot)
+    )
+
+    $ConversationIdValue = if ([string]::IsNullOrWhiteSpace($ConversationId)) { "" } else { [string]$ConversationId }
+    $SessionIdValue = if ([string]::IsNullOrWhiteSpace($SessionId)) { "" } else { [string]$SessionId }
+    $BaseResponse = [ordered]@{
+        original_message         = $Text
+        response_text            = ""
+        recommended_command      = [string]$Route.recommended_command
+        intent                   = [string]$Route.route_type
+        confidence               = [double]$Route.confidence
+        requires_confirmation    = $false
+        dispatch_ready           = $false
+        dispatch_status          = "not_applicable"
+        next_action              = ""
+        bridge_status            = "ready"
+        handoff_status           = [string]$Route.route_type
+        source_of_truth          = "Scripts/PDA_ConversationalRouter.ps1"
+        confirmation_mode        = $false
+        dispatch_path            = ""
+        dispatch_category        = ""
+        conversation_id          = $ConversationIdValue
+        session_id               = $SessionIdValue
+        conversation_state_status = "unknown"
+        latest_task_id           = ""
+        latest_task_status       = ""
+        latest_result_path       = ""
+        latest_result_response_text = ""
+        result_artifact_path     = ""
+        result_artifact          = $null
+        bridge_mode              = "conversational_direct"
+    }
+
+    switch ([string]$Route.route_type) {
+        "direct_status" {
+            $Dashboard = Invoke-PDAConversationalJsonScript -Path $DashboardStatusScript -Arguments @("-AsJson", "-NoThrow", "-SkipCoreIntegration") -SourceName "PDA dashboard status"
+            $Health = if ($Dashboard -and $Dashboard.PSObject.Properties.Name -contains "dashboard_health") { [string]$Dashboard.dashboard_health.status } else { "unknown" }
+            $QueueDepth = if ($Dashboard -and $Dashboard.PSObject.Properties.Name -contains "queue_status") { [int]$Dashboard.queue_status.queue_depth } else { 0 }
+            $PendingApprovals = if ($Dashboard -and $Dashboard.PSObject.Properties.Name -contains "pending_approvals") { @($Dashboard.pending_approvals).Count } else { 0 }
+            $RecentTasks = if ($Dashboard -and $Dashboard.PSObject.Properties.Name -contains "recent_tasks") { @($Dashboard.recent_tasks).Count } else { 0 }
+            $HealthSentence = if ($Health -eq "pass") { "PDA is reachable and healthy." } elseif ($Health -eq "warning") { "PDA is reachable, but the dashboard is showing warning-level health." } elseif ($Health -eq "degraded") { "PDA is reachable, but the dashboard is showing degraded health." } else { "PDA status is available, but the dashboard health is unknown." }
+            $BaseResponse.response_text = "{0} Queue depth is {1}, with {2} pending approvals and {3} recent tasks." -f $HealthSentence, $QueueDepth, $PendingApprovals, $RecentTasks
+            $BaseResponse.next_action = "Ask for /status to see the full operator console or ask about workers, tasks, reports, or memory."
+            $BaseResponse.latest_result_response_text = $BaseResponse.response_text
+        }
+        "direct_help" {
+            $BaseResponse.response_text = "I can check status, summarize tasks, list workers, show reports, summarize memory, run Fabric patterns, create NotebookLM packages, and route governed requests. Ask a plain-language question or use /help."
+            $BaseResponse.next_action = "Ask a status question, a task question, or use /help for the full command list."
+        }
+        "task_lookup" {
+            $TaskResult = Invoke-PDAConversationalJsonScript -Path $TaskResultScript -Arguments @(
+                "-AsJson",
+                "-NoThrow",
+                "-ConversationId", $ConversationIdValue,
+                "-SessionId", $SessionIdValue,
+                "-UserMessage", $(if ([string]::IsNullOrWhiteSpace($Text)) { "what happened to my last task" } else { $Text })
+            ) -SourceName "PDA task result lookup"
+
+            if ($TaskResult -and $TaskResult.PSObject.Properties.Name -contains "latest_task" -and $TaskResult.latest_task) {
+                $LatestTask = $TaskResult.latest_task
+                $BaseResponse.latest_task_id = if ($LatestTask.PSObject.Properties.Name -contains "task_id") { [string]$LatestTask.task_id } else { "" }
+                $BaseResponse.latest_task_status = if ($LatestTask.PSObject.Properties.Name -contains "task_status") { [string]$LatestTask.task_status } else { "" }
+                $BaseResponse.latest_result_path = if ($TaskResult.PSObject.Properties.Name -contains "latest_result_path") { [string]$TaskResult.latest_result_path } else { "" }
+                $BaseResponse.result_artifact_path = $BaseResponse.latest_result_path
+                $BaseResponse.latest_result_response_text = if ($TaskResult.PSObject.Properties.Name -contains "latest_result_response_text") { [string]$TaskResult.latest_result_response_text } else { "" }
+                $BaseResponse.response_text = if ($TaskResult.PSObject.Properties.Name -contains "response_text" -and -not [string]::IsNullOrWhiteSpace([string]$TaskResult.response_text) -and [string]$TaskResult.response_text -notmatch 'No tracked PDA task found for this conversation\.?') {
+                    [string]$TaskResult.response_text
+                }
+                else {
+                    "I don't see a tracked PDA task for this conversation yet."
+                }
+                $BaseResponse.next_action = if ($TaskResult.PSObject.Properties.Name -contains "next_action" -and -not [string]::IsNullOrWhiteSpace([string]$TaskResult.next_action)) { [string]$TaskResult.next_action } else { "Ask me to start a task with /planner or /research, or confirm a queued request." }
+            }
+            else {
+                $BaseResponse.response_text = "I don't see a tracked PDA task for this conversation yet. If you want, I can help start one with /planner, /research, or /reporter."
+                $BaseResponse.next_action = "Ask me to start a task with /planner or /research, or ask for /status."
+            }
+        }
+        "ambiguous" {
+            $BaseResponse.response_text = "I can help with one action at a time. Do you want a review, a run/execution, or a report?"
+            $BaseResponse.next_action = "Reply with one clear action such as review, report, status, research, or execute."
+        }
+        "fallback" {
+            $BaseResponse.response_text = "I can help with status, help, tasks, workers, reports, memory, Fabric, NotebookLM, planning, research, review, and execution. Ask a direct question or use /help."
+            $BaseResponse.next_action = "Ask a status question or use /help for the full command list."
+        }
+        default {
+            $BaseResponse.response_text = "I can help with status, help, tasks, workers, reports, memory, Fabric, NotebookLM, planning, research, review, and execution. Ask a direct question or use /help."
+            $BaseResponse.next_action = "Ask a status question or use /help for the full command list."
+        }
+    }
+
+    return [pscustomobject]$BaseResponse
+}
+
+if ($PSBoundParameters.ContainsKey("Text")) {
+    $Route = Resolve-PDAConversationalRoute -Text $Text -Root $Root
+    if ($OutputJson) {
+        $Route | ConvertTo-Json -Depth 20
+    }
+    else {
+        Write-Host ("Route type          : {0}" -f $Route.route_type)
+        Write-Host ("Recommended command : {0}" -f $(if ($Route.recommended_command) { $Route.recommended_command } else { "(none)" }))
+        Write-Host ("Requires confirmation: {0}" -f $Route.requires_confirmation)
+        Write-Host ("Reason              : {0}" -f $Route.reason)
+    }
+}
