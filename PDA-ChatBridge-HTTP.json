@@ -1,0 +1,73 @@
+{
+  "id": "pda-chat-bridge-http",
+  "name": "PDA Chat Bridge HTTP",
+  "active": true,
+  "nodes": [
+    {
+      "id": "pda-http-webhook-node",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "pda-chat-bridge-http",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "name": "PDA HTTP Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "webhookId": "f5d16ab6-3d2d-4f8a-a0f1-0b8f1e5c7d41"
+    },
+    {
+      "id": "pda-http-normalize-node",
+      "parameters": {
+        "jsCode": "const body = $json.body || $json;\nconst userMessage = String(body.user_message || body.message || '').trim();\nconst confirmDispatch = body.confirm_dispatch === true || body.confirm_dispatch === 'true' || body.confirm_dispatch === 1 || body.confirm_dispatch === '1';\nconst url = 'http://host.docker.internal:8788/pda-chat-bridge';\nreturn [{ json: { user_message: userMessage, confirm_dispatch: confirmDispatch, url, received_at: new Date().toISOString() } }];"
+      },
+      "name": "Normalize Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [260, 0]
+    },
+    {
+      "id": "pda-http-request-node",
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.url }}",
+        "sendBody": true,
+        "contentType": "json",
+        "responseFormat": "json",
+        "jsonBody": "={{ JSON.stringify({ user_message: $json.user_message, confirm_dispatch: $json.confirm_dispatch }, null, 2) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "name": "Invoke Local HTTP Bridge",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [520, 0]
+    },
+    {
+      "id": "pda-http-parse-node",
+      "parameters": {
+        "jsCode": "const payload = $json.body || $json;\nlet parsed = payload;\nif (typeof payload === 'string') {\n  try {\n    parsed = JSON.parse(payload);\n  } catch (error) {\n    parsed = {\n      status: 'fail',\n      response_text: 'HTTP bridge returned invalid JSON.',\n      recommended_command: '',\n      intent: '',\n      confidence: 0,\n      requires_confirmation: false,\n      dispatch_ready: false,\n      dispatch_status: 'blocked',\n      next_action: 'Inspect the local webhook server and PowerShell bridge logs.',\n      source_of_truth: 'Scripts/PDA_CommandInterpreter.ps1',\n      bridge_status: 'fail_closed',\n      handoff_status: 'fail_closed'\n    };\n  }\n}\nreturn [{ json: parsed }];"
+      },
+      "name": "Parse Bridge Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [780, 0]
+    },
+    {
+      "id": "pda-http-response-node",
+      "parameters": {
+        "respondWith": "firstIncomingItem"
+      },
+      "name": "Return HTTP Bridge Result",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1040, 0]
+    }
+  ],
+  "settings": {},
+  "staticData": null,
+  "pinData": {},
+  "versionId": "pda-chat-bridge-http-v1"
+}

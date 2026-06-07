@@ -99,7 +99,8 @@ async function probe(host) {
       resolve();
     });
 
-    req.setTimeout(3000, () => {
+    const timeoutMs = (host === "host.docker.internal" || host === "gateway.docker.internal") ? 15000 : 3000;
+    req.setTimeout(timeoutMs, () => {
       result.http_error = "timeout";
       req.destroy(new Error("timeout"));
     });

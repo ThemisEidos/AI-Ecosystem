@@ -62,7 +62,7 @@ return [{ json: { user_message: userMessage, confirm_dispatch: confirmDispatch, 
                 responseFormat = "json"
                 jsonBody = '={{ { user_message: $json.user_message, confirm_dispatch: $json.confirm_dispatch, conversation_id: $json.conversation_id, session_id: $json.session_id, user_id: $json.user_id, conversation_title: $json.conversation_title } }}'
                 options = [pscustomobject]@{
-                    timeout = 10000
+                    timeout = 30000
                 }
             }
         }

@@ -46,6 +46,8 @@ $Workflow = Get-Content -Path $WorkflowPath -Raw | ConvertFrom-Json
 $WorkflowText = Get-Content -Path $WorkflowPath -Raw
 
 $Issues = New-Object System.Collections.Generic.List[string]
+$TimeoutMatch = [regex]::Match($WorkflowText, '"timeout"\s*:\s*(\d+)')
+$TimeoutValue = if ($TimeoutMatch.Success) { [int]$TimeoutMatch.Groups[1].Value } else { 0 }
 
 if ($Workflow.name -ne "PDA Chat Bridge HTTP") {
     $Issues.Add("Workflow name mismatch.")
@@ -85,6 +87,9 @@ if ($WorkflowText -notmatch 'responseFormat') {
 
 if ($WorkflowText -notmatch 'timeout') {
     $Issues.Add("Workflow HTTP Request node does not declare a timeout.")
+}
+elseif ($TimeoutValue -lt 30000) {
+    $Issues.Add("Workflow HTTP Request node timeout is too low ($TimeoutValue ms). Expected at least 30000 ms for host.docker.internal bridge calls.")
 }
 
 $ExpectedFields = @(
