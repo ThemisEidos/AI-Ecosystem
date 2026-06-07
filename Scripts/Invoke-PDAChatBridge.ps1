@@ -29,6 +29,7 @@ $HandoffScript = Join-Path $PSScriptRoot "Invoke-PDACommandHandoff.ps1"
 $ConversationStateScript = Join-Path $PSScriptRoot "Get-PDAConversationState.ps1"
 $TaskResultScript = Join-Path $PSScriptRoot "Get-PDATaskResult.ps1"
 $UpdateConversationStateScript = Join-Path $PSScriptRoot "Update-PDAConversationState.ps1"
+. (Join-Path $PSScriptRoot "PDA_OutputParsing.ps1")
 
 if (-not (Test-Path -Path $HandoffScript -PathType Leaf)) {
     throw "Command handoff missing: $HandoffScript"
@@ -140,7 +141,7 @@ function Invoke-PDAConversationStateQuery {
             return $null
         }
 
-        return $JsonText | ConvertFrom-Json
+        return ConvertFrom-PDAMixedJson -Text $JsonText -SourceName $ConversationStateScript
     }
     catch {
         return $null
@@ -180,7 +181,7 @@ function Invoke-PDATaskResultQuery {
             return $null
         }
 
-        return $JsonText | ConvertFrom-Json
+        return ConvertFrom-PDAMixedJson -Text $JsonText -SourceName $TaskResultScript
     }
     catch {
         return $null
@@ -347,6 +348,8 @@ $HasPendingAction = $PendingAction -and -not [bool]$PendingAction.is_expired
 $IsConfirmationMessage = Test-PDAConfirmationMessage -Text $Message
 $IsStatusLookup = Test-PDAStatusLookupMessage -Text $Message
 $IsOperatorConsoleCommand = Test-PDAOperatorConsoleMessage -Text $Message
+$NormalizedMessage = [string]$Message.Trim()
+$IsSlashCommandMessage = $NormalizedMessage.StartsWith("/")
 
 if ($IsConfirmationMessage -and -not $HasPendingAction) {
     if ($PendingAction -and [bool]$PendingAction.is_expired) {
@@ -411,12 +414,16 @@ if ($HasPendingAction -and ($IsConfirmationMessage -or $ConfirmDispatch)) {
     )
 
     $Raw = & pwsh -NoProfile -File $HandoffScript @ConfirmationArgs
-    $Handoff = $Raw | ConvertFrom-Json
+    $Handoff = ConvertFrom-PDAMixedJson -Text ([string]($Raw -join "`n")) -SourceName $HandoffScript
 
     $ResponseText = ""
     $NextAction = ""
 
     if ($Handoff.dispatch_status -eq "not_applicable") {
+        $ResponseText = [string]$Handoff.response_text
+        $NextAction = [string]$Handoff.next_action
+    }
+    elseif ($Handoff.dispatch_status -eq "completed") {
         $ResponseText = [string]$Handoff.response_text
         $NextAction = [string]$Handoff.next_action
     }
@@ -446,6 +453,9 @@ if ($HasPendingAction -and ($IsConfirmationMessage -or $ConfirmDispatch)) {
             $ApprovalPath = $TaskFile.FullName
             $TaskStatus = "pending_approval"
         }
+        elseif ($TaskFile.FullName -match '\\results\\') {
+            $TaskStatus = "completed"
+        }
         elseif ($TaskFile.FullName -match '\\running\\') {
             $TaskStatus = "running"
         }
@@ -470,8 +480,8 @@ if ($HasPendingAction -and ($IsConfirmationMessage -or $ConfirmDispatch)) {
         }
     }
 
-    if ($Handoff.dispatch_status -eq "submitted") {
-        Invoke-PDAConversationStateUpdate -TaskId $TaskId -TaskStatus $TaskStatus -TaskFilePath $(if ($TaskFile) { $TaskFile.FullName } else { "" }) -ApprovalFilePath $ApprovalPath -ResultPath $ResultPath -BridgeStatus "submitted" -DispatchStatus $Handoff.dispatch_status -NextAction $NextAction -ResponseText $ResponseText -RecommendedCommand $Handoff.recommended_command -Intent $Handoff.intent -Confidence $Handoff.confidence -RequiresConfirmation:([bool]$Handoff.requires_confirmation) -PendingRecommendedCommand ([string]$PendingAction.recommended_command) -PendingDispatchCategory ([string]$PendingAction.dispatch_category) -PendingOriginalMessage ([string]$PendingAction.original_message) -PendingTimestamp ([string]$PendingAction.timestamp) -PendingExpiresAt ([string]$PendingAction.expires_at) -PendingStatus "dispatched" -ClearPendingAction | Out-Null
+    if ($Handoff.dispatch_status -in @("submitted", "completed")) {
+        Invoke-PDAConversationStateUpdate -TaskId $TaskId -TaskStatus $TaskStatus -TaskFilePath $(if ($TaskFile) { $TaskFile.FullName } else { "" }) -ApprovalFilePath $ApprovalPath -ResultPath $ResultPath -BridgeStatus $(if ($Handoff.bridge_status) { [string]$Handoff.bridge_status } else { "submitted" }) -DispatchStatus $Handoff.dispatch_status -NextAction $NextAction -ResponseText $ResponseText -RecommendedCommand $Handoff.recommended_command -Intent $Handoff.intent -Confidence $Handoff.confidence -RequiresConfirmation:([bool]$Handoff.requires_confirmation) -PendingRecommendedCommand ([string]$PendingAction.recommended_command) -PendingDispatchCategory ([string]$PendingAction.dispatch_category) -PendingOriginalMessage ([string]$PendingAction.original_message) -PendingTimestamp ([string]$PendingAction.timestamp) -PendingExpiresAt ([string]$PendingAction.expires_at) -PendingStatus "dispatched" -ClearPendingAction | Out-Null
     }
 
     $Result = [pscustomobject]@{
@@ -484,7 +494,7 @@ if ($HasPendingAction -and ($IsConfirmationMessage -or $ConfirmDispatch)) {
         dispatch_ready           = [bool]$Handoff.dispatch_ready
         dispatch_status          = [string]$Handoff.dispatch_status
         next_action              = $NextAction
-        bridge_status            = if ($Handoff.dispatch_status -eq "submitted") { "submitted" } elseif ($Handoff.interpreter_status -eq "mapped") { "ready" } else { "needs_clarification" }
+        bridge_status            = if ($Handoff.bridge_status) { [string]$Handoff.bridge_status } elseif ($Handoff.dispatch_status -eq "submitted") { "submitted" } elseif ($Handoff.interpreter_status -eq "mapped") { "ready" } else { "needs_clarification" }
         handoff_status           = [string]$Handoff.interpreter_status
         source_of_truth          = "Scripts/PDA_CommandInterpreter.ps1"
         confirmation_mode        = [bool]$ConfirmDispatch
@@ -516,7 +526,7 @@ if ($HasPendingAction -and ($IsConfirmationMessage -or $ConfirmDispatch)) {
     return
 }
 
-if ($IsStatusLookup -and -not $IsOperatorConsoleCommand) {
+if ($IsStatusLookup -and -not $IsOperatorConsoleCommand -and -not $IsSlashCommandMessage) {
     $TaskResult = Invoke-PDATaskResultQuery -ConversationId $ConversationId -SessionId $SessionId -Message $Message
     if (-not $TaskResult) {
         $TaskResult = Invoke-PDAConversationStateQuery -ConversationId $ConversationId -SessionId $SessionId -Message $Message
@@ -611,19 +621,23 @@ if ($ConfirmDispatch) {
 }
 
 $Raw = & pwsh -NoProfile -File $HandoffScript @HandoffArgs
-$Handoff = $Raw | ConvertFrom-Json
+$Handoff = ConvertFrom-PDAMixedJson -Text ([string]($Raw -join "`n")) -SourceName $HandoffScript
 
 $ResponseText = ""
 $NextAction = ""
 
-if ($Handoff.dispatch_status -eq "not_applicable") {
-    $ResponseText = [string]$Handoff.response_text
-    $NextAction = [string]$Handoff.next_action
-}
-else {
+    if ($Handoff.dispatch_status -eq "not_applicable") {
+        $ResponseText = [string]$Handoff.response_text
+        $NextAction = [string]$Handoff.next_action
+    }
+    else {
 switch ($Handoff.interpreter_status) {
     "mapped" {
-        if ($Handoff.dispatch_status -eq "submitted") {
+        if ($Handoff.dispatch_status -eq "completed") {
+            $ResponseText = [string]$Handoff.response_text
+            $NextAction = [string]$Handoff.next_action
+        }
+        elseif ($Handoff.dispatch_status -eq "submitted") {
             $ResponseText = "Dispatched via governed PDA handoff using $($Handoff.recommended_command)."
             $NextAction = "Dispatch submitted through the governed submitter."
         }
@@ -668,6 +682,9 @@ if ($TaskFile) {
         $ApprovalPath = $TaskFile.FullName
         $TaskStatus = "pending_approval"
     }
+    elseif ($TaskFile.FullName -match '\\results\\') {
+        $TaskStatus = "completed"
+    }
     elseif ($TaskFile.FullName -match '\\running\\') {
         $TaskStatus = "running"
     }
@@ -702,7 +719,7 @@ $Result = [pscustomobject]@{
     dispatch_ready           = [bool]$Handoff.dispatch_ready
     dispatch_status          = [string]$Handoff.dispatch_status
     next_action              = $NextAction
-    bridge_status            = if ($Handoff.dispatch_status -eq "submitted") { "submitted" } elseif ($Handoff.interpreter_status -eq "mapped") { "ready" } else { "needs_clarification" }
+    bridge_status            = if ($Handoff.bridge_status) { [string]$Handoff.bridge_status } elseif ($Handoff.dispatch_status -eq "submitted") { "submitted" } elseif ($Handoff.interpreter_status -eq "mapped") { "ready" } else { "needs_clarification" }
     handoff_status           = [string]$Handoff.interpreter_status
     source_of_truth          = "Scripts/PDA_CommandInterpreter.ps1"
     confirmation_mode        = [bool]$ConfirmDispatch

@@ -169,6 +169,17 @@ $Cases = @(
         marker = "chat-research-$([guid]::NewGuid().ToString())"
     }
     [pscustomobject]@{
+        name = "slash fabric report with status wording"
+        message = "/fabric report Summarize the current PDA ecosystem status..."
+        confirm = $false
+        expected_handoff = "mapped"
+        expected_response_contains = "Recommended command"
+        expected_dispatch_ready = $true
+        expected_dispatch = $false
+        expected_command = "/fabric report"
+        marker = "chat-fabric-report-$([guid]::NewGuid().ToString())"
+    }
+    [pscustomobject]@{
         name = "operator status"
         message = "/status"
         confirm = $false
