@@ -30,9 +30,13 @@ $ConversationStateScript = Join-Path $PSScriptRoot "Get-PDAConversationState.ps1
 $TaskResultScript = Join-Path $PSScriptRoot "Get-PDATaskResult.ps1"
 $UpdateConversationStateScript = Join-Path $PSScriptRoot "Update-PDAConversationState.ps1"
 $ConversationalRouterScript = Join-Path $PSScriptRoot "PDA_ConversationalRouter.ps1"
+$EnvironmentHelperScript = Join-Path $PSScriptRoot "PDA_Environment.ps1"
 . (Join-Path $PSScriptRoot "PDA_OutputParsing.ps1")
 if (Test-Path -Path $ConversationalRouterScript -PathType Leaf) {
     . $ConversationalRouterScript
+}
+if (Test-Path -Path $EnvironmentHelperScript -PathType Leaf) {
+    . $EnvironmentHelperScript
 }
 
 if (-not (Test-Path -Path $HandoffScript -PathType Leaf)) {
@@ -545,6 +549,25 @@ if (Get-Command -Name Resolve-PDAConversationalRoute -ErrorAction SilentlyContin
                 Write-Host ("Next action          : {0}" -f $DirectResult.next_action)
                 return
             }
+            "environment_awareness" {
+                $DirectResult = Get-PDAConversationalNaturalResponse -Route $ConversationRoute -ConversationId $ConversationId -SessionId $SessionId -UserId $UserId -ConversationTitle $ConversationTitle -Text $Message -Root $Root
+                Invoke-PDAConversationStateUpdate -ConversationId $ConversationId -SessionId $SessionId -UserId $UserId -ConversationTitle $ConversationTitle -Message $Message -TaskId "" -TaskStatus "" -TaskFilePath "" -ApprovalFilePath "" -ResultPath "" -ResultSummary "" -BridgeStatus ([string]$DirectResult.bridge_status) -DispatchStatus ([string]$DirectResult.dispatch_status) -NextAction ([string]$DirectResult.next_action) -ResponseText ([string]$DirectResult.response_text) -RecommendedCommand ([string]$DirectResult.recommended_command) -Intent ([string]$DirectResult.intent) -Confidence ([double]$DirectResult.confidence) -RequiresConfirmation:$false | Out-Null
+
+                if ($AsJson) {
+                    $DirectResult | ConvertTo-Json -Depth 20
+                    return
+                }
+
+                Write-Host "[OK] PDA chat bridge result:"
+                Write-Host ("Response text        : {0}" -f $DirectResult.response_text)
+                Write-Host ("Recommended command  : {0}" -f $(if ($DirectResult.recommended_command) { $DirectResult.recommended_command } else { "(none)" }))
+                Write-Host ("Intent               : {0}" -f $(if ($DirectResult.intent) { $DirectResult.intent } else { "(none)" }))
+                Write-Host ("Confidence           : {0}" -f $DirectResult.confidence)
+                Write-Host ("Dispatch ready       : {0}" -f $DirectResult.dispatch_ready)
+                Write-Host ("Dispatch status      : {0}" -f $DirectResult.dispatch_status)
+                Write-Host ("Next action          : {0}" -f $DirectResult.next_action)
+                return
+            }
             "goal_planning" {
                 $DirectResult = Get-PDAConversationalNaturalResponse -Route $ConversationRoute -ConversationId $ConversationId -SessionId $SessionId -UserId $UserId -ConversationTitle $ConversationTitle -Text $Message -Root $Root
                 Invoke-PDAConversationStateUpdate -ConversationId $ConversationId -SessionId $SessionId -UserId $UserId -ConversationTitle $ConversationTitle -Message $Message -TaskId "" -TaskStatus "" -TaskFilePath "" -ApprovalFilePath "" -ResultPath "" -ResultSummary "" -BridgeStatus ([string]$DirectResult.bridge_status) -DispatchStatus ([string]$DirectResult.dispatch_status) -NextAction ([string]$DirectResult.next_action) -ResponseText ([string]$DirectResult.response_text) -RecommendedCommand ([string]$DirectResult.recommended_command) -Intent ([string]$DirectResult.intent) -Confidence ([double]$DirectResult.confidence) -RequiresConfirmation:$false | Out-Null
@@ -874,19 +897,31 @@ if ($UseLegacyStatusLookup -and $IsStatusLookup -and -not $IsOperatorConsoleComm
     return
 }
 
-$HandoffArgs = @(
-    "-Text", $HandoffInputMessage,
-    "-AsJson",
-    "-ConversationId", $(if ($ConversationId) { $ConversationId } else { "" }),
-    "-SessionId", $(if ($SessionId) { $SessionId } else { "" }),
-    "-UserId", $(if ($UserId) { $UserId } else { "" }),
-    "-ConversationTitle", $(if ($ConversationTitle) { $ConversationTitle } else { "" })
-)
+$HandoffArgs = New-Object System.Collections.Generic.List[string]
+$HandoffArgs.Add("-Text") | Out-Null
+$HandoffArgs.Add($HandoffInputMessage) | Out-Null
+$HandoffArgs.Add("-AsJson") | Out-Null
+if (-not [string]::IsNullOrWhiteSpace([string]$ConversationId)) {
+    $HandoffArgs.Add("-ConversationId") | Out-Null
+    $HandoffArgs.Add([string]$ConversationId) | Out-Null
+}
+if (-not [string]::IsNullOrWhiteSpace([string]$SessionId)) {
+    $HandoffArgs.Add("-SessionId") | Out-Null
+    $HandoffArgs.Add([string]$SessionId) | Out-Null
+}
+if (-not [string]::IsNullOrWhiteSpace([string]$UserId)) {
+    $HandoffArgs.Add("-UserId") | Out-Null
+    $HandoffArgs.Add([string]$UserId) | Out-Null
+}
+if (-not [string]::IsNullOrWhiteSpace([string]$ConversationTitle)) {
+    $HandoffArgs.Add("-ConversationTitle") | Out-Null
+    $HandoffArgs.Add([string]$ConversationTitle) | Out-Null
+}
 if ($ConfirmDispatch) {
-    $HandoffArgs += "-ConfirmDispatch"
+    $HandoffArgs.Add("-ConfirmDispatch") | Out-Null
 }
 
-$Raw = & pwsh -NoProfile -File $HandoffScript @HandoffArgs
+$Raw = & pwsh -NoProfile -File $HandoffScript @($HandoffArgs)
 $Handoff = ConvertFrom-PDAMixedJson -Text ([string]($Raw -join "`n")) -SourceName $HandoffScript
 
 $ResponseText = ""

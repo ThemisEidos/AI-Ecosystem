@@ -384,7 +384,18 @@ function Get-PDAConversationTasks {
         $Tasks.Add([pscustomobject]$Merged)
     }
 
-    return @($Tasks | Sort-Object -Property @{ Expression = { [datetime]::Parse([string]($_.updated_at ?? $_.created_at ?? "1970-01-01T00:00:00Z")) } } -Descending)
+    return @($Tasks | Sort-Object -Property @{
+        Expression = {
+            $UpdatedAt = $_.updated_at
+            if ([string]::IsNullOrWhiteSpace([string]$UpdatedAt)) {
+                $UpdatedAt = $_.created_at
+            }
+            if ([string]::IsNullOrWhiteSpace([string]$UpdatedAt)) {
+                $UpdatedAt = "1970-01-01T00:00:00Z"
+            }
+            [datetime]::Parse([string]$UpdatedAt)
+        }
+    } -Descending)
 }
 
 function Get-PDAConversationPendingAction {

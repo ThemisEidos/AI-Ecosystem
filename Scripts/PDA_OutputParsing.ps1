@@ -119,3 +119,58 @@ function ConvertFrom-PDAMixedJson {
         throw "$SourceName contained JSON that could not be parsed: $($_.Exception.Message)"
     }
 }
+
+function ConvertFrom-PDAFlexibleJson {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [AllowNull()]
+        [string]$Text,
+
+        [Parameter(Mandatory = $false)]
+        [string]$SourceName = "output"
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Text)) {
+        throw "$SourceName returned empty output."
+    }
+
+    $Candidates = New-Object System.Collections.Generic.List[string]
+    $Trimmed = [string]$Text.Trim()
+    if (-not [string]::IsNullOrWhiteSpace($Trimmed)) {
+        $Candidates.Add($Trimmed)
+    }
+
+    $JsonSubstring = Get-PDAJsonSubstring -Text $Text
+    if (-not [string]::IsNullOrWhiteSpace($JsonSubstring) -and $JsonSubstring -ne $Trimmed) {
+        $Candidates.Add($JsonSubstring)
+    }
+
+    foreach ($Candidate in @($Candidates | Select-Object -Unique)) {
+        try {
+            $Parsed = $Candidate | ConvertFrom-Json -ErrorAction Stop
+        }
+        catch {
+            continue
+        }
+
+        if ($Parsed -is [string]) {
+            $Nested = [string]$Parsed
+            if (-not [string]::IsNullOrWhiteSpace($Nested)) {
+                $NestedTrimmed = $Nested.Trim()
+                if ($NestedTrimmed.StartsWith("{") -or $NestedTrimmed.StartsWith("[")) {
+                    try {
+                        return $NestedTrimmed | ConvertFrom-Json -ErrorAction Stop
+                    }
+                    catch {
+                        # Fall through and return the outer parsed string if it is the best available result.
+                    }
+                }
+            }
+        }
+
+        return $Parsed
+    }
+
+    throw "$SourceName contained JSON that could not be parsed after normalization."
+}

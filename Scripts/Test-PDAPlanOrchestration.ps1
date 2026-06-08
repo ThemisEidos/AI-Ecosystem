@@ -48,6 +48,12 @@ function Assert-PDACondition {
     return $Condition
 }
 
+function Format-PDAJsonFence {
+    param([Parameter(Mandatory = $true)][string]$JsonText)
+
+    return @('```json', $JsonText, '```') -join [Environment]::NewLine
+}
+
 $Issues = New-Object System.Collections.Generic.List[string]
 $GoalText = "I want to start reading classic literature. Research the topic, create a reading list, write a report, and generate a PDF."
 
@@ -59,6 +65,10 @@ $PlanInstance = Invoke-PDAJsonScript -Path $PlanInstanceScript -Arguments @("-Ex
 Assert-PDACondition -Condition ([string]$PlanInstance.plan_folder -eq "approved") -Message "Plan instance was not written to the approved folder." -Issues $Issues | Out-Null
 Assert-PDACondition -Condition (@($PlanInstance.steps).Count -ge 4) -Message "Plan instance did not preserve the execution steps." -Issues $Issues | Out-Null
 Assert-PDACondition -Condition (@($PlanInstance.steps | Where-Object { @($_.depends_on).Count -gt 0 }).Count -ge 2) -Message "Step dependency tracking was not preserved." -Issues $Issues | Out-Null
+
+$PlanInstanceFenced = Invoke-PDAJsonScript -Path $PlanInstanceScript -Arguments @("-ExecutionPlanJson", (Format-PDAJsonFence -JsonText (($GoalPlan.execution_plan | ConvertTo-Json -Depth 40 -Compress))), "-Root", $Root, "-Status", "approved", "-AsJson")
+Assert-PDACondition -Condition ([string]$PlanInstanceFenced.plan_folder -eq "approved") -Message "Plan instance did not accept fenced execution-plan JSON." -Issues $Issues | Out-Null
+Assert-PDACondition -Condition (@($PlanInstanceFenced.steps).Count -ge 4) -Message "Fenced execution-plan JSON did not preserve the steps." -Issues $Issues | Out-Null
 
 $PlanInstancePath = $PlanInstance.plan_path
 $PlanSnapshot = Get-Content -LiteralPath $PlanInstancePath -Raw | ConvertFrom-Json
@@ -150,6 +160,8 @@ $CleanupTargets = @(
     (Join-Path $Root ("PDA-Plans\failed\{0}-results.json" -f [string]$FailurePlan.plan_id))
 )
 
+$PlanInstanceFencedPath = if ($PlanInstanceFenced -and $PlanInstanceFenced.plan_path) { [string]$PlanInstanceFenced.plan_path } else { "" }
+$CleanupTargets += $PlanInstanceFencedPath
 $CleanupTargets += $PreparedResultPaths
 $CleanupTargets += @(
     $CompletedPlan.steps |

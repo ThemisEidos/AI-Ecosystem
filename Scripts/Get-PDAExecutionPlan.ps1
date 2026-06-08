@@ -15,6 +15,11 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+$ParserPath = Join-Path $PSScriptRoot "PDA_OutputParsing.ps1"
+if (Test-Path -LiteralPath $ParserPath -PathType Leaf) {
+    . $ParserPath
+}
+
 $GoalPlanningHelper = Join-Path $PSScriptRoot "PDA_GoalPlanning.ps1"
 if (Test-Path -LiteralPath $GoalPlanningHelper -PathType Leaf) {
     . $GoalPlanningHelper
@@ -37,7 +42,7 @@ if ([string]::IsNullOrWhiteSpace($GoalPlanJson)) {
     }
 }
 
-$GoalPlan = $GoalPlanJson | ConvertFrom-Json -ErrorAction Stop
+$GoalPlan = ConvertFrom-PDAFlexibleJson -Text $GoalPlanJson -SourceName "goal plan JSON"
 $ExecutionPlan = New-PDAExecutionPlanFromGoalPlan -GoalPlan $GoalPlan
 
 $ExecutionPlan = [pscustomobject]@{

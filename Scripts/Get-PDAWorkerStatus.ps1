@@ -139,7 +139,7 @@ $MultiAgentPid = if ($MultiAgentProcess) {
 Write-Host "=== PDA PERSISTENT WORKER STATUS ==="
 Write-Host ""
 Write-Host ("Status      : {0}" -f $Status)
-Write-Host ("PID         : {0}" -f ($WorkerPid ?? "n/a"))
+Write-Host ("PID         : {0}" -f ($(if ($null -ne $WorkerPid -and -not [string]::IsNullOrWhiteSpace([string]$WorkerPid)) { $WorkerPid } else { "n/a" })))
 Write-Host ("Script      : {0}" -f (Join-Path $Root "Scripts\Start-PDAQueueWorker.ps1"))
 Write-Host ("Log file    : {0}" -f $LogFile)
 Write-Host ("Control log : {0}" -f $ControlLogFile)
@@ -152,7 +152,7 @@ if ($State -and $State.stopped_at) {
 Write-Host ""
 Write-Host "=== REPORTER INTAKE WATCHER ==="
 Write-Host ("Status      : {0}" -f $IntakeStatus)
-Write-Host ("PID         : {0}" -f ($IntakePid ?? "n/a"))
+Write-Host ("PID         : {0}" -f ($(if ($null -ne $IntakePid -and -not [string]::IsNullOrWhiteSpace([string]$IntakePid)) { $IntakePid } else { "n/a" })))
 Write-Host ("Log file    : {0}" -f $IntakeLogFile)
 if ($IntakeState -and $IntakeState.started_at) {
     Write-Host ("Started at  : {0}" -f $IntakeState.started_at)
@@ -164,7 +164,7 @@ if ($IntakeState -and $IntakeState.stopped_at) {
 Write-Host ""
 Write-Host "=== MULTI-AGENT INTAKE WATCHER ==="
 Write-Host ("Status      : {0}" -f $MultiAgentStatus)
-Write-Host ("PID         : {0}" -f ($MultiAgentPid ?? "n/a"))
+Write-Host ("PID         : {0}" -f ($(if ($null -ne $MultiAgentPid -and -not [string]::IsNullOrWhiteSpace([string]$MultiAgentPid)) { $MultiAgentPid } else { "n/a" })))
 Write-Host ("Log file    : {0}" -f $MultiAgentLogFile)
 if ($MultiAgentState -and $MultiAgentState.started_at) {
     Write-Host ("Started at  : {0}" -f $MultiAgentState.started_at)

@@ -49,6 +49,12 @@ function Assert-PDACondition {
     return $Condition
 }
 
+function Format-PDAJsonFence {
+    param([Parameter(Mandatory = $true)][string]$JsonText)
+
+    return @('```json', $JsonText, '```') -join [Environment]::NewLine
+}
+
 $Issues = New-Object System.Collections.Generic.List[string]
 $GoalText = "I want to start reading classic literature. Can you search the internet, create a list of top books from famous authors, write a report, include links and synopses, and make it a PDF?"
 
@@ -67,6 +73,10 @@ $ExecutionPlan = Invoke-PDAJsonScript -Path $ExecutionPlanScript -Arguments @("-
 Assert-PDACondition -Condition (@($ExecutionPlan.subtasks).Count -ge 3) -Message "Execution plan did not retain subtasks." -Issues $Issues | Out-Null
 Assert-PDACondition -Condition (@($ExecutionPlan.recommended_executors) -contains "gemini-cli") -Message "Execution plan did not recommend gemini-cli for research work." -Issues $Issues | Out-Null
 Assert-PDACondition -Condition (@($ExecutionPlan.recommended_executors) -contains "reporter-worker") -Message "Execution plan did not recommend reporter-worker for reporting work." -Issues $Issues | Out-Null
+
+$ExecutionPlanFenced = Invoke-PDAJsonScript -Path $ExecutionPlanScript -Arguments @("-GoalPlanJson", (Format-PDAJsonFence -JsonText (($GoalPlan | ConvertTo-Json -Depth 30 -Compress))), "-AsJson")
+Assert-PDACondition -Condition ([string]$ExecutionPlanFenced.status -eq "pass") -Message "Execution plan did not accept fenced JSON input." -Issues $Issues | Out-Null
+Assert-PDACondition -Condition (@($ExecutionPlanFenced.subtasks).Count -ge 3) -Message "Execution plan fenced input did not retain subtasks." -Issues $Issues | Out-Null
 
 $BridgeResult = Invoke-PDAJsonScript -Path $BridgeScript -Arguments @("-Message", $GoalText, "-AsJson")
 Assert-PDACondition -Condition ([string]$BridgeResult.handoff_status -eq "goal_planning") -Message "Chat bridge did not route the goal prompt to goal planning." -Issues $Issues | Out-Null

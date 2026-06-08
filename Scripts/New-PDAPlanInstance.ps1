@@ -22,6 +22,11 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+$ParserPath = Join-Path $PSScriptRoot "PDA_OutputParsing.ps1"
+if (Test-Path -LiteralPath $ParserPath -PathType Leaf) {
+    . $ParserPath
+}
+
 $HelperScript = Join-Path $PSScriptRoot "PDA_PlanOrchestration.ps1"
 . $HelperScript
 
@@ -37,7 +42,7 @@ if ([string]::IsNullOrWhiteSpace($ExecutionPlanJson)) {
     $ExecutionPlanJson = Get-Content -LiteralPath $ExecutionPlanPath -Raw -ErrorAction Stop
 }
 
-$ExecutionPlan = $ExecutionPlanJson | ConvertFrom-Json -ErrorAction Stop
+$ExecutionPlan = ConvertFrom-PDAFlexibleJson -Text $ExecutionPlanJson -SourceName "execution plan JSON"
 if ($ExecutionPlan.PSObject.Properties.Name -contains "execution_plan" -and $ExecutionPlan.execution_plan) {
     $ExecutionPlan = $ExecutionPlan.execution_plan
 }
