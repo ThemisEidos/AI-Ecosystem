@@ -98,7 +98,10 @@ function Get-PDAGoalPlanningClassification {
     }
 
     $GoalType = "general_goal"
-    if ($Normalized -match '(?i)\b(classic literature|reading list|authors|books|synopses|synopsis|pdf)\b') {
+    if ($Normalized -match '(?i)\b(filesystem|file system|repository|repositories|docker|container|containers|service inventory|service status|tool inventory|workspace inventory|environment awareness|environment inventory|file structure|organize folders|storage locations|scan c:\\|scan ~/|scan my filesystem|show my repositories|what ai services are running|help organize my folders|recommend a better project structure)\b') {
+        $GoalType = "environment_awareness"
+    }
+    elseif ($Normalized -match '(?i)\b(classic literature|reading list|authors|books|synopses|synopsis|pdf)\b') {
         $GoalType = "research_report_pdf"
     }
     elseif ($Normalized -match '(?i)\b(research|investigate|sources|evidence)\b' -and $Normalized -match '(?i)\b(report|summary|summarize|brief)\b') {
@@ -118,6 +121,16 @@ function Get-PDAGoalPlanningClassification {
     }
 
     $Deliverables = New-Object System.Collections.Generic.List[string]
+    if ($GoalType -eq "environment_awareness") {
+        $Deliverables.Add("filesystem inventory")
+        $Deliverables.Add("repository inventory")
+        $Deliverables.Add("docker inventory")
+        $Deliverables.Add("service inventory")
+        $Deliverables.Add("tool inventory")
+        $Deliverables.Add("environment summary")
+        $Deliverables.Add("organization recommendation")
+        $Deliverables.Add("approval path")
+    }
     if ($Normalized -match '(?i)\b(reading list|book list|classic literature|top books|books from famous authors|famous authors)\b') { $Deliverables.Add("reading list") }
     if ($Normalized -match '(?i)\b(authors?|author profiles?)\b') { $Deliverables.Add("author profiles") }
     if ($Normalized -match '(?i)\b(works?|books?|titles?)\b') { $Deliverables.Add("representative works") }
@@ -149,6 +162,10 @@ function Get-PDAGoalPlanningClassification {
 
     $RequiredCapabilities = New-Object System.Collections.Generic.List[string]
     switch ($GoalType) {
+        "environment_awareness" {
+            $RequiredCapabilities.Add("planning")
+            $RequiredCapabilities.Add("reporting")
+        }
         "research_report_pdf" {
             $RequiredCapabilities.Add("research")
             $RequiredCapabilities.Add("reporting")
@@ -229,6 +246,13 @@ function Get-PDAGoalPlanningSubtasks {
     $TaskNumber = 1
 
     switch ($GoalType) {
+        "environment_awareness" {
+            $Subtasks.Add((New-PDAGoalSubtaskRecord -TaskNumber $TaskNumber -Title "Analyze the filesystem and operating context" -TaskType "environment_awareness" -Capabilities @("planning", "reporting") -Executor "planner-worker" -Dependencies @() -Output "environment scope and root selection"))
+            $TaskNumber++
+            $Subtasks.Add((New-PDAGoalSubtaskRecord -TaskNumber $TaskNumber -Title "Collect filesystem, repository, docker, service, and tool inventories" -TaskType "environment_awareness" -Capabilities @("planning", "reporting") -Executor "operator-console-worker" -Dependencies @("goal-step-01") -Output "current-state environment inventory"))
+            $TaskNumber++
+            $Subtasks.Add((New-PDAGoalSubtaskRecord -TaskNumber $TaskNumber -Title "Draft the file organization recommendation and migration plan" -TaskType "reporting" -Capabilities @("planning", "reporting") -Executor "reporter-worker" -Dependencies @("goal-step-02") -Output "recommended structure and phased cleanup plan"))
+        }
         "research_report_pdf" {
             $Subtasks.Add((New-PDAGoalSubtaskRecord -TaskNumber $TaskNumber -Title "Research major authors and representative works" -TaskType "research" -Capabilities @("research") -Executor "gemini-cli" -Dependencies @() -Output "author shortlist and source notes"))
             $TaskNumber++

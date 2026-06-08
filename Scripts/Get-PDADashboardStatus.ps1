@@ -27,8 +27,12 @@ else {
 
 $DashboardPath = Join-Path $Root "Obsidian Vault\02_Projects\AI Tool Ecosystem\PDA Dashboard.md"
 $ParserPath = Join-Path $PSScriptRoot "PDA_OutputParsing.ps1"
+$EnvironmentHelperScript = Join-Path $PSScriptRoot "PDA_Environment.ps1"
 if (Test-Path -LiteralPath $ParserPath -PathType Leaf) {
     . $ParserPath
+}
+if (Test-Path -LiteralPath $EnvironmentHelperScript -PathType Leaf) {
+    . $EnvironmentHelperScript
 }
 
 function ConvertTo-PDAHashtable {
@@ -909,6 +913,42 @@ else {
         checked_at = (Get-Date).ToUniversalTime().ToString("o")
     }
 }
+$EnvironmentAwareness = if (Get-Command -Name Get-PDAEnvironmentSummary -ErrorAction SilentlyContinue) {
+    try {
+        Get-PDAEnvironmentSummary -Root $Root
+    }
+    catch {
+        [pscustomobject]@{
+            status = "error"
+            generated_at = (Get-Date).ToUniversalTime().ToString("o")
+            roots = @($Root)
+            filesystem = [pscustomobject]@{ status = "error"; roots = @(); project_candidates = @(); archive_candidates = @() }
+            repositories = [pscustomobject]@{ status = "error"; repo_count = 0; repositories = @(); active_projects = @(); archived_projects = @() }
+            containers = [pscustomobject]@{ status = "error"; containers = @(); running_count = 0; total_count = 0; compose_projects = @() }
+            services = [pscustomobject]@{ status = "error"; services = @(); online_count = 0; offline_count = 0 }
+            tools = [pscustomobject]@{ status = "error"; tools = @(); available_count = 0 }
+            workspace_summary = [pscustomobject]@{ roots = @(); project_count = 0; archive_count = 0 }
+            storage_summary = [pscustomobject]@{ roots = @(); top_level_category_count = 0 }
+            counts = [pscustomobject]@{ repositories = 0; containers = 0; running_containers = 0; services_online = 0; tools_available = 0 }
+            error = $_.Exception.Message
+        }
+    }
+}
+else {
+    [pscustomobject]@{
+        status = "skipped"
+        generated_at = (Get-Date).ToUniversalTime().ToString("o")
+        roots = @($Root)
+        filesystem = [pscustomobject]@{ status = "skipped"; roots = @(); project_candidates = @(); archive_candidates = @() }
+        repositories = [pscustomobject]@{ status = "skipped"; repo_count = 0; repositories = @(); active_projects = @(); archived_projects = @() }
+        containers = [pscustomobject]@{ status = "skipped"; containers = @(); running_count = 0; total_count = 0; compose_projects = @() }
+        services = [pscustomobject]@{ status = "skipped"; services = @(); online_count = 0; offline_count = 0 }
+        tools = [pscustomobject]@{ status = "skipped"; tools = @(); available_count = 0 }
+        workspace_summary = [pscustomobject]@{ roots = @(); project_count = 0; archive_count = 0 }
+        storage_summary = [pscustomobject]@{ roots = @(); top_level_category_count = 0 }
+        counts = [pscustomobject]@{ repositories = 0; containers = 0; running_containers = 0; services_online = 0; tools_available = 0 }
+    }
+}
 $CommanderSnapshot = if ($SkipCoreIntegration) {
     [pscustomobject]@{
         status = "skipped"
@@ -977,6 +1017,7 @@ foreach ($Candidate in @(
     $ModelSnapshot.env_validation.status,
     $CapabilityRouter.status,
     $FabricHealth.status,
+    $EnvironmentAwareness.status,
     $CommanderSnapshot.command_interpreter.status,
     $CommanderSnapshot.command_handoff.status,
     $CommanderSnapshot.chat_bridge.status,
@@ -1053,6 +1094,7 @@ $Report = [pscustomobject]@{
     commander_briefing = $null
     commander_planning = $null
     commander_plan_orchestration = $null
+    environment_awareness = $EnvironmentAwareness
     dispatch_status = $DispatchSnapshot
     memory_summary = [pscustomobject]@{
         status = Get-PDASafeString $MemorySnapshot.status

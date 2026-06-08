@@ -266,7 +266,71 @@ $Lines.Add((ConvertTo-PDAMarkdownTable -Rows @(
     [pscustomobject]@{ metric = "Cloud-allowed routes"; value = $StatusReport.capability_router.cloud_allowed_count }
 ) -Columns @("metric", "value")))
 $Lines.Add("")
-  
+
+$Lines.Add("## Environment Awareness")
+$Lines.Add("")
+if ($StatusReport.environment_awareness) {
+    $Lines.Add((ConvertTo-PDAMarkdownTable -Rows @(
+        [pscustomobject]@{ metric = "Environment status"; value = $StatusReport.environment_awareness.status }
+        [pscustomobject]@{ metric = "Repository count"; value = $StatusReport.environment_awareness.counts.repositories }
+        [pscustomobject]@{ metric = "Container count"; value = $StatusReport.environment_awareness.counts.containers }
+        [pscustomobject]@{ metric = "Running containers"; value = $StatusReport.environment_awareness.counts.running_containers }
+        [pscustomobject]@{ metric = "Online services"; value = $StatusReport.environment_awareness.counts.services_online }
+        [pscustomobject]@{ metric = "Available tools"; value = $StatusReport.environment_awareness.counts.tools_available }
+    ) -Columns @("metric", "value")))
+    $Lines.Add("")
+
+    $Lines.Add("### Repositories")
+    $Lines.Add("")
+    if ($StatusReport.environment_awareness.repositories.repositories -and @($StatusReport.environment_awareness.repositories.repositories).Count -gt 0) {
+        $Lines.Add((ConvertTo-PDAMarkdownTable -Rows @($StatusReport.environment_awareness.repositories.repositories) -Columns @("path", "branch", "clean", "dirty", "project_state")))
+    }
+    else {
+        $Lines.Add("- No repositories found.")
+    }
+    $Lines.Add("")
+
+    $Lines.Add("### Containers")
+    $Lines.Add("")
+    if ($StatusReport.environment_awareness.containers.containers -and @($StatusReport.environment_awareness.containers.containers).Count -gt 0) {
+        $Lines.Add((ConvertTo-PDAMarkdownTable -Rows @($StatusReport.environment_awareness.containers.containers) -Columns @("name", "image", "running", "status", "ports", "compose_project")))
+    }
+    else {
+        $Lines.Add("- No containers found.")
+    }
+    $Lines.Add("")
+
+    $Lines.Add("### Services")
+    $Lines.Add("")
+    if ($StatusReport.environment_awareness.services.services -and @($StatusReport.environment_awareness.services.services).Count -gt 0) {
+        $Lines.Add((ConvertTo-PDAMarkdownTable -Rows @($StatusReport.environment_awareness.services.services) -Columns @("name", "status", "source", "endpoint", "container")))
+    }
+    else {
+        $Lines.Add("- No services found.")
+    }
+    $Lines.Add("")
+
+    $Lines.Add("### Workspaces")
+    $Lines.Add("")
+    if ($StatusReport.environment_awareness.workspace_summary.roots -and @($StatusReport.environment_awareness.workspace_summary.roots).Count -gt 0) {
+        $Lines.Add((ConvertTo-PDAMarkdownTable -Rows @($StatusReport.environment_awareness.workspace_summary.roots) -Columns @("root", "project_count", "archive_count", "file_count", "folder_count", "size_mb")))
+    }
+    else {
+        $Lines.Add("- No workspace rows found.")
+    }
+    $Lines.Add("")
+
+    $Lines.Add("### Storage")
+    $Lines.Add("")
+    if ($StatusReport.environment_awareness.storage_summary.roots -and @($StatusReport.environment_awareness.storage_summary.roots).Count -gt 0) {
+        $Lines.Add((ConvertTo-PDAMarkdownTable -Rows @($StatusReport.environment_awareness.storage_summary.roots) -Columns @("root", "name", "classification", "file_count", "folder_count", "size_mb")))
+    }
+    else {
+        $Lines.Add("- No storage summary available.")
+    }
+    $Lines.Add("")
+}
+
 $Lines.Add("### Fabric CLI Status")
 $Lines.Add("")
 $Lines.Add((ConvertTo-PDAMarkdownTable -Rows @(

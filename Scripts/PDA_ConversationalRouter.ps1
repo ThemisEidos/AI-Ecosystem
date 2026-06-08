@@ -22,10 +22,14 @@ $DashboardStatusScript = Join-Path $PSScriptRoot "Get-PDADashboardStatus.ps1"
 $TaskResultScript = Join-Path $PSScriptRoot "Get-PDATaskResult.ps1"
 $MemoryCandidateSummaryScript = Join-Path $PSScriptRoot "Get-PDAMemoryCandidateSummary.ps1"
 $DispatchStatusScript = Join-Path $PSScriptRoot "Get-PDADispatchStatus.ps1"
+$EnvironmentHelperScript = Join-Path $PSScriptRoot "PDA_Environment.ps1"
 $ExecutorRegistryScript = Join-Path $PSScriptRoot "PDA_ExecutorRegistry.ps1"
 $ParserPath = Join-Path $PSScriptRoot "PDA_OutputParsing.ps1"
 if (Test-Path -LiteralPath $ParserPath -PathType Leaf) {
     . $ParserPath
+}
+if (Test-Path -LiteralPath $EnvironmentHelperScript -PathType Leaf) {
+    . $EnvironmentHelperScript
 }
 if (Test-Path -LiteralPath $ExecutorRegistryScript -PathType Leaf) {
     . $ExecutorRegistryScript
@@ -128,6 +132,14 @@ function Test-PDAConversationalDispatchGuidance {
 
     return [bool](
         $NormalizedText -match '(?i)\b(what should handle this task|what should handle this|what executor should handle this|what executors are available|what should be delegated|what should i delegate|what should dispatch this|who should handle this task|best executor|best executor for this)\b'
+    )
+}
+
+function Test-PDAConversationalEnvironmentAwareness {
+    param([Parameter(Mandatory = $true)][string]$NormalizedText)
+
+    return [bool](
+        $NormalizedText -match '(?i)\b(filesystem|file system|repository|repositories|docker|container|containers|service inventory|service status|tool inventory|workspace inventory|environment awareness|environment inventory|file structure|organize folders|storage locations|scan c:\\|scan ~/|scan my filesystem|show my repositories|what ai services are running|help organize my folders|recommend a better project structure|workspace structure|project structure)\b'
     )
 }
 
@@ -302,6 +314,20 @@ function Resolve-PDAConversationalRoute {
         }
         else {
             $Route.briefing_focus = "dispatch"
+        }
+        return [pscustomobject]$Route
+    }
+
+    if (Test-PDAConversationalEnvironmentAwareness -NormalizedText $Normalized) {
+        $Route.route_type = "environment_awareness"
+        $Route.response_mode = "direct_answer"
+        $Route.reason = "Environment analysis or file-structure recommendation request."
+        $Route.confidence = 1
+        if ($Normalized -match '(?i)\b(recommend|better structure|organize|organization|structure|migration|cleanup|plan)\b') {
+            $Route.briefing_focus = "recommendation"
+        }
+        else {
+            $Route.briefing_focus = "inventory"
         }
         return [pscustomobject]$Route
     }
@@ -617,6 +643,100 @@ function Get-PDAConversationalNaturalResponse {
             $BaseResponse.recommended_command = "/dispatch"
             $BaseResponse.latest_result_response_text = $BaseResponse.response_text
         }
+        "environment_awareness" {
+            $RequestedRoots = @()
+            if (Get-Command -Name Get-PDAEnvironmentRootsFromText -ErrorAction SilentlyContinue) {
+                $RequestedRoots = @(Get-PDAEnvironmentRootsFromText -Text $Text -FallbackRoots @($Root))
+            }
+            elseif (-not [string]::IsNullOrWhiteSpace($Root)) {
+                $RequestedRoots = @($Root)
+            }
+
+            $EnvironmentSummary = $null
+            if (Get-Command -Name Get-PDAEnvironmentSummary -ErrorAction SilentlyContinue) {
+                try {
+                    $EnvironmentSummary = Get-PDAEnvironmentSummary -Roots $RequestedRoots -Root $Root
+                }
+                catch {
+                    $EnvironmentSummary = $null
+                }
+            }
+
+            $Recommendation = $null
+            if (Get-Command -Name Get-PDAFileOrganizationRecommendation -ErrorAction SilentlyContinue) {
+                try {
+                    $Recommendation = Get-PDAFileOrganizationRecommendation -Roots $RequestedRoots -Root $Root -FilesystemInventory $(if ($EnvironmentSummary) { $EnvironmentSummary.filesystem } else { $null })
+                }
+                catch {
+                    $Recommendation = $null
+                }
+            }
+
+            $GoalLine = if ($Route.briefing_focus -eq "recommendation") {
+                "Goal: Analyze the local environment and recommend a file structure."
+            }
+            else {
+                "Goal: Analyze the local environment and build a current-state inventory."
+            }
+
+            $InventoryLines = New-Object System.Collections.Generic.List[string]
+            if ($EnvironmentSummary) {
+                $InventoryLines.Add(("Roots scanned: {0}" -f (@($EnvironmentSummary.roots).Count)))
+                $InventoryLines.Add(("Repositories: {0}" -f $EnvironmentSummary.counts.repositories))
+                $InventoryLines.Add(("Containers: {0} running / {1} total" -f $EnvironmentSummary.counts.running_containers, $EnvironmentSummary.counts.containers))
+                $InventoryLines.Add(("Services online: {0}" -f $EnvironmentSummary.counts.services_online))
+                $InventoryLines.Add(("Tools available: {0}" -f $EnvironmentSummary.counts.tools_available))
+                $InventoryLines.Add(("Likely projects: {0}" -f @($EnvironmentSummary.filesystem.project_candidates).Count))
+                $InventoryLines.Add(("Likely archives: {0}" -f @($EnvironmentSummary.filesystem.archive_candidates).Count))
+            }
+            else {
+                $InventoryLines.Add("Environment inventory unavailable.")
+            }
+
+            $RecommendationLines = New-Object System.Collections.Generic.List[string]
+            if ($Recommendation) {
+                $RecommendationLines.Add(("Recommended model: {0}" -f [string]$Recommendation.recommended_model))
+                $RecommendationLines.Add("Proposed structure:")
+                foreach ($Item in @($Recommendation.proposed_structure)) {
+                    $RecommendationLines.Add(("- {0}: {1}" -f [string]$Item.path, [string]$Item.purpose))
+                }
+                $RecommendationLines.Add("Migration plan:")
+                foreach ($Item in @($Recommendation.migration_strategy)) {
+                    $RecommendationLines.Add(("- Phase {0}: {1}" -f [string]$Item.phase, [string]$Item.action))
+                }
+                $RecommendationLines.Add("Approval path:")
+                foreach ($Item in @($Recommendation.approval_path)) {
+                    $RecommendationLines.Add(("- {0}" -f [string]$Item))
+                }
+            }
+            else {
+                $RecommendationLines.Add("No recommendation could be generated yet.")
+            }
+
+            $BaseResponse.response_text = @(
+                "Goal Assessment"
+                $GoalLine
+                ""
+                "Environment Discovery"
+                ($InventoryLines -join "`r`n")
+                ""
+                "Execution Plan"
+                "1. Review the current-state inventory."
+                "2. Validate the recommended structure and staged migration."
+                "3. Approve any manual move or rename before execution."
+                ""
+                "Recommended Structure"
+                ($RecommendationLines -join "`r`n")
+                ""
+                "Approval Path"
+                "- No automatic moves, renames, or cleanup actions will be performed."
+            ) -join "`r`n"
+            $BaseResponse.next_action = "Review the inventory and approve or refine the proposed structure before any manual migration."
+            $BaseResponse.recommended_command = ""
+            $BaseResponse.latest_result_response_text = $BaseResponse.response_text
+            $BaseResponse.intent = "environment_awareness"
+            $BaseResponse.confidence = 1
+        }
         "goal_planning" {
             $GoalPlanScript = Join-Path $PSScriptRoot "Get-PDAGoalPlan.ps1"
             $GoalPlan = Invoke-PDAConversationalJsonScript -Path $GoalPlanScript -Arguments @("-Text", $Text, "-Root", $Root, "-Persist", "-AsJson") -SourceName "PDA goal plan"
@@ -640,12 +760,12 @@ function Get-PDAConversationalNaturalResponse {
             $BaseResponse.next_action = "Reply with one clear action such as review, report, status, research, execute, or goal planning."
         }
         "fallback" {
-            $BaseResponse.response_text = "I can help with status, briefing, blocked work, recent changes, tasks, workers, reports, memory, Fabric, NotebookLM, goal planning, research, review, and execution. Ask a direct question or use /help."
-            $BaseResponse.next_action = "Ask for a briefing, a status question, a goal plan, or use /help for the full command list."
+            $BaseResponse.response_text = "I can help with status, briefing, blocked work, recent changes, tasks, workers, reports, memory, Fabric, NotebookLM, environment analysis, goal planning, research, review, and execution. Ask a direct question or use /help."
+            $BaseResponse.next_action = "Ask for a briefing, a status question, an environment inventory, a goal plan, or use /help for the full command list."
         }
         default {
-            $BaseResponse.response_text = "I can help with status, briefing, blocked work, recent changes, tasks, workers, reports, memory, Fabric, NotebookLM, goal planning, research, review, and execution. Ask a direct question or use /help."
-            $BaseResponse.next_action = "Ask for a briefing, a status question, a goal plan, or use /help for the full command list."
+            $BaseResponse.response_text = "I can help with status, briefing, blocked work, recent changes, tasks, workers, reports, memory, Fabric, NotebookLM, environment analysis, goal planning, research, review, and execution. Ask a direct question or use /help."
+            $BaseResponse.next_action = "Ask for a briefing, a status question, an environment inventory, a goal plan, or use /help for the full command list."
         }
     }
 

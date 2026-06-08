@@ -75,6 +75,10 @@ function Get-PDACommanderGuidanceClassification {
         return "operator_guidance"
     }
 
+    if ($Normalized -match '(?i)\b(filesystem|file system|repository|repositories|docker|container|containers|service inventory|service status|tool inventory|workspace inventory|environment awareness|environment inventory|file structure|organize folders|storage locations|scan c:\\|scan ~/|scan my filesystem|show my repositories|what ai services are running|help organize my folders|recommend a better project structure)\b') {
+        return "environment_awareness"
+    }
+
     return "request"
 }
 
@@ -97,6 +101,10 @@ function Resolve-PDACommanderTaskType {
 
     if ($Text -match '(?i)\b(roadmap|road map|planner|planning|build me a roadmap|make me a roadmap)\b') {
         return "planning"
+    }
+
+    if ($Text -match '(?i)\b(filesystem|file system|repository|repositories|docker|container|containers|service inventory|service status|tool inventory|workspace inventory|environment awareness|environment inventory|file structure|organize folders|storage locations|scan c:\\|scan ~/|scan my filesystem|show my repositories|what ai services are running|help organize my folders|recommend a better project structure)\b') {
+        return "environment_awareness"
     }
 
     if (-not [string]::IsNullOrWhiteSpace($Text)) {
@@ -145,6 +153,7 @@ function Get-PDACommanderExecutorFallback {
         "knowledge_management" { return [pscustomobject]@{ selected_tool = "notebooklm"; backup_tool = "operator-console-worker"; reason = "Sanitized learning material belongs in NotebookLM before durable memory promotion." } }
         "administrative" { return [pscustomobject]@{ selected_tool = "operator-console-worker"; backup_tool = "human operator"; reason = "Administrative queue triage and approvals stay human-governed." } }
         "planning" { return [pscustomobject]@{ selected_tool = "planner-worker"; backup_tool = "operator-console-worker"; reason = "Planning is best handled by the local planner pipeline." } }
+        "environment_awareness" { return [pscustomobject]@{ selected_tool = "planner-worker"; backup_tool = "operator-console-worker"; reason = "Environment analysis and file-structure planning should stay governed through the planner pipeline." } }
         "security_triage" { return [pscustomobject]@{ selected_tool = "review-worker"; backup_tool = "reporter-worker"; reason = "Security triage benefits from a deterministic local review pipeline." } }
         default { return [pscustomobject]@{ selected_tool = "operator-console-worker"; backup_tool = "human operator"; reason = "No stronger executor match was found; request human review." } }
     }
