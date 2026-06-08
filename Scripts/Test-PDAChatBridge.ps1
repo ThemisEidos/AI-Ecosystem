@@ -258,11 +258,22 @@ $Cases = @(
         marker = "chat-commander-briefing-$([guid]::NewGuid().ToString())"
     }
     [pscustomobject]@{
+        name = "dispatch guidance"
+        message = "What should handle this task?"
+        confirm = $false
+        expected_handoff = "dispatch_guidance"
+        expected_response_contains = "recommended executor"
+        expected_dispatch_ready = $false
+        expected_dispatch = $false
+        expected_command = "/dispatch"
+        marker = "chat-dispatch-guidance-$([guid]::NewGuid().ToString())"
+    }
+    [pscustomobject]@{
         name = "blocked guidance"
         message = "What is blocked?"
         confirm = $false
         expected_handoff = "commander_briefing"
-        expected_response_contains = "Recommended Actions"
+        expected_response_contains = "Focus: blocked"
         expected_dispatch_ready = $false
         expected_dispatch = $false
         expected_command = ""

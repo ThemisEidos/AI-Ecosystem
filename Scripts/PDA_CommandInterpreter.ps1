@@ -129,6 +129,16 @@ function Get-PDACommandInterpreterRules {
             recommendation = "Use /help for a read-only list of PDA Commander operator commands."
         }
         [pscustomobject]@{
+            rule_id        = "operator_dispatch"
+            intent         = "operator_dispatch"
+            task_type      = "operator_dispatch"
+            command        = "/dispatch"
+            priority       = 85
+            exact_phrases  = @("/dispatch")
+            keywords       = @("dispatch", "delegate", "executor", "handoff", "approval")
+            recommendation = "Use /dispatch to review governed executor recommendations and dispatch preparation status."
+        }
+        [pscustomobject]@{
             rule_id        = "notebooklm_package"
             intent         = "notebooklm_package"
             task_type      = "notebooklm_package"

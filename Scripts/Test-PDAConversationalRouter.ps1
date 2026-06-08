@@ -80,6 +80,12 @@ $Cases = @(
         expected_command = ""
     }
     [pscustomobject]@{
+        name = "dispatch guidance"
+        input = "What should handle this task?"
+        expected_route = "dispatch_guidance"
+        expected_command = "/dispatch"
+    }
+    [pscustomobject]@{
         name = "blocked guidance"
         input = "What is blocked?"
         expected_route = "commander_briefing"
@@ -116,12 +122,12 @@ foreach ($Case in $Cases) {
         $Issues.Add("Expected no recommended command but got '$($Route.recommended_command)'.")
     }
 
-    if ($Route.route_type -in @("direct_status", "direct_help", "task_lookup", "ambiguous", "fallback")) {
-        $Direct = Get-PDAConversationalNaturalResponse -Route $Route -ConversationId $DirectConversationId -SessionId $DirectSessionId -UserId $DirectUserId -ConversationTitle $DirectTitle -Text $Case.input -Root $Root
-        if ([string]::IsNullOrWhiteSpace([string]$Direct.response_text)) {
-            $CasePassed = $false
-            $Issues.Add("Direct response text was empty.")
-        }
+        if ($Route.route_type -in @("direct_status", "direct_help", "task_lookup", "dispatch_guidance", "ambiguous", "fallback")) {
+            $Direct = Get-PDAConversationalNaturalResponse -Route $Route -ConversationId $DirectConversationId -SessionId $DirectSessionId -UserId $DirectUserId -ConversationTitle $DirectTitle -Text $Case.input -Root $Root
+            if ([string]::IsNullOrWhiteSpace([string]$Direct.response_text)) {
+                $CasePassed = $false
+                $Issues.Add("Direct response text was empty.")
+            }
         if ($Route.route_type -eq "direct_status" -and $Direct.response_text -notmatch '(?i)pda is reachable|dashboard') {
             $CasePassed = $false
             $Issues.Add("Direct status response did not look like a status summary.")
@@ -141,6 +147,10 @@ foreach ($Case in $Cases) {
         if ($Route.route_type -eq "commander_briefing" -and $Direct.response_text -notmatch '(?i)pda daily brief|recommended actions|queue:') {
             $CasePassed = $false
             $Issues.Add("Commander briefing response did not look like a daily brief.")
+        }
+        if ($Route.route_type -eq "dispatch_guidance" -and $Direct.response_text -notmatch '(?i)recommended executor|available executors|dispatch queue') {
+            $CasePassed = $false
+            $Issues.Add("Dispatch guidance response did not mention executors or dispatch state.")
         }
     }
 

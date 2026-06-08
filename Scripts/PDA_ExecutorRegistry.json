@@ -1,0 +1,216 @@
+{
+  "schema_version": "1.0",
+  "registry_name": "PDA Executor Registry",
+  "generated_at": "2026-06-08T00:00:00Z",
+  "executors": [
+    {
+      "executor_name": "codex",
+      "display_name": "Codex",
+      "executor_type": "local_cli",
+      "risk_level": "medium",
+      "requires_approval": true,
+      "supports_file_modification": true,
+      "supports_repository_changes": true,
+      "supports_research": false,
+      "supports_reporting": false,
+      "supports_automation": false,
+      "supports_category2": true,
+      "supports_local_only": true,
+      "dispatch_method": "local_prompt_package",
+      "output_mode": "patch_and_summary",
+      "output_locations": [
+        "PDA-Tasks/staging",
+        "PDA-Tasks/results"
+      ],
+      "notes": "Local code and repository execution path."
+    },
+    {
+      "executor_name": "gemini-cli",
+      "display_name": "Gemini CLI",
+      "executor_type": "cloud_cli",
+      "risk_level": "medium",
+      "requires_approval": true,
+      "supports_file_modification": false,
+      "supports_repository_changes": false,
+      "supports_research": true,
+      "supports_reporting": true,
+      "supports_automation": false,
+      "supports_category2": false,
+      "supports_local_only": false,
+      "dispatch_method": "cloud_prompt_package",
+      "output_mode": "analysis_and_summary",
+      "output_locations": [
+        "PDA-Tasks/staging",
+        "PDA-Tasks/results"
+      ],
+      "notes": "Cloud research and synthesis path; blocked for Category 2."
+    },
+    {
+      "executor_name": "n8n",
+      "display_name": "n8n",
+      "executor_type": "workflow_orchestrator",
+      "risk_level": "medium",
+      "requires_approval": true,
+      "supports_file_modification": false,
+      "supports_repository_changes": false,
+      "supports_research": false,
+      "supports_reporting": false,
+      "supports_automation": true,
+      "supports_category2": true,
+      "supports_local_only": true,
+      "dispatch_method": "workflow_request",
+      "output_mode": "workflow_json",
+      "output_locations": [
+        "PDA-Tasks/staging",
+        "PDA-Tasks/results"
+      ],
+      "notes": "Deterministic automation and workflow dispatch path."
+    },
+    {
+      "executor_name": "reporter-worker",
+      "display_name": "Reporter Worker",
+      "executor_type": "pda_worker",
+      "risk_level": "low",
+      "requires_approval": true,
+      "supports_file_modification": true,
+      "supports_repository_changes": false,
+      "supports_research": false,
+      "supports_reporting": true,
+      "supports_automation": false,
+      "supports_category2": true,
+      "supports_local_only": true,
+      "dispatch_method": "task_queue",
+      "output_mode": "report_chain_markdown",
+      "output_locations": [
+        "PDA-Tasks/results",
+        "Obsidian Vault/02_Projects/AI Tool Ecosystem/Agent Findings/Reports"
+      ],
+      "notes": "Local reporting and artifact synthesis."
+    },
+    {
+      "executor_name": "planner-worker",
+      "display_name": "Planner Worker",
+      "executor_type": "pda_worker",
+      "risk_level": "low",
+      "requires_approval": true,
+      "supports_file_modification": true,
+      "supports_repository_changes": false,
+      "supports_research": false,
+      "supports_reporting": false,
+      "supports_automation": false,
+      "supports_category2": true,
+      "supports_local_only": true,
+      "dispatch_method": "task_queue",
+      "output_mode": "plan_markdown",
+      "output_locations": [
+        "PDA-Tasks/results",
+        "Obsidian Vault/02_Projects/AI Tool Ecosystem/Agent Findings/Planner"
+      ],
+      "notes": "Local planning and workflow design."
+    },
+    {
+      "executor_name": "review-worker",
+      "display_name": "Review Worker",
+      "executor_type": "pda_worker",
+      "risk_level": "low",
+      "requires_approval": true,
+      "supports_file_modification": true,
+      "supports_repository_changes": false,
+      "supports_research": false,
+      "supports_reporting": true,
+      "supports_automation": false,
+      "supports_category2": true,
+      "supports_local_only": true,
+      "dispatch_method": "task_queue",
+      "output_mode": "review_markdown",
+      "output_locations": [
+        "PDA-Tasks/results",
+        "Obsidian Vault/02_Projects/AI Tool Ecosystem/Agent Findings/Reviews"
+      ],
+      "notes": "Local critique, audit, and checklist work."
+    },
+    {
+      "executor_name": "execute-worker",
+      "display_name": "Execute Worker",
+      "executor_type": "pda_worker",
+      "risk_level": "medium",
+      "requires_approval": true,
+      "supports_file_modification": true,
+      "supports_repository_changes": true,
+      "supports_research": false,
+      "supports_reporting": false,
+      "supports_automation": true,
+      "supports_category2": true,
+      "supports_local_only": true,
+      "dispatch_method": "task_queue",
+      "output_mode": "execution_summary",
+      "output_locations": [
+        "PDA-Tasks/results"
+      ],
+      "notes": "Local governed execution path."
+    },
+    {
+      "executor_name": "research-worker",
+      "display_name": "Research Worker",
+      "executor_type": "pda_worker",
+      "risk_level": "low",
+      "requires_approval": true,
+      "supports_file_modification": true,
+      "supports_repository_changes": false,
+      "supports_research": true,
+      "supports_reporting": false,
+      "supports_automation": false,
+      "supports_category2": true,
+      "supports_local_only": true,
+      "dispatch_method": "task_queue",
+      "output_mode": "research_summary",
+      "output_locations": [
+        "PDA-Tasks/results",
+        "Obsidian Vault/02_Projects/AI Tool Ecosystem/Agent Findings/Research"
+      ],
+      "notes": "Local research synthesis and evidence gathering."
+    },
+    {
+      "executor_name": "notebooklm",
+      "display_name": "NotebookLM",
+      "executor_type": "cloud_learning_service",
+      "risk_level": "medium",
+      "requires_approval": true,
+      "supports_file_modification": false,
+      "supports_repository_changes": false,
+      "supports_research": true,
+      "supports_reporting": true,
+      "supports_automation": false,
+      "supports_category2": false,
+      "supports_local_only": false,
+      "dispatch_method": "sanitized_package",
+      "output_mode": "learning_package",
+      "output_locations": [
+        "PDA-Backups/notebooklm",
+        "PDA-Tasks/results"
+      ],
+      "notes": "Sanitized Category 1 learning package creation only."
+    },
+    {
+      "executor_name": "operator-console-worker",
+      "display_name": "Operator Console Worker",
+      "executor_type": "pda_worker",
+      "risk_level": "low",
+      "requires_approval": false,
+      "supports_file_modification": false,
+      "supports_repository_changes": false,
+      "supports_research": false,
+      "supports_reporting": true,
+      "supports_automation": false,
+      "supports_category2": true,
+      "supports_local_only": true,
+      "dispatch_method": "operator_console",
+      "output_mode": "operator_console_markdown",
+      "output_locations": [
+        "PDA-Logs",
+        "Obsidian Vault/02_Projects/AI Tool Ecosystem/PDA Dashboard.md"
+      ],
+      "notes": "Read-only operator guidance and dashboard summaries."
+    }
+  ]
+}

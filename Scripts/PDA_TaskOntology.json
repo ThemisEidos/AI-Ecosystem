@@ -297,6 +297,37 @@
       "notes": "Help is a read-only operator console command and does not submit work."
     },
     {
+      "task_type": "operator_dispatch",
+      "intent": "operator_dispatch",
+      "command": "/dispatch",
+      "title": "Operator dispatch",
+      "description": "Render governed executor recommendation and dispatch preparation guidance.",
+      "supported_categories": [
+        "category_1",
+        "category_2"
+      ],
+      "sensitivity_category": "standard",
+      "required_approvals": {
+        "category_1": "none",
+        "category_2": "human_approval"
+      },
+      "input_types": [
+        "message-only-test"
+      ],
+      "output_types": [
+        "operator_console_markdown",
+        "result_json"
+      ],
+      "allowed_workers": [
+        "operator-console-worker"
+      ],
+      "routing_constraints": [
+        "local-only",
+        "read-only"
+      ],
+      "notes": "Dispatch guidance is read-only and points to governed preparation, not automatic execution."
+    },
+    {
       "task_type": "notebooklm_package",
       "intent": "notebooklm_package",
       "command": "/notebooklm",

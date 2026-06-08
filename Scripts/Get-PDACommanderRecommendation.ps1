@@ -27,11 +27,15 @@ $ErrorActionPreference = "Stop"
 
 $InterpreterScript = Join-Path $PSScriptRoot "PDA_CommandInterpreter.ps1"
 $CapabilityRouterScript = Join-Path $PSScriptRoot "PDA_CapabilityRouter.ps1"
+$ExecutorRegistryScript = Join-Path $PSScriptRoot "PDA_ExecutorRegistry.ps1"
 if (Test-Path -LiteralPath (Join-Path $PSScriptRoot "PDA_OutputParsing.ps1") -PathType Leaf) {
     . (Join-Path $PSScriptRoot "PDA_OutputParsing.ps1")
 }
 if (Test-Path -LiteralPath $CapabilityRouterScript -PathType Leaf) {
     . $CapabilityRouterScript
+}
+if (Test-Path -LiteralPath $ExecutorRegistryScript -PathType Leaf) {
+    . $ExecutorRegistryScript
 }
 
 function Invoke-PDACommanderInterpreterJson {
@@ -133,16 +137,16 @@ function Get-PDACommanderExecutorFallback {
     )
 
     switch ($Classification) {
-        "research" { return [pscustomobject]@{ selected_tool = "Gemini"; backup_tool = "Fabric research-synthesis local"; reason = "Research is best handled by a research-capable model when Category 1 allows it." } }
-        "reporting" { return [pscustomobject]@{ selected_tool = "Fabric CLI"; backup_tool = "PowerShell"; reason = "Report synthesis is deterministic and fits the local Fabric report workflow." } }
-        "review" { return [pscustomobject]@{ selected_tool = "Fabric CLI"; backup_tool = "PowerShell"; reason = "Review and checklist work are best handled by a local Fabric review pattern." } }
-        "coding" { return [pscustomobject]@{ selected_tool = "Codex"; backup_tool = "PowerShell"; reason = "Repository or script modification should use the local Codex execution path." } }
-        "automation" { return [pscustomobject]@{ selected_tool = "n8n Workflow"; backup_tool = "PowerShell"; reason = "Deterministic automation should prefer n8n workflow orchestration." } }
-        "knowledge_management" { return [pscustomobject]@{ selected_tool = "NotebookLM"; backup_tool = "Obsidian + PDA Memory"; reason = "Sanitized learning material belongs in NotebookLM before durable memory promotion." } }
-        "administrative" { return [pscustomobject]@{ selected_tool = "Human operator"; backup_tool = "PowerShell"; reason = "Administrative queue triage and approvals stay human-governed." } }
-        "planning" { return [pscustomobject]@{ selected_tool = "PowerShell"; backup_tool = "Human operator"; reason = "Planning is best handled by local analysis and report generation." } }
-        "security_triage" { return [pscustomobject]@{ selected_tool = "Fabric CLI"; backup_tool = "PowerShell"; reason = "Security triage benefits from a deterministic local Fabric checklist." } }
-        default { return [pscustomobject]@{ selected_tool = "Human operator"; backup_tool = "PowerShell"; reason = "No stronger executor match was found; request human review." } }
+        "research" { return [pscustomobject]@{ selected_tool = "gemini-cli"; backup_tool = "research-worker"; reason = "Research is best handled by a research-capable executor when Category 1 allows it." } }
+        "reporting" { return [pscustomobject]@{ selected_tool = "reporter-worker"; backup_tool = "planner-worker"; reason = "Report synthesis is deterministic and fits the local reporter pipeline." } }
+        "review" { return [pscustomobject]@{ selected_tool = "review-worker"; backup_tool = "reporter-worker"; reason = "Review and checklist work are best handled by the local review pipeline." } }
+        "coding" { return [pscustomobject]@{ selected_tool = "codex"; backup_tool = "execute-worker"; reason = "Repository or script modification should use the local Codex execution path." } }
+        "automation" { return [pscustomobject]@{ selected_tool = "n8n"; backup_tool = "execute-worker"; reason = "Deterministic automation should prefer n8n workflow orchestration." } }
+        "knowledge_management" { return [pscustomobject]@{ selected_tool = "notebooklm"; backup_tool = "operator-console-worker"; reason = "Sanitized learning material belongs in NotebookLM before durable memory promotion." } }
+        "administrative" { return [pscustomobject]@{ selected_tool = "operator-console-worker"; backup_tool = "human operator"; reason = "Administrative queue triage and approvals stay human-governed." } }
+        "planning" { return [pscustomobject]@{ selected_tool = "planner-worker"; backup_tool = "operator-console-worker"; reason = "Planning is best handled by the local planner pipeline." } }
+        "security_triage" { return [pscustomobject]@{ selected_tool = "review-worker"; backup_tool = "reporter-worker"; reason = "Security triage benefits from a deterministic local review pipeline." } }
+        default { return [pscustomobject]@{ selected_tool = "operator-console-worker"; backup_tool = "human operator"; reason = "No stronger executor match was found; request human review." } }
     }
 }
 
@@ -185,6 +189,7 @@ function Get-PDACommanderRecommendation {
     $BlockedReason = ""
     $Allowed = $true
     $Confidence = 0.5
+    $ExecutorRecommendation = $null
 
     if ($GuidanceClassification -eq "operator_guidance") {
         $Fallback = Get-PDACommanderExecutorFallback -Classification "administrative"
@@ -232,25 +237,49 @@ function Get-PDACommanderRecommendation {
             }
         }
 
-        if ($CapabilityRoute -and [bool]$CapabilityRoute.allowed) {
-            $SelectedTool = [string]$CapabilityRoute.selected_tool
-            $BackupTool = [string]$CapabilityRoute.backup_tool
-            $RoutingReason = [string]$CapabilityRoute.routing_reason
-            $Allowed = [bool]$CapabilityRoute.allowed
-            $BlockedReason = [string]$CapabilityRoute.blocked_reason
+        if (-not [string]::IsNullOrWhiteSpace($TaskClassification) -and (Get-Command -Name Get-PDAExecutorRecommendation -ErrorAction SilentlyContinue)) {
+            try {
+                $ExecutorRecommendation = Get-PDAExecutorRecommendation -TaskType $TaskClassification -Category $Category -PreferredOutput $PreferredOutput -RequiresLocalOnly:$RequiresLocalOnly -Text $Text -Root $Root
+            }
+            catch {
+                $ExecutorRecommendation = $null
+            }
+        }
+
+        if ($ExecutorRecommendation) {
+            $SelectedTool = [string]$ExecutorRecommendation.recommended_executor
+            $BackupTool = [string]$ExecutorRecommendation.backup_executor
+            $RoutingReason = [string]$ExecutorRecommendation.routing_reason
+            $Allowed = [bool]$ExecutorRecommendation.allowed
+            $BlockedReason = [string]$ExecutorRecommendation.blocked_reason
+            if ([string]::IsNullOrWhiteSpace($SelectedTool) -and $CapabilityRoute) {
+                $SelectedTool = [string]$CapabilityRoute.selected_tool
+            }
+            if ([string]::IsNullOrWhiteSpace($BackupTool) -and $CapabilityRoute) {
+                $BackupTool = [string]$CapabilityRoute.backup_tool
+            }
         }
         else {
-            $Fallback = Get-PDACommanderExecutorFallback -Classification $TaskClassification
-            $SelectedTool = [string]$Fallback.selected_tool
-            $BackupTool = [string]$Fallback.backup_tool
-            $RoutingReason = if ($CapabilityRoute) { [string]$CapabilityRoute.routing_reason } else { [string]$Fallback.reason }
-            $Allowed = if ($CapabilityRoute) { [bool]$CapabilityRoute.allowed } else { $true }
-            $BlockedReason = if ($CapabilityRoute) { [string]$CapabilityRoute.blocked_reason } else { "" }
-            if ([string]::IsNullOrWhiteSpace($SelectedTool)) {
+            if ($CapabilityRoute -and [bool]$CapabilityRoute.allowed) {
+                $SelectedTool = [string]$CapabilityRoute.selected_tool
+                $BackupTool = [string]$CapabilityRoute.backup_tool
+                $RoutingReason = [string]$CapabilityRoute.routing_reason
+                $Allowed = [bool]$CapabilityRoute.allowed
+                $BlockedReason = [string]$CapabilityRoute.blocked_reason
+            }
+            else {
+                $Fallback = Get-PDACommanderExecutorFallback -Classification $TaskClassification
                 $SelectedTool = [string]$Fallback.selected_tool
+                $BackupTool = [string]$Fallback.backup_tool
+                $RoutingReason = if ($CapabilityRoute) { [string]$CapabilityRoute.routing_reason } else { [string]$Fallback.reason }
+                $Allowed = if ($CapabilityRoute) { [bool]$CapabilityRoute.allowed } else { $true }
+                $BlockedReason = if ($CapabilityRoute) { [string]$CapabilityRoute.blocked_reason } else { "" }
+            }
+            if ([string]::IsNullOrWhiteSpace($SelectedTool)) {
+                $SelectedTool = if ($ExecutorRecommendation) { [string]$ExecutorRecommendation.recommended_executor } else { [string]$Fallback.selected_tool }
             }
             if ([string]::IsNullOrWhiteSpace($BackupTool)) {
-                $BackupTool = [string]$Fallback.backup_tool
+                $BackupTool = if ($ExecutorRecommendation) { [string]$ExecutorRecommendation.backup_executor } else { [string]$Fallback.backup_tool }
             }
         }
     }
@@ -281,13 +310,17 @@ function Get-PDACommanderRecommendation {
         blocked_reason       = [string]$BlockedReason
         allowed              = [bool]$Allowed
         confidence           = [double]$Confidence
+        approval_required    = if ($ExecutorRecommendation) { [bool]$ExecutorRecommendation.approval_required } else { $false }
+        executor_type        = if ($ExecutorRecommendation) { [string]$ExecutorRecommendation.executor_type } else { "" }
+        executor_risk_level  = if ($ExecutorRecommendation) { [string]$ExecutorRecommendation.risk_level } else { "" }
         capability_route     = $CapabilityRoute
+        executor_recommendation = $ExecutorRecommendation
         source_of_truth      = "Scripts/PDA_CapabilityMatrix.json"
         matrix_status        = if ($CapabilityRoute) { [string]$CapabilityRoute.matrix_status } else { "unknown" }
         matrix_path          = if ($CapabilityRoute) { [string]$CapabilityRoute.matrix_path } else { (Join-Path $Root "Scripts\PDA_CapabilityMatrix.json") }
         output_location      = if ($CapabilityRoute) { @($CapabilityRoute.output_location) } else { @() }
         dispatch_ready       = $false
-        dispatch_status      = "not_applicable"
+        dispatch_status      = if ($ExecutorRecommendation) { [string]$ExecutorRecommendation.dispatch_status } else { "not_applicable" }
         guidance_classification = [string]$GuidanceClassification
     }
 

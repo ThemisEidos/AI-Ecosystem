@@ -129,6 +129,15 @@ $TestCases = @(
         source_check     = $true
     }
     [pscustomobject]@{
+        name             = "operator dispatch"
+        input            = "/dispatch"
+        expected_status  = "mapped"
+        expected_intent  = "operator_dispatch"
+        expected_task    = "operator_dispatch"
+        expected_command = "/dispatch"
+        source_check     = $true
+    }
+    [pscustomobject]@{
         name             = "exact research command"
         input            = "/research"
         expected_status  = "mapped"

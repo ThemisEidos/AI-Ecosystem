@@ -1,6 +1,6 @@
 # PDA Dashboard v2
 
-Updated: 2026-06-08 07:45:38 -07:00
+Updated: 2026-06-08 09:02:18 -07:00
 Overall health: degraded
 
 ## System Health
@@ -22,8 +22,8 @@ Overall health: degraded
 
 | metric | value |
 | --- | --- |
-| Queue depth | 638 |
-| Pending | 638 |
+| Queue depth | 672 |
+| Pending | 672 |
 | Running | 0 |
 | Completed | 41 |
 | Failed | 244 |
@@ -34,7 +34,7 @@ Overall health: degraded
 
 | queue | task_id | command | status | updated_at |
 | --- | --- | --- | --- | --- |
-| pending | d2c07ce4-8af5-434c-8426-90d9d17e87bb | /review | queued | 06/08/2026 05:29:15 |
+| pending | 3062ec8a-cfc1-487d-ac40-13a206058937 | /review | queued | 06/08/2026 15:53:59 |
 | completed | b4486b1b-8663-4068-b110-b4f215ea418f | /research | success | 06/06/2026 03:47:41 |
 | failed | 881c700e-d685-42e6-b7fa-39ca8d904501 | /research | failed | 06/06/2026 03:44:44 |
 | results | cf20b3bf-0b72-46e7-a0fe-4bb92c0c065c | /fabric security | completed | 06/07/2026 03:40:10 |
@@ -65,7 +65,7 @@ Overall health: degraded
 
 | worker_name | status | state | age_minutes | process_live |
 | --- | --- | --- | --- | --- |
-| test-worker | running | STALE | 8217.68 | no |
+| test-worker | running | STALE | 8294.47 | no |
 
 ## Pending Approvals
 
@@ -86,16 +86,16 @@ Overall health: degraded
 
 | task_id | command | worker | category | queue | status | updated_at |
 | --- | --- | --- | --- | --- | --- | --- |
-| d2c07ce4-8af5-434c-8426-90d9d17e87bb | /review | review-worker | category_1 | pending | queued | 06/08/2026 05:29:15 |
-| 3fcdad71-6696-4463-a9f7-d548505e89db | /reporter | reporter-worker | category_1 | pending | queued | 06/08/2026 05:28:46 |
-| 706aae6f-24c3-4a94-b8f8-9b99ec233b89 | /review | review-worker | category_1 | pending | queued | 06/08/2026 05:25:21 |
-| bbd62339-2adc-4aa4-82af-b44c42cf11b4 | /reporter | reporter-worker | category_1 | pending | queued | 06/08/2026 05:24:54 |
-| 394a5825-bc02-4227-9359-fd38496c7149 | /review | review-worker | category_1 | pending | queued | 06/08/2026 05:21:02 |
-| 05118981-fa8b-4a85-9534-d85dbd0bdbfd | /reporter | reporter-worker | category_1 | pending | queued | 06/08/2026 05:20:25 |
-| 14b470d1-5790-441b-b58c-ab92f7b1d0af | /review | review-worker | category_1 | pending | queued | 06/08/2026 05:18:32 |
-| 443bb75b-0656-4506-b783-7ab8828366da | /reporter | reporter-worker | category_1 | pending | queued | 06/08/2026 05:18:05 |
-| 1a83491e-5c77-4b77-822b-11d8bcb0a33f | /review | review-worker | category_1 | pending | queued | 06/08/2026 05:15:03 |
-| cc92e4b0-f996-488f-9ef8-27d5f79d1fb2 | /reporter | reporter-worker | category_1 | pending | queued | 06/08/2026 05:14:37 |
+| 3062ec8a-cfc1-487d-ac40-13a206058937 | /review | review-worker | category_1 | pending | queued | 06/08/2026 15:53:59 |
+| a0647fdd-20aa-4bac-9d7e-827e6b7cc73c | /reporter | reporter-worker | category_1 | pending | queued | 06/08/2026 15:53:36 |
+| ebb25cd8-14a1-4254-9b9e-f8cb23be38e8 | /review | review-worker | category_1 | pending | queued | 06/08/2026 15:50:08 |
+| c2cfa010-cfe7-4fa6-a20b-885f9f96b497 | /reporter | reporter-worker | category_1 | pending | queued | 06/08/2026 15:49:45 |
+| 5406f909-4d1c-46fe-85b6-e8e50d53ec77 | /fabric research | fabric-worker | category_1 | pending | pending | 06/08/2026 15:48:24 |
+| 6b53a1fb-9242-44d3-841d-e3c685ae253e | /review | review-worker | category_1 | pending | queued | 06/08/2026 15:47:58 |
+| 5d93121b-5c63-46d9-86e6-b20d6a17ee1e | /reporter | reporter-worker | category_1 | pending | queued | 06/08/2026 15:47:35 |
+| c8ce1075-54f0-49b9-b480-e68e96d04db3 | /planner | planner-worker | category_1 | pending | queued | 06/08/2026 15:47:31 |
+| f7ae6bf8-0f3a-4f35-b9db-31cc18ba9dad | /fabric research | fabric-worker | category_1 | pending | pending | 06/08/2026 15:42:22 |
+| 8a9029bb-bcee-4678-b67e-0c27e2ce6af4 | /review | review-worker | category_1 | pending | queued | 06/08/2026 15:41:55 |
 
 ## Recent Reports / Artifacts
 
@@ -170,7 +170,7 @@ Overall health: degraded
 | Conversation status | pass |
 | Conversation ID | default |
 | Active tasks | 3 |
-| Pending approvals | 0 |
+| Pending approvals | 1 |
 | Submitted tasks | 3 |
 | Completed tasks | 0 |
 | Latest task ID | - |
@@ -200,6 +200,59 @@ Overall health: degraded
 | action | executor | reason |
 | --- | --- | --- |
 | Review the dashboard and continue normal operations | Human operator | No immediate blockers were found. |
+
+## Dispatch Queue
+
+| metric | value |
+| --- | --- |
+| Status | pass |
+| Executor count | 10 |
+| Pending approvals | 27 |
+| Approved | 11 |
+| Prepared | 0 |
+| Running | 0 |
+| Completed | 41 |
+| Failed | 244 |
+
+### Executor Registry
+
+| executor_name | display_name | executor_type | risk_level | requires_approval | supports_category2 | supports_local_only | dispatch_method |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| codex | Codex | local_cli | medium | yes | yes | yes | local_prompt_package |
+| gemini-cli | Gemini CLI | cloud_cli | medium | yes | no | no | cloud_prompt_package |
+| n8n | n8n | workflow_orchestrator | medium | yes | yes | yes | workflow_request |
+| reporter-worker | Reporter Worker | pda_worker | low | yes | yes | yes | task_queue |
+| planner-worker | Planner Worker | pda_worker | low | yes | yes | yes | task_queue |
+| review-worker | Review Worker | pda_worker | low | yes | yes | yes | task_queue |
+| execute-worker | Execute Worker | pda_worker | medium | yes | yes | yes | task_queue |
+| research-worker | Research Worker | pda_worker | low | yes | yes | yes | task_queue |
+| notebooklm | NotebookLM | cloud_learning_service | medium | yes | no | no | sanitized_package |
+| operator-console-worker | Operator Console Worker | pda_worker | low | no | yes | yes | operator_console |
+
+### Recent Dispatches
+
+| task_id | command | executor_name | dispatch_state | approval_status | updated_at | file_name |
+| --- | --- | --- | --- | --- | --- | --- |
+| 2026-06-05_20-47-32-research | - | - | - | - | 06/06/2026 03:47:41 | 2026-06-05_20-47-32-research.json |
+| 2026-06-05_20-44-42-research | - | - | - | - | 06/06/2026 03:44:44 | 2026-06-05_20-44-42-research.json |
+| 2026-06-05_20-41-37-research | - | - | - | - | 06/06/2026 03:42:18 | 2026-06-05_20-41-37-research.json |
+| 2026-06-05_20-40-27-review | - | - | - | - | 06/06/2026 03:42:18 | 2026-06-05_20-40-27-review.json |
+| 2026-06-05_20-39-58-reporter | - | - | - | - | 06/06/2026 03:42:17 | 2026-06-05_20-39-58-reporter.json |
+| 2026-06-05_20-39-50-planner | - | - | - | - | 06/06/2026 03:42:17 | 2026-06-05_20-39-50-planner.json |
+| 2026-06-05_19-48-06-review | - | - | - | - | 06/06/2026 03:42:17 | 2026-06-05_19-48-06-review.json |
+| 2026-06-05_19-47-45-review | - | - | - | - | 06/06/2026 03:42:17 | 2026-06-05_19-47-45-review.json |
+| 2026-06-05_19-47-34-reporter | - | - | - | - | 06/06/2026 03:42:17 | 2026-06-05_19-47-34-reporter.json |
+| 2026-06-05_19-45-56-review | - | - | - | - | 06/06/2026 03:42:17 | 2026-06-05_19-45-56-review.json |
+| 2026-06-05_19-45-36-review | - | - | - | - | 06/06/2026 03:42:17 | 2026-06-05_19-45-36-review.json |
+| 2026-06-05_19-45-26-reporter | - | - | - | - | 06/06/2026 03:42:17 | 2026-06-05_19-45-26-reporter.json |
+| 2026-06-05_19-45-17-planner | - | - | - | - | 06/06/2026 03:42:17 | 2026-06-05_19-45-17-planner.json |
+| 2026-06-05_13-57-12-review | - | - | - | - | 06/06/2026 03:42:17 | 2026-06-05_13-57-12-review.json |
+| 2026-06-05_13-56-40-reporter | - | - | - | - | 06/06/2026 03:42:17 | 2026-06-05_13-56-40-reporter.json |
+| 2026-06-05_13-54-20-review | - | - | - | - | 06/06/2026 03:42:17 | 2026-06-05_13-54-20-review.json |
+| 2026-06-05_13-53-52-reporter | - | - | - | - | 06/06/2026 03:42:16 | 2026-06-05_13-53-52-reporter.json |
+| 2026-06-05_13-42-15-reporter | - | - | - | - | 06/06/2026 03:42:16 | 2026-06-05_13-42-15-reporter.json |
+| 2026-06-05_12-49-16-research | - | - | - | - | 06/06/2026 03:42:16 | 2026-06-05_12-49-16-research.json |
+| 2026-06-04_15-48-53-research | - | - | - | - | 06/06/2026 03:42:16 | 2026-06-04_15-48-53-research.json |
 
 ## Memory Summary
 

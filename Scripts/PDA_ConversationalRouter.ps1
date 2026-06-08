@@ -21,9 +21,14 @@ $InterpreterScript = Join-Path $PSScriptRoot "PDA_CommandInterpreter.ps1"
 $DashboardStatusScript = Join-Path $PSScriptRoot "Get-PDADashboardStatus.ps1"
 $TaskResultScript = Join-Path $PSScriptRoot "Get-PDATaskResult.ps1"
 $MemoryCandidateSummaryScript = Join-Path $PSScriptRoot "Get-PDAMemoryCandidateSummary.ps1"
+$DispatchStatusScript = Join-Path $PSScriptRoot "Get-PDADispatchStatus.ps1"
+$ExecutorRegistryScript = Join-Path $PSScriptRoot "PDA_ExecutorRegistry.ps1"
 $ParserPath = Join-Path $PSScriptRoot "PDA_OutputParsing.ps1"
 if (Test-Path -LiteralPath $ParserPath -PathType Leaf) {
     . $ParserPath
+}
+if (Test-Path -LiteralPath $ExecutorRegistryScript -PathType Leaf) {
+    . $ExecutorRegistryScript
 }
 
 function Normalize-PDAConversationalText {
@@ -115,6 +120,14 @@ function Test-PDAConversationalCommanderBriefing {
 
     return [bool](
         $NormalizedText -match '(?i)\b(what should i work on next|what should i do next|give me my pda briefing|give me a pda briefing|pda daily brief|daily brief|what is blocked|what needs attention|what changed recently|what needs review|what should i delegate|what changed since last time)\b'
+    )
+}
+
+function Test-PDAConversationalDispatchGuidance {
+    param([Parameter(Mandatory = $true)][string]$NormalizedText)
+
+    return [bool](
+        $NormalizedText -match '(?i)\b(what should handle this task|what should handle this|what executor should handle this|what executors are available|what should be delegated|what should i delegate|what should dispatch this|who should handle this task|best executor|best executor for this)\b'
     )
 }
 
@@ -262,6 +275,24 @@ function Resolve-PDAConversationalRoute {
         }
         else {
             $Route.briefing_focus = "default"
+        }
+        return [pscustomobject]$Route
+    }
+
+    if (Test-PDAConversationalDispatchGuidance -NormalizedText $Normalized) {
+        $Route.route_type = "dispatch_guidance"
+        $Route.response_mode = "direct_answer"
+        $Route.recommended_command = "/dispatch"
+        $Route.reason = "Direct dispatch guidance request."
+        $Route.confidence = 1
+        if ($Normalized -match '(?i)\b(executors are available|available executors|what executors)\b') {
+            $Route.briefing_focus = "available"
+        }
+        elseif ($Normalized -match '(?i)\b(should handle this task|should handle this|best executor|delegate)\b') {
+            $Route.briefing_focus = "recommendation"
+        }
+        else {
+            $Route.briefing_focus = "dispatch"
         }
         return [pscustomobject]$Route
     }
@@ -493,6 +524,76 @@ function Get-PDAConversationalNaturalResponse {
                 $BaseResponse.response_text = "PDA daily briefing unavailable."
                 $BaseResponse.next_action = "Ask /status if you need the operator console summary."
             }
+        }
+        "dispatch_guidance" {
+            $RegistrySummary = $null
+            if (Get-Command -Name Get-PDAExecutorRegistrySummary -ErrorAction SilentlyContinue) {
+                try {
+                    $RegistrySummary = Get-PDAExecutorRegistrySummary -Root $Root
+                }
+                catch {
+                    $RegistrySummary = $null
+                }
+            }
+
+            $DispatchStatus = $null
+            if (Test-Path -LiteralPath $DispatchStatusScript -PathType Leaf) {
+                try {
+                    $DispatchStatus = Invoke-PDAConversationalJsonScript -Path $DispatchStatusScript -Arguments @("-AsJson", "-NoThrow", "-Root", $Root) -SourceName "PDA dispatch status"
+                }
+                catch {
+                    $DispatchStatus = $null
+                }
+            }
+
+            $ExecutorLine = if ($RegistrySummary -and $RegistrySummary.PSObject.Properties.Name -contains "executors") {
+                "Available executors: {0}" -f (@($RegistrySummary.executors | ForEach-Object { $_.executor_name }) -join ", ")
+            }
+            else {
+                "Available executors: codex, gemini-cli, n8n, research-worker, reporter-worker, planner-worker, review-worker, execute-worker, notebooklm, operator-console-worker."
+            }
+
+            $QueueLine = "Dispatch queue: unavailable."
+            if ($DispatchStatus -and $DispatchStatus.PSObject.Properties.Name -contains "counts") {
+                $QueueLine = "Dispatch queue: {0} pending approval, {1} approved, {2} prepared, {3} running." -f $DispatchStatus.counts.pending_approval, $DispatchStatus.counts.approved, $DispatchStatus.counts.prepared, $DispatchStatus.counts.running
+            }
+
+            $Recommendation = $null
+            if (Get-Command -Name Get-PDAExecutorRecommendation -ErrorAction SilentlyContinue) {
+                try {
+                    $Recommendation = Get-PDAExecutorRecommendation -TaskType "administrative" -Category "category_1" -Text $Text -Root $Root
+                }
+                catch {
+                    $Recommendation = $null
+                }
+            }
+
+            if ($Route.briefing_focus -eq "available") {
+                $BaseResponse.response_text = @(
+                    $ExecutorLine
+                    $QueueLine
+                    "Use /dispatch to review the governed dispatch path."
+                ) -join "`r`n"
+            }
+            else {
+                $RecommendedText = if ($Recommendation -and -not [string]::IsNullOrWhiteSpace([string]$Recommendation.recommended_executor)) {
+                    "Recommended executor: {0}. Approval required: {1}. Reason: {2}" -f $Recommendation.recommended_executor, $Recommendation.approval_required, $Recommendation.routing_reason
+                }
+                else {
+                    "Recommended executor: operator-console-worker. Approval required: false."
+                }
+
+                $BaseResponse.response_text = @(
+                    $RecommendedText
+                    $ExecutorLine
+                    $QueueLine
+                    "Use /dispatch to view the governed dispatch path or share a specific task for recommendation."
+                ) -join "`r`n"
+            }
+
+            $BaseResponse.next_action = "Use /dispatch to view the governed dispatch path or share a specific task for recommendation."
+            $BaseResponse.recommended_command = "/dispatch"
+            $BaseResponse.latest_result_response_text = $BaseResponse.response_text
         }
         "ambiguous" {
             $BaseResponse.response_text = "I can help with one action at a time. Do you want a review, a run/execution, or a report?"

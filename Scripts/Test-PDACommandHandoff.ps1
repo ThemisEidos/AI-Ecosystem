@@ -104,6 +104,7 @@ $Cases = @(
         expect_confirm = $false
         expect_dispatch = $false
         expect_command = ""
+        use_marker_suffix = $false
         marker = "handoff-unknown-$([guid]::NewGuid().ToString())"
     }
     [pscustomobject]@{
@@ -207,6 +208,19 @@ $Cases = @(
         expect_command = "/help"
         expect_response_contains = "PDA Commander Operator Console Commands"
         marker = "handoff-help-$([guid]::NewGuid().ToString())"
+    }
+    [pscustomobject]@{
+        name = "operator dispatch"
+        input = "/dispatch"
+        confirm = $false
+        expect_status = "mapped"
+        expect_ready = $false
+        expect_confirm = $false
+        expect_dispatch = $false
+        expect_dispatch_status = "not_applicable"
+        expect_command = "/dispatch"
+        expect_response_contains = "PDA Operator Console: Dispatch"
+        marker = "handoff-dispatch-console-$([guid]::NewGuid().ToString())"
     }
     [pscustomobject]@{
         name = "exact research command"

@@ -337,6 +337,40 @@ if ($StatusReport.commander_briefing) {
     $Lines.Add("")
 }
 
+$Lines.Add("## Dispatch Queue")
+$Lines.Add("")
+$Lines.Add((ConvertTo-PDAMarkdownTable -Rows @(
+    [pscustomobject]@{ metric = "Status"; value = $StatusReport.dispatch_status.status }
+    [pscustomobject]@{ metric = "Executor count"; value = $StatusReport.dispatch_status.registry.executor_count }
+    [pscustomobject]@{ metric = "Pending approvals"; value = $StatusReport.dispatch_status.counts.pending_approval }
+    [pscustomobject]@{ metric = "Approved"; value = $StatusReport.dispatch_status.counts.approved }
+    [pscustomobject]@{ metric = "Prepared"; value = $StatusReport.dispatch_status.counts.prepared }
+    [pscustomobject]@{ metric = "Running"; value = $StatusReport.dispatch_status.counts.running }
+    [pscustomobject]@{ metric = "Completed"; value = $StatusReport.dispatch_status.counts.completed }
+    [pscustomobject]@{ metric = "Failed"; value = $StatusReport.dispatch_status.counts.failed }
+    ) -Columns @("metric", "value")))
+$Lines.Add("")
+
+$Lines.Add("### Executor Registry")
+$Lines.Add("")
+if ($StatusReport.dispatch_status.registry.executors -and @($StatusReport.dispatch_status.registry.executors).Count -gt 0) {
+    $Lines.Add((ConvertTo-PDAMarkdownTable -Rows @($StatusReport.dispatch_status.registry.executors) -Columns @("executor_name", "display_name", "executor_type", "risk_level", "requires_approval", "supports_category2", "supports_local_only", "dispatch_method")))
+}
+else {
+    $Lines.Add("- No executor registry entries found.")
+}
+$Lines.Add("")
+
+$Lines.Add("### Recent Dispatches")
+$Lines.Add("")
+if ($StatusReport.dispatch_status.recent_items -and @($StatusReport.dispatch_status.recent_items).Count -gt 0) {
+    $Lines.Add((ConvertTo-PDAMarkdownTable -Rows @($StatusReport.dispatch_status.recent_items) -Columns @("task_id", "command", "executor_name", "dispatch_state", "approval_status", "updated_at", "file_name")))
+}
+else {
+    $Lines.Add("- No recent dispatch items found.")
+}
+$Lines.Add("")
+
 $Lines.Add("## Memory Summary")
 $Lines.Add("")
 $Lines.Add((ConvertTo-PDAMarkdownTable -Rows @(

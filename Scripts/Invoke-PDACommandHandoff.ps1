@@ -209,6 +209,18 @@ function Get-PDAOperatorConsoleResponse {
                 next_action = "Use /reports for artifact history or /help for the available console commands."
             }
         }
+        "/dispatch" {
+            $DispatchScript = Join-Path $PSScriptRoot "Get-PDADispatchStatus.ps1"
+            $DispatchBody = Invoke-PDACommandScriptText -Path $DispatchScript -Arguments @("-Root", $Root, "-NoThrow")
+            return [pscustomobject]@{
+                response_text = @(
+                    "PDA Operator Console: Dispatch"
+                    "Use /dispatch to review the governed executor recommendation and preparation path."
+                    $DispatchBody
+                ) -join "`n"
+                next_action = "Use /help for the available console commands or ask 'what should handle this task?' for a natural-language dispatch recommendation."
+            }
+        }
         "/help" {
             return [pscustomobject]@{
                 response_text = @(
@@ -217,12 +229,13 @@ function Get-PDAOperatorConsoleResponse {
                     "/tasks - latest tracked task summary"
                     "/approvals - pending approval summary"
                     "/workers - worker registry and runtime status"
-                "/reports - recent artifacts and reports"
-                "/memory - memory index and recent records"
-                "/fabric research|report|review|security - local Fabric CLI runs from sanitized inputs only"
-                "/notebooklm - sanitized NotebookLM package creation from Category 1 notes only"
-                "/help - show this command list"
-                "Read-only console commands do not require approval."
+                    "/reports - recent artifacts and reports"
+                    "/memory - memory index and recent records"
+                    "/dispatch - governed executor recommendation and dispatch preparation status"
+                    "/fabric research|report|review|security - local Fabric CLI runs from sanitized inputs only"
+                    "/notebooklm - sanitized NotebookLM package creation from Category 1 notes only"
+                    "/help - show this command list"
+                    "Read-only console commands do not require approval."
                 ) -join "`n"
                 next_action = "Use one of the operator commands above, or submit a governed task command when you need work dispatched."
             }
@@ -260,7 +273,7 @@ $CapabilityMatrixSummary = [pscustomobject]@{
 }
 $Eligibility = $null
 $OperatorConsoleResponse = $null
-$OperatorCommands = @("/status", "/tasks", "/approvals", "/workers", "/reports", "/memory", "/help")
+$OperatorCommands = @("/status", "/tasks", "/approvals", "/workers", "/reports", "/memory", "/dispatch", "/help")
 $IsOperatorConsoleCommand = $OperatorCommands -contains [string]$RecommendedCommand
 
 if ($Interpreter.status -eq "mapped" -and -not [string]::IsNullOrWhiteSpace($RecommendedCommand) -and -not $IsOperatorConsoleCommand) {

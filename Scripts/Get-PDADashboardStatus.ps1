@@ -503,7 +503,7 @@ function Get-PDAArtifactSnapshot {
 
     return [pscustomobject]@{
         path = $IndexPath
-        status = if ($null -ne $Index) { "pass" } else { "missing" }
+        status = $(if ($null -ne $Index) { "pass" } else { "missing" })
         count = @($Artifacts).Count
         updated_at = if ($Index -and $Index.PSObject.Properties.Name -contains "updated_at") { Get-PDASafeString $Index.updated_at } else { "" }
         recent = @($Recent)
@@ -565,7 +565,7 @@ function Get-PDAMemorySnapshot {
 
     return [pscustomobject]@{
         path = $IndexPath
-        status = if ($null -ne $Index) { "pass" } else { "missing" }
+        status = $(if ($null -ne $Index) { "pass" } else { "missing" })
         count = @($Memories).Count
         updated_at = if ($Index -and $Index.PSObject.Properties.Name -contains "updated_at") { Get-PDASafeString $Index.updated_at } else { "" }
         recent = @($Recent)
@@ -582,7 +582,7 @@ function Get-PDAModelStatus {
     $RoutingPolicy = Read-PDAJsonFile -Path $RoutingPolicyPath
     $RoutingSummary = [ordered]@{
         path = $RoutingPolicyPath
-        status = if ($null -ne $RoutingPolicy) { "pass" } else { "missing" }
+        status = $(if ($null -ne $RoutingPolicy) { "pass" } else { "missing" })
         command_routes = @()
         category_routes = @()
     }
@@ -636,7 +636,7 @@ function Get-PDAModelStatus {
     }
 
     return [pscustomobject]@{
-        status = if (([string]$Providers.status -eq "pass" -or [string]$Providers.status -eq "warn") -and ([string]$Env.status -in @("pass", "warn")) -and $RoutingSummary.status -eq "pass") { "pass" } else { "degraded" }
+        status = $(if (([string]$Providers.status -eq "pass" -or [string]$Providers.status -eq "warn") -and ([string]$Env.status -in @("pass", "warn")) -and $RoutingSummary.status -eq "pass") { "pass" } else { "degraded" })
         routing_policy = [pscustomobject]$RoutingSummary
         provider_validation = [pscustomobject]@{
             status = Get-PDASafeString $Providers.status
@@ -704,7 +704,7 @@ function Get-PDACoreIntegrationStatus {
     }
 
     return [pscustomobject]@{
-        status = if ($Interpreter.status -eq "pass" -and $Handoff.status -eq "pass" -and $ChatBridge.status -eq "pass") { "pass" } else { "degraded" }
+        status = $(if ($Interpreter.status -eq "pass" -and $Handoff.status -eq "pass" -and $ChatBridge.status -eq "pass") { "pass" } else { "degraded" })
         conversation_state = $ConversationSummary
         task_result = $TaskResultSummary
         command_interpreter = [pscustomobject]@{
@@ -755,6 +755,7 @@ $ArtifactSnapshot = Get-PDAArtifactSnapshot -RootPath $Root
 $MemorySnapshot = Get-PDAMemorySnapshot -RootPath $Root
 $MemoryCandidateSummaryScript = Join-Path $PSScriptRoot "Get-PDAMemoryCandidateSummary.ps1"
 $CommanderBriefingScript = Join-Path $PSScriptRoot "Get-PDACommanderBriefing.ps1"
+$DispatchStatusScript = Join-Path $PSScriptRoot "Get-PDADispatchStatus.ps1"
 $MemoryCandidateSnapshot = if (Test-Path -Path $MemoryCandidateSummaryScript -PathType Leaf) {
     try {
         Invoke-PDAJsonScript -Path $MemoryCandidateSummaryScript -Arguments @("-AsJson", "-Latest", "10") -SourceName "PDA memory candidate summary"
@@ -772,6 +773,59 @@ $MemoryCandidateSnapshot = if (Test-Path -Path $MemoryCandidateSummaryScript -Pa
             recent_memories = @()
             by_source_type = @()
             by_category = @()
+            error = $_.Exception.Message
+        }
+    }
+}
+else {
+    [pscustomobject]@{
+        status = "missing"
+        candidate_root = Join-Path $Root "PDA-Memory\candidates"
+        memory_index_path = Join-Path $Root "PDA_MemoryIndex.json"
+        memory_count = [int]$MemorySnapshot.count
+        candidate_count = 0
+        pending_approval_count = 0
+        promoted_count = [int]$MemorySnapshot.count
+        recent_candidates = @()
+        recent_memories = @()
+        by_source_type = @()
+        by_category = @()
+    }
+}
+$DispatchSnapshot = if (Test-Path -Path $DispatchStatusScript -PathType Leaf) {
+    try {
+        Invoke-PDAJsonScript -Path $DispatchStatusScript -Arguments @("-AsJson", "-NoThrow", "-Root", $Root) -SourceName "PDA dispatch status"
+    }
+    catch {
+        [pscustomobject]@{
+            status = "error"
+            generated_at = $GeneratedAt
+            root_path = $Root
+            registry = [pscustomobject]@{
+                status = "missing"
+                registry_path = Join-Path $Root "Scripts\PDA_ExecutorRegistry.json"
+                executor_count = 0
+                local_only_count = 0
+                category2_capable_count = 0
+                cloud_capable_count = 0
+                requires_approval_count = 0
+                executors = @()
+            }
+            counts = [pscustomobject]@{
+                pending_approval = 0
+                approved = 0
+                prepared = 0
+                running = 0
+                completed = 0
+                failed = 0
+            }
+            pending_approval = @()
+            approved = @()
+            prepared = @()
+            running = @()
+            completed = @()
+            failed = @()
+            recent_items = @()
             error = $_.Exception.Message
         }
     }
@@ -946,7 +1000,7 @@ $Report = [pscustomobject]@{
     dashboard_path = $DashboardPath
     dashboard_health = [pscustomobject]@{
         status = $OverallHealth
-        note = if ($OverallHealth -eq "pass") { "All tracked dashboard surfaces are healthy." } elseif ($OverallHealth -eq "warning") { "At least one tracked surface is degraded or unavailable." } else { "One or more critical surfaces failed validation." }
+        note = $(if ($OverallHealth -eq "pass") { "All tracked dashboard surfaces are healthy." } elseif ($OverallHealth -eq "warning") { "At least one tracked surface is degraded or unavailable." } else { "One or more critical surfaces failed validation." })
     }
     system_health = [pscustomobject]@{
         status = Get-PDASafeString $StackReport.status
@@ -991,11 +1045,13 @@ $Report = [pscustomobject]@{
         conversation_state = $CommanderSnapshot.conversation_state
         task_result = $CommanderSnapshot.task_result
         command_interpreter = $CommanderSnapshot.command_interpreter
-        command_handoff = $CommanderSnapshot.command_handoff
-        chat_bridge = $CommanderSnapshot.chat_bridge
-        webhook_bridge = $CommanderSnapshot.webhook_bridge
+    command_handoff = $CommanderSnapshot.command_handoff
+    chat_bridge = $CommanderSnapshot.chat_bridge
+    webhook_bridge = $CommanderSnapshot.webhook_bridge
+    dispatch_status = $DispatchSnapshot
     }
     commander_briefing = $null
+    dispatch_status = $DispatchSnapshot
     memory_summary = [pscustomobject]@{
         status = Get-PDASafeString $MemorySnapshot.status
         count = [int]$MemorySnapshot.count
