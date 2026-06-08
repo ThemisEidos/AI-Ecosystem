@@ -337,6 +337,57 @@ if ($StatusReport.commander_briefing) {
     $Lines.Add("")
 }
 
+$Lines.Add("## Commander Planning")
+$Lines.Add("")
+if ($StatusReport.commander_planning) {
+    $Lines.Add((ConvertTo-PDAMarkdownTable -Rows @(
+        [pscustomobject]@{ metric = "Planning status"; value = $StatusReport.commander_planning.status }
+        [pscustomobject]@{ metric = "Plan count"; value = $StatusReport.commander_planning.plan_count }
+        [pscustomobject]@{ metric = "Pending plans"; value = $StatusReport.commander_planning.pending_plan_count }
+        [pscustomobject]@{ metric = "Latest goal"; value = $StatusReport.commander_planning.latest_goal.goal }
+        [pscustomobject]@{ metric = "Latest goal type"; value = $StatusReport.commander_planning.latest_goal.goal_type }
+        [pscustomobject]@{ metric = "Latest category"; value = $StatusReport.commander_planning.latest_goal.category }
+        [pscustomobject]@{ metric = "Latest complexity"; value = $StatusReport.commander_planning.latest_goal.complexity }
+    ) -Columns @("metric", "value")) )
+    $Lines.Add("")
+    $Lines.Add("### Recent Goals")
+    $Lines.Add("")
+    if ($StatusReport.commander_planning.recent_goals -and @($StatusReport.commander_planning.recent_goals).Count -gt 0) {
+        $Lines.Add((ConvertTo-PDAMarkdownTable -Rows @($StatusReport.commander_planning.recent_goals) -Columns @("plan_id", "goal", "goal_type", "category", "complexity", "approval_required", "status", "created_at")))
+    }
+    else {
+        $Lines.Add("- No goal plans found.")
+    }
+    $Lines.Add("")
+    $Lines.Add("### Pending Plans")
+    $Lines.Add("")
+    if ($StatusReport.commander_planning.pending_plans -and @($StatusReport.commander_planning.pending_plans).Count -gt 0) {
+        $Lines.Add((ConvertTo-PDAMarkdownTable -Rows @($StatusReport.commander_planning.pending_plans) -Columns @("plan_id", "goal", "goal_type", "category", "complexity", "status", "created_at")))
+    }
+    else {
+        $Lines.Add("- No pending goal plans.")
+    }
+    $Lines.Add("")
+    $Lines.Add("### Executor Chains")
+    $Lines.Add("")
+    if ($StatusReport.commander_planning.recommended_executor_chains -and @($StatusReport.commander_planning.recommended_executor_chains).Count -gt 0) {
+        $Lines.Add((ConvertTo-PDAMarkdownTable -Rows @($StatusReport.commander_planning.recommended_executor_chains) -Columns @("plan_id", "goal", "recommended_executors")))
+    }
+    else {
+        $Lines.Add("- No executor chains found.")
+    }
+    $Lines.Add("")
+    $Lines.Add("### Planned Deliverables")
+    $Lines.Add("")
+    if ($StatusReport.commander_planning.planned_deliverables -and @($StatusReport.commander_planning.planned_deliverables).Count -gt 0) {
+        $Lines.Add((ConvertTo-PDAMarkdownTable -Rows @($StatusReport.commander_planning.planned_deliverables) -Columns @("plan_id", "goal", "deliverables")))
+    }
+    else {
+        $Lines.Add("- No planned deliverables found.")
+    }
+    $Lines.Add("")
+}
+
 $Lines.Add("## Dispatch Queue")
 $Lines.Add("")
 $Lines.Add((ConvertTo-PDAMarkdownTable -Rows @(

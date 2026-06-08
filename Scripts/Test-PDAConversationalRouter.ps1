@@ -52,8 +52,14 @@ $Cases = @(
     [pscustomobject]@{
         name = "roadmap request"
         input = "Build me a roadmap."
-        expected_route = "governed_request"
-        expected_command = "/planner"
+        expected_route = "goal_planning"
+        expected_command = ""
+    }
+    [pscustomobject]@{
+        name = "classic literature goal"
+        input = "I want to start reading classic literature. Can you search the internet, create a list of top books from famous authors, write a report, include links and synopses, and make it a PDF?"
+        expected_route = "goal_planning"
+        expected_command = ""
     }
     [pscustomobject]@{
         name = "ambiguous request"
@@ -122,7 +128,7 @@ foreach ($Case in $Cases) {
         $Issues.Add("Expected no recommended command but got '$($Route.recommended_command)'.")
     }
 
-        if ($Route.route_type -in @("direct_status", "direct_help", "task_lookup", "dispatch_guidance", "ambiguous", "fallback")) {
+        if ($Route.route_type -in @("direct_status", "direct_help", "task_lookup", "dispatch_guidance", "goal_planning", "ambiguous", "fallback")) {
             $Direct = Get-PDAConversationalNaturalResponse -Route $Route -ConversationId $DirectConversationId -SessionId $DirectSessionId -UserId $DirectUserId -ConversationTitle $DirectTitle -Text $Case.input -Root $Root
             if ([string]::IsNullOrWhiteSpace([string]$Direct.response_text)) {
                 $CasePassed = $false
@@ -151,6 +157,10 @@ foreach ($Case in $Cases) {
         if ($Route.route_type -eq "dispatch_guidance" -and $Direct.response_text -notmatch '(?i)recommended executor|available executors|dispatch queue') {
             $CasePassed = $false
             $Issues.Add("Dispatch guidance response did not mention executors or dispatch state.")
+        }
+        if ($Route.route_type -eq "goal_planning" -and $Direct.response_text -notmatch '(?i)goal assessment|execution plan|approval path') {
+            $CasePassed = $false
+            $Issues.Add("Goal planning response did not look like a structured plan.")
         }
     }
 

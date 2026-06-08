@@ -1,6 +1,6 @@
 # PDA Dashboard v2
 
-Updated: 2026-06-08 09:02:18 -07:00
+Updated: 2026-06-08 12:22:56 -07:00
 Overall health: degraded
 
 ## System Health
@@ -22,8 +22,8 @@ Overall health: degraded
 
 | metric | value |
 | --- | --- |
-| Queue depth | 672 |
-| Pending | 672 |
+| Queue depth | 689 |
+| Pending | 689 |
 | Running | 0 |
 | Completed | 41 |
 | Failed | 244 |
@@ -34,7 +34,7 @@ Overall health: degraded
 
 | queue | task_id | command | status | updated_at |
 | --- | --- | --- | --- | --- |
-| pending | 3062ec8a-cfc1-487d-ac40-13a206058937 | /review | queued | 06/08/2026 15:53:59 |
+| pending | 4a5bf669-baad-4d38-a69b-c57195aa553d | /review | queued | 06/08/2026 19:21:59 |
 | completed | b4486b1b-8663-4068-b110-b4f215ea418f | /research | success | 06/06/2026 03:47:41 |
 | failed | 881c700e-d685-42e6-b7fa-39ca8d904501 | /research | failed | 06/06/2026 03:44:44 |
 | results | cf20b3bf-0b72-46e7-a0fe-4bb92c0c065c | /fabric security | completed | 06/07/2026 03:40:10 |
@@ -65,7 +65,7 @@ Overall health: degraded
 
 | worker_name | status | state | age_minutes | process_live |
 | --- | --- | --- | --- | --- |
-| test-worker | running | STALE | 8294.47 | no |
+| test-worker | running | STALE | 8495.42 | no |
 
 ## Pending Approvals
 
@@ -86,16 +86,16 @@ Overall health: degraded
 
 | task_id | command | worker | category | queue | status | updated_at |
 | --- | --- | --- | --- | --- | --- | --- |
-| 3062ec8a-cfc1-487d-ac40-13a206058937 | /review | review-worker | category_1 | pending | queued | 06/08/2026 15:53:59 |
-| a0647fdd-20aa-4bac-9d7e-827e6b7cc73c | /reporter | reporter-worker | category_1 | pending | queued | 06/08/2026 15:53:36 |
-| ebb25cd8-14a1-4254-9b9e-f8cb23be38e8 | /review | review-worker | category_1 | pending | queued | 06/08/2026 15:50:08 |
-| c2cfa010-cfe7-4fa6-a20b-885f9f96b497 | /reporter | reporter-worker | category_1 | pending | queued | 06/08/2026 15:49:45 |
-| 5406f909-4d1c-46fe-85b6-e8e50d53ec77 | /fabric research | fabric-worker | category_1 | pending | pending | 06/08/2026 15:48:24 |
-| 6b53a1fb-9242-44d3-841d-e3c685ae253e | /review | review-worker | category_1 | pending | queued | 06/08/2026 15:47:58 |
-| 5d93121b-5c63-46d9-86e6-b20d6a17ee1e | /reporter | reporter-worker | category_1 | pending | queued | 06/08/2026 15:47:35 |
-| c8ce1075-54f0-49b9-b480-e68e96d04db3 | /planner | planner-worker | category_1 | pending | queued | 06/08/2026 15:47:31 |
-| f7ae6bf8-0f3a-4f35-b9db-31cc18ba9dad | /fabric research | fabric-worker | category_1 | pending | pending | 06/08/2026 15:42:22 |
-| 8a9029bb-bcee-4678-b67e-0c27e2ce6af4 | /review | review-worker | category_1 | pending | queued | 06/08/2026 15:41:55 |
+| 4a5bf669-baad-4d38-a69b-c57195aa553d | /review | review-worker | category_1 | pending | queued | 06/08/2026 19:21:59 |
+| 3641b1f2-487a-4ce5-b278-1e5b69ef6f4b | /reporter | reporter-worker | category_1 | pending | queued | 06/08/2026 19:21:29 |
+| 28b65cc7-2d25-4656-b549-74dfb279f082 | /planner | planner-worker | category_1 | pending | queued | 06/08/2026 19:21:24 |
+| 1f4f6e13-03e6-4faf-ba0e-88f311aff046 | /fabric research | fabric-worker | category_1 | pending | pending | 06/08/2026 19:19:43 |
+| 48c4467e-3e97-412d-9f47-32d9308ac550 | /planner | planner-worker | category_1 | pending | queued | 06/08/2026 19:18:48 |
+| 64655333-f22f-460f-b965-c507198647f3 | /fabric research | fabric-worker | category_1 | pending | pending | 06/08/2026 18:06:02 |
+| f4f92d4b-7d08-4e90-a14b-b307ee059701 | /planner | planner-worker | category_1 | pending | queued | 06/08/2026 18:05:16 |
+| e22a4020-ec70-40d9-bc48-f37fc158ddd1 | /review | review-worker | category_1 | pending | queued | 06/08/2026 18:00:40 |
+| bc1fb585-1938-468b-b675-aff484d07617 | /reporter | reporter-worker | category_1 | pending | queued | 06/08/2026 18:00:21 |
+| 7a04ea02-7eb4-4cab-87c5-fda78a2f15a3 | /review | review-worker | category_1 | pending | queued | 06/08/2026 17:56:35 |
 
 ## Recent Reports / Artifacts
 
@@ -168,10 +168,10 @@ Overall health: degraded
 | metric | value |
 | --- | --- |
 | Conversation status | pass |
-| Conversation ID | default |
-| Active tasks | 3 |
-| Pending approvals | 1 |
-| Submitted tasks | 3 |
+| Conversation ID | conv-717e7cdff87a |
+| Active tasks | 0 |
+| Pending approvals | 0 |
+| Submitted tasks | 0 |
 | Completed tasks | 0 |
 | Latest task ID | - |
 | Latest result path | - |
@@ -200,6 +200,58 @@ Overall health: degraded
 | action | executor | reason |
 | --- | --- | --- |
 | Review the dashboard and continue normal operations | Human operator | No immediate blockers were found. |
+
+## Commander Planning
+
+| metric | value |
+| --- | --- |
+| Planning status | pass |
+| Plan count | 25 |
+| Pending plans | 5 |
+| Latest goal | Create a classic literature reading guide PDF |
+| Latest goal type | research_report_pdf |
+| Latest category | category_1 |
+| Latest complexity | high |
+
+### Recent Goals
+
+| plan_id | goal | goal_type | category | complexity | approval_required | status | created_at |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| goal-20260608-122228-c68d1fd5 | Create a classic literature reading guide PDF | research_report_pdf | category_1 | high | yes | pending_review | 06/08/2026 19:22:28 |
+| goal-20260608-122227-b9cb1fef | Build a roadmap | goal_decomposition | category_1 | medium | yes | pending_review | 06/08/2026 19:22:27 |
+| goal-20260608-122135-20a32f45 | Create a classic literature reading guide PDF | research_report_pdf | category_1 | high | yes | pending_review | 06/08/2026 19:21:35 |
+| goal-20260608-122135-2f0dfaa0 | Build a roadmap | goal_decomposition | category_1 | medium | yes | pending_review | 06/08/2026 19:21:35 |
+| goal-20260608-122111-f67501be | Create a classic literature reading guide PDF | research_report_pdf | category_1 | high | yes | pending_review | 06/08/2026 19:21:11 |
+
+### Pending Plans
+
+| plan_id | goal | goal_type | category | complexity | status | created_at |
+| --- | --- | --- | --- | --- | --- | --- |
+| goal-20260608-122228-c68d1fd5 | Create a classic literature reading guide PDF | research_report_pdf | category_1 | high | pending_review | 06/08/2026 19:22:28 |
+| goal-20260608-122227-b9cb1fef | Build a roadmap | goal_decomposition | category_1 | medium | pending_review | 06/08/2026 19:22:27 |
+| goal-20260608-122135-20a32f45 | Create a classic literature reading guide PDF | research_report_pdf | category_1 | high | pending_review | 06/08/2026 19:21:35 |
+| goal-20260608-122135-2f0dfaa0 | Build a roadmap | goal_decomposition | category_1 | medium | pending_review | 06/08/2026 19:21:35 |
+| goal-20260608-122111-f67501be | Create a classic literature reading guide PDF | research_report_pdf | category_1 | high | pending_review | 06/08/2026 19:21:11 |
+
+### Executor Chains
+
+| plan_id | goal | recommended_executors |
+| --- | --- | --- |
+| goal-20260608-122228-c68d1fd5 | Create a classic literature reading guide PDF | gemini-cli, gemini-cli, reporter-worker, reporter-worker |
+| goal-20260608-122227-b9cb1fef | Build a roadmap | planner-worker, planner-worker |
+| goal-20260608-122135-20a32f45 | Create a classic literature reading guide PDF | gemini-cli, gemini-cli, reporter-worker, reporter-worker |
+| goal-20260608-122135-2f0dfaa0 | Build a roadmap | planner-worker, planner-worker |
+| goal-20260608-122111-f67501be | Create a classic literature reading guide PDF | gemini-cli, gemini-cli, reporter-worker, reporter-worker |
+
+### Planned Deliverables
+
+| plan_id | goal | deliverables |
+| --- | --- | --- |
+| goal-20260608-122228-c68d1fd5 | Create a classic literature reading guide PDF | reading list, author profiles, representative works, book synopses, source links and references, written report, PDF export |
+| goal-20260608-122227-b9cb1fef | Build a roadmap | execution plan |
+| goal-20260608-122135-20a32f45 | Create a classic literature reading guide PDF | reading list, author profiles, representative works, book synopses, source links and references, written report, PDF export |
+| goal-20260608-122135-2f0dfaa0 | Build a roadmap | execution plan |
+| goal-20260608-122111-f67501be | Create a classic literature reading guide PDF | reading list, author profiles, representative works, book synopses, source links and references, written report, PDF export |
 
 ## Dispatch Queue
 

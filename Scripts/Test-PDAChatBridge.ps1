@@ -206,12 +206,23 @@ $Cases = @(
         name = "roadmap request"
         message = "Build me a roadmap."
         confirm = $false
-        expected_handoff = "mapped"
-        expected_response_contains = "Recommended command"
-        expected_dispatch_ready = $true
+        expected_handoff = "goal_planning"
+        expected_response_contains = "Goal Assessment"
+        expected_dispatch_ready = $false
         expected_dispatch = $false
-        expected_command = "/planner"
+        expected_command = ""
         marker = "chat-roadmap-$([guid]::NewGuid().ToString())"
+    }
+    [pscustomobject]@{
+        name = "classic literature goal"
+        message = "I want to start reading classic literature. Can you search the internet, create a list of top books from famous authors, write a report, include links and synopses, and make it a PDF?"
+        confirm = $false
+        expected_handoff = "goal_planning"
+        expected_response_contains = "Execution Plan"
+        expected_dispatch_ready = $false
+        expected_dispatch = $false
+        expected_command = ""
+        marker = "chat-goal-planning-$([guid]::NewGuid().ToString())"
     }
     [pscustomobject]@{
         name = "ambiguous request"
@@ -501,6 +512,17 @@ foreach ($Case in $Cases) {
     if (-not $Case.expected_command -and -not [string]::IsNullOrWhiteSpace([string]$Result.recommended_command)) {
         $CasePassed = $false
         $Issues.Add("Non-mapped input should not recommend an executable command.")
+    }
+
+    if ($Case.expected_handoff -eq "goal_planning") {
+        if (-not ($Result.PSObject.Properties.Name -contains "goal_plan")) {
+            $CasePassed = $false
+            $Issues.Add("Goal planning response did not include goal_plan data.")
+        }
+        if (-not ($Result.PSObject.Properties.Name -contains "execution_plan")) {
+            $CasePassed = $false
+            $Issues.Add("Goal planning response did not include execution_plan data.")
+        }
     }
 
     if ($Case.PSObject.Properties.Name -contains "expected_dispatch_ready") {

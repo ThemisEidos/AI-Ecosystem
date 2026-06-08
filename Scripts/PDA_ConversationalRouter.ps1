@@ -131,6 +131,15 @@ function Test-PDAConversationalDispatchGuidance {
     )
 }
 
+function Test-PDAConversationalGoalPlanning {
+    param([Parameter(Mandatory = $true)][string]$NormalizedText)
+
+    return [bool](
+        $NormalizedText -match '(?i)\b(classic literature|reading list|study plan|goal plan|goal decomposition|build me a roadmap|create a roadmap|help me create|analyze my project|what needs to happen|reading guide|pdf report|write a report|make it a pdf|summarize and create|search the internet)\b' -or
+        ($NormalizedText -match '(?i)\b(research|investigate|search|study|authors|books)\b' -and $NormalizedText -match '(?i)\b(report|pdf|synopsis|synopses|links|sources|reading list|roadmap|plan|guide)\b')
+    )
+}
+
 function Test-PDAConversationalAmbiguous {
     param([Parameter(Mandatory = $true)][string]$NormalizedText)
 
@@ -297,6 +306,17 @@ function Resolve-PDAConversationalRoute {
         return [pscustomobject]$Route
     }
 
+    if (Test-PDAConversationalGoalPlanning -NormalizedText $Normalized) {
+        $Route.route_type = "goal_planning"
+        $Route.response_mode = "direct_answer"
+        $Route.recommended_command = ""
+        $Route.reason = "Natural-language goal decomposition request."
+        $Route.confidence = 0.9
+        $Route.intent = "goal_planning"
+        $Route.task_type = "goal_planning"
+        return [pscustomobject]$Route
+    }
+
     if (Test-PDAConversationalAmbiguous -NormalizedText $Normalized) {
         $Route.route_type = "ambiguous"
         $Route.response_mode = "clarification"
@@ -411,6 +431,8 @@ function Get-PDAConversationalNaturalResponse {
         result_artifact_path     = ""
         result_artifact          = $null
         bridge_mode              = "conversational_direct"
+        goal_plan                = $null
+        execution_plan           = $null
     }
 
     switch ([string]$Route.route_type) {
@@ -426,8 +448,8 @@ function Get-PDAConversationalNaturalResponse {
             $BaseResponse.latest_result_response_text = $BaseResponse.response_text
         }
         "direct_help" {
-            $BaseResponse.response_text = "I can check status, give you a briefing, summarize tasks, list workers, show reports, summarize memory, review memory candidates, run Fabric patterns, create NotebookLM packages, and route governed requests. Ask a plain-language question or use /help."
-            $BaseResponse.next_action = "Ask for a briefing, a status question, or use /help for the full command list."
+            $BaseResponse.response_text = "I can check status, give you a briefing, summarize tasks, list workers, show reports, summarize memory, review memory candidates, plan goals, run Fabric patterns, create NotebookLM packages, and route governed requests. Ask a plain-language question or use /help."
+            $BaseResponse.next_action = "Ask for a briefing, a status question, a goal plan, or use /help for the full command list."
         }
         "task_lookup" {
             $TaskResult = Invoke-PDAConversationalJsonScript -Path $TaskResultScript -Arguments @(
@@ -595,17 +617,35 @@ function Get-PDAConversationalNaturalResponse {
             $BaseResponse.recommended_command = "/dispatch"
             $BaseResponse.latest_result_response_text = $BaseResponse.response_text
         }
+        "goal_planning" {
+            $GoalPlanScript = Join-Path $PSScriptRoot "Get-PDAGoalPlan.ps1"
+            $GoalPlan = Invoke-PDAConversationalJsonScript -Path $GoalPlanScript -Arguments @("-Text", $Text, "-Root", $Root, "-Persist", "-AsJson") -SourceName "PDA goal plan"
+            if ($GoalPlan) {
+                $BaseResponse.response_text = if ($GoalPlan.PSObject.Properties.Name -contains "response_text" -and -not [string]::IsNullOrWhiteSpace([string]$GoalPlan.response_text)) { [string]$GoalPlan.response_text } else { "PDA goal plan unavailable." }
+                $BaseResponse.next_action = if ($GoalPlan.PSObject.Properties.Name -contains "next_action" -and -not [string]::IsNullOrWhiteSpace([string]$GoalPlan.next_action)) { [string]$GoalPlan.next_action } else { "Review the goal plan and ask for refinements or approval." }
+                $BaseResponse.recommended_command = ""
+                $BaseResponse.latest_result_response_text = $BaseResponse.response_text
+                $BaseResponse.intent = "goal_planning"
+                $BaseResponse.confidence = if ($GoalPlan.PSObject.Properties.Name -contains "confidence") { [double]$GoalPlan.confidence } else { 0.9 }
+                $BaseResponse.goal_plan = $GoalPlan
+                $BaseResponse.execution_plan = if ($GoalPlan.PSObject.Properties.Name -contains "execution_plan") { $GoalPlan.execution_plan } else { $null }
+            }
+            else {
+                $BaseResponse.response_text = "I can turn natural-language goals into a structured plan, but the goal planner is unavailable right now."
+                $BaseResponse.next_action = "Try /planner or ask for /help if you want the command list."
+            }
+        }
         "ambiguous" {
-            $BaseResponse.response_text = "I can help with one action at a time. Do you want a review, a run/execution, or a report?"
-            $BaseResponse.next_action = "Reply with one clear action such as review, report, status, research, or execute."
+            $BaseResponse.response_text = "I can help with one action at a time. Do you want a review, a run/execution, a report, or a goal plan?"
+            $BaseResponse.next_action = "Reply with one clear action such as review, report, status, research, execute, or goal planning."
         }
         "fallback" {
-            $BaseResponse.response_text = "I can help with status, briefing, blocked work, recent changes, tasks, workers, reports, memory, Fabric, NotebookLM, planning, research, review, and execution. Ask a direct question or use /help."
-            $BaseResponse.next_action = "Ask for a briefing, a status question, or use /help for the full command list."
+            $BaseResponse.response_text = "I can help with status, briefing, blocked work, recent changes, tasks, workers, reports, memory, Fabric, NotebookLM, goal planning, research, review, and execution. Ask a direct question or use /help."
+            $BaseResponse.next_action = "Ask for a briefing, a status question, a goal plan, or use /help for the full command list."
         }
         default {
-            $BaseResponse.response_text = "I can help with status, briefing, blocked work, recent changes, tasks, workers, reports, memory, Fabric, NotebookLM, planning, research, review, and execution. Ask a direct question or use /help."
-            $BaseResponse.next_action = "Ask for a briefing, a status question, or use /help for the full command list."
+            $BaseResponse.response_text = "I can help with status, briefing, blocked work, recent changes, tasks, workers, reports, memory, Fabric, NotebookLM, goal planning, research, review, and execution. Ask a direct question or use /help."
+            $BaseResponse.next_action = "Ask for a briefing, a status question, a goal plan, or use /help for the full command list."
         }
     }
 

@@ -1051,6 +1051,7 @@ $Report = [pscustomobject]@{
     dispatch_status = $DispatchSnapshot
     }
     commander_briefing = $null
+    commander_planning = $null
     dispatch_status = $DispatchSnapshot
     memory_summary = [pscustomobject]@{
         status = Get-PDASafeString $MemorySnapshot.status
@@ -1114,6 +1115,79 @@ if (-not $SkipCommanderBriefing -and (Test-Path -LiteralPath $CommanderBriefingS
                 next_action = ""
                 recommended_executor = ""
                 briefing_text = ""
+            }
+        }
+    }
+
+    $CommanderPlanningStorePath = Join-Path $Root "PDA-Runtime\data\commander-goals.json"
+    if (Test-Path -LiteralPath $CommanderPlanningStorePath -PathType Leaf) {
+        try {
+            $CommanderPlanningStore = Get-Content -LiteralPath $CommanderPlanningStorePath -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+            $CommanderPlans = @($CommanderPlanningStore.plans)
+            $RecentGoals = @(
+                $CommanderPlans |
+                    Select-Object -First 5 |
+                    ForEach-Object {
+                        [pscustomobject]@{
+                            plan_id = [string]$_.plan_id
+                            goal = [string]$_.goal
+                            goal_type = [string]$_.goal_type
+                            category = [string]$_.category
+                            complexity = [string]$_.complexity
+                            approval_required = [bool]$_.approval_required
+                            status = [string]$_.status
+                            created_at = [string]$_.created_at
+                        }
+                    }
+            )
+            $PendingPlans = @($CommanderPlans | Where-Object { [string]$_.status -in @("pending_review", "pending_approval", "planned") } | Select-Object -First 5)
+            $ExecutorChains = @(
+                $CommanderPlans |
+                    Select-Object -First 5 |
+                    ForEach-Object {
+                        [pscustomobject]@{
+                            plan_id = [string]$_.plan_id
+                            goal = [string]$_.goal
+                            recommended_executors = @($_.recommended_executor_chain | ForEach-Object { $_.executor })
+                        }
+                    }
+            )
+            $PlannedDeliverables = @(
+                $CommanderPlans |
+                    Select-Object -First 5 |
+                    ForEach-Object {
+                        [pscustomobject]@{
+                            plan_id = [string]$_.plan_id
+                            goal = [string]$_.goal
+                            deliverables = @($_.deliverables)
+                        }
+                    }
+            )
+
+            $Report.commander_planning = [pscustomobject]@{
+                status = $(if (@($CommanderPlans).Count -gt 0) { "pass" } else { "empty" })
+                store_path = $CommanderPlanningStorePath
+                plan_count = [int]@($CommanderPlans).Count
+                pending_plan_count = [int]@($PendingPlans).Count
+                recent_goals = @($RecentGoals)
+                pending_plans = @($PendingPlans)
+                recommended_executor_chains = @($ExecutorChains)
+                planned_deliverables = @($PlannedDeliverables)
+                latest_goal = if ($RecentGoals.Count -gt 0) { $RecentGoals[0] } else { $null }
+            }
+        }
+        catch {
+            $Report.commander_planning = [pscustomobject]@{
+                status = "error"
+                store_path = $CommanderPlanningStorePath
+                plan_count = 0
+                pending_plan_count = 0
+                recent_goals = @()
+                pending_plans = @()
+                recommended_executor_chains = @()
+                planned_deliverables = @()
+                latest_goal = $null
+                error = $_.Exception.Message
             }
         }
     }

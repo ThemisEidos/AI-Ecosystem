@@ -611,9 +611,6 @@ $Report = [pscustomobject]@{
 
 if ($AsJson) {
     $Report | ConvertTo-Json -Depth 30
-    if (-not $NoThrow -and $Report.status -eq "empty") {
-        throw "PDA conversation state is empty."
-    }
     return
 }
 
