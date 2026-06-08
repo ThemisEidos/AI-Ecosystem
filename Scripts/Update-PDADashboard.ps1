@@ -310,6 +310,33 @@ if (-not [string]::IsNullOrWhiteSpace([string]$StatusReport.commander_integratio
     $Lines.Add("")
 }
 
+$Lines.Add("## PDA Commander Briefing")
+$Lines.Add("")
+if ($StatusReport.commander_briefing) {
+    $Lines.Add((ConvertTo-PDAMarkdownTable -Rows @(
+        [pscustomobject]@{ metric = "Briefing status"; value = $StatusReport.commander_briefing.status }
+        [pscustomobject]@{ metric = "Focus"; value = $StatusReport.commander_briefing.focus }
+        [pscustomobject]@{ metric = "Dashboard health"; value = $StatusReport.commander_briefing.dashboard_health }
+        [pscustomobject]@{ metric = "Queue depth"; value = $StatusReport.commander_briefing.queue.depth }
+        [pscustomobject]@{ metric = "Pending approvals"; value = $StatusReport.commander_briefing.queue.pending }
+        [pscustomobject]@{ metric = "Failed tasks"; value = $StatusReport.commander_briefing.queue.failed }
+        [pscustomobject]@{ metric = "Memory candidates"; value = $StatusReport.commander_briefing.memory.candidate_count }
+        [pscustomobject]@{ metric = "Memory approvals"; value = $StatusReport.commander_briefing.memory.candidates_pending_approval }
+        [pscustomobject]@{ metric = "Recommended action"; value = $StatusReport.commander_briefing.next_action }
+        [pscustomobject]@{ metric = "Recommended executor"; value = $StatusReport.commander_briefing.recommended_executor }
+    ) -Columns @("metric", "value")))
+    $Lines.Add("")
+    $Lines.Add("### Commander Actions")
+    $Lines.Add("")
+    if ($StatusReport.commander_briefing.recommended_actions -and @($StatusReport.commander_briefing.recommended_actions).Count -gt 0) {
+        $Lines.Add((ConvertTo-PDAMarkdownTable -Rows @($StatusReport.commander_briefing.recommended_actions) -Columns @("action", "executor", "reason")))
+    }
+    else {
+        $Lines.Add("- No commander actions available.")
+    }
+    $Lines.Add("")
+}
+
 $Lines.Add("## Memory Summary")
 $Lines.Add("")
 $Lines.Add((ConvertTo-PDAMarkdownTable -Rows @(

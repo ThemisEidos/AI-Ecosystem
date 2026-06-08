@@ -60,6 +60,12 @@ PDA Commander now supports explicit read-only operator console commands in addit
 - `/help` - command reference
 - `/fabric research|report|review|security` - local Fabric CLI runs from sanitized inputs only
 - `/notebooklm` - sanitized NotebookLM package creation from Category 1 notes only
+- Natural-language Commander prompts:
+  - `What should I work on next?`
+  - `Give me my PDA briefing.`
+  - `What is blocked?`
+  - `What needs attention?`
+  - `What changed recently?`
 
 These commands are read-only and do not require approval. They should return human-readable summaries, not raw JSON. `/notebooklm` is a governed local command that still requires explicit confirmation before it creates the package.
 

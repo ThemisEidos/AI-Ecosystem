@@ -247,6 +247,28 @@ $Cases = @(
         marker = "chat-memory-candidates-$([guid]::NewGuid().ToString())"
     }
     [pscustomobject]@{
+        name = "commander briefing"
+        message = "Give me my PDA briefing."
+        confirm = $false
+        expected_handoff = "commander_briefing"
+        expected_response_contains = "PDA DAILY BRIEF"
+        expected_dispatch_ready = $false
+        expected_dispatch = $false
+        expected_command = ""
+        marker = "chat-commander-briefing-$([guid]::NewGuid().ToString())"
+    }
+    [pscustomobject]@{
+        name = "blocked guidance"
+        message = "What is blocked?"
+        confirm = $false
+        expected_handoff = "commander_briefing"
+        expected_response_contains = "Recommended Actions"
+        expected_dispatch_ready = $false
+        expected_dispatch = $false
+        expected_command = ""
+        marker = "chat-blocked-guidance-$([guid]::NewGuid().ToString())"
+    }
+    [pscustomobject]@{
         name = "slash fabric report with status wording"
         message = "/fabric report Summarize the current PDA ecosystem status..."
         confirm = $false

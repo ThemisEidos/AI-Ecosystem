@@ -74,6 +74,7 @@ try {
             "## Capability Router",
             "### Fabric CLI Status",
             "## PDA Commander Integration",
+            "## PDA Commander Briefing",
             "## Memory Summary"
         )) {
             if ($Content -notmatch [regex]::Escape($Heading)) {

@@ -110,6 +110,14 @@ function Test-PDAConversationalMemoryCandidates {
     )
 }
 
+function Test-PDAConversationalCommanderBriefing {
+    param([Parameter(Mandatory = $true)][string]$NormalizedText)
+
+    return [bool](
+        $NormalizedText -match '(?i)\b(what should i work on next|what should i do next|give me my pda briefing|give me a pda briefing|pda daily brief|daily brief|what is blocked|what needs attention|what changed recently|what needs review|what should i delegate|what changed since last time)\b'
+    )
+}
+
 function Test-PDAConversationalAmbiguous {
     param([Parameter(Mandatory = $true)][string]$NormalizedText)
 
@@ -162,6 +170,7 @@ function Resolve-PDAConversationalRoute {
         reason               = "No conversational rule matched."
         ambiguity_reason     = ""
         synthetic_text       = ""
+        briefing_focus       = ""
         intent               = ""
         task_type            = ""
         command              = ""
@@ -234,6 +243,26 @@ function Resolve-PDAConversationalRoute {
         $Route.recommended_command = "/memory"
         $Route.reason = "Direct memory candidate request."
         $Route.confidence = 1
+        return [pscustomobject]$Route
+    }
+
+    if (Test-PDAConversationalCommanderBriefing -NormalizedText $Normalized) {
+        $Route.route_type = "commander_briefing"
+        $Route.response_mode = "direct_answer"
+        $Route.reason = "Direct Commander briefing request."
+        $Route.confidence = 1
+        if ($Normalized -match '(?i)\b(blocked|blocked items|what is blocked)\b') {
+            $Route.briefing_focus = "blocked"
+        }
+        elseif ($Normalized -match '(?i)\b(recent|changed recently|what changed)\b') {
+            $Route.briefing_focus = "recent"
+        }
+        elseif ($Normalized -match '(?i)\b(next|what should i work on next|what should i do next)\b') {
+            $Route.briefing_focus = "next"
+        }
+        else {
+            $Route.briefing_focus = "default"
+        }
         return [pscustomobject]$Route
     }
 
@@ -366,8 +395,8 @@ function Get-PDAConversationalNaturalResponse {
             $BaseResponse.latest_result_response_text = $BaseResponse.response_text
         }
         "direct_help" {
-            $BaseResponse.response_text = "I can check status, summarize tasks, list workers, show reports, summarize memory, review memory candidates, run Fabric patterns, create NotebookLM packages, and route governed requests. Ask a plain-language question or use /help."
-            $BaseResponse.next_action = "Ask a status question, a task question, or use /help for the full command list."
+            $BaseResponse.response_text = "I can check status, give you a briefing, summarize tasks, list workers, show reports, summarize memory, review memory candidates, run Fabric patterns, create NotebookLM packages, and route governed requests. Ask a plain-language question or use /help."
+            $BaseResponse.next_action = "Ask for a briefing, a status question, or use /help for the full command list."
         }
         "task_lookup" {
             $TaskResult = Invoke-PDAConversationalJsonScript -Path $TaskResultScript -Arguments @(
@@ -447,17 +476,35 @@ function Get-PDAConversationalNaturalResponse {
             $BaseResponse.recommended_command = "/memory"
             $BaseResponse.latest_result_response_text = $BaseResponse.response_text
         }
+        "commander_briefing" {
+            $BriefingScript = Join-Path $PSScriptRoot "Get-PDACommanderBriefing.ps1"
+            $Focus = if ($Route.PSObject.Properties.Name -contains "briefing_focus" -and -not [string]::IsNullOrWhiteSpace([string]$Route.briefing_focus)) { [string]$Route.briefing_focus } else { "default" }
+            $Briefing = Invoke-PDAConversationalJsonScript -Path $BriefingScript -Arguments @("-Focus", $Focus, "-AsJson", "-Root", $Root) -SourceName "PDA commander briefing"
+
+            if ($Briefing) {
+                $BaseResponse.response_text = if ($Briefing.PSObject.Properties.Name -contains "briefing_text" -and -not [string]::IsNullOrWhiteSpace([string]$Briefing.briefing_text)) { [string]$Briefing.briefing_text } else { "PDA daily brief unavailable." }
+                $BaseResponse.next_action = if ($Briefing.PSObject.Properties.Name -contains "next_action" -and -not [string]::IsNullOrWhiteSpace([string]$Briefing.next_action)) { [string]$Briefing.next_action } else { "Review the briefing and choose the highest priority action." }
+                $BaseResponse.recommended_command = ""
+                $BaseResponse.latest_result_response_text = $BaseResponse.response_text
+                $BaseResponse.intent = "commander_briefing"
+                $BaseResponse.confidence = 1
+            }
+            else {
+                $BaseResponse.response_text = "PDA daily briefing unavailable."
+                $BaseResponse.next_action = "Ask /status if you need the operator console summary."
+            }
+        }
         "ambiguous" {
             $BaseResponse.response_text = "I can help with one action at a time. Do you want a review, a run/execution, or a report?"
             $BaseResponse.next_action = "Reply with one clear action such as review, report, status, research, or execute."
         }
         "fallback" {
-            $BaseResponse.response_text = "I can help with status, help, tasks, workers, reports, memory, Fabric, NotebookLM, planning, research, review, and execution. Ask a direct question or use /help."
-            $BaseResponse.next_action = "Ask a status question or use /help for the full command list."
+            $BaseResponse.response_text = "I can help with status, briefing, blocked work, recent changes, tasks, workers, reports, memory, Fabric, NotebookLM, planning, research, review, and execution. Ask a direct question or use /help."
+            $BaseResponse.next_action = "Ask for a briefing, a status question, or use /help for the full command list."
         }
         default {
-            $BaseResponse.response_text = "I can help with status, help, tasks, workers, reports, memory, Fabric, NotebookLM, planning, research, review, and execution. Ask a direct question or use /help."
-            $BaseResponse.next_action = "Ask a status question or use /help for the full command list."
+            $BaseResponse.response_text = "I can help with status, briefing, blocked work, recent changes, tasks, workers, reports, memory, Fabric, NotebookLM, planning, research, review, and execution. Ask a direct question or use /help."
+            $BaseResponse.next_action = "Ask for a briefing, a status question, or use /help for the full command list."
         }
     }
 

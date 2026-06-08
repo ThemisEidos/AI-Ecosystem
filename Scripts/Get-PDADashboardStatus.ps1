@@ -10,7 +10,10 @@ param(
     [switch]$NoThrow,
 
     [Parameter(Mandatory = $false)]
-    [switch]$SkipCoreIntegration
+    [switch]$SkipCoreIntegration,
+
+    [Parameter(Mandatory = $false)]
+    [switch]$SkipCommanderBriefing
 )
 
 $ErrorActionPreference = "Stop"
@@ -751,6 +754,7 @@ $WorkerSnapshot = Get-PDAWorkerSnapshot -RootPath $Root
 $ArtifactSnapshot = Get-PDAArtifactSnapshot -RootPath $Root
 $MemorySnapshot = Get-PDAMemorySnapshot -RootPath $Root
 $MemoryCandidateSummaryScript = Join-Path $PSScriptRoot "Get-PDAMemoryCandidateSummary.ps1"
+$CommanderBriefingScript = Join-Path $PSScriptRoot "Get-PDACommanderBriefing.ps1"
 $MemoryCandidateSnapshot = if (Test-Path -Path $MemoryCandidateSummaryScript -PathType Leaf) {
     try {
         Invoke-PDAJsonScript -Path $MemoryCandidateSummaryScript -Arguments @("-AsJson", "-Latest", "10") -SourceName "PDA memory candidate summary"
@@ -991,6 +995,7 @@ $Report = [pscustomobject]@{
         chat_bridge = $CommanderSnapshot.chat_bridge
         webhook_bridge = $CommanderSnapshot.webhook_bridge
     }
+    commander_briefing = $null
     memory_summary = [pscustomobject]@{
         status = Get-PDASafeString $MemorySnapshot.status
         count = [int]$MemorySnapshot.count
@@ -1014,6 +1019,48 @@ $Report = [pscustomobject]@{
 }
 
 if ($AsJson) {
+if (-not $SkipCommanderBriefing -and (Test-Path -LiteralPath $CommanderBriefingScript -PathType Leaf)) {
+    try {
+        $CommanderBriefingRaw = & pwsh -NoProfile -File $CommanderBriefingScript -DashboardStatus $Report -Root $Root -AsJson 2>&1
+        $CommanderBriefingText = [string]($CommanderBriefingRaw -join "`n").Trim()
+        if ([string]::IsNullOrWhiteSpace($CommanderBriefingText)) {
+            throw "Commander briefing returned empty output."
+        }
+        $Report.commander_briefing = ConvertFrom-PDAMixedJson -Text $CommanderBriefingText -SourceName $CommanderBriefingScript
+    }
+    catch {
+        $Report.commander_briefing = [pscustomobject]@{
+                status = "error"
+                generated_at = $GeneratedAt
+                focus = "default"
+                dashboard_health = $OverallHealth
+                error = $_.Exception.Message
+                queue = [pscustomobject]@{
+                    pending = [int]$QueueSnapshot.counts.pending
+                    running = [int]$QueueSnapshot.counts.running
+                    failed = [int]$QueueSnapshot.counts.failed
+                    completed = [int]$QueueSnapshot.counts.completed
+                    results = [int]$QueueSnapshot.counts.results
+                    depth = [int]$QueueSnapshot.queue_depth
+                }
+                memory = [pscustomobject]@{
+                    candidates_pending_approval = if ($MemoryCandidateSnapshot.PSObject.Properties.Name -contains "pending_approval_count") { [int]$MemoryCandidateSnapshot.pending_approval_count } else { 0 }
+                    candidate_count = if ($MemoryCandidateSnapshot.PSObject.Properties.Name -contains "candidate_count") { [int]$MemoryCandidateSnapshot.candidate_count } else { 0 }
+                    promoted_count = if ($MemoryCandidateSnapshot.PSObject.Properties.Name -contains "promoted_count") { [int]$MemoryCandidateSnapshot.promoted_count } else { [int]$MemorySnapshot.count }
+                    memory_count = [int]$MemorySnapshot.count
+                }
+                recent_activity = [pscustomobject]@{
+                    completed_tasks = @($RecentTasks)
+                    promoted_memories = @($MemorySnapshot.recent)
+                }
+                blocked_items = @()
+                recommended_actions = @()
+                next_action = ""
+                recommended_executor = ""
+                briefing_text = ""
+            }
+        }
+    }
     $Report | ConvertTo-Json -Depth 30
     if (-not $NoThrow -and $Report.status -ne "pass") {
         throw "PDA dashboard status collection failed."

@@ -73,6 +73,18 @@ $Cases = @(
         expected_route = "memory_candidates"
         expected_command = "/memory"
     }
+    [pscustomobject]@{
+        name = "commander briefing"
+        input = "What should I work on next?"
+        expected_route = "commander_briefing"
+        expected_command = ""
+    }
+    [pscustomobject]@{
+        name = "blocked guidance"
+        input = "What is blocked?"
+        expected_route = "commander_briefing"
+        expected_command = ""
+    }
 )
 
 $Results = @()
@@ -125,6 +137,10 @@ foreach ($Case in $Cases) {
         if ($Route.route_type -eq "memory_candidates" -and $Direct.response_text -notmatch '(?i)memory learning is tracking|pending approvals') {
             $CasePassed = $false
             $Issues.Add("Memory candidate response did not summarize the candidate queue.")
+        }
+        if ($Route.route_type -eq "commander_briefing" -and $Direct.response_text -notmatch '(?i)pda daily brief|recommended actions|queue:') {
+            $CasePassed = $false
+            $Issues.Add("Commander briefing response did not look like a daily brief.")
         }
     }
 
