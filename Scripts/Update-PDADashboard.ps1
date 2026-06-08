@@ -388,6 +388,56 @@ if ($StatusReport.commander_planning) {
     $Lines.Add("")
 }
 
+$Lines.Add("## Commander Plan Orchestration")
+$Lines.Add("")
+if ($StatusReport.commander_plan_orchestration) {
+    $Lines.Add((ConvertTo-PDAMarkdownTable -Rows @(
+        [pscustomobject]@{ metric = "Orchestration status"; value = $StatusReport.commander_plan_orchestration.status }
+        [pscustomobject]@{ metric = "Total plans"; value = $StatusReport.commander_plan_orchestration.counts.total }
+        [pscustomobject]@{ metric = "Running"; value = $StatusReport.commander_plan_orchestration.counts.running }
+        [pscustomobject]@{ metric = "Blocked"; value = $StatusReport.commander_plan_orchestration.counts.blocked }
+        [pscustomobject]@{ metric = "Waiting approval"; value = $StatusReport.commander_plan_orchestration.counts.waiting_approval }
+        [pscustomobject]@{ metric = "Completed"; value = $StatusReport.commander_plan_orchestration.counts.completed }
+    ) -Columns @("metric", "value")))
+    $Lines.Add("")
+    $Lines.Add("### Running Plans")
+    $Lines.Add("")
+    if ($StatusReport.commander_plan_orchestration.running_plans -and @($StatusReport.commander_plan_orchestration.running_plans).Count -gt 0) {
+        $Lines.Add((ConvertTo-PDAMarkdownTable -Rows @($StatusReport.commander_plan_orchestration.running_plans) -Columns @("plan_id", "goal", "plan_folder", "status", "current_step", "overall_progress", "next_step", "updated_at")))
+    }
+    else {
+        $Lines.Add("- No running plans.")
+    }
+    $Lines.Add("")
+    $Lines.Add("### Blocked Plans")
+    $Lines.Add("")
+    if ($StatusReport.commander_plan_orchestration.blocked_plans -and @($StatusReport.commander_plan_orchestration.blocked_plans).Count -gt 0) {
+        $Lines.Add((ConvertTo-PDAMarkdownTable -Rows @($StatusReport.commander_plan_orchestration.blocked_plans) -Columns @("plan_id", "goal", "plan_folder", "status", "blocked_reason", "updated_at")))
+    }
+    else {
+        $Lines.Add("- No blocked plans.")
+    }
+    $Lines.Add("")
+    $Lines.Add("### Waiting Approval")
+    $Lines.Add("")
+    if ($StatusReport.commander_plan_orchestration.pending_approvals -and @($StatusReport.commander_plan_orchestration.pending_approvals).Count -gt 0) {
+        $Lines.Add((ConvertTo-PDAMarkdownTable -Rows @($StatusReport.commander_plan_orchestration.pending_approvals) -Columns @("plan_id", "goal", "plan_folder", "status", "current_step", "updated_at")))
+    }
+    else {
+        $Lines.Add("- No plans waiting for approval.")
+    }
+    $Lines.Add("")
+    $Lines.Add("### Recent Deliverables")
+    $Lines.Add("")
+    if ($StatusReport.commander_plan_orchestration.recent_deliverables -and @($StatusReport.commander_plan_orchestration.recent_deliverables).Count -gt 0) {
+        $Lines.Add((ConvertTo-PDAMarkdownTable -Rows @($StatusReport.commander_plan_orchestration.recent_deliverables) -Columns @("plan_id", "goal", "final_deliverable_package_path", "updated_at")))
+    }
+    else {
+        $Lines.Add("- No recent deliverables.")
+    }
+    $Lines.Add("")
+}
+
 $Lines.Add("## Dispatch Queue")
 $Lines.Add("")
 $Lines.Add((ConvertTo-PDAMarkdownTable -Rows @(

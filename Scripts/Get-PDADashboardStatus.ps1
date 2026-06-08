@@ -1052,6 +1052,7 @@ $Report = [pscustomobject]@{
     }
     commander_briefing = $null
     commander_planning = $null
+    commander_plan_orchestration = $null
     dispatch_status = $DispatchSnapshot
     memory_summary = [pscustomobject]@{
         status = Get-PDASafeString $MemorySnapshot.status
@@ -1188,6 +1189,40 @@ if (-not $SkipCommanderBriefing -and (Test-Path -LiteralPath $CommanderBriefingS
                 planned_deliverables = @()
                 latest_goal = $null
                 error = $_.Exception.Message
+            }
+        }
+    }
+
+    $CommanderPlanOrchestrationScript = Join-Path $PSScriptRoot "Get-PDAPlanStatus.ps1"
+    if (Test-Path -LiteralPath $CommanderPlanOrchestrationScript -PathType Leaf) {
+        try {
+            $CommanderPlanOrchestrationRaw = & pwsh -NoProfile -File $CommanderPlanOrchestrationScript -Root $Root -AsJson -NoThrow 2>&1
+            $CommanderPlanOrchestrationText = [string]($CommanderPlanOrchestrationRaw -join "`n").Trim()
+            if (-not [string]::IsNullOrWhiteSpace($CommanderPlanOrchestrationText)) {
+                $Report.commander_plan_orchestration = ConvertFrom-PDAMixedJson -Text $CommanderPlanOrchestrationText -SourceName $CommanderPlanOrchestrationScript
+            }
+        }
+        catch {
+            $Report.commander_plan_orchestration = [pscustomobject]@{
+                status = "error"
+                error = $_.Exception.Message
+                counts = [pscustomobject]@{
+                    total = 0
+                    pending = 0
+                    approved = 0
+                    running = 0
+                    completed = 0
+                    failed = 0
+                    waiting_approval = 0
+                    blocked = 0
+                }
+                plans = @()
+                pending_approvals = @()
+                running_plans = @()
+                blocked_plans = @()
+                completed_plans = @()
+                failed_plans = @()
+                recent_deliverables = @()
             }
         }
     }
