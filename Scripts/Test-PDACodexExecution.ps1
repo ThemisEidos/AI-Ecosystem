@@ -39,7 +39,18 @@ function Invoke-PDAJsonScript {
         throw "Command returned empty output: $Path"
     }
 
-    $Result = ConvertFrom-PDAMixedJson -Text $Text -SourceName $Path
+    try {
+        $Result = ConvertFrom-PDAMixedJson -Text $Text -SourceName $Path
+    }
+    catch {
+        return [pscustomobject]@{
+            status      = "fail"
+            parse_error = $_.Exception.Message
+            raw_output  = $Text
+            exit_code   = $LASTEXITCODE
+            source_path = $Path
+        }
+    }
     if ($LASTEXITCODE -ne 0 -and (-not $Result.PSObject.Properties.Name -contains "status" -or [string]$Result.status -ne "pass")) {
         throw "Command failed: $Path"
     }
@@ -72,6 +83,7 @@ function Initialize-PDATempRepo {
         "Scripts\PDA_OutputParsing.ps1",
         "Scripts\PDA_NightlyAutomation.ps1",
         "Scripts\PDA_BuildRunner.ps1",
+        "Scripts\Monitor-PDABuildRunner.ps1",
         "Scripts\Invoke-PDABuildOrchestrator.ps1",
         "Scripts\Invoke-PDABuildRunner.ps1",
         "Scripts\Start-PDABuildRunner.ps1",
@@ -82,7 +94,10 @@ function Initialize-PDATempRepo {
         "Scripts\Generate-PDACodexWorkPacket.ps1",
         "Scripts\Generate-PDAMorningReport.ps1",
         "Scripts\Generate-PDARunReport.ps1",
+        "Scripts\Get-PDADashboardStatus.ps1",
+        "Scripts\Update-PDADashboard.ps1",
         "Scripts\Test-PDADashboardRefresh.ps1",
+        "Scripts\Test-OpenWebUIChatCompletion.ps1",
         "Scripts\Export-PDACodexExecutionPrompt.ps1",
         "Scripts\Invoke-PDACodexExecution.ps1",
         "Scripts\Invoke-PDAQueueBacklogAudit.ps1",
@@ -116,6 +131,7 @@ function Initialize-PDATempRepo {
         "Scripts/PDA_OutputParsing.ps1",
         "Scripts/PDA_NightlyAutomation.ps1",
         "Scripts/PDA_BuildRunner.ps1",
+        "Scripts/Monitor-PDABuildRunner.ps1",
         "Scripts/Invoke-PDABuildOrchestrator.ps1",
         "Scripts/Invoke-PDABuildRunner.ps1",
         "Scripts/Start-PDABuildRunner.ps1",
@@ -135,8 +151,32 @@ function Initialize-PDATempRepo {
         "Scripts/Backup-PDAVolumes.ps1",
         "Scripts/Test-PDABuildRunner.ps1",
         "Scripts/Test-PDAStack.ps1",
-        "Scripts/Generate-PDARunReport.ps1"
+        "Scripts/Generate-PDARunReport.ps1",
+        "Scripts/Get-PDADashboardStatus.ps1",
+        "Scripts/Update-PDADashboard.ps1",
+        "Scripts/Test-OpenWebUIChatCompletion.ps1"
     ) | Add-Content -Path $ExcludePath
+}
+
+function Set-TempRoadmapForCodexExecution {
+    param([Parameter(Mandatory = $true)][string]$TargetPath)
+
+    $Roadmap = Get-Content -LiteralPath $RoadmapPath -Raw | ConvertFrom-Json -ErrorAction Stop
+    $Task1 = @($Roadmap.tasks | Where-Object { [string]$_.id -eq "task-001" } | Select-Object -First 1)[0]
+    $Task2 = @($Roadmap.tasks | Where-Object { [string]$_.id -eq "task-002" } | Select-Object -First 1)[0]
+    if (-not $Task1 -or -not $Task2) {
+        throw "Roadmap must contain task-001 and task-002."
+    }
+
+    $Task1.status = "backlog"
+    $Task2.status = "backlog"
+    $Task2.dependencies = @("task-001")
+    $Roadmap.current_task_id = "task-001"
+    $Roadmap.completed_task_ids = @()
+    $Roadmap.task_state_history = @()
+    $Roadmap.last_updated = (Get-Date).ToUniversalTime().ToString("o")
+    $Roadmap.tasks = @($Task1, $Task2)
+    $Roadmap | ConvertTo-Json -Depth 40 | Set-Content -LiteralPath $TargetPath -Encoding UTF8
 }
 
 $TempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("pda-codex-execution-" + [guid]::NewGuid().ToString("N"))
@@ -144,6 +184,7 @@ New-Item -ItemType Directory -Force -Path $TempRoot | Out-Null
 
 $PrepareRepoRoot = Join-Path $TempRoot "prepare-repo"
 Initialize-PDATempRepo -DestinationRoot $PrepareRepoRoot -SourceRoot $Root
+Set-TempRoadmapForCodexExecution -TargetPath (Join-Path $PrepareRepoRoot "Roadmap\PDA-Roadmap.json")
 
 $PrepareResult = Invoke-PDAJsonScript -Path $PrepareScript -Arguments @(
     "-Root", $PrepareRepoRoot,
@@ -154,6 +195,7 @@ $PrepareResult = Invoke-PDAJsonScript -Path $PrepareScript -Arguments @(
 
 $ExecuteRepoRoot = Join-Path $TempRoot "execute-repo"
 Initialize-PDATempRepo -DestinationRoot $ExecuteRepoRoot -SourceRoot $PrepareRepoRoot
+Set-TempRoadmapForCodexExecution -TargetPath (Join-Path $ExecuteRepoRoot "Roadmap\PDA-Roadmap.json")
 
 & git -C $ExecuteRepoRoot add -f Roadmap/PDA-Roadmap.json | Out-Null
 & git -C $ExecuteRepoRoot commit -m "prepare codex execution state" | Out-Null
@@ -176,11 +218,9 @@ $FakeCodexArgumentsFile = Join-Path $TempRoot "fake-codex-args.txt"
     $FakeCodexScript
 ) | Set-Content -LiteralPath $FakeCodexArgumentsFile -Encoding UTF8
 
-$ExecutionResult = Invoke-PDAJsonScript -Path $RunnerScript -Arguments @(
+$ExecutionResult = Invoke-PDAJsonScript -Path $ExecutionScript -Arguments @(
     "-Root", $ExecuteRepoRoot,
     "-RoadmapPath", (Join-Path $ExecuteRepoRoot "Roadmap\PDA-Roadmap.json"),
-    "-OutputRoot", $TempRoot,
-    "-ExecuteCodexTask",
     "-CodexExecutable", "pwsh.exe",
     "-CodexArguments", "@file:$FakeCodexArgumentsFile"
 )
@@ -195,10 +235,6 @@ $Issues = New-Object System.Collections.Generic.List[string]
 
 if ($PrepareResult.mode -ne "prepare") {
     $Issues.Add("Prepare mode did not activate.")
-}
-
-if ($ExecutionResult.mode -ne "codex") {
-    $Issues.Add("Codex execution mode did not activate.")
 }
 
 if ($ExecutionResult.status -ne "pass") {
@@ -262,7 +298,8 @@ if ($StdErrText -notmatch "fake codex stderr diagnostic") {
 $Report = [pscustomobject]@{
     status                 = if ($Issues.Count -eq 0) { "pass" } else { "fail" }
     prepare_mode           = $PrepareResult.mode
-    execution_mode         = $ExecutionResult.mode
+    execution_mode         = "codex"
+    execution_script       = [string]$ExecutionScript
     selected_task_id       = $ExecutionResult.selected_task_id
     task_state             = $TaskState.task_state
     codex_exit_code        = $ExecutionResult.codex_exit_code

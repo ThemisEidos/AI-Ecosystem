@@ -40,12 +40,33 @@ function Invoke-PDAJsonScript {
     if ([string]::IsNullOrWhiteSpace($Text)) {
         throw "Command returned empty output: $Path"
     }
-    $Result = ConvertFrom-PDAMixedJson -Text $Text -SourceName $Path
+    try {
+        $Result = ConvertFrom-PDAMixedJson -Text $Text -SourceName $Path
+    }
+    catch {
+        return [pscustomobject]@{
+            status      = "fail"
+            parse_error = $_.Exception.Message
+            raw_output  = $Text
+            exit_code   = $LASTEXITCODE
+            source_path = $Path
+        }
+    }
     if ($LASTEXITCODE -ne 0 -and (-not $Result.PSObject.Properties.Name -contains "status" -or [string]$Result.status -ne "pass")) {
         throw "Command failed: $Path"
     }
 
     return $Result
+}
+
+function Test-PDAPathExists {
+    param([Parameter(Mandatory = $false)][string]$Path)
+
+    if ([string]::IsNullOrWhiteSpace([string]$Path)) {
+        return $false
+    }
+
+    return (Test-Path -LiteralPath $Path -PathType Leaf)
 }
 
 function Initialize-PDATempRepo {
@@ -128,11 +149,33 @@ function Initialize-PDATempRepo {
     ) | Add-Content -Path $ExcludePath
 }
 
+function Set-TempRoadmapForNightlyAutomation {
+    param([Parameter(Mandatory = $true)][string]$TargetPath)
+
+    $Roadmap = Get-Content -LiteralPath $RoadmapPath -Raw | ConvertFrom-Json -ErrorAction Stop
+    $Task1 = @($Roadmap.tasks | Where-Object { [string]$_.id -eq "task-001" } | Select-Object -First 1)[0]
+    $Task2 = @($Roadmap.tasks | Where-Object { [string]$_.id -eq "task-002" } | Select-Object -First 1)[0]
+    if (-not $Task1 -or -not $Task2) {
+        throw "Roadmap must contain task-001 and task-002."
+    }
+
+    $Task1.status = "backlog"
+    $Task2.status = "backlog"
+    $Task2.dependencies = @("task-001")
+    $Roadmap.current_task_id = "task-001"
+    $Roadmap.completed_task_ids = @()
+    $Roadmap.task_state_history = @()
+    $Roadmap.last_updated = (Get-Date).ToUniversalTime().ToString("o")
+    $Roadmap.tasks = @($Task1, $Task2)
+    $Roadmap | ConvertTo-Json -Depth 40 | Set-Content -LiteralPath $TargetPath -Encoding UTF8
+}
+
 $TempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("pda-nightly-auto-" + [guid]::NewGuid().ToString("N"))
 New-Item -ItemType Directory -Force -Path $TempRoot | Out-Null
 
 $TempRepoRoot = Join-Path $TempRoot "repo"
 Initialize-PDATempRepo -DestinationRoot $TempRepoRoot -SourceRoot $Root
+Set-TempRoadmapForNightlyAutomation -TargetPath (Join-Path $TempRepoRoot "Roadmap\PDA-Roadmap.json")
 
 $Roadmap = Invoke-PDAJsonScript -Path $StateScript -Arguments @(
     "-Root", $TempRepoRoot,
@@ -280,23 +323,23 @@ if ($WrapperExecute.task_state.task_state.status -ne "assigned") {
     $Issues.Add("Execution wrapper should leave the task in assigned state.")
 }
 
-if (-not (Test-Path -LiteralPath $OrchestratorPrepare.work_packet_path -PathType Leaf)) {
+if (-not (Test-PDAPathExists -Path $OrchestratorPrepare.work_packet_path)) {
     $Issues.Add("Work packet JSON was not written.")
 }
 
-if (-not (Test-Path -LiteralPath $OrchestratorPrepare.work_packet_markdown_path -PathType Leaf)) {
+if (-not (Test-PDAPathExists -Path $OrchestratorPrepare.work_packet_markdown_path)) {
     $Issues.Add("Work packet markdown was not written.")
 }
 
-if (-not (Test-Path -LiteralPath $OrchestratorExecute.execution_summary_path -PathType Leaf)) {
+if (-not (Test-PDAPathExists -Path $OrchestratorExecute.execution_summary_path)) {
     $Issues.Add("Execution summary JSON was not written.")
 }
 
-if (-not (Test-Path -LiteralPath $OrchestratorExecute.execution_summary_markdown_path -PathType Leaf)) {
+if (-not (Test-PDAPathExists -Path $OrchestratorExecute.execution_summary_markdown_path)) {
     $Issues.Add("Execution summary markdown was not written.")
 }
 
-if (-not (Test-Path -LiteralPath $OrchestratorExecute.morning_report_path -PathType Leaf)) {
+if (-not (Test-PDAPathExists -Path $OrchestratorExecute.morning_report_path)) {
     $Issues.Add("Morning report was not written.")
 }
 
