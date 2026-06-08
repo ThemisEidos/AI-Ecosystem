@@ -750,6 +750,43 @@ $QueueSnapshot = Get-PDAQueueSnapshot -RootPath $Root
 $WorkerSnapshot = Get-PDAWorkerSnapshot -RootPath $Root
 $ArtifactSnapshot = Get-PDAArtifactSnapshot -RootPath $Root
 $MemorySnapshot = Get-PDAMemorySnapshot -RootPath $Root
+$MemoryCandidateSummaryScript = Join-Path $PSScriptRoot "Get-PDAMemoryCandidateSummary.ps1"
+$MemoryCandidateSnapshot = if (Test-Path -Path $MemoryCandidateSummaryScript -PathType Leaf) {
+    try {
+        Invoke-PDAJsonScript -Path $MemoryCandidateSummaryScript -Arguments @("-AsJson", "-Latest", "10") -SourceName "PDA memory candidate summary"
+    }
+    catch {
+        [pscustomobject]@{
+            status = "error"
+            candidate_root = Join-Path $Root "PDA-Memory\candidates"
+            memory_index_path = Join-Path $Root "PDA_MemoryIndex.json"
+            memory_count = 0
+            candidate_count = 0
+            pending_approval_count = 0
+            promoted_count = 0
+            recent_candidates = @()
+            recent_memories = @()
+            by_source_type = @()
+            by_category = @()
+            error = $_.Exception.Message
+        }
+    }
+}
+else {
+    [pscustomobject]@{
+        status = "skipped"
+        candidate_root = Join-Path $Root "PDA-Memory\candidates"
+        memory_index_path = Join-Path $Root "PDA_MemoryIndex.json"
+        memory_count = [int]$MemorySnapshot.count
+        candidate_count = 0
+        pending_approval_count = 0
+        promoted_count = [int]$MemorySnapshot.count
+        recent_candidates = @()
+        recent_memories = @()
+        by_source_type = @()
+        by_category = @()
+    }
+}
 $ModelSnapshot = Get-PDAModelStatus -RootPath $Root
 $FabricHealthScript = Join-Path $PSScriptRoot "Invoke-PDAFabricHealthCheck.ps1"
 $CapabilityRouterScript = Join-Path $PSScriptRoot "PDA_CapabilityRouter.ps1"
@@ -958,9 +995,14 @@ $Report = [pscustomobject]@{
         status = Get-PDASafeString $MemorySnapshot.status
         count = [int]$MemorySnapshot.count
         updated_at = Get-PDASafeString $MemorySnapshot.updated_at
+        candidate_summary = $MemoryCandidateSnapshot
+        candidate_count = if ($MemoryCandidateSnapshot.PSObject.Properties.Name -contains "candidate_count") { [int]$MemoryCandidateSnapshot.candidate_count } else { 0 }
+        pending_approval_count = if ($MemoryCandidateSnapshot.PSObject.Properties.Name -contains "pending_approval_count") { [int]$MemoryCandidateSnapshot.pending_approval_count } else { 0 }
+        promoted_count = if ($MemoryCandidateSnapshot.PSObject.Properties.Name -contains "promoted_count") { [int]$MemoryCandidateSnapshot.promoted_count } else { [int]$MemorySnapshot.count }
         by_type = @($MemorySnapshot.by_type)
         by_category = @($MemorySnapshot.by_category)
         recent = @($MemorySnapshot.recent)
+        recent_candidates = if ($MemoryCandidateSnapshot.PSObject.Properties.Name -contains "recent_candidates") { @($MemoryCandidateSnapshot.recent_candidates) } else { @() }
     }
     artifacts_summary = [pscustomobject]@{
         status = Get-PDASafeString $ArtifactSnapshot.status

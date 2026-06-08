@@ -44,6 +44,7 @@ $WorkerStatusScript = Join-Path $PSScriptRoot "Get-PDAWorkerStatus.ps1"
 $TaskResultScript = Join-Path $PSScriptRoot "Get-PDATaskResult.ps1"
 $ArtifactIndexScript = Join-Path $PSScriptRoot "Get-PDAArtifactIndex.ps1"
 $MemoryIndexScript = Join-Path $PSScriptRoot "Get-PDAMemoryIndex.ps1"
+$MemoryCandidateSummaryScript = Join-Path $PSScriptRoot "Get-PDAMemoryCandidateSummary.ps1"
 
 if (-not (Test-Path -Path $InterpreterScript -PathType Leaf)) {
     throw "Command interpreter missing: $InterpreterScript"
@@ -197,10 +198,13 @@ function Get-PDAOperatorConsoleResponse {
         }
         "/memory" {
             $Body = Invoke-PDACommandScriptText -Path $MemoryIndexScript
+            $CandidateBody = Invoke-PDACommandScriptText -Path $MemoryCandidateSummaryScript -Arguments @()
             return [pscustomobject]@{
                 response_text = @(
                     "PDA Operator Console: Memory"
                     $Body
+                    ""
+                    $CandidateBody
                 ) -join "`n"
                 next_action = "Use /reports for artifact history or /help for the available console commands."
             }

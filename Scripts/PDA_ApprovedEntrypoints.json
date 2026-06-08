@@ -392,6 +392,22 @@
       "notes": "NotebookLM package generator."
     },
     {
+      "path": "Scripts\\New-PDAMemoryCandidate.ps1",
+      "governance_class": "worker_output",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "CandidateRoot",
+        "CandidatePath",
+        "Set-Content"
+      ],
+      "required_tokens": [
+        "PDA-Memory\\candidates",
+        "PDA_ArtifactIndex.json",
+        "PDA-Backups\\notebooklm"
+      ],
+      "notes": "Memory candidate discovery and writer."
+    },
+    {
       "path": "Scripts\\Invoke-PDAFindingsWorker.ps1",
       "governance_class": "worker_output",
       "scan_mode": "direct_path",

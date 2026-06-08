@@ -174,7 +174,7 @@ $Cases = @(
         message = "How is the PDA doing?"
         confirm = $false
         expected_handoff = "direct_status"
-        expected_response_contains = "PDA status is available"
+        expected_response_contains = "dashboard is showing degraded health"
         expected_dispatch_ready = $false
         expected_dispatch = $false
         expected_command = "/status"
@@ -196,7 +196,7 @@ $Cases = @(
         message = "Summarize the ecosystem status."
         confirm = $false
         expected_handoff = "direct_status"
-        expected_response_contains = "PDA status is available"
+        expected_response_contains = "dashboard is showing degraded health"
         expected_dispatch_ready = $false
         expected_dispatch = $false
         expected_command = "/status"
@@ -234,6 +234,17 @@ $Cases = @(
         expected_dispatch = $false
         expected_command = ""
         marker = "chat-task-lookup-$([guid]::NewGuid().ToString())"
+    }
+    [pscustomobject]@{
+        name = "memory candidates"
+        message = "What memory candidates exist?"
+        confirm = $false
+        expected_handoff = "memory_candidates"
+        expected_response_contains = "memory learning is tracking"
+        expected_dispatch_ready = $false
+        expected_dispatch = $false
+        expected_command = "/memory"
+        marker = "chat-memory-candidates-$([guid]::NewGuid().ToString())"
     }
     [pscustomobject]@{
         name = "slash fabric report with status wording"

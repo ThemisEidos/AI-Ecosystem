@@ -20,6 +20,7 @@ if ([string]::IsNullOrWhiteSpace($Root)) {
 $InterpreterScript = Join-Path $PSScriptRoot "PDA_CommandInterpreter.ps1"
 $DashboardStatusScript = Join-Path $PSScriptRoot "Get-PDADashboardStatus.ps1"
 $TaskResultScript = Join-Path $PSScriptRoot "Get-PDATaskResult.ps1"
+$MemoryCandidateSummaryScript = Join-Path $PSScriptRoot "Get-PDAMemoryCandidateSummary.ps1"
 $ParserPath = Join-Path $PSScriptRoot "PDA_OutputParsing.ps1"
 if (Test-Path -LiteralPath $ParserPath -PathType Leaf) {
     . $ParserPath
@@ -58,7 +59,7 @@ function Invoke-PDAConversationalJsonScript {
             }
         )
 
-        $Raw = & $Path @SafeArguments 2>&1
+        $Raw = & pwsh -NoProfile -File $Path @SafeArguments 2>&1
         $TextOutput = [string]($Raw -join "`n").Trim()
         if ([string]::IsNullOrWhiteSpace($TextOutput)) {
             return $null
@@ -98,6 +99,14 @@ function Test-PDAConversationalTaskLookup {
 
     return [bool](
         $NormalizedText -match '(?i)\b(what happened to my last task|what happened to my task|latest result|latest task|task status|where is my result|result location|what happened)\b'
+    )
+}
+
+function Test-PDAConversationalMemoryCandidates {
+    param([Parameter(Mandatory = $true)][string]$NormalizedText)
+
+    return [bool](
+        $NormalizedText -match '(?i)\b(memory candidates|pending memory promotions|pending promotions|what did the pda learn recently|what has the pda learned recently|what did the pda learn|recent learnings|recent memory|memory promotion)\b'
     )
 }
 
@@ -215,6 +224,15 @@ function Resolve-PDAConversationalRoute {
         $Route.response_mode = "direct_answer"
         $Route.recommended_command = ""
         $Route.reason = "Direct task lookup request."
+        $Route.confidence = 1
+        return [pscustomobject]$Route
+    }
+
+    if (Test-PDAConversationalMemoryCandidates -NormalizedText $Normalized) {
+        $Route.route_type = "memory_candidates"
+        $Route.response_mode = "direct_answer"
+        $Route.recommended_command = "/memory"
+        $Route.reason = "Direct memory candidate request."
         $Route.confidence = 1
         return [pscustomobject]$Route
     }
@@ -348,7 +366,7 @@ function Get-PDAConversationalNaturalResponse {
             $BaseResponse.latest_result_response_text = $BaseResponse.response_text
         }
         "direct_help" {
-            $BaseResponse.response_text = "I can check status, summarize tasks, list workers, show reports, summarize memory, run Fabric patterns, create NotebookLM packages, and route governed requests. Ask a plain-language question or use /help."
+            $BaseResponse.response_text = "I can check status, summarize tasks, list workers, show reports, summarize memory, review memory candidates, run Fabric patterns, create NotebookLM packages, and route governed requests. Ask a plain-language question or use /help."
             $BaseResponse.next_action = "Ask a status question, a task question, or use /help for the full command list."
         }
         "task_lookup" {
@@ -379,6 +397,55 @@ function Get-PDAConversationalNaturalResponse {
                 $BaseResponse.response_text = "I don't see a tracked PDA task for this conversation yet. If you want, I can help start one with /planner, /research, or /reporter."
                 $BaseResponse.next_action = "Ask me to start a task with /planner or /research, or ask for /status."
             }
+        }
+        "memory_candidates" {
+            $CandidateSummary = Invoke-PDAConversationalJsonScript -Path $MemoryCandidateSummaryScript -Arguments @("-AsJson", "-Latest", "5") -SourceName "PDA memory candidate summary"
+            $CandidateCount = if ($CandidateSummary -and $CandidateSummary.PSObject.Properties.Name -contains "candidate_count") { [int]$CandidateSummary.candidate_count } else { 0 }
+            $PendingCount = if ($CandidateSummary -and $CandidateSummary.PSObject.Properties.Name -contains "pending_approval_count") { [int]$CandidateSummary.pending_approval_count } else { 0 }
+            $PromotedCount = if ($CandidateSummary -and $CandidateSummary.PSObject.Properties.Name -contains "promoted_count") { [int]$CandidateSummary.promoted_count } else { 0 }
+            $MemoryCount = if ($CandidateSummary -and $CandidateSummary.PSObject.Properties.Name -contains "memory_count") { [int]$CandidateSummary.memory_count } else { 0 }
+
+            $RecentCandidateTitles = @()
+            if ($CandidateSummary -and $CandidateSummary.PSObject.Properties.Name -contains "recent_candidates" -and $CandidateSummary.recent_candidates) {
+                $RecentCandidateTitles = @(
+                    $CandidateSummary.recent_candidates |
+                        Select-Object -First 3 |
+                        ForEach-Object {
+                            if ($_.PSObject.Properties.Name -contains "title" -and -not [string]::IsNullOrWhiteSpace([string]$_.title)) {
+                                [string]$_.title
+                            }
+                            else {
+                                ""
+                            }
+                        } |
+                        Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) }
+                )
+            }
+
+            $RecentMemoryTitles = @()
+            if ($CandidateSummary -and $CandidateSummary.PSObject.Properties.Name -contains "recent_memories" -and $CandidateSummary.recent_memories) {
+                $RecentMemoryTitles = @(
+                    $CandidateSummary.recent_memories |
+                        Select-Object -First 3 |
+                        ForEach-Object {
+                            if ($_.PSObject.Properties.Name -contains "title" -and -not [string]::IsNullOrWhiteSpace([string]$_.title)) {
+                                [string]$_.title
+                            }
+                            else {
+                                ""
+                            }
+                        } |
+                        Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) }
+                )
+            }
+
+            $RecentCandidateText = if ($RecentCandidateTitles.Count -gt 0) { $RecentCandidateTitles -join "; " } else { "none yet" }
+            $RecentMemoryText = if ($RecentMemoryTitles.Count -gt 0) { $RecentMemoryTitles -join "; " } else { "none yet" }
+
+            $BaseResponse.response_text = "PDA memory learning is tracking $CandidateCount candidates, with $PendingCount pending approvals and $PromotedCount promoted memories out of $MemoryCount total memories. Recent candidates: $RecentCandidateText. Recent memories: $RecentMemoryText."
+            $BaseResponse.next_action = "Use /memory to review the full index or inspect PDA-Memory/candidates for pending promotions."
+            $BaseResponse.recommended_command = "/memory"
+            $BaseResponse.latest_result_response_text = $BaseResponse.response_text
         }
         "ambiguous" {
             $BaseResponse.response_text = "I can help with one action at a time. Do you want a review, a run/execution, or a report?"

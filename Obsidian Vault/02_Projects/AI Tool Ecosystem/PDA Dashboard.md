@@ -1,6 +1,6 @@
 # PDA Dashboard v2
 
-Updated: 2026-06-06 23:19:17 -07:00
+Updated: 2026-06-06 23:55:18 -07:00
 Overall health: degraded
 
 ## System Health
@@ -22,8 +22,8 @@ Overall health: degraded
 
 | metric | value |
 | --- | --- |
-| Queue depth | 577 |
-| Pending | 577 |
+| Queue depth | 579 |
+| Pending | 579 |
 | Running | 0 |
 | Completed | 41 |
 | Failed | 244 |
@@ -34,7 +34,7 @@ Overall health: degraded
 
 | queue | task_id | command | status | updated_at |
 | --- | --- | --- | --- | --- |
-| pending | 4d945bb9-3b8c-43dd-9f1d-72f241f7c5a4 | /fabric research | pending | 06/07/2026 05:51:55 |
+| pending | 26836cfa-5d68-49e4-8222-0eb7d5ad3063 | /fabric research | pending | 06/07/2026 06:18:44 |
 | completed | b4486b1b-8663-4068-b110-b4f215ea418f | /research | success | 06/06/2026 03:47:41 |
 | failed | 881c700e-d685-42e6-b7fa-39ca8d904501 | /research | failed | 06/06/2026 03:44:44 |
 | results | cf20b3bf-0b72-46e7-a0fe-4bb92c0c065c | /fabric security | completed | 06/07/2026 03:40:10 |
@@ -65,7 +65,7 @@ Overall health: degraded
 
 | worker_name | status | state | age_minutes | process_live |
 | --- | --- | --- | --- | --- |
-| test-worker | running | STALE | 6270.81 | no |
+| test-worker | running | STALE | 6307.12 | no |
 
 ## Pending Approvals
 
@@ -86,6 +86,8 @@ Overall health: degraded
 
 | task_id | command | worker | category | queue | status | updated_at |
 | --- | --- | --- | --- | --- | --- | --- |
+| 26836cfa-5d68-49e4-8222-0eb7d5ad3063 | /fabric research | fabric-worker | category_1 | pending | pending | 06/07/2026 06:18:44 |
+| f1531add-7ab8-4124-8418-b5e860906e71 | /planner | planner-worker | category_1 | pending | queued | 06/07/2026 06:17:51 |
 | 4d945bb9-3b8c-43dd-9f1d-72f241f7c5a4 | /fabric research | fabric-worker | category_1 | pending | pending | 06/07/2026 05:51:55 |
 | 20cd9f2d-e41e-4cb8-afbe-693f44c1bb7a | /planner | planner-worker | category_1 | pending | queued | 06/07/2026 05:51:00 |
 | 13e82668-ed29-4e4b-8a82-465cc4a6f59a | /review | review-worker | category_1 | pending | queued | 06/07/2026 05:31:20 |
@@ -94,8 +96,6 @@ Overall health: degraded
 | 6bbe6b8b-5e46-4b4e-a23e-2f2ac1d52365 | /review | review-worker | category_1 | pending | queued | 06/07/2026 05:28:53 |
 | 6fae85bb-fe96-4606-bee3-e1c7bd73964e | /fabric research | fabric-worker | category_1 | pending | pending | 06/07/2026 05:28:03 |
 | a5842ce7-d911-44ca-89c8-272739db712e | /planner | planner-worker | category_1 | pending | queued | 06/07/2026 05:26:46 |
-| 69d49370-85ce-426b-b2af-48703e64745d | /review | review-worker | category_1 | pending | queued | 06/07/2026 05:26:05 |
-| 3d78a586-0a57-470d-8df9-7626d755ca34 | /review | review-worker | category_1 | pending | queued | 06/07/2026 05:25:14 |
 
 ## Recent Reports / Artifacts
 

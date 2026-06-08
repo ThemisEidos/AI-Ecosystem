@@ -11,6 +11,7 @@ $LegacyRepairAllowlistPath = Join-Path $PSScriptRoot "PDA_LegacyMemoryRepairAllo
 $LegacyRepairToolPath = "Scripts/Repair-PDALegacyMemoryRecord.ps1"
 $MemoryTaxonomyScript = Join-Path $PSScriptRoot "Test-PDAMemoryTaxonomy.ps1"
 $MemoryWriterEnforcementScript = Join-Path $PSScriptRoot "Test-PDAMemoryWriterEnforcement.ps1"
+$MemoryCandidateSummaryScript = Join-Path $PSScriptRoot "Get-PDAMemoryCandidateSummary.ps1"
 . (Join-Path $PSScriptRoot "PDA_Lifecycle.ps1")
 
 function New-PDAMemoryIndexFile {
@@ -247,12 +248,26 @@ if (Test-Path $MemoryWriterEnforcementScript) {
     }
 }
 
+$MemoryCandidateReport = $null
+if (Test-Path $MemoryCandidateSummaryScript) {
+    try {
+        $MemoryCandidateJson = & pwsh -NoProfile -File $MemoryCandidateSummaryScript -AsJson -Latest 10
+        $MemoryCandidateReport = $MemoryCandidateJson | ConvertFrom-Json
+    }
+    catch {
+        $MemoryCandidateReport = $null
+    }
+}
+
 $WriterEnforcementStatusText = if ($null -ne $WriterEnforcementReport) { [string]$WriterEnforcementReport.status } else { "unknown" }
 $WriterCountText = if ($null -ne $WriterEnforcementReport) { [string]$WriterEnforcementReport.writer_count } else { "unknown" }
 $CompliantWriterCountText = if ($null -ne $WriterEnforcementReport) { [string]$WriterEnforcementReport.taxonomy_compliant_writer_count } else { "unknown" }
 $LiveValidMemoryCountText = if ($null -ne $WriterEnforcementReport) { [string]$WriterEnforcementReport.live_valid_record_count } else { "unknown" }
 $LiveInvalidMemoryCountText = if ($null -ne $WriterEnforcementReport) { [string]$WriterEnforcementReport.live_invalid_record_count } else { "unknown" }
 $RepairNeededCountText = if ($null -ne $WriterEnforcementReport) { [string]$WriterEnforcementReport.repair_needed_count } else { "unknown" }
+$CandidateCountText = if ($null -ne $MemoryCandidateReport) { [string]$MemoryCandidateReport.candidate_count } else { "0" }
+$PendingApprovalCountText = if ($null -ne $MemoryCandidateReport) { [string]$MemoryCandidateReport.pending_approval_count } else { "0" }
+$PromotedCountText = if ($null -ne $MemoryCandidateReport) { [string]$MemoryCandidateReport.promoted_count } else { [string](@($Index.memories).Count) }
 
 $LegacyRepairAllowlistCountText = "unknown"
 if (Test-Path $LegacyRepairAllowlistPath) {
@@ -275,6 +290,19 @@ $Dashboard.Add("")
 $Dashboard.Add("- Schema version: $($Index.schema_version)")
 $Dashboard.Add("- Memory count: $MemoryCount")
 $Dashboard.Add("- Last updated: $LastUpdated")
+$Dashboard.Add("")
+
+$Dashboard.Add("## Memory Candidates")
+$Dashboard.Add("")
+$Dashboard.Add("- Candidate count: $CandidateCountText")
+$Dashboard.Add("- Pending approvals: $PendingApprovalCountText")
+$Dashboard.Add("- Promoted count: $PromotedCountText")
+if ($null -ne $MemoryCandidateReport -and @($MemoryCandidateReport.recent_candidates).Count -gt 0) {
+    $Dashboard.Add("")
+    foreach ($Line in (ConvertTo-PDAMarkdownTable -Rows @($MemoryCandidateReport.recent_candidates) -Columns @("candidate_id","created_at","title","category","source_type","approval_status","promotion_status"))) {
+        $Dashboard.Add($Line)
+    }
+}
 $Dashboard.Add("")
 
 $Dashboard.Add("## Health Summary")

@@ -67,6 +67,12 @@ $Cases = @(
         expected_route = "task_lookup"
         expected_command = ""
     }
+    [pscustomobject]@{
+        name = "memory candidates"
+        input = "What memory candidates exist?"
+        expected_route = "memory_candidates"
+        expected_command = "/memory"
+    }
 )
 
 $Results = @()
@@ -115,6 +121,10 @@ foreach ($Case in $Cases) {
         if ($Route.route_type -eq "ambiguous" -and $Direct.response_text -notmatch '(?i)one action|clarify') {
             $CasePassed = $false
             $Issues.Add("Ambiguous response did not ask for clarification.")
+        }
+        if ($Route.route_type -eq "memory_candidates" -and $Direct.response_text -notmatch '(?i)memory learning is tracking|pending approvals') {
+            $CasePassed = $false
+            $Issues.Add("Memory candidate response did not summarize the candidate queue.")
         }
     }
 
