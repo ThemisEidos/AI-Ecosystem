@@ -1,0 +1,243 @@
+{
+  "schema_version": "1.0",
+  "policy_name": "PDA Agent Profile Registry",
+  "policy_version": "1.0",
+  "updated_at": "2026-06-09T00:00:00Z",
+  "agent_profiles": [
+    {
+      "agent_id": "research_agent",
+      "display_name": "Research Agent",
+      "mission": "Gather, compare, and synthesize information from approved sources.",
+      "responsibilities": [
+        "source discovery",
+        "research synthesis",
+        "large-context analysis"
+      ],
+      "approved_capabilities": [
+        "research",
+        "source_discovery",
+        "large_context_analysis"
+      ],
+      "approved_tools": [
+        "Browser",
+        "PowerShell",
+        "LiteLLM",
+        "MCP tools"
+      ],
+      "preferred_providers": [
+        "Gemini"
+      ],
+      "fallback_providers": [
+        "Claude"
+      ],
+      "category_allowed": [
+        "category_1"
+      ],
+      "approval_required_default": false,
+      "restricted_local_only": false,
+      "output_types": [
+        "research_summary",
+        "citations",
+        "source_notes"
+      ],
+      "risk_level": "low",
+      "notes": "Research remains capability-led; provider selection is downstream."
+    },
+    {
+      "agent_id": "reporting_agent",
+      "display_name": "Reporting Agent",
+      "mission": "Turn structured inputs into reports, briefings, and summaries.",
+      "responsibilities": [
+        "report writing",
+        "briefing creation",
+        "summary drafting"
+      ],
+      "approved_capabilities": [
+        "report_writing",
+        "report_review",
+        "large_context_analysis"
+      ],
+      "approved_tools": [
+        "PowerShell",
+        "Python",
+        "Browser",
+        "LiteLLM"
+      ],
+      "preferred_providers": [
+        "Claude"
+      ],
+      "fallback_providers": [
+        "Gemini"
+      ],
+      "category_allowed": [
+        "category_1"
+      ],
+      "approval_required_default": false,
+      "restricted_local_only": false,
+      "output_types": [
+        "report",
+        "markdown",
+        "briefing"
+      ],
+      "risk_level": "low",
+      "notes": "Category 2 use is limited to local-only data and outputs."
+    },
+    {
+      "agent_id": "review_agent",
+      "display_name": "Review Agent",
+      "mission": "Review work for correctness, compliance, and quality.",
+      "responsibilities": [
+        "code review",
+        "report review",
+        "governance review",
+        "skill promotion review"
+      ],
+      "approved_capabilities": [
+        "report_review",
+        "code_review",
+        "skill_promotion_review"
+      ],
+      "approved_tools": [
+        "PowerShell",
+        "Browser",
+        "LiteLLM"
+      ],
+      "preferred_providers": [
+        "Claude"
+      ],
+      "fallback_providers": [
+        "Codex"
+      ],
+      "category_allowed": [
+        "category_1"
+      ],
+      "approval_required_default": false,
+      "restricted_local_only": false,
+      "output_types": [
+        "review_notes",
+        "findings",
+        "recommendations"
+      ],
+      "risk_level": "medium",
+      "notes": "Review is inspection only; follow-on action may still require approval."
+    },
+    {
+      "agent_id": "build_agent",
+      "display_name": "Build Agent",
+      "mission": "Implement repository changes and build-oriented tasks.",
+      "responsibilities": [
+        "code implementation",
+        "repo modification",
+        "automation design"
+      ],
+      "approved_capabilities": [
+        "code_implementation",
+        "repo_modification",
+        "automation_design"
+      ],
+      "approved_tools": [
+        "PowerShell",
+        "Python",
+        "Browser",
+        "filesystem"
+      ],
+      "preferred_providers": [
+        "Claude Code"
+      ],
+      "fallback_providers": [
+        "Codex"
+      ],
+      "category_allowed": [
+        "category_1"
+      ],
+      "approval_required_default": true,
+      "restricted_local_only": false,
+      "output_types": [
+        "patch",
+        "implementation_summary",
+        "test_notes"
+      ],
+      "risk_level": "high",
+      "notes": "Build work is governed and requires approval before execution."
+    },
+    {
+      "agent_id": "automation_agent",
+      "display_name": "Automation Agent",
+      "mission": "Design deterministic automation and orchestration workflows.",
+      "responsibilities": [
+        "automation design",
+        "n8n workflow design",
+        "workflow orchestration"
+      ],
+      "approved_capabilities": [
+        "automation_design",
+        "n8n_workflow_design",
+        "file_processing"
+      ],
+      "approved_tools": [
+        "PowerShell",
+        "Python",
+        "n8n",
+        "filesystem"
+      ],
+      "preferred_providers": [
+        "Claude Code"
+      ],
+      "fallback_providers": [
+        "Codex"
+      ],
+      "category_allowed": [
+        "category_1"
+      ],
+      "approval_required_default": true,
+      "restricted_local_only": false,
+      "output_types": [
+        "workflow",
+        "json",
+        "summary"
+      ],
+      "risk_level": "high",
+      "notes": "n8n is an execution surface, not a governance authority."
+    },
+    {
+      "agent_id": "restricted_agent",
+      "display_name": "Restricted Agent",
+      "mission": "Handle sensitive or restricted workflows without cloud exposure.",
+      "responsibilities": [
+        "local restricted analysis",
+        "dashboard/status generation",
+        "memory summarization",
+        "file processing"
+      ],
+      "approved_capabilities": [
+        "local_restricted_analysis",
+        "file_processing",
+        "dashboard_status_generation",
+        "memory_summarization"
+      ],
+      "approved_tools": [
+        "PowerShell",
+        "Python",
+        "filesystem"
+      ],
+      "preferred_providers": [
+        "local models"
+      ],
+      "fallback_providers": [
+        "local models"
+      ],
+      "category_allowed": [
+        "category_2"
+      ],
+      "approval_required_default": true,
+      "restricted_local_only": true,
+      "output_types": [
+        "restricted_analysis",
+        "local_summary",
+        "status_report"
+      ],
+      "risk_level": "high",
+      "notes": "Cloud routing is prohibited."
+    }
+  ]
+}
