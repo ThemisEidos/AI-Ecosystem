@@ -509,6 +509,15 @@ function Get-PDAConversationSummary {
 
     if ($LatestTask) {
         $LatestCommand = [string]$LatestTask.command
+        if ([string]::IsNullOrWhiteSpace($LatestCommand) -and $LatestTask.PSObject.Properties.Name -contains "recommended_command") {
+            $LatestCommand = [string]$LatestTask.recommended_command
+        }
+        if ([string]::IsNullOrWhiteSpace($LatestCommand) -and $PendingAction) {
+            $LatestCommand = [string]$PendingAction.recommended_command
+        }
+        if ([string]::IsNullOrWhiteSpace($LatestCommand)) {
+            $LatestCommand = "(pending)"
+        }
         $LatestStatus = [string]$LatestTask.task_status
         if ($LatestStatus -eq "completed") {
             $LatestLocation = if ($LatestTask.result_path) { [string]$LatestTask.result_path } else { "" }
@@ -524,7 +533,7 @@ function Get-PDAConversationSummary {
             $ResponseText = "Task $($LatestTask.task_id) for $LatestCommand is running."
             $NextAction = "Wait for the queue worker to finish, then ask again for the latest status."
         }
-        elseif ($LatestStatus -eq "pending_approval" -or $LatestTask.requires_confirmation -eq $true) {
+        elseif ($LatestStatus -in @("pending_approval", "pending_confirmation") -or $LatestTask.requires_confirmation -eq $true) {
             $ResponseText = "Task $($LatestTask.task_id) for $LatestCommand is waiting for approval."
             $NextAction = "Confirm the request if you want the governed submitter to dispatch it."
         }

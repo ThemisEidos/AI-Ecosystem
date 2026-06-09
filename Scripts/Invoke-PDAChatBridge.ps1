@@ -76,7 +76,7 @@ function Test-PDAConfirmationMessage {
     }
 
     $Normalized = $Text.Trim().ToLowerInvariant()
-    return [bool]($Normalized -match '^(confirm|yes|approve|proceed|dispatch)\b')
+    return [bool]($Normalized -match '^(confirm|confirmed|yes|approve|approved|proceed|dispatch)\b')
 }
 
 function Get-PDAConversationPendingActionFromSummary {
@@ -677,7 +677,124 @@ if (Get-Command -Name Resolve-PDAConversationalRoute -ErrorAction SilentlyContin
             "goal_planning" {
                 $DirectResult = Get-PDAConversationalNaturalResponse -Route $ConversationRoute -ConversationId $ConversationId -SessionId $SessionId -UserId $UserId -ConversationTitle $ConversationTitle -Text $Message -Root $Root
                 $DirectResult = Set-PDABridgeDecisionMetadata -Result $DirectResult -RouteType ([string]$ConversationRoute.route_type) -Decision $script:PDACommanderDecision
-                Invoke-PDAConversationStateUpdate -ConversationId $ConversationId -SessionId $SessionId -UserId $UserId -ConversationTitle $ConversationTitle -Message $Message -TaskId "" -TaskStatus "" -TaskFilePath "" -ApprovalFilePath "" -ResultPath "" -ResultSummary "" -BridgeStatus ([string]$DirectResult.bridge_status) -DispatchStatus ([string]$DirectResult.dispatch_status) -NextAction ([string]$DirectResult.next_action) -ResponseText ([string]$DirectResult.response_text) -RecommendedCommand ([string]$DirectResult.recommended_command) -Intent ([string]$DirectResult.intent) -Confidence ([double]$DirectResult.confidence) -RequiresConfirmation:$false | Out-Null
+                $GoalPlan = if ($DirectResult.PSObject.Properties.Name -contains "goal_plan") { $DirectResult.goal_plan } else { $null }
+                $ExecutionPlan = if ($DirectResult.PSObject.Properties.Name -contains "execution_plan") { $DirectResult.execution_plan } else { $null }
+                $GoalPlanRequiresConfirmation = [bool](
+                    ($GoalPlan -and $GoalPlan.PSObject.Properties.Name -contains "approval_required" -and [bool]$GoalPlan.approval_required) -or
+                    ($ExecutionPlan -and $ExecutionPlan.PSObject.Properties.Name -contains "approval_required" -and [bool]$ExecutionPlan.approval_required)
+                )
+                $PendingCommand = ""
+                if ($script:PDACommanderDecision -and $script:PDACommanderDecision.PSObject.Properties.Name -contains "recommended_command" -and -not [string]::IsNullOrWhiteSpace([string]$script:PDACommanderDecision.recommended_command)) {
+                    $PendingCommand = [string]$script:PDACommanderDecision.recommended_command
+                }
+                elseif ($DirectResult.PSObject.Properties.Name -contains "recommended_command" -and -not [string]::IsNullOrWhiteSpace([string]$DirectResult.recommended_command)) {
+                    $PendingCommand = [string]$DirectResult.recommended_command
+                }
+                elseif ($GoalPlanRequiresConfirmation) {
+                    $PendingCommand = "/planner"
+                }
+
+                $PendingCategory = "category_1"
+                if ($script:PDACommanderDecision -and $script:PDACommanderDecision.PSObject.Properties.Name -contains "classification" -and $script:PDACommanderDecision.classification -and $script:PDACommanderDecision.classification.PSObject.Properties.Name -contains "category" -and -not [string]::IsNullOrWhiteSpace([string]$script:PDACommanderDecision.classification.category)) {
+                    $PendingCategory = [string]$script:PDACommanderDecision.classification.category
+                }
+
+                $PendingTaskId = ""
+                if ($ExecutionPlan -and $ExecutionPlan.PSObject.Properties.Name -contains "plan_id" -and -not [string]::IsNullOrWhiteSpace([string]$ExecutionPlan.plan_id)) {
+                    $PendingTaskId = [string]$ExecutionPlan.plan_id
+                }
+                elseif ($GoalPlan -and $GoalPlan.PSObject.Properties.Name -contains "plan_id" -and -not [string]::IsNullOrWhiteSpace([string]$GoalPlan.plan_id)) {
+                    $PendingTaskId = [string]$GoalPlan.plan_id
+                }
+
+                $GoalPlanDecision = [pscustomobject]@{
+                    decision_id = if ($script:PDACommanderDecision -and $script:PDACommanderDecision.PSObject.Properties.Name -contains "decision_id" -and -not [string]::IsNullOrWhiteSpace([string]$script:PDACommanderDecision.decision_id)) { [string]$script:PDACommanderDecision.decision_id } else { [guid]::NewGuid().ToString() }
+                    created_at = if ($script:PDACommanderDecision -and $script:PDACommanderDecision.PSObject.Properties.Name -contains "created_at" -and -not [string]::IsNullOrWhiteSpace([string]$script:PDACommanderDecision.created_at)) { [string]$script:PDACommanderDecision.created_at } else { (Get-Date).ToUniversalTime().ToString("o") }
+                    source = [pscustomobject]@{
+                        surface = "decision_engine"
+                        script = "Scripts/PDA_DecisionEngine.ps1"
+                    }
+                    request = [pscustomobject]@{
+                        text = [string]$Message
+                        conversation_id = [string]$ConversationId
+                        session_id = [string]$SessionId
+                        user_id = [string]$UserId
+                        root_path = [string]$Root
+                    }
+                    decision_type = "plan"
+                    classification = [pscustomobject]@{
+                        decision_type = "plan"
+                        intent = "goal_planning"
+                        task_type = "goal_planning"
+                        goal_type = if ($ExecutionPlan -and $ExecutionPlan.PSObject.Properties.Name -contains "goal_type") { [string]$ExecutionPlan.goal_type } elseif ($GoalPlan -and $GoalPlan.PSObject.Properties.Name -contains "goal_type") { [string]$GoalPlan.goal_type } else { "" }
+                        category = $PendingCategory
+                        confidence = if ($DirectResult.PSObject.Properties.Name -contains "confidence") { [double]$DirectResult.confidence } else { 0.9 }
+                        ambiguous = $false
+                    }
+                    governance = [pscustomobject]@{
+                        allowed = $true
+                        requires_confirmation = $GoalPlanRequiresConfirmation
+                        approval_required = $GoalPlanRequiresConfirmation
+                        requires_local_only = ($PendingCategory -in @("category_2", "restricted_local"))
+                        blocked_reason = ""
+                    }
+                    routing = [pscustomobject]@{
+                        recommended_command = $PendingCommand
+                        recommended_executor = "planner-worker"
+                        recommended_workflow = "goal_planning"
+                        dispatch_target = "planner"
+                        next_action = [string]$DirectResult.next_action
+                        response_mode = "direct_answer"
+                    }
+                    plan = [pscustomobject]@{
+                        goal_plan = $GoalPlan
+                        execution_plan = $ExecutionPlan
+                        subtasks = if ($ExecutionPlan -and $ExecutionPlan.PSObject.Properties.Name -contains "subtasks") { @($ExecutionPlan.subtasks) } else { @() }
+                        deliverables = if ($ExecutionPlan -and $ExecutionPlan.PSObject.Properties.Name -contains "deliverables") { @($ExecutionPlan.deliverables) } else { @() }
+                    }
+                    diagnostics = [pscustomobject]@{
+                        reason = if ($GoalPlan -and $GoalPlan.PSObject.Properties.Name -contains "next_action" -and -not [string]::IsNullOrWhiteSpace([string]$GoalPlan.next_action)) { [string]$GoalPlan.next_action } else { "Goal plan requires approval." }
+                        fallback_reason = ""
+                        matched_rules = @("goal_planning")
+                        capability_route = $null
+                        executor_recommendation = $null
+                    }
+                    route_type = "goal_planning"
+                    intent = "goal_planning"
+                    recommended_command = $PendingCommand
+                    recommended_executor = "planner-worker"
+                    requires_confirmation = $GoalPlanRequiresConfirmation
+                    dispatch_ready = $false
+                    dispatch_status = "not_dispatched"
+                    response_mode = "direct_answer"
+                    allowed = $true
+                    blocked_reason = ""
+                    source_of_truth = "Scripts/Invoke-PDAChatBridge.ps1"
+                }
+
+                $PendingTimestamp = (Get-Date).ToUniversalTime().ToString("o")
+                $PendingExpiresAt = (Get-Date).ToUniversalTime().AddMinutes((Get-PDAPendingConfirmationTimeoutMinutes)).ToString("o")
+
+                if ($GoalPlanRequiresConfirmation) {
+                    $DirectResult | Add-Member -NotePropertyName requires_confirmation -NotePropertyValue $true -Force
+                    $DirectResult | Add-Member -NotePropertyName dispatch_ready -NotePropertyValue $false -Force
+                    $DirectResult | Add-Member -NotePropertyName dispatch_status -NotePropertyValue "not_dispatched" -Force
+                    $DirectResult | Add-Member -NotePropertyName pending_action -NotePropertyValue ([pscustomobject]@{
+                        recommended_command = $PendingCommand
+                        dispatch_category    = $PendingCategory
+                        original_message     = $Message
+                        timestamp            = $PendingTimestamp
+                        expires_at           = $PendingExpiresAt
+                        status               = "awaiting_confirmation"
+                        is_expired           = $false
+                    }) -Force
+                    $DirectResult | Add-Member -NotePropertyName pending_confirmation -NotePropertyValue $true -Force
+                    $DirectResult | Add-Member -NotePropertyName pending_recommended_command -NotePropertyValue $PendingCommand -Force
+                    $DirectResult | Add-Member -NotePropertyName pending_dispatch_category -NotePropertyValue $PendingCategory -Force
+                }
+
+                Invoke-PDAConversationStateUpdate -ConversationId $ConversationId -SessionId $SessionId -UserId $UserId -ConversationTitle $ConversationTitle -Message $Message -TaskId $PendingTaskId -TaskStatus $(if ($GoalPlanRequiresConfirmation) { "pending_confirmation" } else { "" }) -TaskFilePath "" -ApprovalFilePath "" -ResultPath "" -ResultSummary "" -BridgeStatus ([string]$DirectResult.bridge_status) -DispatchStatus ([string]$DirectResult.dispatch_status) -NextAction ([string]$DirectResult.next_action) -ResponseText ([string]$DirectResult.response_text) -RecommendedCommand $PendingCommand -Intent ([string]$DirectResult.intent) -Confidence ([double]$DirectResult.confidence) -RequiresConfirmation:([bool]$GoalPlanRequiresConfirmation) -PendingRecommendedCommand $PendingCommand -PendingDispatchCategory $PendingCategory -PendingOriginalMessage $Message -PendingTimestamp $PendingTimestamp -PendingExpiresAt $PendingExpiresAt -PendingStatus $(if ($GoalPlanRequiresConfirmation) { "awaiting_confirmation" } else { "" }) -Decision $GoalPlanDecision -RouteType ([string]$ConversationRoute.route_type) | Out-Null
+                $DirectResult = Set-PDABridgeDecisionMetadata -Result $DirectResult -RouteType ([string]$ConversationRoute.route_type) -Decision $GoalPlanDecision
 
                 if ($AsJson) {
                     $DirectResult | ConvertTo-Json -Depth 20
@@ -802,6 +919,79 @@ if ($IsConfirmationMessage -and -not $HasPendingAction) {
 }
 
 if ($HasPendingAction -and ($IsConfirmationMessage -or $ConfirmDispatch)) {
+    if ([string]::IsNullOrWhiteSpace([string]$PendingAction.recommended_command) -eq $false -and [string]$PendingAction.recommended_command -eq "/planner") {
+        $GoalPlanPendingResponseText = if ($ConversationState -and $ConversationState.response_text) {
+            [string]$ConversationState.response_text
+        }
+        elseif ($ConversationState -and $ConversationState.conversation -and $ConversationState.conversation.latest_response_text) {
+            [string]$ConversationState.conversation.latest_response_text
+        }
+        elseif ($ConversationState -and $ConversationState.conversation -and $ConversationState.conversation.last_response_text) {
+            [string]$ConversationState.conversation.last_response_text
+        }
+        else {
+            "Goal plan remains pending approval."
+        }
+
+        $GoalPlanPendingNextAction = if ($ConversationState -and $ConversationState.next_action) {
+            [string]$ConversationState.next_action
+        }
+        elseif ($ConversationState -and $ConversationState.conversation -and $ConversationState.conversation.latest_next_action) {
+            [string]$ConversationState.conversation.latest_next_action
+        }
+        else {
+            "Review the goal plan and approve it when ready."
+        }
+
+        $Result = [pscustomobject]@{
+            original_message         = $Message
+            response_text            = $GoalPlanPendingResponseText
+            recommended_command      = [string]$PendingAction.recommended_command
+            intent                   = "goal_planning"
+            route_type               = "goal_planning"
+            confidence               = if ($ConversationState -and $ConversationState.pending_action -and $ConversationState.pending_action.PSObject.Properties.Name -contains "confidence" -and -not [string]::IsNullOrWhiteSpace([string]$ConversationState.pending_action.confidence)) { [double]$ConversationState.pending_action.confidence } elseif ($ConversationState -and $ConversationState.conversation -and $ConversationState.conversation.pending_action -and $ConversationState.conversation.pending_action.PSObject.Properties.Name -contains "confidence") { [double]$ConversationState.conversation.pending_action.confidence } else { 0.9 }
+            requires_confirmation    = $true
+            dispatch_ready           = $false
+            dispatch_status          = "not_dispatched"
+            next_action              = $GoalPlanPendingNextAction
+            bridge_status            = "ready"
+            handoff_status           = "goal_plan_pending_confirmation"
+            source_of_truth          = "Scripts/Get-PDAConversationState.ps1"
+            confirmation_mode        = [bool]$ConfirmDispatch
+            dispatch_path            = ""
+            dispatch_category        = [string]$PendingAction.dispatch_category
+            conversation_id          = $(if ($ConversationId) { $ConversationId } elseif ($ConversationState -and $ConversationState.conversation_id) { [string]$ConversationState.conversation_id } else { "" })
+            session_id               = $SessionId
+            conversation_state_status = if ($ConversationState) { [string]$ConversationState.status } else { "empty" }
+            latest_task_id           = if ($ConversationState -and $ConversationState.latest_task) { [string]$ConversationState.latest_task.task_id } elseif ($ConversationState -and $ConversationState.conversation -and $ConversationState.conversation.latest_task_id) { [string]$ConversationState.conversation.latest_task_id } else { "" }
+            latest_task_status       = if ($ConversationState -and $ConversationState.latest_task) { [string]$ConversationState.latest_task.task_status } elseif ($ConversationState -and $ConversationState.conversation -and $ConversationState.conversation.latest_task_status) { [string]$ConversationState.conversation.latest_task_status } else { "" }
+            latest_result_path       = if ($ConversationState -and $ConversationState.latest_result) { [string]$ConversationState.latest_result.result_path } elseif ($ConversationState -and $ConversationState.conversation -and $ConversationState.conversation.latest_result_path) { [string]$ConversationState.conversation.latest_result_path } else { "" }
+            latest_result_response_text = if ($ConversationState -and $ConversationState.conversation -and $ConversationState.conversation.latest_response_text) { [string]$ConversationState.conversation.latest_response_text } else { "" }
+            result_artifact_path     = if ($ConversationState -and $ConversationState.latest_result) { [string]$ConversationState.latest_result.result_path } else { "" }
+            result_artifact          = if ($ConversationState) { $ConversationState.latest_result } else { $null }
+            decision                 = if ($ConversationState -and $ConversationState.conversation -and $ConversationState.conversation.last_decision) { $ConversationState.conversation.last_decision } else { $script:PDACommanderDecision }
+            bridge_mode              = "confirmation_replay"
+            pending_action           = if ($PendingAction) { $PendingAction } else { $null }
+            goal_plan                = if ($ConversationState -and $ConversationState.conversation -and $ConversationState.conversation.goal_plan) { $ConversationState.conversation.goal_plan } else { $null }
+            execution_plan           = if ($ConversationState -and $ConversationState.conversation -and $ConversationState.conversation.execution_plan) { $ConversationState.conversation.execution_plan } else { $null }
+        }
+
+        if ($AsJson) {
+            $Result | ConvertTo-Json -Depth 20
+            return
+        }
+
+        Write-Host "[OK] PDA chat bridge result:"
+        Write-Host ("Response text        : {0}" -f $Result.response_text)
+        Write-Host ("Recommended command  : {0}" -f $(if ($Result.recommended_command) { $Result.recommended_command } else { "(none)" }))
+        Write-Host ("Intent               : {0}" -f $(if ($Result.intent) { $Result.intent } else { "(none)" }))
+        Write-Host ("Confidence           : {0}" -f $Result.confidence)
+        Write-Host ("Dispatch ready       : {0}" -f $Result.dispatch_ready)
+        Write-Host ("Dispatch status      : {0}" -f $Result.dispatch_status)
+        Write-Host ("Next action          : {0}" -f $Result.next_action)
+        return
+    }
+
     $DispatchMessage = if ($PendingAction.original_message) { [string]$PendingAction.original_message } else { $Message }
     $ConfirmationArgs = @(
         "-Text", $DispatchMessage,
