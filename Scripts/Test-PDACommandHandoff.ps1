@@ -128,7 +128,7 @@ $Cases = @(
         expect_dispatch = $false
         expect_dispatch_status = "not_applicable"
         expect_command = "/status"
-        expect_response_contains = "PDA Operator Console: Status"
+        expect_response_contains = "COOPER Operator Console: Status"
         marker = "handoff-status-$([guid]::NewGuid().ToString())"
     }
     [pscustomobject]@{
@@ -141,7 +141,7 @@ $Cases = @(
         expect_dispatch = $false
         expect_dispatch_status = "not_applicable"
         expect_command = "/tasks"
-        expect_response_contains = "PDA Operator Console: Tasks"
+        expect_response_contains = "COOPER Operator Console: Tasks"
         marker = "handoff-tasks-$([guid]::NewGuid().ToString())"
     }
     [pscustomobject]@{
@@ -154,7 +154,7 @@ $Cases = @(
         expect_dispatch = $false
         expect_dispatch_status = "not_applicable"
         expect_command = "/approvals"
-        expect_response_contains = "PDA Operator Console: Approvals"
+        expect_response_contains = "COOPER Operator Console: Approvals"
         marker = "handoff-approvals-$([guid]::NewGuid().ToString())"
     }
     [pscustomobject]@{
@@ -167,7 +167,7 @@ $Cases = @(
         expect_dispatch = $false
         expect_dispatch_status = "not_applicable"
         expect_command = "/workers"
-        expect_response_contains = "PDA Operator Console: Workers"
+        expect_response_contains = "COOPER Operator Console: Workers"
         marker = "handoff-workers-$([guid]::NewGuid().ToString())"
     }
     [pscustomobject]@{
@@ -180,7 +180,7 @@ $Cases = @(
         expect_dispatch = $false
         expect_dispatch_status = "not_applicable"
         expect_command = "/reports"
-        expect_response_contains = "PDA Operator Console: Reports"
+        expect_response_contains = "COOPER Operator Console: Reports"
         marker = "handoff-reports-$([guid]::NewGuid().ToString())"
     }
     [pscustomobject]@{
@@ -193,7 +193,7 @@ $Cases = @(
         expect_dispatch = $false
         expect_dispatch_status = "not_applicable"
         expect_command = "/memory"
-        expect_response_contains = "PDA Operator Console: Memory"
+        expect_response_contains = "COOPER Operator Console: Memory"
         marker = "handoff-memory-$([guid]::NewGuid().ToString())"
     }
     [pscustomobject]@{
@@ -206,7 +206,7 @@ $Cases = @(
         expect_dispatch = $false
         expect_dispatch_status = "not_applicable"
         expect_command = "/help"
-        expect_response_contains = "PDA Commander Operator Console Commands"
+        expect_response_contains = "COOPER Operator Console Commands"
         marker = "handoff-help-$([guid]::NewGuid().ToString())"
     }
     [pscustomobject]@{
@@ -219,7 +219,7 @@ $Cases = @(
         expect_dispatch = $false
         expect_dispatch_status = "not_applicable"
         expect_command = "/dispatch"
-        expect_response_contains = "PDA Operator Console: Dispatch"
+        expect_response_contains = "COOPER Operator Console: Dispatch"
         marker = "handoff-dispatch-console-$([guid]::NewGuid().ToString())"
     }
     [pscustomobject]@{

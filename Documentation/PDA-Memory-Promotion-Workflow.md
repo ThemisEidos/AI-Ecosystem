@@ -19,7 +19,7 @@ flowchart LR
 3. Each candidate includes title, source artifact, category, summary, proposed memory text, confidence, and promotion reason.
 4. Candidates remain pending until approved.
 5. Approved items can later be promoted into the durable memory index.
-6. The dashboard and PDA Commander surface candidate counts, pending approvals, promoted memories, and recent learning.
+6. The dashboard and COOPER surface candidate counts, pending approvals, promoted memories, and recent learning.
 
 ## Governance
 
@@ -37,7 +37,7 @@ Scripts\New-PDAMemoryCandidate.ps1 -Discover -Limit 1 -Force
 # Review memory candidate status
 Scripts\Get-PDAMemoryCandidateSummary.ps1 -AsJson
 
-# Ask PDA Commander about recent learning
+# Ask COOPER about recent learning
 Scripts\Invoke-PDAChatBridge.ps1 -Message 'What memory candidates exist?' -AsJson
 ```
 
@@ -48,4 +48,3 @@ Scripts\Invoke-PDAChatBridge.ps1 -Message 'What memory candidates exist?' -AsJso
 - Explicit promotion/rollback lifecycle tracking.
 - More granular candidate scoring and deduplication.
 - Optional memory synthesis from multiple related artifacts.
-

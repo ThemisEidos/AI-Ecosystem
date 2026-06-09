@@ -2,7 +2,7 @@
 
 ## Goal
 
-Give PDA Commander read-only visibility into the local operating environment so it can reason about files, repositories, containers, services, tools, and workspace layout before proposing a plan or recommendation.
+Give COOPER read-only visibility into the local operating environment so it can reason about files, repositories, containers, services, tools, and workspace layout before proposing a plan or recommendation.
 
 ## Design Principles
 
@@ -122,4 +122,3 @@ The environment-awareness test harness validates:
 - environment summary
 - organization recommendations
 - router and bridge integration
-

@@ -126,7 +126,7 @@ function Get-PDACommandInterpreterRules {
             priority       = 86
             exact_phrases  = @("/help")
             keywords       = @()
-            recommendation = "Use /help for a read-only list of PDA Commander operator commands."
+            recommendation = "Use /help for a read-only list of COOPER operator commands."
         }
         [pscustomobject]@{
             rule_id        = "operator_dispatch"

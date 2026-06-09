@@ -272,7 +272,7 @@
       "intent": "operator_help",
       "command": "/help",
       "title": "Operator help",
-      "description": "Render a read-only list of PDA Commander operator console commands.",
+      "description": "Render a read-only list of COOPER operator console commands.",
       "supported_categories": [
         "category_1"
       ],

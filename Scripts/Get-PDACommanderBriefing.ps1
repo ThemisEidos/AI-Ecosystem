@@ -258,7 +258,8 @@ $Briefing | Add-Member -NotePropertyName "recommended_executor" -NotePropertyVal
 $Briefing | Add-Member -NotePropertyName "briefing_text" -NotePropertyValue "" -Force
 
 $BriefingLines = New-Object System.Collections.Generic.List[string]
-$BriefingLines.Add("PDA DAILY BRIEF")
+$BriefingLines.Add("COOPER DAILY BRIEF")
+$BriefingLines.Add("Chief Officer of Preventing Everything from Randomly Exploding")
 $BriefingLines.Add("")
 if (-not [string]::IsNullOrWhiteSpace($Briefing.focus)) {
     $BriefingLines.Add(("Focus: {0}" -f $Briefing.focus))
@@ -324,7 +325,7 @@ if ($AsJson) {
     return
 }
 
-Write-Host "[PDA COMMANDER BRIEFING]"
+Write-Host "[COOPER COMMAND BRIEFING]"
 Write-Host $Briefing.briefing_text
 
 $Briefing

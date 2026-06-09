@@ -145,7 +145,7 @@ function Get-PDAOperatorConsoleResponse {
             $Body = Invoke-PDACommandScriptText -Path $DashboardStatusScript -Arguments @("-NoThrow", "-SkipCoreIntegration")
             return [pscustomobject]@{
                 response_text = @(
-                    "PDA Operator Console: Status"
+                    "COOPER Operator Console: Status"
                     $Body
                 ) -join "`n"
                 next_action = "Use /tasks, /approvals, /workers, /reports, /memory, or /help for a narrower operator view."
@@ -160,7 +160,7 @@ function Get-PDAOperatorConsoleResponse {
             )
             return [pscustomobject]@{
                 response_text = @(
-                    "PDA Operator Console: Tasks"
+                    "COOPER Operator Console: Tasks"
                     $Body
                 ) -join "`n"
                 next_action = "Use /status for the queue overview or /help for the available console commands."
@@ -170,7 +170,7 @@ function Get-PDAOperatorConsoleResponse {
             $Body = Invoke-PDACommandScriptText -Path $DashboardStatusScript -Arguments @("-NoThrow", "-SkipCoreIntegration")
             return [pscustomobject]@{
                 response_text = @(
-                    "PDA Operator Console: Approvals"
+                    "COOPER Operator Console: Approvals"
                     $Body
                 ) -join "`n"
                 next_action = "Use /help to see the command list or confirm a task request if you intend to dispatch work."
@@ -180,7 +180,7 @@ function Get-PDAOperatorConsoleResponse {
             $Body = Invoke-PDACommandScriptText -Path $WorkerStatusScript
             return [pscustomobject]@{
                 response_text = @(
-                    "PDA Operator Console: Workers"
+                    "COOPER Operator Console: Workers"
                     $Body
                 ) -join "`n"
                 next_action = "Use /status for a cross-system summary or /help for the available console commands."
@@ -190,7 +190,7 @@ function Get-PDAOperatorConsoleResponse {
             $Body = Invoke-PDACommandScriptText -Path $ArtifactIndexScript
             return [pscustomobject]@{
                 response_text = @(
-                    "PDA Operator Console: Reports"
+                    "COOPER Operator Console: Reports"
                     $Body
                 ) -join "`n"
                 next_action = "Use /memory for memory records or /help for the available console commands."
@@ -201,7 +201,7 @@ function Get-PDAOperatorConsoleResponse {
             $CandidateBody = Invoke-PDACommandScriptText -Path $MemoryCandidateSummaryScript -Arguments @()
             return [pscustomobject]@{
                 response_text = @(
-                    "PDA Operator Console: Memory"
+                    "COOPER Operator Console: Memory"
                     $Body
                     ""
                     $CandidateBody
@@ -214,7 +214,7 @@ function Get-PDAOperatorConsoleResponse {
             $DispatchBody = Invoke-PDACommandScriptText -Path $DispatchScript -Arguments @("-Root", $Root, "-NoThrow")
             return [pscustomobject]@{
                 response_text = @(
-                    "PDA Operator Console: Dispatch"
+                    "COOPER Operator Console: Dispatch"
                     "Use /dispatch to review the governed executor recommendation and preparation path."
                     $DispatchBody
                 ) -join "`n"
@@ -224,7 +224,7 @@ function Get-PDAOperatorConsoleResponse {
         "/help" {
             return [pscustomobject]@{
                 response_text = @(
-                    "PDA Commander Operator Console Commands"
+                    "COOPER Operator Console Commands"
                     "/status - system health, queue depth, worker and model status"
                     "/tasks - latest tracked task summary"
                     "/approvals - pending approval summary"

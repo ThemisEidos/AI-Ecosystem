@@ -61,7 +61,7 @@ def test_pipe_exposes_pda_commander_name() -> None:
     pipe = make_pipe()
     entries = pipe.pipes()
 
-    assert entries == [{"id": "pda_commander", "name": "PDA Commander"}]
+    assert entries == [{"id": "pda_commander", "name": "COOPER"}]
 
 
 def test_confirm_dispatch_replays_pending_message() -> None:
@@ -133,7 +133,7 @@ def test_title_generation_prompt_is_ignored() -> None:
     }
 
     rendered = run(pipe.pipe(body))
-    assert rendered == "PDA Commander"
+    assert rendered == "COOPER"
 
 
 def test_fail_closed_response_is_human_readable() -> None:

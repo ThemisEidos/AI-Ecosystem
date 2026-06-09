@@ -10,7 +10,7 @@ It does **not** create a parallel queue.
 
 ```mermaid
 flowchart TD
-    U["User"] --> C["PDA Commander"]
+    U["User"] --> C["COOPER"]
     C --> R["Task classification"]
     R --> E["Executor recommendation"]
     E --> A["Human approval"]
@@ -69,7 +69,7 @@ Those artifacts are derived from the approved task and executor metadata.
 
 ## Commander Behavior
 
-PDA Commander Phase 1 can now answer:
+COOPER Phase 1 can now answer:
 
 - what should handle this task
 - what executors are available

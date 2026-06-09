@@ -1,5 +1,5 @@
 """
-title: PDA Commander
+title: COOPER
 author: Codex
 version: 1.0.0
 """
@@ -63,7 +63,7 @@ class Pipe:
             description="JSONL log file for raw request and bridge payload diagnostics.",
         )
         TITLE_SAFE_RESPONSE: str = Field(
-            default="PDA Commander",
+            default="COOPER",
             description="Short harmless response returned for Open WebUI title-generation or internal prompts.",
         )
 
@@ -72,7 +72,7 @@ class Pipe:
         self._state_lock = asyncio.Lock()
 
     def pipes(self):
-        return [{"id": "pda_commander", "name": "PDA Commander"}]
+        return [{"id": "pda_commander", "name": "COOPER"}]
 
     async def pipe(self, body: dict, __user__: dict | None = None, __request__: Any = None) -> str:
         session_key = self._get_session_key(body, __user__)

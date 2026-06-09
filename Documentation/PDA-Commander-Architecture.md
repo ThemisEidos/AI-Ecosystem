@@ -1,14 +1,14 @@
-# PDA Commander Architecture
+# COOPER Architecture
 
 ## Phase 1 Goal
 
-PDA Commander Phase 1 adds observation and recommendation above the existing PDA chat bridge. It does not dispatch work autonomously.
+COOPER Phase 1 adds observation and recommendation above the existing PDA chat bridge. It does not dispatch work autonomously.
 
 ## Target Flow
 
 ```mermaid
 flowchart TD
-    U[User] --> C[PDA Commander]
+    U[User] --> C[COOPER]
     C --> S[Situational Awareness]
     S --> A[Task Classification]
     A --> R[Executor Recommendation]
@@ -70,4 +70,3 @@ flowchart TD
 - What is blocked?
 - What needs attention?
 - What changed recently?
-

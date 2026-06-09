@@ -1,6 +1,6 @@
 # Open WebUI Integration
 
-This document defines the Open WebUI chat path for PDA Commander.
+This document defines the Open WebUI chat path for COOPER.
 
 ## Dual-Provider Model Access
 
@@ -8,7 +8,7 @@ Open WebUI now serves two distinct model access patterns:
 
 - **LiteLLM** is the governed PDA gateway. It exposes the curated PDA aliases used for approved workflow routing and stable day-to-day use.
 - **OpenRouter direct** is connected separately as an OpenAI-compatible provider for exploration and broad model catalog browsing.
-- **PDA Commander** remains a preserved Pipe Function workflow and is not replaced by either provider connection.
+- **COOPER** remains a preserved Pipe Function workflow and is not replaced by either provider connection.
 
 ### Current Model Sources
 
@@ -16,7 +16,7 @@ Open WebUI now serves two distinct model access patterns:
   - Curated aliases: `local-llama`, `openai`, `claude`, `gemini`, `openrouter`
 - **OpenRouter Catalog**: `https://openrouter.ai/api/v1`
   - Large external catalog for discovery and ad hoc use
-- **PDA Commander**: preserved as the `PDA Commander` Pipe Function in Open WebUI
+- **COOPER**: preserved as the `COOPER` Pipe Function in Open WebUI
 
 ### Governance Notes
 
@@ -49,7 +49,7 @@ flowchart TD
 
 ## Operator Console Commands
 
-PDA Commander now supports explicit read-only operator console commands in addition to governed task submission.
+COOPER now supports explicit read-only operator console commands in addition to governed task submission.
 
 - `/status` - system health, queue depth, worker state, model status, and commander integration
 - `/tasks` - latest tracked task summary
@@ -87,8 +87,8 @@ Use a **Pipe Function**.
 4. Run `Scripts/Start-PDAWebhookServer.ps1` on the host machine before testing the HTTP workflow.
 5. In Open WebUI, create a Pipe Function from [Open WebUI/PDA_ChatBridge_Pipe.py](C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\Open WebUI\PDA_ChatBridge_Pipe.py).
 6. Set the Pipe Function's `N8N_WEBHOOK_URL` valve to `http://host.docker.internal:5678/webhook/pda-chat-bridge-http` if Open WebUI runs in Docker, or `http://localhost:5678/webhook/pda-chat-bridge-http` if it runs on the host.
-7. Enable the Pipe Function and select `PDA Commander` as the active model in the chat sidebar.
-8. Confirm that the Open WebUI model points to the PDA Commander Pipe, not to queue files or workers.
+7. Enable the Pipe Function and select `COOPER` as the active model in the chat sidebar.
+8. Confirm that the Open WebUI model points to the COOPER Pipe, not to queue files or workers.
 
 ## NotebookLM Command Flow
 
@@ -214,7 +214,7 @@ Pattern setup:
 4. Save the function.
 5. Open the function settings and set `N8N_WEBHOOK_URL`.
 6. Enable the function.
-7. Select `PDA Commander` from the chat model picker.
+7. Select `COOPER` from the chat model picker.
 8. Send an initial message. The function will query the n8n webhook with `confirm_dispatch: false`.
 9. Reply with an explicit approval phrase such as `confirm dispatch`. The function will replay the same request with `confirm_dispatch: true`.
 
@@ -258,4 +258,4 @@ pwsh -File Scripts\Test-OpenWebUIChatCompletion.ps1 -AsJson -NoThrow
 - The Pipe Function is the primary integration path.
 - An Action Function can be added later if you want a button-driven confirmation step, but it is not required for the working chat flow.
 - The integration assumes the Open WebUI container can reach the host via `host.docker.internal`, which matches the documented Docker setup.
-- The dual-provider setup is intentional: LiteLLM for governance, OpenRouter direct for exploration, and PDA Commander for workflow dispatch.
+- The dual-provider setup is intentional: LiteLLM for governance, OpenRouter direct for exploration, and COOPER for workflow dispatch.

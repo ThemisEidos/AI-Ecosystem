@@ -1,6 +1,6 @@
 # PDA Plan Orchestration Architecture
 
-PDA Commander Phase 3 extends the existing goal-planning and dispatch stack with governed plan orchestration.
+COOPER Phase 3 extends the existing goal-planning and dispatch stack with governed plan orchestration.
 
 The orchestration layer does not replace tasks, workers, approvals, or executor governance. It wraps them with a plan instance record so Commander can track a multi-step plan from approval through completion.
 

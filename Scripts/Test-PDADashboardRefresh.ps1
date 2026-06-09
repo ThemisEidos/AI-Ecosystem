@@ -73,8 +73,9 @@ try {
             "## Model Status",
             "## Capability Router",
             "### Fabric CLI Status",
-            "## PDA Commander Integration",
-            "## PDA Commander Briefing",
+            "## COOPER Status",
+            "## COOPER Integration",
+            "## COOPER Briefing",
             "## Memory Summary"
         )) {
             if ($Content -notmatch [regex]::Escape($Heading)) {
