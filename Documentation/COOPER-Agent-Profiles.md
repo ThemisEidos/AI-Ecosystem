@@ -1,13 +1,13 @@
 # COOPER Agent Profiles
 
-COOPER uses specialized agent profiles to decide who should do the work, which tools are allowed, which models are preferred, and what governance applies.
+COOPER uses specialized agent profiles to decide which capability should handle the work, which tools are allowed, which providers may be used, and what governance applies.
 
 ## Design Goals
 
 - Preserve human-controlled governance.
-- Separate reasoning roles from tool execution.
+- Separate capability selection from tool execution and provider selection.
 - Keep Category 2 and restricted-local work local.
-- Allow model preference without turning LiteLLM into governance.
+- Allow provider preference without turning LiteLLM into governance.
 - Keep PowerShell as a tool harness, not a reasoning layer.
 
 ## Shared Profile Fields
@@ -15,25 +15,57 @@ COOPER uses specialized agent profiles to decide who should do the work, which t
 Each agent profile should define:
 
 - Mission
+- Capability requirements
 - Responsibilities
 - Approved tools
-- Preferred models
-- Fallback models
+- Preferred providers / models
+- Fallback providers / models
 - Category restrictions
 - Approval requirements
 - Inputs
 - Outputs
 - Success criteria
 
+## Capability Registry Concept
+
+The capability registry is the first-level routing catalog. Agents are selected after COOPER matches the task to one or more capabilities.
+
+Suggested capabilities:
+
+- research
+- source discovery
+- large-context analysis
+- report writing
+- report review
+- code implementation
+- code review
+- repo modification
+- automation design
+- n8n workflow design
+- local restricted analysis
+- file processing
+- dashboard/status generation
+- memory summarization
+- skill promotion review
+
+The registry should answer:
+
+- what capability is needed
+- which agents can satisfy it
+- which tools are permitted
+- which providers/models are preferred
+- what category boundaries apply
+
 ## Required Agent Profiles
 
 ### Research Agent
 
 - Mission: gather and synthesize information.
+- Capability requirements: research, source discovery, large-context analysis.
 - Responsibilities: web research, fact collection, evidence gathering, source comparison.
 - Approved tools: Browser, PowerShell harnesses, LiteLLM, MCP search tools, local retrieval helpers.
-- Preferred models: Gemini.
-- Fallback models: Claude.
+- Preferred providers / models: Gemini first, then Claude if needed.
+- Fallback providers / models: Claude, then local-only options when restricted.
 - Category restrictions: Category 2 must remain local-only; cloud research is Category 1 only.
 - Approval requirements: approval required when the task is governed or modifies state.
 - Inputs: goal, topic, constraints, sources, output format.
@@ -43,10 +75,11 @@ Each agent profile should define:
 ### Reporting Agent
 
 - Mission: turn gathered information into structured reports.
+- Capability requirements: report writing, file processing, dashboard/status generation.
 - Responsibilities: summarize findings, write reports, format deliverables, produce operator-friendly outputs.
 - Approved tools: PowerShell harnesses, document generation helpers, LiteLLM, Browser when needed.
-- Preferred models: Claude.
-- Fallback models: Gemini.
+- Preferred providers / models: Claude first.
+- Fallback providers / models: Gemini.
 - Category restrictions: Category 2 stays local-only.
 - Approval requirements: approval required for governed outputs or repository changes.
 - Inputs: source materials, outline, audience, style rules.
@@ -56,10 +89,11 @@ Each agent profile should define:
 ### Review Agent
 
 - Mission: evaluate work for correctness, compliance, and quality.
+- Capability requirements: report review, code review, skill promotion review.
 - Responsibilities: code review, report review, governance review, consistency checks.
 - Approved tools: PowerShell harnesses, diff readers, LiteLLM, local inspection tools.
-- Preferred models: Claude.
-- Secondary models: Codex.
+- Preferred providers / models: Claude first.
+- Secondary providers / models: Codex.
 - Category restrictions: Category 2 and restricted-local work remain local-only.
 - Approval requirements: approval required for follow-up actions, not for review itself.
 - Inputs: artifact, patch, plan, or report under review.
@@ -69,10 +103,11 @@ Each agent profile should define:
 ### Build Agent
 
 - Mission: implement changes, create patches, and perform build-oriented tasks.
+- Capability requirements: code implementation, repo modification, automation design.
 - Responsibilities: code construction, repo modifications, refactors, integration work.
 - Approved tools: PowerShell, Python, Browser for local verification, build scripts, future CLI integration.
-- Preferred models: Claude Code.
-- Secondary models: Codex.
+- Preferred providers / models: Claude Code first.
+- Secondary providers / models: Codex.
 - Category restrictions: Category 2 restricted local work must remain local-only.
 - Approval requirements: approval required before execution.
 - Inputs: goal plan, task plan, patch scope, constraints.
@@ -82,10 +117,11 @@ Each agent profile should define:
 ### Automation Agent
 
 - Mission: perform deterministic workflow automation.
+- Capability requirements: automation design, n8n workflow design, file processing.
 - Responsibilities: scripts, orchestration, routine task execution, environment management.
 - Approved tools: PowerShell, Python, n8n, local automation utilities.
-- Preferred models: Claude Code.
-- Secondary models: Codex.
+- Preferred providers / models: Claude Code first.
+- Secondary providers / models: Codex.
 - Category restrictions: Category 2 stays local-only.
 - Approval requirements: approval required for state-changing automation.
 - Inputs: workflow request, triggers, safety rules, expected output.
@@ -95,24 +131,27 @@ Each agent profile should define:
 ### Restricted Agent
 
 - Mission: handle sensitive or restricted workflows without cloud exposure.
+- Capability requirements: local restricted analysis, memory summarization, file processing.
 - Responsibilities: local-only analysis, local report generation, restricted task execution.
 - Approved tools: local PowerShell, local Python, local models, local filesystem utilities.
-- Preferred models: local models only.
-- Fallback models: none for cloud paths.
+- Preferred providers / models: local models only.
+- Fallback providers / models: none for cloud paths.
 - Category restrictions: Category 2 and restricted-local only.
 - Approval requirements: approval required when governed.
 - Inputs: local-only data, sanitized local artifacts, restricted context.
 - Outputs: local reports, local summaries, local task artifacts.
 - Success criteria: no cloud routing, no policy violations, full auditability.
 
-## Model Strategy Summary
+## Provider Strategy Summary
 
-- Research: Gemini preferred, Claude fallback
-- Reporting: Claude preferred, Gemini fallback
-- Review: Claude preferred, Codex secondary
-- Build: Claude Code preferred, Codex secondary
-- Automation: Claude Code preferred, Codex secondary
-- Restricted: local models only
+Capability comes first. Provider choice comes after the capability match, sensitivity check, and tool availability check.
+
+- Research capability: Gemini preferred, Claude fallback
+- Reporting capability: Claude preferred, Gemini fallback
+- Review capability: Claude preferred, Codex secondary
+- Build capability: Claude Code preferred, Codex secondary
+- Automation capability: Claude Code preferred, Codex secondary
+- Restricted capability: local models only
 - ChatGPT: optional external advisor, not core runtime
 
 ## Governance Boundary
@@ -124,6 +163,7 @@ Model preference is not governance.
 - Local-only restrictions remain mandatory.
 - Audit logging remains required.
 - Agent selection does not bypass approval state.
+- Capability selection does not bypass approval state.
 
 ## Output Contract
 
@@ -134,4 +174,3 @@ Every profile should produce outputs that are:
 - tool-aware
 - category-aware
 - human-readable
-
