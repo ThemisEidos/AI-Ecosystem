@@ -2,6 +2,10 @@
 
 PDA Agent Loop v1 adds a governed observation-and-review layer above the existing Commander stack. It does not auto-dispatch or auto-execute actions. It only prepares one action at a time, requires human approval, records the result, and computes the next action.
 
+## Approval Workflow Link
+
+The agent loop must treat approval as a durable state transition, not a transient prompt response. Each run should reference the approval object via `approval_id` and `approval_path`, and execution must not proceed while the run is still `pending_approval`.
+
 ## Flow
 
 ```mermaid
@@ -38,6 +42,8 @@ Recommended supporting fields:
 - `status`
 - `approval_status`
 - `approval_required`
+- `approval_id`
+- `approval_path`
 - `iteration_count`
 - `max_iterations`
 - `stop_reason`
@@ -66,6 +72,8 @@ The registry is used for approval-aware tool selection and Category 1 / Category
 - Cloud tools are blocked when policy or category restrictions disallow them.
 - The loop stops at `max_iterations`.
 - The loop only handles one active run at a time in v1.
+- Approval transitions must be persisted to the approval store and mirrored in conversation state for chat replay.
+- A run may request a new approval for the next step, but it may not skip approval gates.
 
 ## Operator Experience
 

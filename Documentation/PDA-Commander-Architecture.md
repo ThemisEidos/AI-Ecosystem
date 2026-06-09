@@ -4,6 +4,10 @@
 
 COOPER Phase 1 adds observation and recommendation above the existing PDA chat bridge. It does not dispatch work autonomously.
 
+## Governance Interlock
+
+Any request that requires execution must pass through the durable approval workflow documented in [COOPER Approval Workflow](Documentation/COOPER-Approval-Workflow.md). The approval layer is the stateful gate between planning and execution and must survive restarts independently of conversation state.
+
 ## Target Flow
 
 ```mermaid
@@ -31,6 +35,8 @@ flowchart TD
 - Ambiguous requests get one clarification.
 - State-changing requests still require governed confirmation.
 - No auto-dispatch, auto-approval, or autonomous task mutation in Phase 1.
+- When a plan or governed action requires human approval, COOPER must persist an approval record and resume the same approval on later confirmation phrases.
+- Category 1 / Category 2 restrictions continue to apply even after approval is granted.
 
 ## Recommended Executor Mapping
 
@@ -50,6 +56,7 @@ flowchart TD
 - Observation
 - Assessment
 - Recommendation
+- Approval workflow handoff and replay
 
 ### Phase 2
 
