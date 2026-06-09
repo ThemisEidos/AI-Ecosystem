@@ -76,6 +76,12 @@ param(
     [string]$PendingStatus,
 
     [Parameter(Mandatory = $false)]
+    [string]$RouteType,
+
+    [Parameter(Mandatory = $false)]
+    [object]$Decision,
+
+    [Parameter(Mandatory = $false)]
     [switch]$ClearPendingAction,
 
     [Parameter(Mandatory = $false)]
@@ -307,9 +313,36 @@ function ConvertTo-PDABool {
     return [bool]$Value
 }
 
+function ConvertTo-PDADecisionRecord {
+    param([Parameter(Mandatory = $false)]$Value)
+
+    if ($null -eq $Value) {
+        return $null
+    }
+
+    if ($Value -is [string]) {
+        $Text = [string]$Value
+        if ([string]::IsNullOrWhiteSpace($Text)) {
+            return $null
+        }
+
+        try {
+            return $Text | ConvertFrom-Json -ErrorAction Stop
+        }
+        catch {
+            return [pscustomobject]@{
+                raw = $Text
+            }
+        }
+    }
+
+    return $Value
+}
+
 $State = Load-PDAConversationState
 $ConversationKey = Resolve-PDAConversationKey -ConversationId $ConversationId -SessionId $SessionId -TaskId $TaskId
 $Conversation = Ensure-PDAConversationRecord -State $State -ConversationKey $ConversationKey
+$DecisionRecord = ConvertTo-PDADecisionRecord -Value $Decision
 
 Set-PDAFieldIfPresent -Record $Conversation -Name "conversation_id" -Value $ConversationKey
 Set-PDAFieldIfPresent -Record $Conversation -Name "session_id" -Value $SessionId
@@ -322,6 +355,8 @@ Set-PDAFieldIfPresent -Record $Conversation -Name "last_response_text" -Value $R
 Set-PDAFieldIfPresent -Record $Conversation -Name "last_next_action" -Value $NextAction
 Set-PDAFieldIfPresent -Record $Conversation -Name "last_bridge_status" -Value $BridgeStatus
 Set-PDAFieldIfPresent -Record $Conversation -Name "last_dispatch_status" -Value $DispatchStatus
+Set-PDAFieldIfPresent -Record $Conversation -Name "last_route_type" -Value $RouteType
+Set-PDAFieldIfPresent -Record $Conversation -Name "last_decision" -Value $DecisionRecord
 Set-PDAFieldIfPresent -Record $Conversation -Name "latest_result_path" -Value $ResultPath
 Set-PDAFieldIfPresent -Record $Conversation -Name "latest_result_summary" -Value $ResultSummary
 Set-PDAFieldIfPresent -Record $Conversation -Name "updated_at" -Value (Get-Date).ToUniversalTime().ToString("o")
@@ -384,6 +419,8 @@ if (-not [string]::IsNullOrWhiteSpace($TaskId)) {
     Set-PDAFieldIfPresent -Record $TaskRecord -Name "requires_confirmation" -Value (ConvertTo-PDABool -Value $RequiresConfirmation)
     Set-PDAFieldIfPresent -Record $TaskRecord -Name "dispatch_status" -Value $DispatchStatus
     Set-PDAFieldIfPresent -Record $TaskRecord -Name "bridge_status" -Value $BridgeStatus
+    Set-PDAFieldIfPresent -Record $TaskRecord -Name "route_type" -Value $RouteType
+    Set-PDAFieldIfPresent -Record $TaskRecord -Name "decision" -Value $DecisionRecord
     Set-PDAFieldIfPresent -Record $TaskRecord -Name "next_action" -Value $NextAction
     Set-PDAFieldIfPresent -Record $TaskRecord -Name "response_text" -Value $ResponseText
     Set-PDAFieldIfPresent -Record $TaskRecord -Name "task_file_path" -Value $TaskFilePath

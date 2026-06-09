@@ -504,6 +504,20 @@ foreach ($Case in $Cases) {
         $Issues.Add("Response text did not include expected guidance.")
     }
 
+    if (-not ($Result.PSObject.Properties.Name -contains "route_type")) {
+        $CasePassed = $false
+        $Issues.Add("Bridge result did not include route_type.")
+    }
+
+    if (-not ($Result.PSObject.Properties.Name -contains "decision")) {
+        $CasePassed = $false
+        $Issues.Add("Bridge result did not include decision payload.")
+    }
+    elseif (-not ($Result.decision.PSObject.Properties.Name -contains "decision_type")) {
+        $CasePassed = $false
+        $Issues.Add("Bridge decision payload is missing decision_type.")
+    }
+
     if ($Case.expected_command -and $Result.recommended_command -ne $Case.expected_command) {
         $CasePassed = $false
         $Issues.Add("Expected recommended command '$($Case.expected_command)' but got '$($Result.recommended_command)'.")
@@ -544,6 +558,19 @@ foreach ($Case in $Cases) {
     if ($Result.original_message -notlike "*$($Case.marker)*") {
         $CasePassed = $false
         $Issues.Add("Original message did not round-trip through the bridge output.")
+    }
+
+    if (-not $DashboardMode -and $Case.name -in @("known message", "roadmap request")) {
+        $ConversationStateProbeRaw = & $StateScript -ConversationId $CaseConversationId -SessionId $CaseSessionId -AsJson -NoThrow 2>&1
+        $ConversationStateProbe = ConvertFrom-PDAMixedJson -Text ([string]($ConversationStateProbeRaw -join "`n")) -SourceName $StateScript
+        if (-not ($ConversationStateProbe -and $ConversationStateProbe.conversation -and ($ConversationStateProbe.conversation.PSObject.Properties.Name -contains "last_decision"))) {
+            $CasePassed = $false
+            $Issues.Add("Conversation state did not persist last_decision for $($Case.name).")
+        }
+        if (-not [string]::IsNullOrWhiteSpace([string]$ConversationStateProbe.conversation.last_route_type) -and $ConversationStateProbe.conversation.last_route_type -ne $Result.route_type) {
+            $CasePassed = $false
+            $Issues.Add("Conversation state route_type did not match bridge route_type for $($Case.name).")
+        }
     }
 
     if (-not $DashboardMode -and $Result.dispatch_status -eq "submitted") {
