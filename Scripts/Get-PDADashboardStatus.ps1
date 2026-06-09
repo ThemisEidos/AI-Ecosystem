@@ -29,6 +29,7 @@ $DashboardPath = Join-Path $Root "Obsidian Vault\02_Projects\AI Tool Ecosystem\P
 $ParserPath = Join-Path $PSScriptRoot "PDA_OutputParsing.ps1"
 $EnvironmentHelperScript = Join-Path $PSScriptRoot "PDA_Environment.ps1"
 $COOPERProfileScript = Join-Path $PSScriptRoot "Get-COOPERIdentity.ps1"
+$ApprovalWorkflowScript = Join-Path $PSScriptRoot "PDA_ApprovalWorkflow.ps1"
 if (Test-Path -LiteralPath $ParserPath -PathType Leaf) {
     . $ParserPath
 }
@@ -37,6 +38,9 @@ if (Test-Path -LiteralPath $EnvironmentHelperScript -PathType Leaf) {
 }
 if (Test-Path -LiteralPath $COOPERProfileScript -PathType Leaf) {
     . $COOPERProfileScript
+}
+if (Test-Path -LiteralPath $ApprovalWorkflowScript -PathType Leaf) {
+    . $ApprovalWorkflowScript
 }
 
 function ConvertTo-PDAHashtable {
@@ -1236,6 +1240,7 @@ $Report = [pscustomobject]@{
     commander_planning = $null
     commander_plan_orchestration = $null
     commander_agent_loop = $null
+    approval_workflow = $null
     environment_awareness = $EnvironmentAwareness
     dispatch_status = $DispatchSnapshot
     memory_summary = [pscustomobject]@{
@@ -1322,6 +1327,45 @@ if (-not $SkipCommanderBriefing -and (Test-Path -LiteralPath $CommanderBriefingS
                 latest_run = $null
                 recent_runs = @()
                 runs = @()
+                error = $_.Exception.Message
+            }
+        }
+    }
+
+    $ApprovalWorkflowScriptPath = Join-Path $PSScriptRoot "Get-PDAApprovalWorkflowStatus.ps1"
+    if (Get-Command -Name Get-PDAApprovalWorkflowStatus -ErrorAction SilentlyContinue -or (Test-Path -LiteralPath $ApprovalWorkflowScriptPath -PathType Leaf)) {
+        try {
+            if (-not (Get-Command -Name Get-PDAApprovalWorkflowStatus -ErrorAction SilentlyContinue) -and (Test-Path -LiteralPath $ApprovalWorkflowScriptPath -PathType Leaf)) {
+                . $ApprovalWorkflowScriptPath
+            }
+            if (Get-Command -Name Get-PDAApprovalWorkflowStatus -ErrorAction SilentlyContinue) {
+                $Report.approval_workflow = Get-PDAApprovalWorkflowStatus -Root $Root -Latest 10
+            }
+        }
+        catch {
+            $Report.approval_workflow = [pscustomobject]@{
+                status = "error"
+                generated_at = (Get-Date).ToUniversalTime().ToString("o")
+                root_path = $Root
+                store_path = Join-Path $Root "PDA-Runtime\data\approval-workflows\index.json"
+                index_path = Join-Path $Root "PDA-Runtime\data\approval-workflows\index.json"
+                counts = [pscustomobject]@{
+                    pending_approval = 0
+                    approved = 0
+                    rejected = 0
+                    revision_requested = 0
+                    replan_requested = 0
+                    escalated = 0
+                    cancelled = 0
+                    completed = 0
+                    blocked_agent_runs = 0
+                    pending_agent_runs = 0
+                }
+                approval_count = 0
+                pending_approval_count = 0
+                blocked_count = 0
+                recent_approvals = @()
+                recent_pending = @()
                 error = $_.Exception.Message
             }
         }

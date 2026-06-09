@@ -58,6 +58,33 @@ param(
     [string]$ResultSummary,
 
     [Parameter(Mandatory = $false)]
+    [string]$ApprovalId,
+
+    [Parameter(Mandatory = $false)]
+    [string]$ApprovalStatus,
+
+    [Parameter(Mandatory = $false)]
+    [string]$ApprovalPath,
+
+    [Parameter(Mandatory = $false)]
+    [string]$ApprovalRequestedAction,
+
+    [Parameter(Mandatory = $false)]
+    [string]$ApprovalRationale,
+
+    [Parameter(Mandatory = $false)]
+    [string]$ApprovalRequestTimestamp,
+
+    [Parameter(Mandatory = $false)]
+    [string]$ApprovalResponseTimestamp,
+
+    [Parameter(Mandatory = $false)]
+    [object]$ApprovalHistory,
+
+    [Parameter(Mandatory = $false)]
+    [string]$ApprovalKind,
+
+    [Parameter(Mandatory = $false)]
     [string]$PendingRecommendedCommand,
 
     [Parameter(Mandatory = $false)]
@@ -359,6 +386,17 @@ Set-PDAFieldIfPresent -Record $Conversation -Name "last_route_type" -Value $Rout
 Set-PDAFieldIfPresent -Record $Conversation -Name "last_decision" -Value $DecisionRecord
 Set-PDAFieldIfPresent -Record $Conversation -Name "latest_result_path" -Value $ResultPath
 Set-PDAFieldIfPresent -Record $Conversation -Name "latest_result_summary" -Value $ResultSummary
+Set-PDAFieldIfPresent -Record $Conversation -Name "approval_id" -Value $ApprovalId
+Set-PDAFieldIfPresent -Record $Conversation -Name "approval_status" -Value $ApprovalStatus
+Set-PDAFieldIfPresent -Record $Conversation -Name "approval_path" -Value $ApprovalPath
+Set-PDAFieldIfPresent -Record $Conversation -Name "approval_requested_action" -Value $ApprovalRequestedAction
+Set-PDAFieldIfPresent -Record $Conversation -Name "approval_rationale" -Value $ApprovalRationale
+Set-PDAFieldIfPresent -Record $Conversation -Name "approval_request_timestamp" -Value $ApprovalRequestTimestamp
+Set-PDAFieldIfPresent -Record $Conversation -Name "approval_response_timestamp" -Value $ApprovalResponseTimestamp
+Set-PDAFieldIfPresent -Record $Conversation -Name "approval_kind" -Value $ApprovalKind
+if ($null -ne $ApprovalHistory) {
+    $Conversation.approval_history = ConvertTo-PDAHashtable -Value $ApprovalHistory
+}
 Set-PDAFieldIfPresent -Record $Conversation -Name "updated_at" -Value (Get-Date).ToUniversalTime().ToString("o")
 
 if ($ClearPendingAction) {
@@ -427,6 +465,17 @@ if (-not [string]::IsNullOrWhiteSpace($TaskId)) {
     Set-PDAFieldIfPresent -Record $TaskRecord -Name "approval_file_path" -Value $ApprovalFilePath
     Set-PDAFieldIfPresent -Record $TaskRecord -Name "result_path" -Value $ResultPath
     Set-PDAFieldIfPresent -Record $TaskRecord -Name "result_summary" -Value $ResultSummary
+    Set-PDAFieldIfPresent -Record $TaskRecord -Name "approval_id" -Value $ApprovalId
+    Set-PDAFieldIfPresent -Record $TaskRecord -Name "approval_status" -Value $ApprovalStatus
+    Set-PDAFieldIfPresent -Record $TaskRecord -Name "approval_path" -Value $ApprovalPath
+    Set-PDAFieldIfPresent -Record $TaskRecord -Name "approval_requested_action" -Value $ApprovalRequestedAction
+    Set-PDAFieldIfPresent -Record $TaskRecord -Name "approval_rationale" -Value $ApprovalRationale
+    Set-PDAFieldIfPresent -Record $TaskRecord -Name "approval_request_timestamp" -Value $ApprovalRequestTimestamp
+    Set-PDAFieldIfPresent -Record $TaskRecord -Name "approval_response_timestamp" -Value $ApprovalResponseTimestamp
+    Set-PDAFieldIfPresent -Record $TaskRecord -Name "approval_kind" -Value $ApprovalKind
+    if ($null -ne $ApprovalHistory) {
+        $TaskRecord.approval_history = ConvertTo-PDAHashtable -Value $ApprovalHistory
+    }
     Set-PDAFieldIfPresent -Record $TaskRecord -Name "source" -Value $Source
     Set-PDAFieldIfPresent -Record $TaskRecord -Name "confirmed" -Value ([bool]$Confirmed)
 

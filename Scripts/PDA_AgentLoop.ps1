@@ -354,6 +354,9 @@ function Get-PDAAgentRunSummary {
         category          = if ($Run.PSObject.Properties.Name -contains "category") { [string]$Run.category } else { "" }
         status            = if ($Run.PSObject.Properties.Name -contains "status") { [string]$Run.status } else { "" }
         approval_status   = if ($Run.PSObject.Properties.Name -contains "approval_status") { [string]$Run.approval_status } else { "" }
+        approval_id       = if ($Run.PSObject.Properties.Name -contains "approval_id") { [string]$Run.approval_id } else { "" }
+        approval_path     = if ($Run.PSObject.Properties.Name -contains "approval_path") { [string]$Run.approval_path } else { "" }
+        approval_required = if ($Run.PSObject.Properties.Name -contains "approval_required") { [bool]$Run.approval_required } else { $false }
         assigned_tool     = if ($Run.PSObject.Properties.Name -contains "assigned_tool") { [string]$Run.assigned_tool } else { "" }
         current_step_id   = if ($CurrentStep -and ($CurrentStep.PSObject.Properties.Name -contains "step_id")) { [string]$CurrentStep.step_id } else { "" }
         current_step      = if ($CurrentStep -and ($CurrentStep.PSObject.Properties.Name -contains "title")) { [string]$CurrentStep.title } else { "" }
@@ -513,6 +516,10 @@ function Write-PDAAgentRunMarkdown {
     $Lines.Add(("Goal: {0}" -f $Goal))
     $Lines.Add(("Status: {0}" -f $Status))
     $Lines.Add(("Approval status: {0}" -f $ApprovalStatus))
+    $ApprovalId = if ($Run.PSObject.Properties.Name -contains "approval_id") { [string]$Run.approval_id } else { "" }
+    if (-not [string]::IsNullOrWhiteSpace($ApprovalId)) {
+        $Lines.Add(("Approval ID: {0}" -f $ApprovalId))
+    }
     $Lines.Add(("Category: {0}" -f $Category))
     $Lines.Add(("Assigned tool: {0}" -f $AssignedTool))
     $Lines.Add(("Iteration count: {0}" -f $IterationCount))

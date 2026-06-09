@@ -22,6 +22,11 @@ if (-not (Test-Path -LiteralPath $HelperPath -PathType Leaf)) {
 }
 . $HelperPath
 
+$ApprovalWorkflowScript = Join-Path $PSScriptRoot "PDA_ApprovalWorkflow.ps1"
+if ((Test-Path -LiteralPath $ApprovalWorkflowScript -PathType Leaf) -and -not (Get-Command -Name New-PDAApprovalRequest -ErrorAction SilentlyContinue)) {
+    . $ApprovalWorkflowScript
+}
+
 $ParserPath = Join-Path $PSScriptRoot "PDA_OutputParsing.ps1"
 if ((Test-Path -LiteralPath $ParserPath -PathType Leaf) -and -not (Get-Command -Name ConvertFrom-PDAMixedJson -ErrorAction SilentlyContinue)) {
     . $ParserPath
@@ -121,6 +126,8 @@ $Run = [ordered]@{
     plan              = ConvertTo-PDAAgentHashtable -Value $PlanObject
     execution_plan    = ConvertTo-PDAAgentHashtable -Value $PlanObject.execution_plan
     approval_history  = @()
+    approval_id       = ""
+    approval_path     = ""
     action_history    = @()
     result_history    = @()
     review_history    = @()
@@ -144,6 +151,15 @@ else {
     $ActionRequest = New-PDAAgentActionRequest -Run ([pscustomobject]$Run) -Step $CurrentStep
     $Run.action_request = ConvertTo-PDAAgentHashtable -Value $ActionRequest
     $Run.next_action = Get-PDAAgentNextAction -Run ([pscustomobject]$Run)
+}
+
+if ($Run.approval_required -and (Get-Command -Name New-PDAApprovalRequest -ErrorAction SilentlyContinue)) {
+    $Approval = New-PDAApprovalRequest -RunId $RunId -ConversationId "" -SessionId "" -Goal [string]$Run.goal -RequestedAction ([string]$Run.next_action) -Category ([string]$Run.category) -RouteType "agent_loop" -RecommendedCommand "/planner" -RecommendedExecutor ([string]$Run.assigned_tool) -DispatchCategory "local-only" -UserMessage ([string]$Run.goal) -ApprovalKind "agent_run" -ApprovalRationale "Agent run requires human approval before execution." -Root $Root
+    if ($Approval -and $Approval.PSObject.Properties.Name -contains "approval_id") {
+        $Run.approval_id = [string]$Approval.approval_id
+        $Run.approval_path = [string]$Approval.approval_path
+        $Run.approval_history = @($Approval.approval.history)
+    }
 }
 
 $RunObject = [pscustomobject]$Run

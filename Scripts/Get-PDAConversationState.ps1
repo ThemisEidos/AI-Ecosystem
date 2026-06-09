@@ -23,6 +23,10 @@ $ErrorActionPreference = "Stop"
 
 $Root = Split-Path -Parent $PSScriptRoot
 $StatePath = Join-Path $Root "PDA-Runtime\data\conversation-state.json"
+$ApprovalWorkflowScript = Join-Path $PSScriptRoot "PDA_ApprovalWorkflow.ps1"
+if (Test-Path -LiteralPath $ApprovalWorkflowScript -PathType Leaf) {
+    . $ApprovalWorkflowScript
+}
 
 function New-PDAConversationStateStore {
     return [ordered]@{
@@ -463,6 +467,34 @@ function Get-PDAConversationSummary {
     )
 
     $PendingAction = Get-PDAConversationPendingAction -Conversation $Conversation
+    $ApprovalRecord = $null
+    if (Get-Command -Name Get-PDAApprovalRequest -ErrorAction SilentlyContinue) {
+        try {
+            if ($Conversation.PSObject.Properties.Name -contains "approval_id" -and -not [string]::IsNullOrWhiteSpace([string]$Conversation.approval_id)) {
+                $ApprovalRecord = Get-PDAApprovalRequest -ApprovalId ([string]$Conversation.approval_id) -Root $Root
+            }
+            if (-not $ApprovalRecord) {
+                $ApprovalRecord = Get-PDAApprovalRequest -ConversationId $ConversationKey -Root $Root
+            }
+        }
+        catch {
+            $ApprovalRecord = $null
+        }
+    }
+
+    if (-not $PendingAction -and $ApprovalRecord -and [string]$ApprovalRecord.status -eq "pending_approval") {
+        $PendingAction = [pscustomobject]@{
+            recommended_command = if ($ApprovalRecord.PSObject.Properties.Name -contains "recommended_command") { [string]$ApprovalRecord.recommended_command } else { "" }
+            dispatch_category    = if ($ApprovalRecord.PSObject.Properties.Name -contains "dispatch_category") { [string]$ApprovalRecord.dispatch_category } else { "" }
+            original_message     = if ($ApprovalRecord.PSObject.Properties.Name -contains "user_message") { [string]$ApprovalRecord.user_message } else { "" }
+            timestamp            = if ($ApprovalRecord.PSObject.Properties.Name -contains "request_timestamp") { [string]$ApprovalRecord.request_timestamp } else { "" }
+            expires_at           = if ($ApprovalRecord.PSObject.Properties.Name -contains "expires_at") { [string]$ApprovalRecord.expires_at } else { "" }
+            status               = [string]$ApprovalRecord.status
+            is_expired           = $false
+            approval_id          = if ($ApprovalRecord.PSObject.Properties.Name -contains "approval_id") { [string]$ApprovalRecord.approval_id } else { "" }
+            approval_path        = if ($ApprovalRecord.PSObject.Properties.Name -contains "approval_path") { [string]$ApprovalRecord.approval_path } else { "" }
+        }
+    }
     if ($PendingAction -and -not $PendingAction.is_expired) {
         $PendingApprovals = @(
             [pscustomobject]@{
@@ -572,6 +604,16 @@ function Get-PDAConversationSummary {
     $Conversation.pending_expires_at = if ($PendingAction) { $PendingAction.expires_at } else { $Conversation.pending_expires_at }
     $Conversation.pending_status = if ($PendingAction) { if ($PendingAction.is_expired) { "expired" } else { $PendingAction.status } } else { $Conversation.pending_status }
     $Conversation.pending_is_expired = if ($PendingAction) { [bool]$PendingAction.is_expired } else { $false }
+    if ($ApprovalRecord) {
+        $Conversation.approval_id = if ($ApprovalRecord.PSObject.Properties.Name -contains "approval_id") { [string]$ApprovalRecord.approval_id } else { [string]$Conversation.approval_id }
+        $Conversation.approval_status = if ($ApprovalRecord.PSObject.Properties.Name -contains "status") { [string]$ApprovalRecord.status } else { [string]$Conversation.approval_status }
+        $Conversation.approval_path = if ($ApprovalRecord.PSObject.Properties.Name -contains "approval_path") { [string]$ApprovalRecord.approval_path } else { [string]$Conversation.approval_path }
+        $Conversation.approval_requested_action = if ($ApprovalRecord.PSObject.Properties.Name -contains "requested_action") { [string]$ApprovalRecord.requested_action } else { [string]$Conversation.approval_requested_action }
+        $Conversation.approval_rationale = if ($ApprovalRecord.PSObject.Properties.Name -contains "rationale") { [string]$ApprovalRecord.rationale } else { [string]$Conversation.approval_rationale }
+        $Conversation.approval_request_timestamp = if ($ApprovalRecord.PSObject.Properties.Name -contains "request_timestamp") { [string]$ApprovalRecord.request_timestamp } else { [string]$Conversation.approval_request_timestamp }
+        $Conversation.approval_response_timestamp = if ($ApprovalRecord.PSObject.Properties.Name -contains "response_timestamp") { [string]$ApprovalRecord.response_timestamp } else { [string]$Conversation.approval_response_timestamp }
+        $Conversation.approval_history = if ($ApprovalRecord.PSObject.Properties.Name -contains "history") { @($ApprovalRecord.history) } else { @($Conversation.approval_history) }
+    }
     $Conversation.updated_at = if ($Conversation.updated_at) { [string]$Conversation.updated_at } else { (Get-Date).ToUniversalTime().ToString("o") }
 
     return [pscustomobject]@{
@@ -583,6 +625,7 @@ function Get-PDAConversationSummary {
         submitted_tasks   = @($SubmittedTasks)
         completed_tasks   = @($CompletedTasks)
         pending_action    = $PendingAction
+        approval          = if ($ApprovalRecord) { $ApprovalRecord } else { $null }
         latest_task       = if ($LatestTask) { $LatestTask } else { $null }
         latest_result     = if ($LatestResult) { $LatestResult } else { $null }
         response_text     = $ResponseText
@@ -624,6 +667,7 @@ $Report = [pscustomobject]@{
     response_text         = if ($ConversationSummary) { $ConversationSummary.response_text } else { "No tracked PDA task found for this conversation." }
     next_action           = if ($ConversationSummary) { $ConversationSummary.next_action } else { "Ask the PDA to start a new task or confirm a queued request." }
     pending_approval_count = if ($ConversationSummary) { $ConversationSummary.pending_approvals.Count } else { 0 }
+    approval               = if ($ConversationSummary) { $ConversationSummary.approval } else { $null }
     active_task_count     = if ($ConversationSummary) { $ConversationSummary.active_tasks.Count } else { 0 }
     submitted_task_count  = if ($ConversationSummary) { $ConversationSummary.submitted_tasks.Count } else { 0 }
     completed_task_count  = if ($ConversationSummary) { $ConversationSummary.completed_tasks.Count } else { 0 }

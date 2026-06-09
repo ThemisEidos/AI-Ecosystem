@@ -564,6 +564,33 @@ if ($StatusReport.commander_agent_loop) {
     $Lines.Add("")
 }
 
+$Lines.Add("## Approval Workflow")
+$Lines.Add("")
+if ($StatusReport.approval_workflow) {
+    $Lines.Add((ConvertTo-PDAMarkdownTable -Rows @(
+        [pscustomobject]@{ metric = "Status"; value = $StatusReport.approval_workflow.status }
+        [pscustomobject]@{ metric = "Approval count"; value = $StatusReport.approval_workflow.approval_count }
+        [pscustomobject]@{ metric = "Pending approvals"; value = $StatusReport.approval_workflow.pending_approval_count }
+        [pscustomobject]@{ metric = "Blocked approvals"; value = $StatusReport.approval_workflow.blocked_count }
+        [pscustomobject]@{ metric = "Blocked agent runs"; value = $StatusReport.approval_workflow.counts.blocked_agent_runs }
+        [pscustomobject]@{ metric = "Pending agent runs"; value = $StatusReport.approval_workflow.counts.pending_agent_runs }
+    ) -Columns @("metric", "value")))
+    $Lines.Add("")
+    $Lines.Add("### Recent Approvals")
+    $Lines.Add("")
+    if ($StatusReport.approval_workflow.recent_approvals -and @($StatusReport.approval_workflow.recent_approvals).Count -gt 0) {
+        $Lines.Add((ConvertTo-PDAMarkdownTable -Rows @($StatusReport.approval_workflow.recent_approvals) -Columns @("approval_id", "goal", "requested_action", "status", "approval_path", "updated_at")))
+    }
+    else {
+        $Lines.Add("- No approval records found.")
+    }
+    $Lines.Add("")
+}
+else {
+    $Lines.Add("- Approval workflow data unavailable.")
+    $Lines.Add("")
+}
+
 $Lines.Add("## Dispatch Queue")
 $Lines.Add("")
 $Lines.Add((ConvertTo-PDAMarkdownTable -Rows @(

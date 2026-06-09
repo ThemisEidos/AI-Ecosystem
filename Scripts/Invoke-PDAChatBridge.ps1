@@ -32,6 +32,7 @@ $UpdateConversationStateScript = Join-Path $PSScriptRoot "Update-PDAConversation
 $ConversationalRouterScript = Join-Path $PSScriptRoot "PDA_ConversationalRouter.ps1"
 $DecisionEngineScript = Join-Path $PSScriptRoot "PDA_DecisionEngine.ps1"
 $EnvironmentHelperScript = Join-Path $PSScriptRoot "PDA_Environment.ps1"
+$ApprovalWorkflowScript = Join-Path $PSScriptRoot "PDA_ApprovalWorkflow.ps1"
 . (Join-Path $PSScriptRoot "PDA_OutputParsing.ps1")
 if (Test-Path -Path $ConversationalRouterScript -PathType Leaf) {
     . $ConversationalRouterScript
@@ -41,6 +42,9 @@ if (Test-Path -Path $DecisionEngineScript -PathType Leaf) {
 }
 if (Test-Path -Path $EnvironmentHelperScript -PathType Leaf) {
     . $EnvironmentHelperScript
+}
+if (Test-Path -Path $ApprovalWorkflowScript -PathType Leaf) {
+    . $ApprovalWorkflowScript
 }
 
 if (-not (Test-Path -Path $HandoffScript -PathType Leaf)) {
@@ -77,6 +81,32 @@ function Test-PDAConfirmationMessage {
 
     $Normalized = $Text.Trim().ToLowerInvariant()
     return [bool]($Normalized -match '^(confirm|confirmed|yes|approve|approved|proceed|dispatch)\b')
+}
+
+function Test-PDAApprovalActionMessage {
+    param([Parameter(Mandatory = $true)][string]$Text)
+
+    if ([string]::IsNullOrWhiteSpace($Text)) {
+        return $false
+    }
+
+    $Normalized = $Text.Trim().ToLowerInvariant()
+    return [bool]($Normalized -match '^(approve|approved|reject|rejected|revise|revision|replan|escalate|cancel|cancelled|canceled|yes|confirm|confirmed|proceed|dispatch)\b')
+}
+
+function Get-PDAApprovalActionStatus {
+    param([Parameter(Mandatory = $true)][string]$Text)
+
+    $Normalized = $Text.Trim().ToLowerInvariant()
+    switch -Regex ($Normalized) {
+        '^(approve|approved|yes|confirm|confirmed|proceed|dispatch)\b' { return 'approved' }
+        '^(reject|rejected|deny|decline|no)\b' { return 'rejected' }
+        '^(revise|revision)\b' { return 'revision_requested' }
+        '^(replan|re-plan)\b' { return 'replan_requested' }
+        '^(escalate)\b' { return 'escalated' }
+        '^(cancel|cancelled|canceled|abort|stop)\b' { return 'cancelled' }
+        default { return '' }
+    }
 }
 
 function Get-PDAConversationPendingActionFromSummary {
@@ -520,12 +550,154 @@ $UseLegacyStatusLookup = $true
 $HandoffInputMessage = $Message
 
 $ConversationState = $null
-if ($IsConfirmationMessage -or $ConfirmDispatch) {
+if ($IsConfirmationMessage -or $ConfirmDispatch -or (Test-PDAApprovalActionMessage -Text $Message)) {
     $ConversationState = Invoke-PDAConversationStateQuery -ConversationId $ConversationId -SessionId $SessionId -Message $Message
 }
 
 $PendingAction = Get-PDAConversationPendingActionFromSummary -ConversationState $ConversationState
 $HasPendingAction = $PendingAction -and -not [bool]$PendingAction.is_expired
+
+$ApprovalRecord = $null
+if (Get-Command -Name Get-PDAApprovalRequest -ErrorAction SilentlyContinue) {
+    try {
+        if ($ConversationState -and $ConversationState.conversation -and $ConversationState.conversation.PSObject.Properties.Name -contains "approval_id" -and -not [string]::IsNullOrWhiteSpace([string]$ConversationState.conversation.approval_id)) {
+            $ApprovalRecord = Get-PDAApprovalRequest -ApprovalId ([string]$ConversationState.conversation.approval_id) -Root $Root
+        }
+        if (-not $ApprovalRecord -and -not [string]::IsNullOrWhiteSpace($ConversationId)) {
+            $ApprovalRecord = Get-PDAApprovalRequest -ConversationId $ConversationId -SessionId $SessionId -Root $Root
+        }
+    }
+    catch {
+        $ApprovalRecord = $null
+    }
+}
+
+if (-not $PendingAction -and $ApprovalRecord -and [string]$ApprovalRecord.status -eq "pending_approval") {
+    $PendingAction = [pscustomobject]@{
+        recommended_command = if ($ApprovalRecord.PSObject.Properties.Name -contains "recommended_command") { [string]$ApprovalRecord.recommended_command } else { "" }
+        dispatch_category    = if ($ApprovalRecord.PSObject.Properties.Name -contains "dispatch_category") { [string]$ApprovalRecord.dispatch_category } else { "" }
+        original_message     = if ($ApprovalRecord.PSObject.Properties.Name -contains "user_message") { [string]$ApprovalRecord.user_message } else { "" }
+        timestamp            = if ($ApprovalRecord.PSObject.Properties.Name -contains "request_timestamp") { [string]$ApprovalRecord.request_timestamp } else { "" }
+        expires_at           = if ($ApprovalRecord.PSObject.Properties.Name -contains "expires_at") { [string]$ApprovalRecord.expires_at } else { "" }
+        status               = [string]$ApprovalRecord.status
+        is_expired           = $false
+        approval_id          = if ($ApprovalRecord.PSObject.Properties.Name -contains "approval_id") { [string]$ApprovalRecord.approval_id } else { "" }
+        approval_path        = if ($ApprovalRecord.PSObject.Properties.Name -contains "approval_path") { [string]$ApprovalRecord.approval_path } else { "" }
+    }
+    $HasPendingAction = $true
+}
+
+if (-not $ApprovalRecord -and $HasPendingAction -and (Get-Command -Name New-PDAApprovalRequest -ErrorAction SilentlyContinue)) {
+    try {
+        $ApprovalRecord = New-PDAApprovalRequest -RunId "" -ConversationId $(if ($ConversationId) { $ConversationId } else { "" }) -SessionId $(if ($SessionId) { $SessionId } else { "" }) -Goal $(if ($ConversationState -and $ConversationState.conversation -and $ConversationState.conversation.goal) { [string]$ConversationState.conversation.goal } else { [string]$Message }) -RequestedAction ([string]$PendingAction.recommended_command) -Category $(if ($PendingAction.dispatch_category) { [string]$PendingAction.dispatch_category } else { "category_1" }) -RouteType "conversation_approval" -RecommendedCommand ([string]$PendingAction.recommended_command) -RecommendedExecutor "human approval" -DispatchCategory ([string]$PendingAction.dispatch_category) -UserMessage ([string]$PendingAction.original_message) -ApprovalKind "conversation" -ApprovalRationale "Created from pending conversation action." -Root $Root
+        if ($ApprovalRecord -and $ApprovalRecord.PSObject.Properties.Name -contains "approval") {
+            $ConversationState = if ($ConversationState) { $ConversationState } else { [pscustomobject]@{} }
+            if (-not ($ConversationState.PSObject.Properties.Name -contains "conversation")) {
+                $ConversationState | Add-Member -NotePropertyName conversation -NotePropertyValue ([pscustomobject]@{}) -Force
+            }
+            $ConversationState.conversation | Add-Member -NotePropertyName approval_id -NotePropertyValue ([string]$ApprovalRecord.approval_id) -Force
+            $ConversationState.conversation | Add-Member -NotePropertyName approval_status -NotePropertyValue "pending_approval" -Force
+            $ConversationState.conversation | Add-Member -NotePropertyName approval_path -NotePropertyValue ([string]$ApprovalRecord.approval_path) -Force
+            $ConversationState.conversation | Add-Member -NotePropertyName approval_requested_action -NotePropertyValue ([string]$PendingAction.recommended_command) -Force
+            $ConversationState.conversation | Add-Member -NotePropertyName approval_request_timestamp -NotePropertyValue ([string]$ApprovalRecord.approval.request_timestamp) -Force
+        }
+    }
+    catch {}
+}
+
+$ApprovalActionStatus = if (Test-PDAApprovalActionMessage -Text $Message) { Get-PDAApprovalActionStatus -Text $Message } else { "" }
+if (-not [string]::IsNullOrWhiteSpace($ApprovalActionStatus) -and ($HasPendingAction -or $ApprovalRecord)) {
+    if ($ApprovalActionStatus -eq "approved") {
+        $IsConfirmationMessage = $true
+        $ConfirmDispatch = $true
+    }
+    else {
+        $ApprovalTarget = $ApprovalRecord
+        if (-not $ApprovalTarget -and (Get-Command -Name New-PDAApprovalRequest -ErrorAction SilentlyContinue) -and $HasPendingAction) {
+            try {
+                $ApprovalTarget = New-PDAApprovalRequest -RunId "" -ConversationId $(if ($ConversationId) { $ConversationId } else { "" }) -SessionId $(if ($SessionId) { $SessionId } else { "" }) -Goal $(if ($ConversationState -and $ConversationState.conversation -and $ConversationState.conversation.goal) { [string]$ConversationState.conversation.goal } else { [string]$Message }) -RequestedAction ([string]$PendingAction.recommended_command) -Category $(if ($PendingAction.dispatch_category) { [string]$PendingAction.dispatch_category } else { "category_1" }) -RouteType "conversation_approval" -RecommendedCommand ([string]$PendingAction.recommended_command) -RecommendedExecutor "human approval" -DispatchCategory ([string]$PendingAction.dispatch_category) -UserMessage ([string]$PendingAction.original_message) -ApprovalKind "conversation" -ApprovalRationale "Created for approval action replay." -Root $Root
+            }
+            catch {
+                $ApprovalTarget = $null
+            }
+        }
+
+        $ApprovalIdForAction = if ($ApprovalTarget -and $ApprovalTarget.PSObject.Properties.Name -contains "approval_id") { [string]$ApprovalTarget.approval_id } elseif ($ConversationState -and $ConversationState.conversation -and $ConversationState.conversation.PSObject.Properties.Name -contains "approval_id") { [string]$ConversationState.conversation.approval_id } else { "" }
+        if (-not [string]::IsNullOrWhiteSpace($ApprovalIdForAction) -and (Get-Command -Name Update-PDAApprovalRequest -ErrorAction SilentlyContinue)) {
+            try {
+                [void](Update-PDAApprovalRequest -ApprovalId $ApprovalIdForAction -Status $ApprovalActionStatus -Approver $(if ($UserId) { $UserId } else { "human" }) -Rationale ([string]$Message) -Root $Root -NoThrow)
+            }
+            catch {}
+        }
+
+        $ApprovalResponseText = switch ($ApprovalActionStatus) {
+            "rejected" { "Approval rejected. The governed request will not dispatch." }
+            "revision_requested" { "Revision requested. The governed request stays queued for revision." }
+            "replan_requested" { "Replan requested. COOPER will revise the goal plan before dispatch." }
+            "escalated" { "Approval escalated for human review." }
+            "cancelled" { "Approval cancelled. The governed request has been closed." }
+            default { "Approval state updated." }
+        }
+
+        $ShouldClearPending = $ApprovalActionStatus -in @("rejected", "cancelled")
+        if ($ShouldClearPending) {
+            $PendingAction = $null
+        }
+
+        if ($ConversationId -or $SessionId -or $ApprovalIdForAction) {
+            Invoke-PDAConversationStateUpdate -ConversationId $ConversationId -SessionId $SessionId -UserId $UserId -ConversationTitle $ConversationTitle -Message $Message -TaskId "" -TaskStatus $(if ($ShouldClearPending) { "" } else { "pending_approval" }) -TaskFilePath "" -ApprovalFilePath $(if (-not [string]::IsNullOrWhiteSpace($ApprovalIdForAction) -and $ApprovalTarget -and $ApprovalTarget.PSObject.Properties.Name -contains "approval_path") { [string]$ApprovalTarget.approval_path } elseif ($ApprovalRecord -and $ApprovalRecord.PSObject.Properties.Name -contains "approval_path") { [string]$ApprovalRecord.approval_path } else { "" }) -ResultPath "" -ResultSummary "" -BridgeStatus "ready" -DispatchStatus "not_dispatched" -NextAction $(if ($ShouldClearPending) { "Use /planner or ask for a revised goal plan." } else { "The approval remains pending human follow-up." }) -ResponseText $ApprovalResponseText -RecommendedCommand $(if ($PendingAction) { [string]$PendingAction.recommended_command } else { "" }) -Intent "approval_action" -Confidence 1 -RequiresConfirmation:$false -ApprovalId $ApprovalIdForAction -ApprovalStatus $ApprovalActionStatus -ApprovalPath $(if (-not [string]::IsNullOrWhiteSpace($ApprovalIdForAction) -and $ApprovalTarget -and $ApprovalTarget.PSObject.Properties.Name -contains "approval_path") { [string]$ApprovalTarget.approval_path } elseif ($ApprovalRecord -and $ApprovalRecord.PSObject.Properties.Name -contains "approval_path") { [string]$ApprovalRecord.approval_path } else { "" }) -ApprovalRequestedAction $(if ($ApprovalTarget -and $ApprovalTarget.PSObject.Properties.Name -contains "requested_action") { [string]$ApprovalTarget.requested_action } elseif ($ApprovalRecord -and $ApprovalRecord.PSObject.Properties.Name -contains "requested_action") { [string]$ApprovalRecord.requested_action } else { "" }) -ApprovalRationale ([string]$Message) -ApprovalRequestTimestamp $(if ($ApprovalTarget -and $ApprovalTarget.PSObject.Properties.Name -contains "request_timestamp") { [string]$ApprovalTarget.request_timestamp } elseif ($ApprovalRecord -and $ApprovalRecord.PSObject.Properties.Name -contains "request_timestamp") { [string]$ApprovalRecord.request_timestamp } else { "" }) -ApprovalResponseTimestamp $(if ($ApprovalTarget -and $ApprovalTarget.PSObject.Properties.Name -contains "response_timestamp") { [string]$ApprovalTarget.response_timestamp } elseif ($ApprovalRecord -and $ApprovalRecord.PSObject.Properties.Name -contains "response_timestamp") { [string]$ApprovalRecord.response_timestamp } else { "" }) -ApprovalHistory $(if ($ApprovalTarget -and $ApprovalTarget.PSObject.Properties.Name -contains "history") { $ApprovalTarget.history } elseif ($ApprovalRecord -and $ApprovalRecord.PSObject.Properties.Name -contains "history") { $ApprovalRecord.history } else { @() }) -PendingRecommendedCommand $(if ($ShouldClearPending) { "" } else { [string]$PendingAction.recommended_command }) -PendingDispatchCategory $(if ($ShouldClearPending) { "" } else { [string]$PendingAction.dispatch_category }) -PendingOriginalMessage $(if ($ShouldClearPending) { "" } else { [string]$PendingAction.original_message }) -PendingTimestamp $(if ($ShouldClearPending) { "" } else { [string]$PendingAction.timestamp }) -PendingExpiresAt $(if ($ShouldClearPending) { "" } else { [string]$PendingAction.expires_at }) -PendingStatus $(if ($ShouldClearPending) { "" } else { $ApprovalActionStatus }) $(if ($ShouldClearPending) { "-ClearPendingAction" } else { "" }) | Out-Null
+        }
+
+        $Result = [pscustomobject]@{
+            original_message         = $Message
+            response_text            = $ApprovalResponseText
+            recommended_command      = $(if ($PendingAction) { [string]$PendingAction.recommended_command } else { "" })
+            intent                   = "approval_action"
+            route_type               = "approval_action"
+            confidence               = 1
+            requires_confirmation    = $false
+            dispatch_ready           = $false
+            dispatch_status          = "not_dispatched"
+            next_action              = $(if ($ShouldClearPending) { "Use /planner or ask for a revised goal plan." } else { "The approval remains active." })
+            bridge_status            = "ready"
+            handoff_status           = $ApprovalActionStatus
+            source_of_truth          = "Scripts/PDA_ApprovalWorkflow.ps1"
+            confirmation_mode        = [bool]$ConfirmDispatch
+            dispatch_path            = ""
+            dispatch_category        = $(if ($PendingAction) { [string]$PendingAction.dispatch_category } else { "" })
+            conversation_id          = $(if ($ConversationId) { $ConversationId } elseif ($ConversationState -and $ConversationState.conversation_id) { [string]$ConversationState.conversation_id } else { "" })
+            session_id               = $SessionId
+            conversation_state_status = if ($ConversationState) { [string]$ConversationState.status } else { "empty" }
+            latest_task_id           = if ($ConversationState -and $ConversationState.latest_task) { [string]$ConversationState.latest_task.task_id } else { "" }
+            latest_task_status       = if ($ConversationState -and $ConversationState.latest_task) { [string]$ConversationState.latest_task.task_status } else { "" }
+            latest_result_path       = if ($ConversationState -and $ConversationState.latest_result) { [string]$ConversationState.latest_result.result_path } else { "" }
+            latest_result_response_text = if ($ConversationState) { [string]$ConversationState.response_text } else { "" }
+            result_artifact_path     = if ($ConversationState -and $ConversationState.latest_result) { [string]$ConversationState.latest_result.result_path } else { "" }
+            result_artifact          = if ($ConversationState) { $ConversationState.latest_result } else { $null }
+            decision                 = $script:PDACommanderDecision
+            bridge_mode              = "approval_action"
+            pending_action           = if ($PendingAction) { $PendingAction } else { $null }
+            approval_id              = $ApprovalIdForAction
+            approval_status          = $ApprovalActionStatus
+            approval_path            = $(if (-not [string]::IsNullOrWhiteSpace($ApprovalIdForAction) -and $ApprovalTarget -and $ApprovalTarget.PSObject.Properties.Name -contains "approval_path") { [string]$ApprovalTarget.approval_path } elseif ($ApprovalRecord -and $ApprovalRecord.PSObject.Properties.Name -contains "approval_path") { [string]$ApprovalRecord.approval_path } else { "" })
+        }
+
+        if ($AsJson) {
+            $Result | ConvertTo-Json -Depth 20
+            return
+        }
+
+        Write-Host "[OK] PDA chat bridge result:"
+        Write-Host ("Response text        : {0}" -f $Result.response_text)
+        Write-Host ("Recommended command  : {0}" -f $(if ($Result.recommended_command) { $Result.recommended_command } else { "(none)" }))
+        Write-Host ("Intent               : {0}" -f $(if ($Result.intent) { $Result.intent } else { "(none)" }))
+        Write-Host ("Confidence           : {0}" -f $Result.confidence)
+        Write-Host ("Dispatch ready       : {0}" -f $Result.dispatch_ready)
+        Write-Host ("Dispatch status      : {0}" -f $Result.dispatch_status)
+        Write-Host ("Next action          : {0}" -f $Result.next_action)
+        return
+    }
+}
 
 $ConversationRoute = $null
 if (Get-Command -Name Resolve-PDAConversationalRoute -ErrorAction SilentlyContinue) {
@@ -775,6 +947,15 @@ if (Get-Command -Name Resolve-PDAConversationalRoute -ErrorAction SilentlyContin
 
                 $PendingTimestamp = (Get-Date).ToUniversalTime().ToString("o")
                 $PendingExpiresAt = (Get-Date).ToUniversalTime().AddMinutes((Get-PDAPendingConfirmationTimeoutMinutes)).ToString("o")
+                $GoalPlanApproval = $null
+                if ($GoalPlanRequiresConfirmation -and (Get-Command -Name New-PDAApprovalRequest -ErrorAction SilentlyContinue)) {
+                    try {
+                        $GoalPlanApproval = New-PDAApprovalRequest -RunId ([string]$PendingTaskId) -ConversationId $(if ($ConversationId) { $ConversationId } else { "" }) -SessionId $(if ($SessionId) { $SessionId } else { "" }) -Goal ([string]$GoalPlan.goal) -RequestedAction ([string]$PendingCommand) -Category ([string]$PendingCategory) -RouteType ([string]$ConversationRoute.route_type) -RecommendedCommand ([string]$PendingCommand) -RecommendedExecutor ([string]$GoalPlanDecision.recommended_executor) -DispatchCategory ([string]$PendingCategory) -UserMessage $Message -ApprovalKind "goal_plan" -ApprovalRationale "Goal plan requires human approval before dispatch." -Root $Root
+                    }
+                    catch {
+                        $GoalPlanApproval = $null
+                    }
+                }
 
                 if ($GoalPlanRequiresConfirmation) {
                     $DirectResult | Add-Member -NotePropertyName requires_confirmation -NotePropertyValue $true -Force
@@ -792,9 +973,13 @@ if (Get-Command -Name Resolve-PDAConversationalRoute -ErrorAction SilentlyContin
                     $DirectResult | Add-Member -NotePropertyName pending_confirmation -NotePropertyValue $true -Force
                     $DirectResult | Add-Member -NotePropertyName pending_recommended_command -NotePropertyValue $PendingCommand -Force
                     $DirectResult | Add-Member -NotePropertyName pending_dispatch_category -NotePropertyValue $PendingCategory -Force
+                    if ($GoalPlanApproval) {
+                        $DirectResult | Add-Member -NotePropertyName approval_id -NotePropertyValue ([string]$GoalPlanApproval.approval_id) -Force
+                        $DirectResult | Add-Member -NotePropertyName approval_path -NotePropertyValue ([string]$GoalPlanApproval.approval_path) -Force
+                    }
                 }
 
-                Invoke-PDAConversationStateUpdate -ConversationId $ConversationId -SessionId $SessionId -UserId $UserId -ConversationTitle $ConversationTitle -Message $Message -TaskId $PendingTaskId -TaskStatus $(if ($GoalPlanRequiresConfirmation) { "pending_confirmation" } else { "" }) -TaskFilePath "" -ApprovalFilePath "" -ResultPath "" -ResultSummary "" -BridgeStatus ([string]$DirectResult.bridge_status) -DispatchStatus ([string]$DirectResult.dispatch_status) -NextAction ([string]$DirectResult.next_action) -ResponseText ([string]$DirectResult.response_text) -RecommendedCommand $PendingCommand -Intent ([string]$DirectResult.intent) -Confidence ([double]$DirectResult.confidence) -RequiresConfirmation:([bool]$GoalPlanRequiresConfirmation) -PendingRecommendedCommand $PendingCommand -PendingDispatchCategory $PendingCategory -PendingOriginalMessage $Message -PendingTimestamp $PendingTimestamp -PendingExpiresAt $PendingExpiresAt -PendingStatus $(if ($GoalPlanRequiresConfirmation) { "awaiting_confirmation" } else { "" }) -Decision $GoalPlanDecision -RouteType ([string]$ConversationRoute.route_type) | Out-Null
+                Invoke-PDAConversationStateUpdate -ConversationId $ConversationId -SessionId $SessionId -UserId $UserId -ConversationTitle $ConversationTitle -Message $Message -TaskId $PendingTaskId -TaskStatus $(if ($GoalPlanRequiresConfirmation) { "pending_confirmation" } else { "" }) -TaskFilePath "" -ApprovalFilePath $(if ($GoalPlanApproval) { [string]$GoalPlanApproval.approval_path } else { "" }) -ResultPath "" -ResultSummary "" -BridgeStatus ([string]$DirectResult.bridge_status) -DispatchStatus ([string]$DirectResult.dispatch_status) -NextAction ([string]$DirectResult.next_action) -ResponseText ([string]$DirectResult.response_text) -RecommendedCommand $PendingCommand -Intent ([string]$DirectResult.intent) -Confidence ([double]$DirectResult.confidence) -RequiresConfirmation:([bool]$GoalPlanRequiresConfirmation) -ApprovalId $(if ($GoalPlanApproval) { [string]$GoalPlanApproval.approval_id } else { "" }) -ApprovalStatus $(if ($GoalPlanRequiresConfirmation) { "pending_approval" } else { "" }) -ApprovalPath $(if ($GoalPlanApproval) { [string]$GoalPlanApproval.approval_path } else { "" }) -ApprovalRequestedAction $PendingCommand -ApprovalRationale "Goal plan requires human approval before dispatch." -ApprovalRequestTimestamp $(if ($GoalPlanApproval -and $GoalPlanApproval.approval -and $GoalPlanApproval.approval.PSObject.Properties.Name -contains "request_timestamp") { [string]$GoalPlanApproval.approval.request_timestamp } else { $PendingTimestamp }) -ApprovalHistory $(if ($GoalPlanApproval -and $GoalPlanApproval.approval -and $GoalPlanApproval.approval.PSObject.Properties.Name -contains "history") { $GoalPlanApproval.approval.history } else { @() }) -ApprovalKind "goal_plan" -PendingRecommendedCommand $PendingCommand -PendingDispatchCategory $PendingCategory -PendingOriginalMessage $Message -PendingTimestamp $PendingTimestamp -PendingExpiresAt $PendingExpiresAt -PendingStatus $(if ($GoalPlanRequiresConfirmation) { "awaiting_confirmation" } else { "" }) -Decision $GoalPlanDecision -RouteType ([string]$ConversationRoute.route_type) | Out-Null
                 $DirectResult = Set-PDABridgeDecisionMetadata -Result $DirectResult -RouteType ([string]$ConversationRoute.route_type) -Decision $GoalPlanDecision
 
                 if ($AsJson) {
@@ -1071,8 +1256,23 @@ if ($HasPendingAction -and ($IsConfirmationMessage -or $ConfirmDispatch)) {
         }
     }
 
+    $ApprovalId = ""
+    if ($ConversationState -and $ConversationState.conversation -and $ConversationState.conversation.PSObject.Properties.Name -contains "approval_id") {
+        $ApprovalId = [string]$ConversationState.conversation.approval_id
+    }
+    elseif ($PendingAction -and $PendingAction.PSObject.Properties.Name -contains "approval_id") {
+        $ApprovalId = [string]$PendingAction.approval_id
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($ApprovalId) -and (Get-Command -Name Update-PDAApprovalRequest -ErrorAction SilentlyContinue)) {
+        try {
+            [void](Update-PDAApprovalRequest -ApprovalId $ApprovalId -Status "approved" -Approver $(if ($UserId) { $UserId } else { "human" }) -Rationale ([string]$Message) -Root $Root -NoThrow)
+        }
+        catch {}
+    }
+
     if ($Handoff.dispatch_status -in @("submitted", "completed")) {
-        Invoke-PDAConversationStateUpdate -ConversationId $ConversationId -SessionId $SessionId -UserId $UserId -ConversationTitle $ConversationTitle -Message $Message -TaskId $TaskId -TaskStatus $TaskStatus -TaskFilePath $(if ($TaskFile) { $TaskFile.FullName } else { "" }) -ApprovalFilePath $ApprovalPath -ResultPath $ResultPath -BridgeStatus $(if ($Handoff.bridge_status) { [string]$Handoff.bridge_status } else { "submitted" }) -DispatchStatus $Handoff.dispatch_status -NextAction $NextAction -ResponseText $ResponseText -RecommendedCommand $Handoff.recommended_command -Intent $Handoff.intent -Confidence $Handoff.confidence -RequiresConfirmation:([bool]$Handoff.requires_confirmation) -PendingRecommendedCommand ([string]$PendingAction.recommended_command) -PendingDispatchCategory ([string]$PendingAction.dispatch_category) -PendingOriginalMessage ([string]$PendingAction.original_message) -PendingTimestamp ([string]$PendingAction.timestamp) -PendingExpiresAt ([string]$PendingAction.expires_at) -PendingStatus "dispatched" -ClearPendingAction | Out-Null
+        Invoke-PDAConversationStateUpdate -ConversationId $ConversationId -SessionId $SessionId -UserId $UserId -ConversationTitle $ConversationTitle -Message $Message -TaskId $TaskId -TaskStatus $TaskStatus -TaskFilePath $(if ($TaskFile) { $TaskFile.FullName } else { "" }) -ApprovalFilePath $ApprovalPath -ResultPath $ResultPath -BridgeStatus $(if ($Handoff.bridge_status) { [string]$Handoff.bridge_status } else { "submitted" }) -DispatchStatus $Handoff.dispatch_status -NextAction $NextAction -ResponseText $ResponseText -RecommendedCommand $Handoff.recommended_command -Intent $Handoff.intent -Confidence $Handoff.confidence -RequiresConfirmation:([bool]$Handoff.requires_confirmation) -ApprovalId $ApprovalId -ApprovalStatus "approved" -ApprovalPath $(if (-not [string]::IsNullOrWhiteSpace($ApprovalPath)) { $ApprovalPath } elseif ($ConversationState -and $ConversationState.conversation -and $ConversationState.conversation.PSObject.Properties.Name -contains "approval_path") { [string]$ConversationState.conversation.approval_path } else { "" }) -ApprovalRequestedAction $(if ($PendingAction) { [string]$PendingAction.recommended_command } else { "" }) -ApprovalRationale ([string]$Message) -ApprovalRequestTimestamp $(if ($ConversationState -and $ConversationState.conversation -and $ConversationState.conversation.PSObject.Properties.Name -contains "approval_request_timestamp") { [string]$ConversationState.conversation.approval_request_timestamp } else { "" }) -ApprovalResponseTimestamp (Get-Date).ToUniversalTime().ToString("o") -PendingRecommendedCommand ([string]$PendingAction.recommended_command) -PendingDispatchCategory ([string]$PendingAction.dispatch_category) -PendingOriginalMessage ([string]$PendingAction.original_message) -PendingTimestamp ([string]$PendingAction.timestamp) -PendingExpiresAt ([string]$PendingAction.expires_at) -PendingStatus "dispatched" -ClearPendingAction | Out-Null
     }
 
     $Result = [pscustomobject]@{

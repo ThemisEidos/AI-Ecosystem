@@ -30,6 +30,15 @@ param(
     [string]$ReviewText,
 
     [Parameter(Mandatory = $false)]
+    [string]$ApprovalId,
+
+    [Parameter(Mandatory = $false)]
+    [string]$ApprovalRationale,
+
+    [Parameter(Mandatory = $false)]
+    [string]$Approver,
+
+    [Parameter(Mandatory = $false)]
     [string]$NextAction,
 
     [Parameter(Mandatory = $false)]
@@ -52,6 +61,11 @@ if (-not (Test-Path -LiteralPath $HelperPath -PathType Leaf)) {
     throw "Agent loop helper missing: $HelperPath"
 }
 . $HelperPath
+
+$ApprovalWorkflowScript = Join-Path $PSScriptRoot "PDA_ApprovalWorkflow.ps1"
+if ((Test-Path -LiteralPath $ApprovalWorkflowScript -PathType Leaf) -and -not (Get-Command -Name Get-PDAApprovalRequest -ErrorAction SilentlyContinue)) {
+    . $ApprovalWorkflowScript
+}
 
 $Run = Get-PDAAgentRunRecord -RunId $RunId -Root $Root
 if (-not $Run) {
@@ -78,6 +92,14 @@ if ($PSBoundParameters.ContainsKey("ApprovalStatus") -and -not [string]::IsNullO
         updated_at = (Get-Date).ToUniversalTime().ToString("o")
     })
     $Changed = $true
+
+    $ResolvedApprovalId = if (-not [string]::IsNullOrWhiteSpace([string]$ApprovalId)) { [string]$ApprovalId } elseif ($Run.PSObject.Properties.Name -contains "approval_id") { [string]$Run.approval_id } else { "" }
+    if (-not [string]::IsNullOrWhiteSpace($ResolvedApprovalId) -and (Get-Command -Name Update-PDAApprovalRequest -ErrorAction SilentlyContinue)) {
+        try {
+            [void](Update-PDAApprovalRequest -ApprovalId $ResolvedApprovalId -Status $ApprovalStatus -Approver $(if ([string]::IsNullOrWhiteSpace($Approver)) { "human" } else { [string]$Approver }) -Rationale $(if ([string]::IsNullOrWhiteSpace([string]$ApprovalRationale)) { "Agent run approval updated." } else { [string]$ApprovalRationale }) -Root $Root -NoThrow)
+        }
+        catch {}
+    }
 }
 
 if ($PSBoundParameters.ContainsKey("AssignedTool") -and -not [string]::IsNullOrWhiteSpace($AssignedTool)) {
@@ -131,6 +153,16 @@ if ($PSBoundParameters.ContainsKey("ResultText") -and -not [string]::IsNullOrWhi
         $Run.action_request = ConvertTo-PDAAgentHashtable -Value (New-PDAAgentActionRequest -Run ([pscustomobject]$Run) -Step $Steps[$NextIndex])
         $Run.status = "pending_approval"
         $Run.approval_status = "pending"
+        if (Get-Command -Name New-PDAApprovalRequest -ErrorAction SilentlyContinue) {
+            try {
+                $NextApproval = New-PDAApprovalRequest -RunId ([string]$Run.run_id) -ConversationId "" -SessionId "" -Goal ([string]$Run.goal) -RequestedAction ([string]$Run.action_request.action_request) -Category ([string]$Run.category) -RouteType "agent_loop" -RecommendedCommand "/planner" -RecommendedExecutor ([string]$Run.assigned_tool) -DispatchCategory "local-only" -UserMessage ([string]$Run.goal) -ApprovalKind "agent_run" -ApprovalRationale "Next agent step requires approval." -Root $Root
+                if ($NextApproval -and $NextApproval.PSObject.Properties.Name -contains "approval_id") {
+                    $Run.approval_id = [string]$NextApproval.approval_id
+                    $Run.approval_path = [string]$NextApproval.approval_path
+                }
+            }
+            catch {}
+        }
         $Run.next_action = Get-PDAAgentNextAction -Run ([pscustomobject]$Run)
     }
     else {
