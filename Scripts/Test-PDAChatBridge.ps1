@@ -693,6 +693,56 @@ foreach ($Case in $Cases) {
         $Issues.Add("Bridge decision payload is missing decision_type.")
     }
 
+    foreach ($ContextField in @(
+        "cooper_layers_loaded",
+        "personality_loaded",
+        "memory_available",
+        "governance_available",
+        "capability_registry_available",
+        "agent_registry_available",
+        "cooper_context"
+    )) {
+        if (-not ($Result.PSObject.Properties.Name -contains $ContextField)) {
+            $CasePassed = $false
+            $Issues.Add("Bridge result did not include $ContextField.")
+        }
+    }
+
+    if (-not [bool]$Result.cooper_layers_loaded) {
+        $CasePassed = $false
+        $Issues.Add("COOPER runtime layers were not reported as loaded.")
+    }
+
+    if (-not [bool]$Result.personality_loaded) {
+        $CasePassed = $false
+        $Issues.Add("COOPER personality was not reported as loaded.")
+    }
+
+    if (-not [bool]$Result.memory_available) {
+        $CasePassed = $false
+        $Issues.Add("COOPER memory layer was not reported as available.")
+    }
+
+    if (-not [bool]$Result.governance_available) {
+        $CasePassed = $false
+        $Issues.Add("COOPER governance layer was not reported as available.")
+    }
+
+    if (-not [bool]$Result.capability_registry_available) {
+        $CasePassed = $false
+        $Issues.Add("COOPER capability registry was not reported as available.")
+    }
+
+    if (-not [bool]$Result.agent_registry_available) {
+        $CasePassed = $false
+        $Issues.Add("COOPER agent registry was not reported as available.")
+    }
+
+    if (-not ($Result.cooper_context -and $Result.cooper_context.identity -and $Result.cooper_context.identity.display_name -eq "COOPER")) {
+        $CasePassed = $false
+        $Issues.Add("COOPER runtime context did not include the COOPER identity summary.")
+    }
+
     if ($Case.expected_command -and $Result.recommended_command -ne $Case.expected_command) {
         $CasePassed = $false
         $Issues.Add("Expected recommended command '$($Case.expected_command)' but got '$($Result.recommended_command)'.")

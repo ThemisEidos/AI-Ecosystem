@@ -1186,6 +1186,7 @@ $Report = [pscustomobject]@{
         current_explosions = 0
         modes = if ($COOPERProfile -and $COOPERProfile.PSObject.Properties.Name -contains "operational_modes") { @($COOPERProfile.operational_modes) } else { @("Analyst Mode", "Operator Mode", "TARS Mode", "Overlord Mode", "Emergency Mode") }
         personality = if ($COOPERProfile -and $COOPERProfile.PSObject.Properties.Name -contains "personality") { $COOPERProfile.personality } else { [pscustomobject]@{ humor = 75; sarcasm = 60; honesty = 100; directness = 85; brevity = 40; initiative = 85; caution = 80; persistence = 90 } }
+        runtime_layers = if ($COOPERProfile -and $COOPERProfile.PSObject.Properties.Name -contains "runtime_layers") { $COOPERProfile.runtime_layers } else { $null }
         systems = $COOPERSystems
     }
     system_health = [pscustomobject]@{

@@ -6,6 +6,53 @@ function Get-COOPERIdentity {
     )
 
     $ProfilePath = Join-Path $Root "Scripts\COOPER_Personality.json"
+    $CapabilityRegistryPath = Join-Path $Root "Scripts\PDA_CapabilityRegistry.json"
+    $AgentProfileRegistryPath = Join-Path $Root "Scripts\PDA_AgentProfileRegistry.json"
+    $ApprovalWorkflowPath = Join-Path $Root "Scripts\PDA_ApprovalWorkflow.ps1"
+    $MemoryArchitecturePath = Join-Path $Root "Documentation\COOPER-Memory-Architecture.md"
+
+    function Get-COOPERRuntimeLayerStatus {
+        param(
+            [Parameter(Mandatory = $true)]
+            [string]$ProfilePath,
+
+            [Parameter(Mandatory = $true)]
+            [string]$CapabilityRegistryPath,
+
+            [Parameter(Mandatory = $true)]
+            [string]$AgentProfileRegistryPath,
+
+            [Parameter(Mandatory = $true)]
+            [string]$ApprovalWorkflowPath,
+
+            [Parameter(Mandatory = $true)]
+            [string]$MemoryArchitecturePath
+        )
+
+        $PersonalityLoaded = Test-Path -LiteralPath $ProfilePath -PathType Leaf
+        $MemoryAvailable = (Test-Path -LiteralPath $MemoryArchitecturePath -PathType Leaf) -or (Test-Path -LiteralPath (Join-Path (Split-Path -Parent $MemoryArchitecturePath) "PDA-Memory-Promotion-Workflow.md") -PathType Leaf)
+        $GovernanceAvailable = (Test-Path -LiteralPath $ApprovalWorkflowPath -PathType Leaf) -and (Test-Path -LiteralPath (Join-Path (Split-Path -Parent $ApprovalWorkflowPath) "New-PDAApprovalRequest.ps1") -PathType Leaf)
+        $CapabilityRegistryAvailable = Test-Path -LiteralPath $CapabilityRegistryPath -PathType Leaf
+        $AgentRegistryAvailable = Test-Path -LiteralPath $AgentProfileRegistryPath -PathType Leaf
+
+        $Loaded = $PersonalityLoaded -and $MemoryAvailable -and $GovernanceAvailable -and $CapabilityRegistryAvailable -and $AgentRegistryAvailable
+
+        return [pscustomobject]@{
+            cooper_layers_loaded = [bool]$Loaded
+            personality_loaded = [bool]$PersonalityLoaded
+            memory_available = [bool]$MemoryAvailable
+            governance_available = [bool]$GovernanceAvailable
+            capability_registry_available = [bool]$CapabilityRegistryAvailable
+            agent_registry_available = [bool]$AgentRegistryAvailable
+            source_paths = [pscustomobject]@{
+                personality = $ProfilePath
+                memory = $MemoryArchitecturePath
+                governance = $ApprovalWorkflowPath
+                capability_registry = $CapabilityRegistryPath
+                agent_registry = $AgentProfileRegistryPath
+            }
+        }
+    }
 
     function New-COOPERDefaultProfile {
         param(
@@ -24,6 +71,7 @@ function Get-COOPERIdentity {
                 "Computational Overlord of Operations, Planning, Execution, and Reporting"
                 "Chief Officer of Preventing Everything from Randomly Exploding"
             )
+            runtime_layers = Get-COOPERRuntimeLayerStatus -ProfilePath $ProfilePath -CapabilityRegistryPath $CapabilityRegistryPath -AgentProfileRegistryPath $AgentProfileRegistryPath -ApprovalWorkflowPath $ApprovalWorkflowPath -MemoryArchitecturePath $MemoryArchitecturePath
             personality = [pscustomobject]@{
                 humor = 75
                 sarcasm = 60
@@ -86,6 +134,9 @@ function Get-COOPERIdentity {
                 "Chief Officer of Preventing Everything from Randomly Exploding"
             ) -Force
         }
+        if (-not ($Profile.PSObject.Properties.Name -contains "runtime_layers")) {
+            $Profile | Add-Member -NotePropertyName runtime_layers -NotePropertyValue (Get-COOPERRuntimeLayerStatus -ProfilePath $ProfilePath -CapabilityRegistryPath $CapabilityRegistryPath -AgentProfileRegistryPath $AgentProfileRegistryPath -ApprovalWorkflowPath $ApprovalWorkflowPath -MemoryArchitecturePath $MemoryArchitecturePath) -Force
+        }
         if (-not ($Profile.PSObject.Properties.Name -contains "personality")) {
             $Profile | Add-Member -NotePropertyName personality -NotePropertyValue ([pscustomobject]@{
                 humor = 75
@@ -115,6 +166,9 @@ function Get-COOPERIdentity {
         $Default = New-COOPERDefaultProfile -ProfilePath $ProfilePath
         $Default | Add-Member -NotePropertyName status -NotePropertyValue "error" -Force
         $Default | Add-Member -NotePropertyName error -NotePropertyValue $_.Exception.Message -Force
+        if (-not ($Default.PSObject.Properties.Name -contains "runtime_layers")) {
+            $Default | Add-Member -NotePropertyName runtime_layers -NotePropertyValue (Get-COOPERRuntimeLayerStatus -ProfilePath $ProfilePath -CapabilityRegistryPath $CapabilityRegistryPath -AgentProfileRegistryPath $AgentProfileRegistryPath -ApprovalWorkflowPath $ApprovalWorkflowPath -MemoryArchitecturePath $MemoryArchitecturePath) -Force
+        }
         return $Default
     }
 }

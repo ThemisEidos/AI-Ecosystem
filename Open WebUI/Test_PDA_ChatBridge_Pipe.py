@@ -62,6 +62,7 @@ def test_pipe_exposes_pda_commander_name() -> None:
     entries = pipe.pipes()
 
     assert entries == [{"id": "pda_commander", "name": "COOPER"}]
+    assert pipe.valves.TITLE_SAFE_RESPONSE == "COOPER"
 
 
 def test_confirm_dispatch_replays_pending_message() -> None:

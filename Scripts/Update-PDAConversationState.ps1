@@ -109,6 +109,27 @@ param(
     [object]$Decision,
 
     [Parameter(Mandatory = $false)]
+    [object]$COOPERContext,
+
+    [Parameter(Mandatory = $false)]
+    [object]$COOPERLayersLoaded = $false,
+
+    [Parameter(Mandatory = $false)]
+    [object]$PersonalityLoaded = $false,
+
+    [Parameter(Mandatory = $false)]
+    [object]$MemoryAvailable = $false,
+
+    [Parameter(Mandatory = $false)]
+    [object]$GovernanceAvailable = $false,
+
+    [Parameter(Mandatory = $false)]
+    [object]$CapabilityRegistryAvailable = $false,
+
+    [Parameter(Mandatory = $false)]
+    [object]$AgentRegistryAvailable = $false,
+
+    [Parameter(Mandatory = $false)]
     [switch]$ClearPendingAction,
 
     [Parameter(Mandatory = $false)]
@@ -366,6 +387,32 @@ function ConvertTo-PDADecisionRecord {
     return $Value
 }
 
+function ConvertTo-PDAContextRecord {
+    param([Parameter(Mandatory = $false)]$Value)
+
+    if ($null -eq $Value) {
+        return $null
+    }
+
+    if ($Value -is [string]) {
+        $Text = [string]$Value
+        if ([string]::IsNullOrWhiteSpace($Text)) {
+            return $null
+        }
+
+        try {
+            return $Text | ConvertFrom-Json -ErrorAction Stop
+        }
+        catch {
+            return [pscustomobject]@{
+                raw = $Text
+            }
+        }
+    }
+
+    return $Value
+}
+
 $State = Load-PDAConversationState
 $ConversationKey = Resolve-PDAConversationKey -ConversationId $ConversationId -SessionId $SessionId -TaskId $TaskId
 $Conversation = Ensure-PDAConversationRecord -State $State -ConversationKey $ConversationKey
@@ -384,6 +431,15 @@ Set-PDAFieldIfPresent -Record $Conversation -Name "last_bridge_status" -Value $B
 Set-PDAFieldIfPresent -Record $Conversation -Name "last_dispatch_status" -Value $DispatchStatus
 Set-PDAFieldIfPresent -Record $Conversation -Name "last_route_type" -Value $RouteType
 Set-PDAFieldIfPresent -Record $Conversation -Name "last_decision" -Value $DecisionRecord
+Set-PDAFieldIfPresent -Record $Conversation -Name "cooper_layers_loaded" -Value (ConvertTo-PDABool -Value $COOPERLayersLoaded)
+Set-PDAFieldIfPresent -Record $Conversation -Name "personality_loaded" -Value (ConvertTo-PDABool -Value $PersonalityLoaded)
+Set-PDAFieldIfPresent -Record $Conversation -Name "memory_available" -Value (ConvertTo-PDABool -Value $MemoryAvailable)
+Set-PDAFieldIfPresent -Record $Conversation -Name "governance_available" -Value (ConvertTo-PDABool -Value $GovernanceAvailable)
+Set-PDAFieldIfPresent -Record $Conversation -Name "capability_registry_available" -Value (ConvertTo-PDABool -Value $CapabilityRegistryAvailable)
+Set-PDAFieldIfPresent -Record $Conversation -Name "agent_registry_available" -Value (ConvertTo-PDABool -Value $AgentRegistryAvailable)
+if ($null -ne $COOPERContext) {
+    $Conversation.cooper_context = ConvertTo-PDAHashtable -Value (ConvertTo-PDAContextRecord -Value $COOPERContext)
+}
 Set-PDAFieldIfPresent -Record $Conversation -Name "latest_result_path" -Value $ResultPath
 Set-PDAFieldIfPresent -Record $Conversation -Name "latest_result_summary" -Value $ResultSummary
 Set-PDAFieldIfPresent -Record $Conversation -Name "approval_id" -Value $ApprovalId
@@ -459,6 +515,15 @@ if (-not [string]::IsNullOrWhiteSpace($TaskId)) {
     Set-PDAFieldIfPresent -Record $TaskRecord -Name "bridge_status" -Value $BridgeStatus
     Set-PDAFieldIfPresent -Record $TaskRecord -Name "route_type" -Value $RouteType
     Set-PDAFieldIfPresent -Record $TaskRecord -Name "decision" -Value $DecisionRecord
+    Set-PDAFieldIfPresent -Record $TaskRecord -Name "cooper_layers_loaded" -Value (ConvertTo-PDABool -Value $COOPERLayersLoaded)
+    Set-PDAFieldIfPresent -Record $TaskRecord -Name "personality_loaded" -Value (ConvertTo-PDABool -Value $PersonalityLoaded)
+    Set-PDAFieldIfPresent -Record $TaskRecord -Name "memory_available" -Value (ConvertTo-PDABool -Value $MemoryAvailable)
+    Set-PDAFieldIfPresent -Record $TaskRecord -Name "governance_available" -Value (ConvertTo-PDABool -Value $GovernanceAvailable)
+    Set-PDAFieldIfPresent -Record $TaskRecord -Name "capability_registry_available" -Value (ConvertTo-PDABool -Value $CapabilityRegistryAvailable)
+    Set-PDAFieldIfPresent -Record $TaskRecord -Name "agent_registry_available" -Value (ConvertTo-PDABool -Value $AgentRegistryAvailable)
+    if ($null -ne $COOPERContext) {
+        $TaskRecord.cooper_context = ConvertTo-PDAHashtable -Value (ConvertTo-PDAContextRecord -Value $COOPERContext)
+    }
     Set-PDAFieldIfPresent -Record $TaskRecord -Name "next_action" -Value $NextAction
     Set-PDAFieldIfPresent -Record $TaskRecord -Name "response_text" -Value $ResponseText
     Set-PDAFieldIfPresent -Record $TaskRecord -Name "task_file_path" -Value $TaskFilePath

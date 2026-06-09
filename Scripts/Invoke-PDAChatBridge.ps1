@@ -33,6 +33,7 @@ $ConversationalRouterScript = Join-Path $PSScriptRoot "PDA_ConversationalRouter.
 $DecisionEngineScript = Join-Path $PSScriptRoot "PDA_DecisionEngine.ps1"
 $EnvironmentHelperScript = Join-Path $PSScriptRoot "PDA_Environment.ps1"
 $ApprovalWorkflowScript = Join-Path $PSScriptRoot "PDA_ApprovalWorkflow.ps1"
+$COOPERIdentityScript = Join-Path $PSScriptRoot "Get-COOPERIdentity.ps1"
 . (Join-Path $PSScriptRoot "PDA_OutputParsing.ps1")
 if (Test-Path -Path $ConversationalRouterScript -PathType Leaf) {
     . $ConversationalRouterScript
@@ -45,6 +46,9 @@ if (Test-Path -Path $EnvironmentHelperScript -PathType Leaf) {
 }
 if (Test-Path -Path $ApprovalWorkflowScript -PathType Leaf) {
     . $ApprovalWorkflowScript
+}
+if (Test-Path -Path $COOPERIdentityScript -PathType Leaf) {
+    . $COOPERIdentityScript
 }
 
 if (-not (Test-Path -Path $HandoffScript -PathType Leaf)) {
@@ -149,6 +153,95 @@ function Get-PDAPendingConfirmationTimeoutMinutes {
 
     return $DefaultMinutes
 }
+
+function Get-PDACommanderRuntimeContext {
+    param([Parameter(Mandatory = $true)][string]$Root)
+
+    $Identity = $null
+    if (Get-Command -Name Get-COOPERIdentity -ErrorAction SilentlyContinue) {
+        try {
+            $Identity = Get-COOPERIdentity -Root $Root
+        }
+        catch {
+            $Identity = $null
+        }
+    }
+
+    $RuntimeLayers = $null
+    if ($Identity -and $Identity.PSObject.Properties.Name -contains "runtime_layers") {
+        $RuntimeLayers = $Identity.runtime_layers
+    }
+
+    if (-not $RuntimeLayers) {
+        $RuntimeLayers = [pscustomobject]@{
+            cooper_layers_loaded = $false
+            personality_loaded = (Test-Path -LiteralPath (Join-Path $Root "Scripts\COOPER_Personality.json") -PathType Leaf)
+            memory_available = (Test-Path -LiteralPath (Join-Path $Root "Documentation\COOPER-Memory-Architecture.md") -PathType Leaf) -or (Test-Path -LiteralPath (Join-Path $Root "Documentation\PDA-Memory-Promotion-Workflow.md") -PathType Leaf)
+            governance_available = (Test-Path -LiteralPath (Join-Path $Root "Scripts\PDA_ApprovalWorkflow.ps1") -PathType Leaf)
+            capability_registry_available = (Test-Path -LiteralPath (Join-Path $Root "Scripts\PDA_CapabilityRegistry.json") -PathType Leaf)
+            agent_registry_available = (Test-Path -LiteralPath (Join-Path $Root "Scripts\PDA_AgentProfileRegistry.json") -PathType Leaf)
+            source_paths = [pscustomobject]@{
+                personality = Join-Path $Root "Scripts\COOPER_Personality.json"
+                memory = Join-Path $Root "Documentation\COOPER-Memory-Architecture.md"
+                governance = Join-Path $Root "Scripts\PDA_ApprovalWorkflow.ps1"
+                capability_registry = Join-Path $Root "Scripts\PDA_CapabilityRegistry.json"
+                agent_registry = Join-Path $Root "Scripts\PDA_AgentProfileRegistry.json"
+            }
+        }
+        $RuntimeLayers.cooper_layers_loaded = [bool]($RuntimeLayers.personality_loaded -and $RuntimeLayers.memory_available -and $RuntimeLayers.governance_available -and $RuntimeLayers.capability_registry_available -and $RuntimeLayers.agent_registry_available)
+    }
+
+    $IdentitySummary = [pscustomobject]@{
+        display_name = if ($Identity -and $Identity.PSObject.Properties.Name -contains "display_name") { [string]$Identity.display_name } else { "COOPER" }
+        official_name = if ($Identity -and $Identity.PSObject.Properties.Name -contains "official_name") { [string]$Identity.official_name } else { "Command Operations Orchestrator for Planning, Execution, and Reporting" }
+        tagline = if ($Identity -and $Identity.PSObject.Properties.Name -contains "tagline") { [string]$Identity.tagline } else { "Chief Officer of Preventing Everything from Randomly Exploding" }
+        operational_modes = if ($Identity -and $Identity.PSObject.Properties.Name -contains "operational_modes") { @($Identity.operational_modes) } else { @("Analyst Mode", "Operator Mode", "TARS Mode", "Overlord Mode", "Emergency Mode") }
+    }
+
+    return [pscustomobject]@{
+        cooper_layers_loaded = [bool]$RuntimeLayers.cooper_layers_loaded
+        personality_loaded = [bool]$RuntimeLayers.personality_loaded
+        memory_available = [bool]$RuntimeLayers.memory_available
+        governance_available = [bool]$RuntimeLayers.governance_available
+        capability_registry_available = [bool]$RuntimeLayers.capability_registry_available
+        agent_registry_available = [bool]$RuntimeLayers.agent_registry_available
+        identity = $IdentitySummary
+        runtime_layers = $RuntimeLayers
+        cooper_interface = "COOPER"
+        source_of_truth = "Scripts/Get-COOPERIdentity.ps1"
+    }
+}
+
+function Add-PDACommanderRuntimeContextFields {
+    param([Parameter(Mandatory = $true)]$Result)
+
+    if ($null -eq $Result) {
+        return $Result
+    }
+
+    $RuntimeContext = $script:PDACommanderRuntimeContext
+    if (-not $RuntimeContext) {
+        return $Result
+    }
+
+    $Fields = [ordered]@{
+        cooper_layers_loaded = [bool]$RuntimeContext.cooper_layers_loaded
+        personality_loaded = [bool]$RuntimeContext.personality_loaded
+        memory_available = [bool]$RuntimeContext.memory_available
+        governance_available = [bool]$RuntimeContext.governance_available
+        capability_registry_available = [bool]$RuntimeContext.capability_registry_available
+        agent_registry_available = [bool]$RuntimeContext.agent_registry_available
+        cooper_context = $RuntimeContext
+    }
+
+    foreach ($Entry in $Fields.GetEnumerator()) {
+        $Result | Add-Member -NotePropertyName ([string]$Entry.Key) -NotePropertyValue $Entry.Value -Force
+    }
+
+    return $Result
+}
+
+$script:PDACommanderRuntimeContext = Get-PDACommanderRuntimeContext -Root $Root
 
 function Invoke-PDAConversationStateQuery {
     param(
@@ -318,6 +411,13 @@ function Invoke-PDAConversationStateUpdate {
         [string]$PendingStatus,
         [string]$RouteType,
         [object]$Decision,
+        [object]$COOPERContext,
+        [bool]$COOPERLayersLoaded = $false,
+        [bool]$PersonalityLoaded = $false,
+        [bool]$MemoryAvailable = $false,
+        [bool]$GovernanceAvailable = $false,
+        [bool]$CapabilityRegistryAvailable = $false,
+        [bool]$AgentRegistryAvailable = $false,
         [switch]$ClearPendingAction
     )
 
@@ -397,6 +497,20 @@ function Invoke-PDAConversationStateUpdate {
     }
     if ($null -ne $DecisionValue) {
         $UpdateArgs += @("-Decision", ($DecisionValue | ConvertTo-Json -Depth 20 -Compress))
+    }
+
+    $RuntimeContext = $COOPERContext
+    if ($null -eq $RuntimeContext -and $script:PDACommanderRuntimeContext) {
+        $RuntimeContext = $script:PDACommanderRuntimeContext
+    }
+    if ($null -ne $RuntimeContext) {
+        $UpdateArgs += @("-COOPERContext", ($RuntimeContext | ConvertTo-Json -Depth 20 -Compress))
+        $UpdateArgs += @("-COOPERLayersLoaded", [bool]$RuntimeContext.cooper_layers_loaded)
+        $UpdateArgs += @("-PersonalityLoaded", [bool]$RuntimeContext.personality_loaded)
+        $UpdateArgs += @("-MemoryAvailable", [bool]$RuntimeContext.memory_available)
+        $UpdateArgs += @("-GovernanceAvailable", [bool]$RuntimeContext.governance_available)
+        $UpdateArgs += @("-CapabilityRegistryAvailable", [bool]$RuntimeContext.capability_registry_available)
+        $UpdateArgs += @("-AgentRegistryAvailable", [bool]$RuntimeContext.agent_registry_available)
     }
 
     try {
@@ -681,6 +795,7 @@ if (-not [string]::IsNullOrWhiteSpace($ApprovalActionStatus) -and ($HasPendingAc
             approval_status          = $ApprovalActionStatus
             approval_path            = $(if (-not [string]::IsNullOrWhiteSpace($ApprovalIdForAction) -and $ApprovalTarget -and $ApprovalTarget.PSObject.Properties.Name -contains "approval_path") { [string]$ApprovalTarget.approval_path } elseif ($ApprovalRecord -and $ApprovalRecord.PSObject.Properties.Name -contains "approval_path") { [string]$ApprovalRecord.approval_path } else { "" })
         }
+        $Result = Add-PDACommanderRuntimeContextFields -Result $Result
 
         if ($AsJson) {
             $Result | ConvertTo-Json -Depth 20
@@ -711,6 +826,8 @@ if (Get-Command -Name Resolve-PDAConversationalRoute -ErrorAction SilentlyContin
                 $DirectResult = Set-PDABridgeDecisionMetadata -Result $DirectResult -RouteType ([string]$ConversationRoute.route_type) -Decision $script:PDACommanderDecision
                 Invoke-PDAConversationStateUpdate -ConversationId $ConversationId -SessionId $SessionId -UserId $UserId -ConversationTitle $ConversationTitle -Message $Message -TaskId ([string]$DirectResult.latest_task_id) -TaskStatus ([string]$DirectResult.latest_task_status) -TaskFilePath "" -ApprovalFilePath "" -ResultPath ([string]$DirectResult.latest_result_path) -ResultSummary "" -BridgeStatus ([string]$DirectResult.bridge_status) -DispatchStatus ([string]$DirectResult.dispatch_status) -NextAction ([string]$DirectResult.next_action) -ResponseText ([string]$DirectResult.response_text) -RecommendedCommand ([string]$DirectResult.recommended_command) -Intent ([string]$DirectResult.intent) -Confidence ([double]$DirectResult.confidence) -RequiresConfirmation:$false | Out-Null
 
+                $DirectResult = Add-PDACommanderRuntimeContextFields -Result $DirectResult
+
                 if ($AsJson) {
                     $DirectResult | ConvertTo-Json -Depth 20
                     return
@@ -730,6 +847,8 @@ if (Get-Command -Name Resolve-PDAConversationalRoute -ErrorAction SilentlyContin
                 $DirectResult = Get-PDAConversationalNaturalResponse -Route $ConversationRoute -ConversationId $ConversationId -SessionId $SessionId -UserId $UserId -ConversationTitle $ConversationTitle -Text $Message -Root $Root
                 $DirectResult = Set-PDABridgeDecisionMetadata -Result $DirectResult -RouteType ([string]$ConversationRoute.route_type) -Decision $script:PDACommanderDecision
                 Invoke-PDAConversationStateUpdate -ConversationId $ConversationId -SessionId $SessionId -UserId $UserId -ConversationTitle $ConversationTitle -Message $Message -TaskId ([string]$DirectResult.latest_task_id) -TaskStatus ([string]$DirectResult.latest_task_status) -TaskFilePath "" -ApprovalFilePath "" -ResultPath ([string]$DirectResult.latest_result_path) -ResultSummary "" -BridgeStatus ([string]$DirectResult.bridge_status) -DispatchStatus ([string]$DirectResult.dispatch_status) -NextAction ([string]$DirectResult.next_action) -ResponseText ([string]$DirectResult.response_text) -RecommendedCommand ([string]$DirectResult.recommended_command) -Intent ([string]$DirectResult.intent) -Confidence ([double]$DirectResult.confidence) -RequiresConfirmation:$false | Out-Null
+
+                $DirectResult = Add-PDACommanderRuntimeContextFields -Result $DirectResult
 
                 if ($AsJson) {
                     $DirectResult | ConvertTo-Json -Depth 20
@@ -981,6 +1100,7 @@ if (Get-Command -Name Resolve-PDAConversationalRoute -ErrorAction SilentlyContin
 
                 Invoke-PDAConversationStateUpdate -ConversationId $ConversationId -SessionId $SessionId -UserId $UserId -ConversationTitle $ConversationTitle -Message $Message -TaskId $PendingTaskId -TaskStatus $(if ($GoalPlanRequiresConfirmation) { "pending_confirmation" } else { "" }) -TaskFilePath "" -ApprovalFilePath $(if ($GoalPlanApproval) { [string]$GoalPlanApproval.approval_path } else { "" }) -ResultPath "" -ResultSummary "" -BridgeStatus ([string]$DirectResult.bridge_status) -DispatchStatus ([string]$DirectResult.dispatch_status) -NextAction ([string]$DirectResult.next_action) -ResponseText ([string]$DirectResult.response_text) -RecommendedCommand $PendingCommand -Intent ([string]$DirectResult.intent) -Confidence ([double]$DirectResult.confidence) -RequiresConfirmation:([bool]$GoalPlanRequiresConfirmation) -ApprovalId $(if ($GoalPlanApproval) { [string]$GoalPlanApproval.approval_id } else { "" }) -ApprovalStatus $(if ($GoalPlanRequiresConfirmation) { "pending_approval" } else { "" }) -ApprovalPath $(if ($GoalPlanApproval) { [string]$GoalPlanApproval.approval_path } else { "" }) -ApprovalRequestedAction $PendingCommand -ApprovalRationale "Goal plan requires human approval before dispatch." -ApprovalRequestTimestamp $(if ($GoalPlanApproval -and $GoalPlanApproval.approval -and $GoalPlanApproval.approval.PSObject.Properties.Name -contains "request_timestamp") { [string]$GoalPlanApproval.approval.request_timestamp } else { $PendingTimestamp }) -ApprovalHistory $(if ($GoalPlanApproval -and $GoalPlanApproval.approval -and $GoalPlanApproval.approval.PSObject.Properties.Name -contains "history") { $GoalPlanApproval.approval.history } else { @() }) -ApprovalKind "goal_plan" -PendingRecommendedCommand $PendingCommand -PendingDispatchCategory $PendingCategory -PendingOriginalMessage $Message -PendingTimestamp $PendingTimestamp -PendingExpiresAt $PendingExpiresAt -PendingStatus $(if ($GoalPlanRequiresConfirmation) { "awaiting_confirmation" } else { "" }) -Decision $GoalPlanDecision -RouteType ([string]$ConversationRoute.route_type) | Out-Null
                 $DirectResult = Set-PDABridgeDecisionMetadata -Result $DirectResult -RouteType ([string]$ConversationRoute.route_type) -Decision $GoalPlanDecision
+                $DirectResult = Add-PDACommanderRuntimeContextFields -Result $DirectResult
 
                 if ($AsJson) {
                     $DirectResult | ConvertTo-Json -Depth 20
@@ -1001,6 +1121,7 @@ if (Get-Command -Name Resolve-PDAConversationalRoute -ErrorAction SilentlyContin
                 $DirectResult = Get-PDAConversationalNaturalResponse -Route $ConversationRoute -ConversationId $ConversationId -SessionId $SessionId -UserId $UserId -ConversationTitle $ConversationTitle -Text $Message -Root $Root
                 $DirectResult = Set-PDABridgeDecisionMetadata -Result $DirectResult -RouteType ([string]$ConversationRoute.route_type) -Decision $script:PDACommanderDecision
                 Invoke-PDAConversationStateUpdate -ConversationId $ConversationId -SessionId $SessionId -UserId $UserId -ConversationTitle $ConversationTitle -Message $Message -TaskId "" -TaskStatus "" -TaskFilePath "" -ApprovalFilePath "" -ResultPath "" -ResultSummary "" -BridgeStatus ([string]$DirectResult.bridge_status) -DispatchStatus ([string]$DirectResult.dispatch_status) -NextAction ([string]$DirectResult.next_action) -ResponseText ([string]$DirectResult.response_text) -RecommendedCommand ([string]$DirectResult.recommended_command) -Intent ([string]$DirectResult.intent) -Confidence ([double]$DirectResult.confidence) -RequiresConfirmation:$false | Out-Null
+                $DirectResult = Add-PDACommanderRuntimeContextFields -Result $DirectResult
 
                 if ($AsJson) {
                     $DirectResult | ConvertTo-Json -Depth 20
@@ -1021,6 +1142,7 @@ if (Get-Command -Name Resolve-PDAConversationalRoute -ErrorAction SilentlyContin
                 $DirectResult = Get-PDAConversationalNaturalResponse -Route $ConversationRoute -ConversationId $ConversationId -SessionId $SessionId -UserId $UserId -ConversationTitle $ConversationTitle -Text $Message -Root $Root
                 $DirectResult = Set-PDABridgeDecisionMetadata -Result $DirectResult -RouteType ([string]$ConversationRoute.route_type) -Decision $script:PDACommanderDecision
                 Invoke-PDAConversationStateUpdate -TaskId "" -TaskStatus "" -TaskFilePath "" -ApprovalFilePath "" -ResultPath "" -ResultSummary "" -BridgeStatus ([string]$DirectResult.bridge_status) -DispatchStatus ([string]$DirectResult.dispatch_status) -NextAction ([string]$DirectResult.next_action) -ResponseText ([string]$DirectResult.response_text) -RecommendedCommand ([string]$DirectResult.recommended_command) -Intent ([string]$DirectResult.intent) -Confidence ([double]$DirectResult.confidence) -RequiresConfirmation:$false | Out-Null
+                $DirectResult = Add-PDACommanderRuntimeContextFields -Result $DirectResult
 
                 if ($AsJson) {
                     $DirectResult | ConvertTo-Json -Depth 20
@@ -1087,6 +1209,8 @@ if ($IsConfirmationMessage -and -not $HasPendingAction) {
         bridge_mode              = "confirmation_replay"
         pending_action           = if ($PendingAction) { $PendingAction } else { $null }
     }
+
+    $Result = Add-PDACommanderRuntimeContextFields -Result $Result
 
     if ($AsJson) {
         $Result | ConvertTo-Json -Depth 20
@@ -1303,6 +1427,8 @@ if ($HasPendingAction -and ($IsConfirmationMessage -or $ConfirmDispatch)) {
         pending_action           = if ($PendingAction) { $PendingAction } else { $null }
     }
 
+    $Result = Add-PDACommanderRuntimeContextFields -Result $Result
+
     if ($AsJson) {
         $Result | ConvertTo-Json -Depth 20
         return
@@ -1386,6 +1512,8 @@ if ($UseLegacyStatusLookup -and $IsStatusLookup -and -not $IsOperatorConsoleComm
     }
 
     Invoke-PDAConversationStateUpdate -ConversationId $ConversationId -SessionId $SessionId -UserId $UserId -ConversationTitle $ConversationTitle -Message $Message -TaskId $LatestTaskId -TaskStatus $LatestTaskStatus -ResultPath $LatestResultPath -BridgeStatus "ready" -DispatchStatus "not_dispatched" -NextAction $NextAction -ResponseText $ResponseText -RecommendedCommand $RecommendedCommand -Intent $Intent -Confidence $Confidence -RequiresConfirmation:$false | Out-Null
+
+    $Result = Add-PDACommanderRuntimeContextFields -Result $Result
 
     if ($AsJson) {
         $Result | ConvertTo-Json -Depth 20
@@ -1475,7 +1603,7 @@ $PendingExpiresAt = ""
 if ($Handoff.interpreter_status -eq "mapped" -and $Handoff.requires_confirmation) {
     $PendingTimestamp = (Get-Date).ToUniversalTime().ToString("o")
     $PendingExpiresAt = (Get-Date).ToUniversalTime().AddMinutes((Get-PDAPendingConfirmationTimeoutMinutes)).ToString("o")
-    Invoke-PDAConversationStateUpdate -ConversationId $ConversationId -SessionId $SessionId -UserId $UserId -ConversationTitle $ConversationTitle -Message $Message -TaskId "" -TaskStatus "pending_confirmation" -TaskFilePath "" -ApprovalFilePath "" -ResultPath "" -ResultSummary "" -BridgeStatus "ready" -DispatchStatus "not_dispatched" -NextAction $NextAction -ResponseText $ResponseText -RecommendedCommand $Handoff.recommended_command -Intent $Handoff.intent -Confidence $Handoff.confidence -RequiresConfirmation:([bool]$Handoff.requires_confirmation) -PendingRecommendedCommand ([string]$Handoff.recommended_command) -PendingDispatchCategory ([string]$Handoff.dispatch_category) -PendingOriginalMessage $Message -PendingTimestamp $PendingTimestamp -PendingExpiresAt $PendingExpiresAt -PendingStatus "awaiting_confirmation" | Out-Null
+    Invoke-PDAConversationStateUpdate -ConversationId $ConversationId -SessionId $SessionId -UserId $UserId -ConversationTitle $ConversationTitle -Message $Message -TaskId "" -TaskStatus "pending_confirmation" -TaskFilePath "" -ApprovalFilePath "" -ResultPath "" -ResultSummary "" -BridgeStatus "ready" -DispatchStatus "not_dispatched" -NextAction $NextAction -ResponseText $ResponseText -RecommendedCommand $Handoff.recommended_command -Intent $Handoff.intent -Confidence $Handoff.confidence -RequiresConfirmation:([bool]$Handoff.requires_confirmation) -PendingRecommendedCommand ([string]$Handoff.recommended_command) -PendingDispatchCategory ([string]$Handoff.dispatch_category) -PendingOriginalMessage $Message -PendingTimestamp $PendingTimestamp -PendingExpiresAt $PendingExpiresAt -PendingStatus "awaiting_confirmation" -COOPERContext $script:PDACommanderRuntimeContext -COOPERLayersLoaded ([bool]$script:PDACommanderRuntimeContext.cooper_layers_loaded) -PersonalityLoaded ([bool]$script:PDACommanderRuntimeContext.personality_loaded) -MemoryAvailable ([bool]$script:PDACommanderRuntimeContext.memory_available) -GovernanceAvailable ([bool]$script:PDACommanderRuntimeContext.governance_available) -CapabilityRegistryAvailable ([bool]$script:PDACommanderRuntimeContext.capability_registry_available) -AgentRegistryAvailable ([bool]$script:PDACommanderRuntimeContext.agent_registry_available) | Out-Null
 }
 
 $DispatchPath = [string]$Handoff.dispatch_path
@@ -1545,7 +1673,9 @@ $Result = [pscustomobject]@{
     bridge_mode              = "command_handoff"
 }
 
-Invoke-PDAConversationStateUpdate -TaskId $TaskId -TaskStatus $TaskStatus -TaskFilePath $(if ($TaskFile) { $TaskFile.FullName } else { "" }) -ApprovalFilePath $ApprovalPath -ResultPath $ResultPath -BridgeStatus $Result.bridge_status -DispatchStatus $Result.dispatch_status -NextAction $Result.next_action -ResponseText $Result.response_text -RecommendedCommand $Result.recommended_command -Intent $Result.intent -Confidence $Result.confidence -RequiresConfirmation:([bool]$Result.requires_confirmation) | Out-Null
+$Result = Add-PDACommanderRuntimeContextFields -Result $Result
+
+Invoke-PDAConversationStateUpdate -TaskId $TaskId -TaskStatus $TaskStatus -TaskFilePath $(if ($TaskFile) { $TaskFile.FullName } else { "" }) -ApprovalFilePath $ApprovalPath -ResultPath $ResultPath -BridgeStatus $Result.bridge_status -DispatchStatus $Result.dispatch_status -NextAction $Result.next_action -ResponseText $Result.response_text -RecommendedCommand $Result.recommended_command -Intent $Result.intent -Confidence $Result.confidence -RequiresConfirmation:([bool]$Result.requires_confirmation) -COOPERContext $script:PDACommanderRuntimeContext -COOPERLayersLoaded ([bool]$script:PDACommanderRuntimeContext.cooper_layers_loaded) -PersonalityLoaded ([bool]$script:PDACommanderRuntimeContext.personality_loaded) -MemoryAvailable ([bool]$script:PDACommanderRuntimeContext.memory_available) -GovernanceAvailable ([bool]$script:PDACommanderRuntimeContext.governance_available) -CapabilityRegistryAvailable ([bool]$script:PDACommanderRuntimeContext.capability_registry_available) -AgentRegistryAvailable ([bool]$script:PDACommanderRuntimeContext.agent_registry_available) | Out-Null
 
 if ($AsJson) {
     $Result | ConvertTo-Json -Depth 20

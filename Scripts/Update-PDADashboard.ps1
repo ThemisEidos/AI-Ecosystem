@@ -141,14 +141,20 @@ $Lines.Add("")
 if ($StatusReport.cooper_status) {
     $Lines.Add((ConvertTo-PDAMarkdownTable -Rows @(
         [pscustomobject]@{ metric = "Identity"; value = $StatusReport.cooper_status.display_name }
-        [pscustomobject]@{ metric = "Official name"; value = $StatusReport.cooper_status.official_name }
-        [pscustomobject]@{ metric = "Tagline"; value = $StatusReport.cooper_status.tagline }
-        [pscustomobject]@{ metric = "Mode options"; value = $StatusReport.cooper_status.modes }
-        [pscustomobject]@{ metric = "Current explosions"; value = $StatusReport.cooper_status.current_explosions }
-        [pscustomobject]@{ metric = "Docker"; value = $StatusReport.cooper_status.systems.docker }
-        [pscustomobject]@{ metric = "Open WebUI"; value = $StatusReport.cooper_status.systems.open_webui }
-        [pscustomobject]@{ metric = "n8n"; value = $StatusReport.cooper_status.systems.n8n }
-        [pscustomobject]@{ metric = "LiteLLM"; value = $StatusReport.cooper_status.systems.litellm }
+    [pscustomobject]@{ metric = "Official name"; value = $StatusReport.cooper_status.official_name }
+    [pscustomobject]@{ metric = "Tagline"; value = $StatusReport.cooper_status.tagline }
+    [pscustomobject]@{ metric = "Mode options"; value = $StatusReport.cooper_status.modes }
+    [pscustomobject]@{ metric = "Current explosions"; value = $StatusReport.cooper_status.current_explosions }
+    [pscustomobject]@{ metric = "Runtime layers loaded"; value = if ($StatusReport.cooper_status.runtime_layers) { $StatusReport.cooper_status.runtime_layers.cooper_layers_loaded } else { $false } }
+    [pscustomobject]@{ metric = "Personality layer"; value = if ($StatusReport.cooper_status.runtime_layers) { $StatusReport.cooper_status.runtime_layers.personality_loaded } else { $false } }
+    [pscustomobject]@{ metric = "Memory layer"; value = if ($StatusReport.cooper_status.runtime_layers) { $StatusReport.cooper_status.runtime_layers.memory_available } else { $false } }
+    [pscustomobject]@{ metric = "Governance layer"; value = if ($StatusReport.cooper_status.runtime_layers) { $StatusReport.cooper_status.runtime_layers.governance_available } else { $false } }
+    [pscustomobject]@{ metric = "Capability registry"; value = if ($StatusReport.cooper_status.runtime_layers) { $StatusReport.cooper_status.runtime_layers.capability_registry_available } else { $false } }
+    [pscustomobject]@{ metric = "Agent registry"; value = if ($StatusReport.cooper_status.runtime_layers) { $StatusReport.cooper_status.runtime_layers.agent_registry_available } else { $false } }
+    [pscustomobject]@{ metric = "Docker"; value = $StatusReport.cooper_status.systems.docker }
+    [pscustomobject]@{ metric = "Open WebUI"; value = $StatusReport.cooper_status.systems.open_webui }
+    [pscustomobject]@{ metric = "n8n"; value = $StatusReport.cooper_status.systems.n8n }
+    [pscustomobject]@{ metric = "LiteLLM"; value = $StatusReport.cooper_status.systems.litellm }
         [pscustomobject]@{ metric = "Ollama"; value = $StatusReport.cooper_status.systems.ollama }
     ) -Columns @("metric", "value")))
     $Lines.Add("")
