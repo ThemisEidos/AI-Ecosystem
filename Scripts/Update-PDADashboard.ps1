@@ -32,8 +32,12 @@ else {
 $DashboardPath = Join-Path $ResolvedOutputDirectory "PDA Dashboard.md"
 $StatusScript = Join-Path $PSScriptRoot "Get-PDADashboardStatus.ps1"
 $ParserPath = Join-Path $PSScriptRoot "PDA_OutputParsing.ps1"
+$COOPERProfileScript = Join-Path $PSScriptRoot "Get-COOPERIdentity.ps1"
 if (Test-Path -LiteralPath $ParserPath -PathType Leaf) {
     . $ParserPath
+}
+if (Test-Path -LiteralPath $COOPERProfileScript -PathType Leaf) {
+    . $COOPERProfileScript
 }
 
 function Get-PDAValueText {
@@ -131,6 +135,37 @@ $Lines.Add("")
 $Lines.Add(("Updated: {0}" -f $GeneratedAt))
 $Lines.Add(("Overall health: {0}" -f (Get-PDAValueText $StatusReport.dashboard_health.status)))
 $Lines.Add("")
+
+$Lines.Add("## COOPER Status")
+$Lines.Add("")
+if ($StatusReport.cooper_status) {
+    $Lines.Add((ConvertTo-PDAMarkdownTable -Rows @(
+        [pscustomobject]@{ metric = "Identity"; value = $StatusReport.cooper_status.display_name }
+        [pscustomobject]@{ metric = "Official name"; value = $StatusReport.cooper_status.official_name }
+        [pscustomobject]@{ metric = "Tagline"; value = $StatusReport.cooper_status.tagline }
+        [pscustomobject]@{ metric = "Mode options"; value = $StatusReport.cooper_status.modes }
+        [pscustomobject]@{ metric = "Current explosions"; value = $StatusReport.cooper_status.current_explosions }
+        [pscustomobject]@{ metric = "Docker"; value = $StatusReport.cooper_status.systems.docker }
+        [pscustomobject]@{ metric = "Open WebUI"; value = $StatusReport.cooper_status.systems.open_webui }
+        [pscustomobject]@{ metric = "n8n"; value = $StatusReport.cooper_status.systems.n8n }
+        [pscustomobject]@{ metric = "LiteLLM"; value = $StatusReport.cooper_status.systems.litellm }
+        [pscustomobject]@{ metric = "Ollama"; value = $StatusReport.cooper_status.systems.ollama }
+    ) -Columns @("metric", "value")))
+    $Lines.Add("")
+    $Lines.Add("### Personality Baseline")
+    $Lines.Add("")
+    $Lines.Add((ConvertTo-PDAMarkdownTable -Rows @(
+        [pscustomobject]@{ trait = "Humor"; value = $StatusReport.cooper_status.personality.humor }
+        [pscustomobject]@{ trait = "Sarcasm"; value = $StatusReport.cooper_status.personality.sarcasm }
+        [pscustomobject]@{ trait = "Honesty"; value = $StatusReport.cooper_status.personality.honesty }
+        [pscustomobject]@{ trait = "Directness"; value = $StatusReport.cooper_status.personality.directness }
+        [pscustomobject]@{ trait = "Brevity"; value = $StatusReport.cooper_status.personality.brevity }
+        [pscustomobject]@{ trait = "Initiative"; value = $StatusReport.cooper_status.personality.initiative }
+        [pscustomobject]@{ trait = "Caution"; value = $StatusReport.cooper_status.personality.caution }
+        [pscustomobject]@{ trait = "Persistence"; value = $StatusReport.cooper_status.personality.persistence }
+    ) -Columns @("trait", "value")))
+    $Lines.Add("")
+}
 
 $Lines.Add("## System Health")
 $Lines.Add("")
@@ -343,7 +378,7 @@ $Lines.Add((ConvertTo-PDAMarkdownTable -Rows @(
 ) -Columns @("metric", "value")))
 $Lines.Add("")
 
-$Lines.Add("## PDA Commander Integration")
+$Lines.Add("## COOPER Integration")
 $Lines.Add("")
 $Lines.Add((ConvertTo-PDAMarkdownTable -Rows @(
     [pscustomobject]@{ component = "Command Interpreter"; status = $StatusReport.commander_integration.command_interpreter.status; passed = $StatusReport.commander_integration.command_interpreter.passed_count; failed = $StatusReport.commander_integration.command_interpreter.failed_count; details = "mapped / ambiguous / unknown routing" }
@@ -374,7 +409,7 @@ if (-not [string]::IsNullOrWhiteSpace([string]$StatusReport.commander_integratio
     $Lines.Add("")
 }
 
-$Lines.Add("## PDA Commander Briefing")
+$Lines.Add("## COOPER Briefing")
 $Lines.Add("")
 if ($StatusReport.commander_briefing) {
     $Lines.Add((ConvertTo-PDAMarkdownTable -Rows @(
@@ -498,6 +533,33 @@ if ($StatusReport.commander_plan_orchestration) {
     }
     else {
         $Lines.Add("- No recent deliverables.")
+    }
+    $Lines.Add("")
+}
+
+$Lines.Add("## Commander Agent Loop")
+$Lines.Add("")
+if ($StatusReport.commander_agent_loop) {
+    $Lines.Add((ConvertTo-PDAMarkdownTable -Rows @(
+        [pscustomobject]@{ metric = "Loop status"; value = $StatusReport.commander_agent_loop.status }
+        [pscustomobject]@{ metric = "Run count"; value = $StatusReport.commander_agent_loop.run_count }
+        [pscustomobject]@{ metric = "Active runs"; value = $StatusReport.commander_agent_loop.active_run_count }
+        [pscustomobject]@{ metric = "Pending approvals"; value = $StatusReport.commander_agent_loop.pending_approval_count }
+        [pscustomobject]@{ metric = "Completed"; value = $StatusReport.commander_agent_loop.completed_count }
+        [pscustomobject]@{ metric = "Blocked"; value = $StatusReport.commander_agent_loop.blocked_count }
+        [pscustomobject]@{ metric = "Latest goal"; value = $StatusReport.commander_agent_loop.latest_run.goal }
+        [pscustomobject]@{ metric = "Latest step"; value = $StatusReport.commander_agent_loop.latest_run.current_step }
+        [pscustomobject]@{ metric = "Latest tool"; value = $StatusReport.commander_agent_loop.latest_run.assigned_tool }
+        [pscustomobject]@{ metric = "Latest next action"; value = $StatusReport.commander_agent_loop.latest_run.next_action }
+    ) -Columns @("metric", "value")))
+    $Lines.Add("")
+    $Lines.Add("### Recent Agent Runs")
+    $Lines.Add("")
+    if ($StatusReport.commander_agent_loop.recent_runs -and @($StatusReport.commander_agent_loop.recent_runs).Count -gt 0) {
+        $Lines.Add((ConvertTo-PDAMarkdownTable -Rows @($StatusReport.commander_agent_loop.recent_runs) -Columns @("run_id", "goal", "status", "approval_status", "current_step", "assigned_tool", "next_action", "updated_at")))
+    }
+    else {
+        $Lines.Add("- No agent runs found.")
     }
     $Lines.Add("")
 }

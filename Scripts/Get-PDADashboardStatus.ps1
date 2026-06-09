@@ -28,11 +28,15 @@ else {
 $DashboardPath = Join-Path $Root "Obsidian Vault\02_Projects\AI Tool Ecosystem\PDA Dashboard.md"
 $ParserPath = Join-Path $PSScriptRoot "PDA_OutputParsing.ps1"
 $EnvironmentHelperScript = Join-Path $PSScriptRoot "PDA_Environment.ps1"
+$COOPERProfileScript = Join-Path $PSScriptRoot "Get-COOPERIdentity.ps1"
 if (Test-Path -LiteralPath $ParserPath -PathType Leaf) {
     . $ParserPath
 }
 if (Test-Path -LiteralPath $EnvironmentHelperScript -PathType Leaf) {
     . $EnvironmentHelperScript
+}
+if (Test-Path -LiteralPath $COOPERProfileScript -PathType Leaf) {
+    . $COOPERProfileScript
 }
 
 function ConvertTo-PDAHashtable {
@@ -112,6 +116,56 @@ function Read-PDAJsonFile {
     catch {
         return $null
     }
+}
+
+function Get-PDAFriendlyHealthLabel {
+    param([Parameter(Mandatory = $false)]$Value)
+
+    $Text = [string]$Value
+    if ([string]::IsNullOrWhiteSpace($Text)) {
+        return "Unknown"
+    }
+
+    switch ($Text.ToLowerInvariant()) {
+        { $_ -in @("pass", "passed", "healthy", "healthy.", "online", "running", "running.") } { return "Healthy" }
+        { $_ -in @("warning", "degraded", "degraded.") } { return "Degraded" }
+        { $_ -in @("fail", "failed", "error", "unavailable") } { return "Unhealthy" }
+        default { return $Text }
+    }
+}
+
+function Get-PDAServiceHealth {
+    param(
+        [Parameter(Mandatory = $false)]
+        [object]$EnvironmentServices,
+
+        [Parameter(Mandatory = $true)]
+        [string]$ServiceName,
+
+        [Parameter(Mandatory = $false)]
+        [string]$Default = "Unknown"
+    )
+
+    if ($null -eq $EnvironmentServices) {
+        return $Default
+    }
+
+    $ServiceRows = @()
+    if ($EnvironmentServices.PSObject.Properties.Name -contains "services" -and $EnvironmentServices.services) {
+        $ServiceRows = @($EnvironmentServices.services)
+    }
+
+    $Match = @($ServiceRows | Where-Object { [string]$_.name -ieq $ServiceName } | Select-Object -First 1)[0]
+    if ($null -eq $Match) {
+        return $Default
+    }
+
+    $Label = Get-PDAFriendlyHealthLabel -Value $Match.status
+    if ($Label -eq "Unknown") {
+        return $Default
+    }
+
+    return $Label
 }
 
 function Invoke-PDAJsonScript {
@@ -579,6 +633,63 @@ function Get-PDAMemorySnapshot {
     }
 }
 
+function Get-PDAAgentLoopSnapshot {
+    param([Parameter(Mandatory = $true)][string]$RootPath)
+
+    $RunRoot = Join-Path $RootPath "PDA-Agent-Runs"
+    $IndexPath = Join-Path $RunRoot "index.json"
+    $RunFiles = @()
+    if (Test-Path -LiteralPath $RunRoot -PathType Container) {
+        $RunFiles = @(Get-ChildItem -LiteralPath $RunRoot -File -Filter *.json -ErrorAction SilentlyContinue | Where-Object { $_.Name -ne "index.json" })
+    }
+
+    $Runs = New-Object System.Collections.Generic.List[object]
+    foreach ($File in @($RunFiles | Sort-Object LastWriteTimeUtc -Descending)) {
+        $Run = Read-PDAJsonFile -Path $File.FullName
+        if (-not $Run) {
+            continue
+        }
+
+        $CurrentStep = if ($Run.PSObject.Properties.Name -contains "current_step") { $Run.current_step } else { $null }
+        $Runs.Add([pscustomobject]@{
+            run_id             = if ($Run.PSObject.Properties.Name -contains "run_id") { Get-PDASafeString $Run.run_id } else { $File.BaseName }
+            goal               = if ($Run.PSObject.Properties.Name -contains "goal") { Get-PDASafeString $Run.goal } else { "" }
+            category           = if ($Run.PSObject.Properties.Name -contains "category") { Get-PDASafeString $Run.category } else { "" }
+            status             = if ($Run.PSObject.Properties.Name -contains "status") { Get-PDASafeString $Run.status } else { "unknown" }
+            approval_status    = if ($Run.PSObject.Properties.Name -contains "approval_status") { Get-PDASafeString $Run.approval_status } else { "" }
+            current_step       = if ($CurrentStep -and $CurrentStep.PSObject.Properties.Name -contains "title") { Get-PDASafeString $CurrentStep.title } else { "" }
+            assigned_tool      = if ($Run.PSObject.Properties.Name -contains "assigned_tool") { Get-PDASafeString $Run.assigned_tool } else { "" }
+            next_action        = if ($Run.PSObject.Properties.Name -contains "next_action") { Get-PDASafeString $Run.next_action } else { "" }
+            iteration_count    = if ($Run.PSObject.Properties.Name -contains "iteration_count") { [int]$Run.iteration_count } else { 0 }
+            max_iterations     = if ($Run.PSObject.Properties.Name -contains "max_iterations") { [int]$Run.max_iterations } else { 0 }
+            created_at         = if ($Run.PSObject.Properties.Name -contains "created_at") { Get-PDASafeString $Run.created_at } else { "" }
+            updated_at         = if ($Run.PSObject.Properties.Name -contains "updated_at") { Get-PDASafeString $Run.updated_at } else { "" }
+            plan_id            = if ($Run.PSObject.Properties.Name -contains "plan" -and $Run.plan.PSObject.Properties.Name -contains "plan_id") { Get-PDASafeString $Run.plan.plan_id } else { "" }
+        })
+    }
+
+    $RunCount = @($Runs).Count
+    $PendingApprovalCount = @($Runs | Where-Object { [string]$_.status -eq "pending_approval" -or [string]$_.approval_status -eq "pending" }).Count
+    $ActiveRunCount = @($Runs | Where-Object { [string]$_.status -in @("pending_approval", "ready_for_action", "running", "reviewing") }).Count
+    $BlockedCount = @($Runs | Where-Object { [string]$_.status -eq "blocked" }).Count
+    $CompletedCount = @($Runs | Where-Object { [string]$_.status -eq "completed" }).Count
+    $LatestRun = @($Runs | Select-Object -First 1)[0]
+
+    return [pscustomobject]@{
+        path                = $RunRoot
+        index_path          = $IndexPath
+        status              = $(if ($RunCount -gt 0) { "pass" } else { "empty" })
+        run_count           = [int]$RunCount
+        active_run_count    = [int]$ActiveRunCount
+        pending_approval_count = [int]$PendingApprovalCount
+        blocked_count       = [int]$BlockedCount
+        completed_count     = [int]$CompletedCount
+        latest_run          = $LatestRun
+        recent_runs         = @($Runs | Select-Object -First 5)
+        runs                = @($Runs)
+    }
+}
+
 function Get-PDAModelStatus {
     param([Parameter(Mandatory = $true)][string]$RootPath)
 
@@ -1034,6 +1145,25 @@ foreach ($Candidate in @(
     }
 }
 
+$COOPERProfile = Get-COOPERIdentity -Root $Root
+$COOPERSystems = [pscustomobject]@{
+    docker = Get-PDAServiceHealth -EnvironmentServices $EnvironmentAwareness.services -ServiceName "Docker" -Default (Get-PDAFriendlyHealthLabel -Value $StackReport.status)
+    open_webui = Get-PDAServiceHealth -EnvironmentServices $EnvironmentAwareness.services -ServiceName "Open WebUI"
+    n8n = Get-PDAServiceHealth -EnvironmentServices $EnvironmentAwareness.services -ServiceName "n8n"
+    litellm = Get-PDAServiceHealth -EnvironmentServices $EnvironmentAwareness.services -ServiceName "LiteLLM"
+    ollama = Get-PDAServiceHealth -EnvironmentServices $EnvironmentAwareness.services -ServiceName "Ollama"
+}
+$COOPERHealthValues = @($COOPERSystems.docker, $COOPERSystems.open_webui, $COOPERSystems.n8n, $COOPERSystems.litellm, $COOPERSystems.ollama)
+$COOPERStatusLabel = if (@($COOPERHealthValues | Where-Object { [string]$_ -ne "Healthy" }).Count -eq 0) {
+    "pass"
+}
+elseif (@($COOPERHealthValues | Where-Object { [string]$_ -eq "Unhealthy" }).Count -gt 0) {
+    "degraded"
+}
+else {
+    "warning"
+}
+
 $Report = [pscustomobject]@{
     status = "pass"
     generated_at = $GeneratedAt
@@ -1042,6 +1172,17 @@ $Report = [pscustomobject]@{
     dashboard_health = [pscustomobject]@{
         status = $OverallHealth
         note = $(if ($OverallHealth -eq "pass") { "All tracked dashboard surfaces are healthy." } elseif ($OverallHealth -eq "warning") { "At least one tracked surface is degraded or unavailable." } else { "One or more critical surfaces failed validation." })
+    }
+    cooper_status = [pscustomobject]@{
+        status = $COOPERStatusLabel
+        display_name = if ($COOPERProfile -and $COOPERProfile.PSObject.Properties.Name -contains "display_name") { [string]$COOPERProfile.display_name } else { "COOPER" }
+        official_name = if ($COOPERProfile -and $COOPERProfile.PSObject.Properties.Name -contains "official_name") { [string]$COOPERProfile.official_name } else { "Command Operations Orchestrator for Planning, Execution, and Reporting" }
+        secondary_expansion = if ($COOPERProfile -and $COOPERProfile.PSObject.Properties.Name -contains "secondary_expansion") { [string]$COOPERProfile.secondary_expansion } else { "Collaborative Operational Planning, Execution, and Reasoning" }
+        tagline = if ($COOPERProfile -and $COOPERProfile.PSObject.Properties.Name -contains "tagline") { [string]$COOPERProfile.tagline } else { "Chief Officer of Preventing Everything from Randomly Exploding" }
+        current_explosions = 0
+        modes = if ($COOPERProfile -and $COOPERProfile.PSObject.Properties.Name -contains "operational_modes") { @($COOPERProfile.operational_modes) } else { @("Analyst Mode", "Operator Mode", "TARS Mode", "Overlord Mode", "Emergency Mode") }
+        personality = if ($COOPERProfile -and $COOPERProfile.PSObject.Properties.Name -contains "personality") { $COOPERProfile.personality } else { [pscustomobject]@{ humor = 75; sarcasm = 60; honesty = 100; directness = 85; brevity = 40; initiative = 85; caution = 80; persistence = 90 } }
+        systems = $COOPERSystems
     }
     system_health = [pscustomobject]@{
         status = Get-PDASafeString $StackReport.status
@@ -1094,6 +1235,7 @@ $Report = [pscustomobject]@{
     commander_briefing = $null
     commander_planning = $null
     commander_plan_orchestration = $null
+    commander_agent_loop = $null
     environment_awareness = $EnvironmentAwareness
     dispatch_status = $DispatchSnapshot
     memory_summary = [pscustomobject]@{
@@ -1158,6 +1300,29 @@ if (-not $SkipCommanderBriefing -and (Test-Path -LiteralPath $CommanderBriefingS
                 next_action = ""
                 recommended_executor = ""
                 briefing_text = ""
+            }
+        }
+    }
+
+    $AgentLoopScript = Join-Path $PSScriptRoot "Get-PDAAgentRun.ps1"
+    if (Test-Path -LiteralPath $AgentLoopScript -PathType Leaf) {
+        try {
+            $Report.commander_agent_loop = Get-PDAAgentLoopSnapshot -RootPath $Root
+        }
+        catch {
+            $Report.commander_agent_loop = [pscustomobject]@{
+                path = Join-Path $Root "PDA-Agent-Runs"
+                index_path = Join-Path $Root "PDA-Agent-Runs\index.json"
+                status = "error"
+                run_count = 0
+                active_run_count = 0
+                pending_approval_count = 0
+                blocked_count = 0
+                completed_count = 0
+                latest_run = $null
+                recent_runs = @()
+                runs = @()
+                error = $_.Exception.Message
             }
         }
     }

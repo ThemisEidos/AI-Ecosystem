@@ -1,0 +1,172 @@
+{
+  "schema_version": "1.0",
+  "registry_name": "PDA Agent Tool Registry",
+  "generated_at": "2026-06-09T00:00:00Z",
+  "tools": [
+    {
+      "tool_name": "codex",
+      "display_name": "Codex",
+      "tool_type": "local_cli_agent",
+      "risk_level": "medium",
+      "requires_approval": true,
+      "supports_file_modification": true,
+      "supports_repository_changes": true,
+      "supports_research": false,
+      "supports_reporting": false,
+      "supports_automation": false,
+      "supports_category2": true,
+      "supports_local_only": true,
+      "supports_cloud_ai": false,
+      "dispatch_method": "local_prompt_package",
+      "output_locations": [
+        "PDA-Tasks/staging",
+        "PDA-Tasks/results"
+      ],
+      "notes": "Local code and repository execution."
+    },
+    {
+      "tool_name": "gemini-cli",
+      "display_name": "Gemini CLI",
+      "tool_type": "cloud_cli_agent",
+      "risk_level": "medium",
+      "requires_approval": true,
+      "supports_file_modification": false,
+      "supports_repository_changes": false,
+      "supports_research": true,
+      "supports_reporting": true,
+      "supports_automation": false,
+      "supports_category2": false,
+      "supports_local_only": false,
+      "supports_cloud_ai": true,
+      "dispatch_method": "cloud_prompt_package",
+      "output_locations": [
+        "PDA-Tasks/staging",
+        "PDA-Tasks/results"
+      ],
+      "notes": "Cloud research and synthesis; blocked for Category 2."
+    },
+    {
+      "tool_name": "n8n",
+      "display_name": "n8n",
+      "tool_type": "workflow_orchestrator",
+      "risk_level": "medium",
+      "requires_approval": true,
+      "supports_file_modification": false,
+      "supports_repository_changes": false,
+      "supports_research": false,
+      "supports_reporting": false,
+      "supports_automation": true,
+      "supports_category2": true,
+      "supports_local_only": true,
+      "supports_cloud_ai": false,
+      "dispatch_method": "workflow_request",
+      "output_locations": [
+        "PDA-Tasks/staging",
+        "PDA-Tasks/results"
+      ],
+      "notes": "Deterministic workflow automation."
+    },
+    {
+      "tool_name": "execute-worker",
+      "display_name": "Execute Worker",
+      "tool_type": "pda_worker",
+      "risk_level": "medium",
+      "requires_approval": true,
+      "supports_file_modification": true,
+      "supports_repository_changes": true,
+      "supports_research": false,
+      "supports_reporting": false,
+      "supports_automation": true,
+      "supports_category2": true,
+      "supports_local_only": true,
+      "supports_cloud_ai": false,
+      "dispatch_method": "task_queue",
+      "output_locations": [
+        "PDA-Tasks/results"
+      ],
+      "notes": "Local governed execution path."
+    },
+    {
+      "tool_name": "reporter-worker",
+      "display_name": "Reporter Worker",
+      "tool_type": "pda_worker",
+      "risk_level": "low",
+      "requires_approval": true,
+      "supports_file_modification": true,
+      "supports_repository_changes": false,
+      "supports_research": false,
+      "supports_reporting": true,
+      "supports_automation": false,
+      "supports_category2": true,
+      "supports_local_only": true,
+      "supports_cloud_ai": false,
+      "dispatch_method": "task_queue",
+      "output_locations": [
+        "PDA-Tasks/results",
+        "Obsidian Vault/02_Projects/AI Tool Ecosystem/Agent Findings/Reports"
+      ],
+      "notes": "Local reporting and artifact synthesis."
+    },
+    {
+      "tool_name": "review-worker",
+      "display_name": "Review Worker",
+      "tool_type": "pda_worker",
+      "risk_level": "low",
+      "requires_approval": true,
+      "supports_file_modification": true,
+      "supports_repository_changes": false,
+      "supports_research": false,
+      "supports_reporting": true,
+      "supports_automation": false,
+      "supports_category2": true,
+      "supports_local_only": true,
+      "supports_cloud_ai": false,
+      "dispatch_method": "task_queue",
+      "output_locations": [
+        "PDA-Tasks/results",
+        "Obsidian Vault/02_Projects/AI Tool Ecosystem/Agent Findings/Reviews"
+      ],
+      "notes": "Local critique and checklist work."
+    },
+    {
+      "tool_name": "filesystem",
+      "display_name": "Filesystem",
+      "tool_type": "local_system",
+      "risk_level": "medium",
+      "requires_approval": true,
+      "supports_file_modification": true,
+      "supports_repository_changes": true,
+      "supports_research": false,
+      "supports_reporting": false,
+      "supports_automation": false,
+      "supports_category2": true,
+      "supports_local_only": true,
+      "supports_cloud_ai": false,
+      "dispatch_method": "local_shell",
+      "output_locations": [
+        "PDA-Tasks/staging"
+      ],
+      "notes": "Local filesystem work only."
+    },
+    {
+      "tool_name": "shell-command",
+      "display_name": "Shell Command",
+      "tool_type": "local_system",
+      "risk_level": "medium",
+      "requires_approval": true,
+      "supports_file_modification": true,
+      "supports_repository_changes": true,
+      "supports_research": false,
+      "supports_reporting": false,
+      "supports_automation": true,
+      "supports_category2": true,
+      "supports_local_only": true,
+      "supports_cloud_ai": false,
+      "dispatch_method": "local_shell",
+      "output_locations": [
+        "PDA-Tasks/staging"
+      ],
+      "notes": "Controlled local command execution."
+    }
+  ]
+}

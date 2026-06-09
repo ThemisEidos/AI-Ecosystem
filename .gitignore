@@ -122,6 +122,7 @@ VeraCrypt/
 
 # Local PDA backups
 PDA-Backups/
+PDA-Agent-Runs/
 
 # Generated nightly work packets
 Roadmap/work-packets/
