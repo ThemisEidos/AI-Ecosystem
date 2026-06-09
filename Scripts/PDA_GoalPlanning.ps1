@@ -104,6 +104,13 @@ function Get-PDAGoalPlanningClassification {
     elseif ($Normalized -match '(?i)\b(classic literature|reading list|authors|books|synopses|synopsis|pdf)\b') {
         $GoalType = "research_report_pdf"
     }
+    elseif (
+        $Normalized -match '(?i)\b(xlsx|excel|spreadsheet|workbook)\b' -and
+        $Normalized -match '(?i)\b(validate|check|verify|audit|rate[- ]?limit|limit requests?|first \d+ links?|first ten links?|links?|urls?)\b' -and
+        $Normalized -match '(?i)\b(report|markdown|obsidian|write|save)\b'
+    ) {
+        $GoalType = "data_validation_report"
+    }
     elseif ($Normalized -match '(?i)\b(research|investigate|sources|evidence)\b' -and $Normalized -match '(?i)\b(report|summary|summarize|brief)\b') {
         $GoalType = "research_report"
     }
@@ -140,6 +147,12 @@ function Get-PDAGoalPlanningClassification {
     if ($Normalized -match '(?i)\b(pdf)\b') { $Deliverables.Add("PDF export") }
     if ($Normalized -match '(?i)\b(guide|reading guide)\b') { $Deliverables.Add("reading guide") }
     if ($Normalized -match '(?i)\b(plan|roadmap|strategy)\b') { $Deliverables.Add("execution plan") }
+    if ($GoalType -eq "data_validation_report") {
+        $Deliverables.Add("validated links")
+        $Deliverables.Add("rate-limit notes")
+        $Deliverables.Add("markdown report")
+        $Deliverables.Add("Obsidian note")
+    }
 
     if ($Deliverables.Count -eq 0) {
         $Deliverables.Add("structured goal plan")
@@ -170,6 +183,11 @@ function Get-PDAGoalPlanningClassification {
             $RequiredCapabilities.Add("research")
             $RequiredCapabilities.Add("reporting")
             $RequiredCapabilities.Add("document_generation")
+        }
+        "data_validation_report" {
+            $RequiredCapabilities.Add("execution")
+            $RequiredCapabilities.Add("reporting")
+            $RequiredCapabilities.Add("knowledge_management")
         }
         "research_report" {
             $RequiredCapabilities.Add("research")
@@ -261,6 +279,13 @@ function Get-PDAGoalPlanningSubtasks {
             $Subtasks.Add((New-PDAGoalSubtaskRecord -TaskNumber $TaskNumber -Title "Draft the report" -TaskType "reporting" -Capabilities @("reporting") -Executor "reporter-worker" -Dependencies @("goal-step-01", "goal-step-02") -Output "report draft"))
             $TaskNumber++
             $Subtasks.Add((New-PDAGoalSubtaskRecord -TaskNumber $TaskNumber -Title "Prepare the PDF export" -TaskType "document_generation" -Capabilities @("reporting", "document_generation") -Executor "reporter-worker" -Dependencies @("goal-step-03") -Output "PDF-ready document"))
+        }
+        "data_validation_report" {
+            $Subtasks.Add((New-PDAGoalSubtaskRecord -TaskNumber $TaskNumber -Title "Validate the first 10 links from the XLSX and apply rate limiting" -TaskType "execute" -Capabilities @("execution") -Executor "execute-worker" -Dependencies @() -Output "validated link results"))
+            $TaskNumber++
+            $Subtasks.Add((New-PDAGoalSubtaskRecord -TaskNumber $TaskNumber -Title "Draft the Markdown report from the validation results" -TaskType "reporting" -Capabilities @("reporting") -Executor "reporter-worker" -Dependencies @("goal-step-01") -Output "markdown report"))
+            $TaskNumber++
+            $Subtasks.Add((New-PDAGoalSubtaskRecord -TaskNumber $TaskNumber -Title "Save the report to Obsidian" -TaskType "knowledge_management" -Capabilities @("knowledge_management", "reporting") -Executor "reporter-worker" -Dependencies @("goal-step-02") -Output "Obsidian note"))
         }
         "research_report" {
             $Subtasks.Add((New-PDAGoalSubtaskRecord -TaskNumber $TaskNumber -Title "Research the source material" -TaskType "research" -Capabilities @("research") -Executor "gemini-cli" -Dependencies @() -Output "source notes"))

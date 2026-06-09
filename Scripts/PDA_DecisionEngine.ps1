@@ -42,6 +42,7 @@ function Test-PDACommanderDecisionGoalPlanning {
 
     return [bool](
         $NormalizedText -match '(?i)\b(classic literature|reading list|study plan|goal plan|goal decomposition|build me a roadmap|create a roadmap|help me create|analyze my project|what needs to happen|reading guide|pdf report|write a report|make it a pdf|summarize and create|search the internet)\b' -or
+        ($NormalizedText -match '(?i)\b(xlsx|excel|spreadsheet|workbook)\b' -and $NormalizedText -match '(?i)\b(validate|check|verify|audit|rate[- ]?limit|limit requests?|first \d+ links?|first ten links?|links?|urls?)\b' -and $NormalizedText -match '(?i)\b(report|markdown|obsidian|write|save)\b') -or
         ($NormalizedText -match '(?i)\b(research|investigate|search|study|authors|books)\b' -and $NormalizedText -match '(?i)\b(report|pdf|synopsis|synopses|links|sources|reading list|roadmap|plan|guide)\b')
     )
 }

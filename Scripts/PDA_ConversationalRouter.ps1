@@ -148,6 +148,7 @@ function Test-PDAConversationalGoalPlanning {
 
     return [bool](
         $NormalizedText -match '(?i)\b(classic literature|reading list|study plan|goal plan|goal decomposition|build me a roadmap|create a roadmap|help me create|analyze my project|what needs to happen|reading guide|pdf report|write a report|make it a pdf|summarize and create|search the internet)\b' -or
+        ($NormalizedText -match '(?i)\b(xlsx|excel|spreadsheet|workbook)\b' -and $NormalizedText -match '(?i)\b(validate|check|verify|audit|rate[- ]?limit|limit requests?|first \d+ links?|first ten links?|links?|urls?)\b' -and $NormalizedText -match '(?i)\b(report|markdown|obsidian|write|save)\b') -or
         ($NormalizedText -match '(?i)\b(research|investigate|search|study|authors|books)\b' -and $NormalizedText -match '(?i)\b(report|pdf|synopsis|synopses|links|sources|reading list|roadmap|plan|guide)\b')
     )
 }
@@ -749,6 +750,15 @@ function Get-PDAConversationalNaturalResponse {
                 $BaseResponse.confidence = if ($GoalPlan.PSObject.Properties.Name -contains "confidence") { [double]$GoalPlan.confidence } else { 0.9 }
                 $BaseResponse.goal_plan = $GoalPlan
                 $BaseResponse.execution_plan = if ($GoalPlan.PSObject.Properties.Name -contains "execution_plan") { $GoalPlan.execution_plan } else { $null }
+                $BaseResponse.task_type = if ($GoalPlan.PSObject.Properties.Name -contains "goal_type" -and -not [string]::IsNullOrWhiteSpace([string]$GoalPlan.goal_type)) { [string]$GoalPlan.goal_type } else { "goal_planning" }
+                if ($GoalPlan.PSObject.Properties.Name -contains "goal_type" -and [string]$GoalPlan.goal_type -eq "data_validation_report") {
+                    $BaseResponse.task_type = "data_validation_report"
+                    $BaseResponse.route_type = "goal_planning"
+                    $BaseResponse.decision_type = "plan"
+                    $BaseResponse.dispatch_ready = $false
+                    $BaseResponse.dispatch_status = "not_dispatched"
+                    $BaseResponse.requires_confirmation = $true
+                }
             }
             else {
                 $BaseResponse.response_text = "I can turn natural-language goals into a structured plan, but the goal planner is unavailable right now."

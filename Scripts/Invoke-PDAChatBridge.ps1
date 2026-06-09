@@ -725,7 +725,7 @@ if (Get-Command -Name Resolve-PDAConversationalRoute -ErrorAction SilentlyContin
                     classification = [pscustomobject]@{
                         decision_type = "plan"
                         intent = "goal_planning"
-                        task_type = "goal_planning"
+                        task_type = if ($GoalPlan -and $GoalPlan.PSObject.Properties.Name -contains "goal_type" -and -not [string]::IsNullOrWhiteSpace([string]$GoalPlan.goal_type)) { [string]$GoalPlan.goal_type } else { "goal_planning" }
                         goal_type = if ($ExecutionPlan -and $ExecutionPlan.PSObject.Properties.Name -contains "goal_type") { [string]$ExecutionPlan.goal_type } elseif ($GoalPlan -and $GoalPlan.PSObject.Properties.Name -contains "goal_type") { [string]$GoalPlan.goal_type } else { "" }
                         category = $PendingCategory
                         confidence = if ($DirectResult.PSObject.Properties.Name -contains "confidence") { [double]$DirectResult.confidence } else { 0.9 }
@@ -740,7 +740,7 @@ if (Get-Command -Name Resolve-PDAConversationalRoute -ErrorAction SilentlyContin
                     }
                     routing = [pscustomobject]@{
                         recommended_command = $PendingCommand
-                        recommended_executor = "planner-worker"
+                        recommended_executor = if ($GoalPlan -and $GoalPlan.PSObject.Properties.Name -contains "goal_type" -and [string]$GoalPlan.goal_type -eq "data_validation_report") { "execute-worker" } else { "planner-worker" }
                         recommended_workflow = "goal_planning"
                         dispatch_target = "planner"
                         next_action = [string]$DirectResult.next_action
@@ -761,8 +761,9 @@ if (Get-Command -Name Resolve-PDAConversationalRoute -ErrorAction SilentlyContin
                     }
                     route_type = "goal_planning"
                     intent = "goal_planning"
+                    task_type = if ($GoalPlan -and $GoalPlan.PSObject.Properties.Name -contains "goal_type" -and -not [string]::IsNullOrWhiteSpace([string]$GoalPlan.goal_type)) { [string]$GoalPlan.goal_type } else { "goal_planning" }
                     recommended_command = $PendingCommand
-                    recommended_executor = "planner-worker"
+                    recommended_executor = if ($GoalPlan -and $GoalPlan.PSObject.Properties.Name -contains "goal_type" -and [string]$GoalPlan.goal_type -eq "data_validation_report") { "execute-worker" } else { "planner-worker" }
                     requires_confirmation = $GoalPlanRequiresConfirmation
                     dispatch_ready = $false
                     dispatch_status = "not_dispatched"

@@ -69,6 +69,16 @@ Assert-PDACondition -Condition (@($GoalPlan.subtasks).Count -ge 3) -Message "Goa
 Assert-PDACondition -Condition ($GoalPlan.execution_plan.PSObject.Properties.Name -contains "executor_chain") -Message "Goal plan did not include an execution plan." -Issues $Issues | Out-Null
 Assert-PDACondition -Condition (@($GoalPlan.execution_plan.executor_chain).Count -ge 3) -Message "Execution plan did not include enough executor steps." -Issues $Issues | Out-Null
 
+$SpreadsheetText = "Validate first 10 website links from an XLSX, rate-limit requests, write Markdown report to Obsidian."
+$SpreadsheetPlan = Invoke-PDAJsonScript -Path $GoalPlanScript -Arguments @("-Text", $SpreadsheetText, "-Root", $Root, "-Persist", "-AsJson")
+Assert-PDACondition -Condition ([string]$SpreadsheetPlan.goal_type -eq "data_validation_report") -Message "Spreadsheet validation request did not classify as data_validation_report." -Issues $Issues | Out-Null
+Assert-PDACondition -Condition ([string]$SpreadsheetPlan.category -eq "category_1") -Message "Spreadsheet validation request should be Category 1." -Issues $Issues | Out-Null
+Assert-PDACondition -Condition ($SpreadsheetPlan.approval_required) -Message "Spreadsheet validation request should require approval." -Issues $Issues | Out-Null
+Assert-PDACondition -Condition (@($SpreadsheetPlan.deliverables) -contains "validated links") -Message "Spreadsheet validation request did not include validated links deliverable." -Issues $Issues | Out-Null
+Assert-PDACondition -Condition (@($SpreadsheetPlan.deliverables) -contains "markdown report") -Message "Spreadsheet validation request did not include markdown report deliverable." -Issues $Issues | Out-Null
+Assert-PDACondition -Condition (@($SpreadsheetPlan.execution_plan.executor_chain.executor) -contains "execute-worker") -Message "Spreadsheet validation request did not recommend execute-worker." -Issues $Issues | Out-Null
+Assert-PDACondition -Condition (@($SpreadsheetPlan.execution_plan.executor_chain.executor) -contains "reporter-worker") -Message "Spreadsheet validation request did not recommend reporter-worker." -Issues $Issues | Out-Null
+
 $ExecutionPlan = Invoke-PDAJsonScript -Path $ExecutionPlanScript -Arguments @("-GoalPlanJson", (($GoalPlan | ConvertTo-Json -Depth 30 -Compress)), "-AsJson")
 Assert-PDACondition -Condition (@($ExecutionPlan.subtasks).Count -ge 3) -Message "Execution plan did not retain subtasks." -Issues $Issues | Out-Null
 Assert-PDACondition -Condition (@($ExecutionPlan.recommended_executors) -contains "gemini-cli") -Message "Execution plan did not recommend gemini-cli for research work." -Issues $Issues | Out-Null

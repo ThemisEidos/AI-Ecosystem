@@ -569,6 +569,84 @@ else {
     $Failed++
 }
 
+$SpreadsheetGoalConversationId = "conv-spreadsheet-goal-$([guid]::NewGuid().ToString('N').Substring(0, 12))"
+$SpreadsheetGoalSessionId = "sess-spreadsheet-goal-$([guid]::NewGuid().ToString('N').Substring(0, 12))"
+$SpreadsheetGoalMarker = "spreadsheet-goal-flow-$([guid]::NewGuid().ToString())"
+$SpreadsheetGoalIssues = New-Object System.Collections.Generic.List[string]
+
+$SpreadsheetGoalMessage = "Validate first 10 website links from an XLSX, rate-limit requests, write Markdown report to Obsidian. [$SpreadsheetGoalMarker]"
+$SpreadsheetGoalRequestRaw = & $BridgeScript -Message $SpreadsheetGoalMessage -ConversationId $SpreadsheetGoalConversationId -SessionId $SpreadsheetGoalSessionId -AsJson 2>&1
+$SpreadsheetGoalRequest = ConvertFrom-PDAMixedJson -Text ([string]($SpreadsheetGoalRequestRaw -join "`n")) -SourceName $BridgeScript
+
+if ($SpreadsheetGoalRequest.response_text -match 'I can help with one action at a time') {
+    $SpreadsheetGoalIssues.Add("Detailed spreadsheet workflow should not be treated as ambiguous multi-action guidance.")
+}
+if (-not ($SpreadsheetGoalRequest.PSObject.Properties.Name -contains "goal_plan")) {
+    $SpreadsheetGoalIssues.Add("Spreadsheet workflow did not return goal_plan data.")
+}
+if (-not ($SpreadsheetGoalRequest.PSObject.Properties.Name -contains "execution_plan")) {
+    $SpreadsheetGoalIssues.Add("Spreadsheet workflow did not return execution_plan data.")
+}
+if (-not ($SpreadsheetGoalRequest.PSObject.Properties.Name -contains "decision") -or -not $SpreadsheetGoalRequest.decision -or $SpreadsheetGoalRequest.decision.decision_type -ne "plan") {
+    $SpreadsheetGoalIssues.Add("Spreadsheet workflow did not persist a plan decision object.")
+}
+if (-not ($SpreadsheetGoalRequest.decision.PSObject.Properties.Name -contains "task_type") -or $SpreadsheetGoalRequest.decision.task_type -ne "data_validation_report") {
+    $SpreadsheetGoalIssues.Add("Spreadsheet workflow decision should advertise task_type data_validation_report.")
+}
+if (-not ($SpreadsheetGoalRequest.decision.PSObject.Properties.Name -contains "recommended_executor") -or [string]::IsNullOrWhiteSpace([string]$SpreadsheetGoalRequest.decision.recommended_executor)) {
+    $SpreadsheetGoalIssues.Add("Spreadsheet workflow decision should recommend an executor.")
+}
+if ($SpreadsheetGoalRequest.decision.recommended_executor -notin @("execute-worker", "reporter-worker")) {
+    $SpreadsheetGoalIssues.Add("Spreadsheet workflow decision should recommend execute-worker or reporter-worker.")
+}
+if (-not [bool]$SpreadsheetGoalRequest.requires_confirmation) {
+    $SpreadsheetGoalIssues.Add("Spreadsheet workflow should require confirmation.")
+}
+if ($SpreadsheetGoalRequest.dispatch_status -ne "not_dispatched") {
+    $SpreadsheetGoalIssues.Add("Spreadsheet workflow should not dispatch before approval.")
+}
+if ($SpreadsheetGoalRequest.route_type -ne "goal_planning") {
+    $SpreadsheetGoalIssues.Add("Spreadsheet workflow should route through goal planning.")
+}
+if ($SpreadsheetGoalRequest.goal_plan.goal_type -ne "data_validation_report") {
+    $SpreadsheetGoalIssues.Add("Spreadsheet workflow should classify as data_validation_report.")
+}
+if ($SpreadsheetGoalRequest.goal_plan.category -ne "category_1") {
+    $SpreadsheetGoalIssues.Add("Spreadsheet workflow should remain category_1.")
+}
+if (@($SpreadsheetGoalRequest.goal_plan.subtasks).recommended_executor -notcontains "execute-worker") {
+    $SpreadsheetGoalIssues.Add("Spreadsheet workflow should recommend execute-worker for the validation step.")
+}
+if (@($SpreadsheetGoalRequest.goal_plan.subtasks).recommended_executor -notcontains "reporter-worker") {
+    $SpreadsheetGoalIssues.Add("Spreadsheet workflow should recommend reporter-worker for reporting.")
+}
+if ($SpreadsheetGoalRequest.response_text -notmatch 'Executor: execute-worker') {
+    $SpreadsheetGoalIssues.Add("Spreadsheet workflow response text should show execute-worker in the execution plan.")
+}
+if ($SpreadsheetGoalRequest.response_text -notmatch 'Executor: reporter-worker') {
+    $SpreadsheetGoalIssues.Add("Spreadsheet workflow response text should show reporter-worker in the execution plan.")
+}
+if (($SpreadsheetGoalRequest.goal_plan.deliverables -join ' ') -notmatch '(?i)markdown') {
+    $SpreadsheetGoalIssues.Add("Spreadsheet workflow should include a Markdown deliverable.")
+}
+
+$Results += [pscustomobject]@{
+    name = "spreadsheet validation goal"
+    passed = ($SpreadsheetGoalIssues.Count -eq 0)
+    status = $SpreadsheetGoalRequest.dispatch_status
+    response_text = $SpreadsheetGoalRequest.response_text
+    dispatch_status = $SpreadsheetGoalRequest.dispatch_status
+    dispatch_ready = $SpreadsheetGoalRequest.dispatch_ready
+    issues = @($SpreadsheetGoalIssues)
+}
+
+if ($SpreadsheetGoalIssues.Count -eq 0) {
+    $Passed++
+}
+else {
+    $Failed++
+}
+
 foreach ($Case in $Cases) {
     if (-not $DashboardMode) {
         $Before = Find-QueueArtifactByMarker -Marker $Case.marker
