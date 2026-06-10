@@ -73,7 +73,12 @@ function Invoke-TestCase {
     $Issues = New-Object System.Collections.Generic.List[string]
     $Skipped = $false
 
-    if ($AllowUnavailable -and $Result.status -ne "pass" -and $Result.response.http_status -in @(401, 403, 404, 429, 500, 502, 503, 504)) {
+    $MissingSecret = $false
+    if ($Result.PSObject.Properties.Name -contains "response" -and $Result.response -and $Result.response.PSObject.Properties.Name -contains "error_message") {
+        $MissingSecret = [bool]($Result.response.error_message -match '(?i)LITELLM_MASTER_KEY|approved runtime secret source')
+    }
+
+    if (($AllowUnavailable -or $MissingSecret) -and $Result.status -ne "pass" -and ($MissingSecret -or $Result.response.http_status -in @(401, 403, 404, 429, 500, 502, 503, 504))) {
         $Skipped = $true
     }
     else {

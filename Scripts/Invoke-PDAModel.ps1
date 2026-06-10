@@ -459,7 +459,91 @@ if (($NormalizedCategory -in @("category_2", "restricted_local")) -and $CloudAll
     throw "Category 2 and restricted_local routes cannot allow cloud fallback."
 }
 
-$MasterKey = Get-PDARequiredEnvironmentVariable -Name "LITELLM_MASTER_KEY"
+$MasterKey = $null
+try {
+    $MasterKey = Get-PDARequiredEnvironmentVariable -Name "LITELLM_MASTER_KEY"
+}
+catch {
+    $FailureMessage = $_.Exception.Message
+    $Failure = [pscustomobject]@{
+        status = "fail"
+        adapter = "Invoke-PDAModel.ps1"
+        routing = [pscustomobject]@{
+            worker_name = $WorkerName
+            task_type = $TaskType
+            sensitivity = $NormalizedSensitivity
+            route_source = [string]$Route.route_source
+            routing_surface = [string]$Route.routing_surface
+            routing_gateway = [string]$Route.routing_gateway
+            via_litellm = [bool]$Route.via_litellm
+            command = [string]$Route.command
+            category = $NormalizedCategory
+            requested_model = $PrimaryModel
+            primary_model = $PrimaryModel
+            selected_model = $SelectedModel
+            transport_model = Get-PDAModelTransportModel -LogicalModel $SelectedModel
+            fallback_chain = @($FallbackChain)
+            model_candidates = @($LogicalCandidates)
+            provider_families = @($Route.provider_families)
+            routing_reason = [string]$Route.routing_reason
+            reason = [string]$Route.routing_reason
+            cloud_allowed = $CloudAllowed
+        }
+        fallback = [pscustomobject]@{
+            allowed = [bool]$AllowFallback
+            used = $false
+            attempt_count = 0
+            from_model = ""
+            to_model = ""
+            attempts = @()
+        }
+        request = [pscustomobject]@{
+            endpoint = $Endpoint
+            method = "POST"
+            model = $SelectedModel
+            temperature = 0.0
+            stream = $false
+            messages = $Messages
+            prompt = $Prompt
+        }
+        response = [pscustomobject]@{
+            http_status = $null
+            http_status_description = ""
+            id = ""
+            model = $SelectedModel
+            created = $null
+            finish_reason = ""
+            usage = $null
+            error = $null
+            error_message = $FailureMessage
+        }
+        response_text = ""
+        normalized_response_text = ""
+        next_action = "Configure the approved runtime secret source and retry the invocation."
+        source_of_truth = "Scripts/Get-PDAModelRoute.ps1"
+    }
+
+    $FailureAuditRecord = New-PDARoutingAuditRecord -Outcome "fail" -WorkerNameText $WorkerName -CommandText ([string]$Route.command) -CategoryText $NormalizedCategory -SelectedModelText $SelectedModel -FallbackChainText $FallbackChain -RoutingReasonText ([string]$Route.routing_reason) -FallbackUsed $false -CloudAllowed $CloudAllowed -RoutingSurface ([string]$Route.routing_surface) -TransportModelText (Get-PDAModelTransportModel -LogicalModel $SelectedModel)
+    $FailureAuditPath = Write-PDARoutingAuditRecord -Record $FailureAuditRecord
+    if ($FailureAuditPath) {
+        $Failure | Add-Member -NotePropertyName routing_audit_log -NotePropertyValue $FailureAuditPath
+    }
+
+    if ($AsJson) {
+        $Failure | ConvertTo-Json -Depth 20
+        if (-not $NoThrow) {
+            throw "PDA model invocation failed."
+        }
+        return
+    }
+
+    Write-Host "[ERR] PDA model invocation failed"
+    Write-Host ("Reason : {0}" -f $FailureMessage)
+    if (-not $NoThrow) {
+        throw "PDA model invocation failed."
+    }
+    return
+}
 $SystemPrompt = "You are the PDA model invocation adapter. Respond directly and concisely."
 
 $Messages = @(
