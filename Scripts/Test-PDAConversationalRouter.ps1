@@ -10,7 +10,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 $Root = Split-Path -Parent $PSScriptRoot
-$RouterScript = Join-Path $PSScriptRoot "PDA_ConversationalRouter.ps1"
+$RouterScript = Join-Path $PSScriptRoot "COOPER_ConversationalRouter.ps1"
 
 if (-not (Test-Path -LiteralPath $RouterScript -PathType Leaf)) {
     throw "Conversational router missing: $RouterScript"

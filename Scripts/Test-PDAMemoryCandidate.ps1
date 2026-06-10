@@ -13,7 +13,7 @@ $Root = Split-Path -Parent $PSScriptRoot
 $CandidateScript = Join-Path $PSScriptRoot "New-PDAMemoryCandidate.ps1"
 $DashboardScript = Join-Path $PSScriptRoot "Get-PDADashboardStatus.ps1"
 $BridgeScript = Join-Path $PSScriptRoot "Invoke-PDAChatBridge.ps1"
-$RouterScript = Join-Path $PSScriptRoot "PDA_ConversationalRouter.ps1"
+$RouterScript = Join-Path $PSScriptRoot "COOPER_ConversationalRouter.ps1"
 $ParserPath = Join-Path $PSScriptRoot "PDA_OutputParsing.ps1"
 if (Test-Path -LiteralPath $ParserPath -PathType Leaf) {
     . $ParserPath
