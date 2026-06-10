@@ -2,6 +2,7 @@ model_list:
   - model_name: local-llama
     litellm_params:
       model: ollama/llama3.2
+      # Docker containers must reach the host Ollama daemon via host.docker.internal.
       api_base: http://host.docker.internal:11434
   - model_name: openai
     litellm_params:
