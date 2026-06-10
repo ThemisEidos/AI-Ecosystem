@@ -5,6 +5,20 @@ function Get-COOPERIdentity {
         [string]$Root = (Split-Path -Parent $PSScriptRoot)
     )
 
+    function Get-COOPERDefaultModelName {
+        param(
+            [Parameter(Mandatory = $false)]
+            [string]$Fallback = "local-llama"
+        )
+
+        $Configured = [string]$env:COOPER_DEFAULT_MODEL
+        if (-not [string]::IsNullOrWhiteSpace($Configured)) {
+            return $Configured.Trim()
+        }
+
+        return $Fallback
+    }
+
     $ProfilePath = Join-Path $Root "Scripts\COOPER_Personality.json"
     $CapabilityRegistryPath = Join-Path $Root "Scripts\PDA_CapabilityRegistry.json"
     $AgentProfileRegistryPath = Join-Path $Root "Scripts\PDA_AgentProfileRegistry.json"
@@ -102,6 +116,7 @@ function Get-COOPERIdentity {
             secondary_expansion = "Collaborative Operational Planning, Execution, and Reasoning"
             tagline = "Chief Officer of Preventing Everything from Randomly Exploding"
             identity_note = "TARS-inspired, not copyrighted imitation"
+            default_model = Get-COOPERDefaultModelName
             easter_egg_expansions = @(
                 "Computational Overlord of Operations, Planning, Execution, and Reporting"
                 "Chief Officer of Preventing Everything from Randomly Exploding"
@@ -154,6 +169,9 @@ function Get-COOPERIdentity {
         }
         if (-not ($Profile.PSObject.Properties.Name -contains "identity_note")) {
             $Profile | Add-Member -NotePropertyName identity_note -NotePropertyValue "TARS-inspired, not copyrighted imitation" -Force
+        }
+        if (-not ($Profile.PSObject.Properties.Name -contains "default_model")) {
+            $Profile | Add-Member -NotePropertyName default_model -NotePropertyValue (Get-COOPERDefaultModelName) -Force
         }
         if (-not ($Profile.PSObject.Properties.Name -contains "operational_modes")) {
             $Profile | Add-Member -NotePropertyName operational_modes -NotePropertyValue @("Analyst Mode", "Operator Mode", "TARS Mode", "Overlord Mode", "Emergency Mode") -Force

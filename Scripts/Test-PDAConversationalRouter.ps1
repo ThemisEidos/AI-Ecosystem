@@ -97,6 +97,13 @@ $Cases = @(
         expected_route = "commander_briefing"
         expected_command = ""
     }
+    [pscustomobject]@{
+        name = "plain chat fallback"
+        input = "Tell me something useful about local-first routing."
+        expected_route = "fallback"
+        expected_command = ""
+        expected_default_model = "local-llama"
+    }
 )
 
 $Results = @()
@@ -128,12 +135,12 @@ foreach ($Case in $Cases) {
         $Issues.Add("Expected no recommended command but got '$($Route.recommended_command)'.")
     }
 
-        if ($Route.route_type -in @("direct_status", "direct_help", "task_lookup", "dispatch_guidance", "goal_planning", "ambiguous", "fallback")) {
-            $Direct = Get-PDAConversationalNaturalResponse -Route $Route -ConversationId $DirectConversationId -SessionId $DirectSessionId -UserId $DirectUserId -ConversationTitle $DirectTitle -Text $Case.input -Root $Root
-            if ([string]::IsNullOrWhiteSpace([string]$Direct.response_text)) {
-                $CasePassed = $false
-                $Issues.Add("Direct response text was empty.")
-            }
+    if ($Route.route_type -in @("direct_status", "direct_help", "task_lookup", "dispatch_guidance", "goal_planning", "ambiguous", "fallback")) {
+        $Direct = Get-PDAConversationalNaturalResponse -Route $Route -ConversationId $DirectConversationId -SessionId $DirectSessionId -UserId $DirectUserId -ConversationTitle $DirectTitle -Text $Case.input -Root $Root
+        if ([string]::IsNullOrWhiteSpace([string]$Direct.response_text)) {
+            $CasePassed = $false
+            $Issues.Add("Direct response text was empty.")
+        }
         if ($Route.route_type -eq "direct_status" -and $Direct.response_text -notmatch '(?i)pda is reachable|dashboard') {
             $CasePassed = $false
             $Issues.Add("Direct status response did not look like a status summary.")
@@ -161,6 +168,29 @@ foreach ($Case in $Cases) {
         if ($Route.route_type -eq "goal_planning" -and $Direct.response_text -notmatch '(?i)goal assessment|execution plan|approval path') {
             $CasePassed = $false
             $Issues.Add("Goal planning response did not look like a structured plan.")
+        }
+        if ($Route.route_type -eq "fallback") {
+            if (-not ($Direct.PSObject.Properties.Name -contains "selected_model")) {
+                $CasePassed = $false
+                $Issues.Add("Fallback response did not include selected_model.")
+            }
+            elseif ($Case.PSObject.Properties.Name -contains "expected_default_model" -and $Direct.selected_model -ne $Case.expected_default_model) {
+                $CasePassed = $false
+                $Issues.Add("Fallback response selected '$($Direct.selected_model)' instead of '$($Case.expected_default_model)'.")
+            }
+
+            if (-not ($Direct.PSObject.Properties.Name -contains "model_status")) {
+                $CasePassed = $false
+                $Issues.Add("Fallback response did not include model_status.")
+            }
+            elseif ($Direct.model_status -eq "pass" -and $Direct.response_text -match '(?i)i can help with status, briefing, blocked work, recent changes, tasks, workers, reports, memory, fabric, notebooklm, environment analysis, goal planning, research, review, and execution\.)') {
+                $CasePassed = $false
+                $Issues.Add("Fallback response returned legacy static help even though the model path succeeded.")
+            }
+            elseif ($Direct.model_status -ne "pass" -and [string]::IsNullOrWhiteSpace([string]$Direct.model_error_message)) {
+                $CasePassed = $false
+                $Issues.Add("Fallback model failure did not report a useful error.")
+            }
         }
     }
 

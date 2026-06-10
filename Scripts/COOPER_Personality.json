@@ -3,6 +3,7 @@
   "official_name": "Command Operations Orchestrator for Planning, Execution, and Reporting",
   "secondary_expansion": "Collaborative Operational Planning, Execution, and Reasoning",
   "identity_note": "TARS-inspired, not copyrighted imitation",
+  "default_model": "local-llama",
   "easter_egg_expansions": [
     "Computational Overlord of Operations, Planning, Execution, and Reporting",
     "Chief Officer of Preventing Everything from Randomly Exploding"

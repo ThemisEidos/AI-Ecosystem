@@ -11,10 +11,14 @@ $ErrorActionPreference = "Stop"
 
 $Root = Split-Path -Parent $PSScriptRoot
 $InvokeScript = Join-Path $PSScriptRoot "Invoke-PDAModel.ps1"
+$ParserPath = Join-Path $PSScriptRoot "PDA_OutputParsing.ps1"
 $RoutingLogRoot = Join-Path $Root "PDA-Logs\routing"
 
 if (-not (Test-Path -Path $InvokeScript -PathType Leaf)) {
     throw "Model invocation adapter missing: $InvokeScript"
+}
+if (Test-Path -LiteralPath $ParserPath -PathType Leaf) {
+    . $ParserPath
 }
 
 function Invoke-TestCase {
@@ -62,7 +66,10 @@ function Invoke-TestCase {
         throw "Adapter returned empty output for test case '$Name'."
     }
 
-    $Result = $JsonText | ConvertFrom-Json
+    $Result = ConvertFrom-PDAMixedJson -Text $JsonText -SourceName $InvokeScript
+    if (-not $Result) {
+        throw "Adapter output could not be parsed as JSON for test case '$Name'."
+    }
     $Issues = New-Object System.Collections.Generic.List[string]
     $Skipped = $false
 

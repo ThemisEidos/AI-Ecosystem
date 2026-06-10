@@ -81,6 +81,124 @@ function Invoke-PDAConversationalJsonScript {
     }
 }
 
+function Get-COOPERDefaultModelName {
+    param(
+        [Parameter(Mandatory = $false)]
+        [string]$Root = (Split-Path -Parent $PSScriptRoot)
+    )
+
+    $Configured = [string]$env:COOPER_DEFAULT_MODEL
+    if (-not [string]::IsNullOrWhiteSpace($Configured)) {
+        return $Configured.Trim()
+    }
+
+    if (Get-Command -Name Get-COOPERIdentity -ErrorAction SilentlyContinue) {
+        try {
+            $Identity = Get-COOPERIdentity -Root $Root
+            if ($Identity -and $Identity.PSObject.Properties.Name -contains "default_model" -and -not [string]::IsNullOrWhiteSpace([string]$Identity.default_model)) {
+                return [string]$Identity.default_model
+            }
+        }
+        catch {}
+    }
+
+    return "local-llama"
+}
+
+function Invoke-COOPERDefaultModelChat {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Text,
+
+        [Parameter(Mandatory = $false)]
+        [string]$Root = (Split-Path -Parent $PSScriptRoot)
+    )
+
+    $ModelScript = Join-Path $PSScriptRoot "Invoke-PDAModel.ps1"
+    $DefaultModel = Get-COOPERDefaultModelName -Root $Root
+    $FallbackHelp = "I can help with status, briefing, blocked work, recent changes, tasks, workers, reports, memory, Fabric, NotebookLM, environment analysis, goal planning, research, review, and execution. Ask a direct question or use /help."
+    $Result = [ordered]@{
+        status = "fail"
+        default_model = $DefaultModel
+        selected_model = $DefaultModel
+        model_status = "fail"
+        model_error_message = ""
+        routing_reason = ""
+        response_text = ""
+        next_action = "Ask /help for the command list."
+        bridge_mode = "model_fallback"
+        handoff_status = "fallback"
+        source_of_truth = "Scripts/Invoke-PDAModel.ps1"
+        model_result = $null
+        model_routing = $null
+    }
+
+    if (-not (Test-Path -LiteralPath $ModelScript -PathType Leaf)) {
+        $Result.model_error_message = "Model invocation adapter missing: $ModelScript"
+        $Result.response_text = "COOPER default model '$DefaultModel' is unavailable. $($Result.model_error_message) $FallbackHelp"
+        return [pscustomobject]$Result
+    }
+
+    try {
+        $Raw = & pwsh -NoProfile -File $ModelScript -WorkerName "cooper-chat" -TaskType "conversational" -Category "category_1" -Sensitivity "standard" -Prompt $Text -SelectedModelOverride $DefaultModel -AsJson -NoThrow 2>&1
+        $JsonText = [string]($Raw -join "`n").Trim()
+        if ([string]::IsNullOrWhiteSpace($JsonText)) {
+            $Result.model_error_message = "COOPER default model '$DefaultModel' returned empty output."
+            $Result.response_text = "COOPER default model '$DefaultModel' is unavailable. $($Result.model_error_message) $FallbackHelp"
+            return [pscustomobject]$Result
+        }
+
+        $ModelResult = ConvertFrom-PDAMixedJson -Text $JsonText -SourceName "COOPER default model"
+        if (-not $ModelResult) {
+            $Result.model_error_message = "COOPER default model '$DefaultModel' returned unparseable output."
+            $Result.raw_output = $JsonText
+            $Result.response_text = "COOPER default model '$DefaultModel' is unavailable. $($Result.model_error_message) $FallbackHelp"
+            return [pscustomobject]$Result
+        }
+
+        $Result.model_result = $ModelResult
+        if ($ModelResult.PSObject.Properties.Name -contains "routing") {
+            $Result.model_routing = $ModelResult.routing
+            if ($ModelResult.routing -and $ModelResult.routing.PSObject.Properties.Name -contains "selected_model" -and -not [string]::IsNullOrWhiteSpace([string]$ModelResult.routing.selected_model)) {
+                $Result.selected_model = [string]$ModelResult.routing.selected_model
+            }
+            if ($ModelResult.routing -and $ModelResult.routing.PSObject.Properties.Name -contains "routing_reason" -and -not [string]::IsNullOrWhiteSpace([string]$ModelResult.routing.routing_reason)) {
+                $Result.routing_reason = [string]$ModelResult.routing.routing_reason
+            }
+        }
+
+        $Result.model_status = if ($ModelResult.PSObject.Properties.Name -contains "status") { [string]$ModelResult.status } else { "unknown" }
+        $ModelResponseText = if ($ModelResult.PSObject.Properties.Name -contains "response_text") { [string]$ModelResult.response_text } else { "" }
+        $ModelNextAction = if ($ModelResult.PSObject.Properties.Name -contains "next_action") { [string]$ModelResult.next_action } else { "" }
+        $Result.model_error_message = if ($ModelResult.PSObject.Properties.Name -contains "error_message") { [string]$ModelResult.error_message } else { "" }
+
+        if ($Result.model_status -eq "pass" -and -not [string]::IsNullOrWhiteSpace($ModelResponseText)) {
+            $Result.status = "pass"
+            $Result.response_text = $ModelResponseText
+            $Result.next_action = if (-not [string]::IsNullOrWhiteSpace($ModelNextAction)) { $ModelNextAction } else { "Continue the conversation or use /help for the command list." }
+            $Result.bridge_mode = "model_chat"
+            $Result.handoff_status = "fallback"
+            $Result.model_error_message = ""
+            return [pscustomobject]$Result
+        }
+
+        if ([string]::IsNullOrWhiteSpace($Result.model_error_message)) {
+            $Result.model_error_message = "COOPER default model '$DefaultModel' did not return a usable response."
+        }
+        $Result.response_text = "COOPER default model '$DefaultModel' is unavailable. $($Result.model_error_message) $FallbackHelp"
+        $Result.next_action = "Restore the local model or ask /help for the command list."
+        $Result.bridge_mode = "model_fallback"
+        $Result.handoff_status = "fallback"
+        return [pscustomobject]$Result
+    }
+    catch {
+        $Result.model_error_message = $_.Exception.Message
+        $Result.response_text = "COOPER default model '$DefaultModel' is unavailable. $($Result.model_error_message) $FallbackHelp"
+        $Result.next_action = "Restore the local model or ask /help for the command list."
+        return [pscustomobject]$Result
+    }
+}
+
 function Test-PDAConversationalSlashCommand {
     param([Parameter(Mandatory = $true)][string]$NormalizedText)
 
@@ -458,6 +576,12 @@ function Get-PDAConversationalNaturalResponse {
         result_artifact_path     = ""
         result_artifact          = $null
         bridge_mode              = "conversational_direct"
+        default_model            = Get-COOPERDefaultModelName -Root $Root
+        selected_model           = ""
+        model_status             = ""
+        model_error_message      = ""
+        model_routing_reason     = ""
+        model_result             = $null
         goal_plan                = $null
         execution_plan           = $null
     }
@@ -770,8 +894,24 @@ function Get-PDAConversationalNaturalResponse {
             $BaseResponse.next_action = "Reply with one clear action such as review, report, status, research, execute, or goal planning."
         }
         "fallback" {
-            $BaseResponse.response_text = "I can help with status, briefing, blocked work, recent changes, tasks, workers, reports, memory, Fabric, NotebookLM, environment analysis, goal planning, research, review, and execution. Ask a direct question or use /help."
-            $BaseResponse.next_action = "Ask for a briefing, a status question, an environment inventory, a goal plan, or use /help for the full command list."
+            $ModelResult = Invoke-COOPERDefaultModelChat -Text $Text -Root $Root
+            if ($ModelResult) {
+                $BaseResponse.bridge_mode = [string]$ModelResult.bridge_mode
+                $BaseResponse.response_text = [string]$ModelResult.response_text
+                $BaseResponse.next_action = [string]$ModelResult.next_action
+                $BaseResponse.selected_model = [string]$ModelResult.selected_model
+                $BaseResponse.model_status = [string]$ModelResult.model_status
+                $BaseResponse.model_error_message = [string]$ModelResult.model_error_message
+                $BaseResponse.model_routing_reason = [string]$ModelResult.routing_reason
+                $BaseResponse.model_result = $ModelResult.model_result
+                if ([string]::IsNullOrWhiteSpace([string]$BaseResponse.model_routing_reason) -and $ModelResult.model_routing) {
+                    $BaseResponse.model_routing_reason = if ($ModelResult.model_routing.PSObject.Properties.Name -contains "routing_reason") { [string]$ModelResult.model_routing.routing_reason } else { "" }
+                }
+            }
+            else {
+                $BaseResponse.response_text = "I can help with status, briefing, blocked work, recent changes, tasks, workers, reports, memory, Fabric, NotebookLM, environment analysis, goal planning, research, review, and execution. Ask a direct question or use /help."
+                $BaseResponse.next_action = "Ask for a briefing, a status question, an environment inventory, a goal plan, or use /help for the full command list."
+            }
         }
         default {
             $BaseResponse.response_text = "I can help with status, briefing, blocked work, recent changes, tasks, workers, reports, memory, Fabric, NotebookLM, environment analysis, goal planning, research, review, and execution. Ask a direct question or use /help."

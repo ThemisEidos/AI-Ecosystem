@@ -28,7 +28,10 @@ param(
     [string]$PolicyPath,
 
     [Parameter(Mandatory = $false)]
-    [string]$Endpoint = "http://localhost:4000/v1/chat/completions"
+    [string]$Endpoint = "http://localhost:4000/v1/chat/completions",
+
+    [Parameter(Mandatory = $false)]
+    [string]$SelectedModelOverride
 )
 
 $ErrorActionPreference = "Stop"
@@ -416,6 +419,35 @@ $PrimaryModel = [string]$Route.primary_model
 $SelectedModel = [string]$Route.selected_model
 $FallbackChain = @($Route.fallback_chain | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | ForEach-Object { [string]$_ })
 $CloudAllowed = [bool]$Route.cloud_allowed
+
+if (-not [string]::IsNullOrWhiteSpace([string]$SelectedModelOverride)) {
+    $SelectedModel = [string]$SelectedModelOverride
+    $PrimaryModel = [string]$SelectedModelOverride
+    $FallbackChain = @()
+    $Route = [pscustomobject]@{
+        status = "pass"
+        policy_path = $ResolvedPolicyPath
+        routing_gateway = "litellm"
+        worker_name = $WorkerName
+        task_type = $TaskType
+        command = if (-not [string]::IsNullOrWhiteSpace($Command)) { [string]$Command } elseif (-not [string]::IsNullOrWhiteSpace($TaskType)) { "/$TaskType" } else { "" }
+        command_source = "explicit_override"
+        category = $NormalizedCategory
+        sensitivity = $NormalizedSensitivity
+        route_source = "explicit_model_override"
+        primary_model = $PrimaryModel
+        selected_model = $SelectedModel
+        fallback_chain = @()
+        model_candidates = @($SelectedModel)
+        provider_families = @()
+        routing_surface = "direct_chat"
+        cloud_allowed = $false
+        via_litellm = $true
+        routing_reason = "Explicit model override selected by COOPER default routing."
+        reason = "Explicit model override selected by COOPER default routing."
+        message = $Prompt
+    }
+}
 
 if ($NormalizedCategory -in @("category_2", "restricted_local") -and $SelectedModel -ne "local-llama") {
     throw "Category 2 and restricted_local tasks must route to local-llama only."

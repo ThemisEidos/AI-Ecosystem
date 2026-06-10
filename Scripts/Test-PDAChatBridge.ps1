@@ -141,10 +141,11 @@ $Cases = @(
         message = "blorf glarb frobnicate"
         confirm = $false
         expected_handoff = "fallback"
-        expected_response_contains = "I can help with status"
+        expected_response_contains = ""
         expected_dispatch_ready = $false
         expected_dispatch = $false
         expected_command = ""
+        expected_default_model = "local-llama"
         marker = "chat-unknown-$([guid]::NewGuid().ToString())"
     }
     [pscustomobject]@{
@@ -674,7 +675,7 @@ foreach ($Case in $Cases) {
         $Issues.Add("Expected handoff status '$($Case.expected_handoff)' but got '$($Result.handoff_status)'.")
     }
 
-    if ($Result.response_text -notlike "*$($Case.expected_response_contains)*") {
+    if (-not [string]::IsNullOrWhiteSpace([string]$Case.expected_response_contains) -and $Result.response_text -notlike "*$($Case.expected_response_contains)*") {
         $CasePassed = $false
         $Issues.Add("Response text did not include expected guidance.")
     }
@@ -741,6 +742,30 @@ foreach ($Case in $Cases) {
     if (-not ($Result.cooper_context -and $Result.cooper_context.identity -and $Result.cooper_context.identity.display_name -eq "COOPER")) {
         $CasePassed = $false
         $Issues.Add("COOPER runtime context did not include the COOPER identity summary.")
+    }
+
+    if ($Case.PSObject.Properties.Name -contains "expected_default_model") {
+        if (-not ($Result.PSObject.Properties.Name -contains "selected_model")) {
+            $CasePassed = $false
+            $Issues.Add("Fallback response did not expose selected_model.")
+        }
+        elseif ($Result.selected_model -ne $Case.expected_default_model) {
+            $CasePassed = $false
+            $Issues.Add("Expected fallback model '$($Case.expected_default_model)' but got '$($Result.selected_model)'.")
+        }
+
+        if (-not ($Result.PSObject.Properties.Name -contains "model_status")) {
+            $CasePassed = $false
+            $Issues.Add("Fallback response did not expose model_status.")
+        }
+        elseif ($Result.model_status -eq "pass" -and $Result.response_text -match '(?i)i can help with status, briefing, blocked work, recent changes, tasks, workers, reports, memory, fabric, notebooklm, environment analysis, goal planning, research, review, and execution\.)') {
+            $CasePassed = $false
+            $Issues.Add("Fallback response returned legacy static help despite a successful model route.")
+        }
+        elseif ($Result.model_status -ne "pass" -and [string]::IsNullOrWhiteSpace([string]$Result.model_error_message)) {
+            $CasePassed = $false
+            $Issues.Add("Fallback model failure did not report a useful error.")
+        }
     }
 
     if ($Case.expected_command -and $Result.recommended_command -ne $Case.expected_command) {
