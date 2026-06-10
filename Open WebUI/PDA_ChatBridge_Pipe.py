@@ -72,7 +72,7 @@ class Pipe:
         self._state_lock = asyncio.Lock()
 
     def pipes(self):
-        return [{"id": "pda_commander", "name": "COOPER"}]
+        return [{"id": "cooper", "name": "COOPER"}]
 
     async def pipe(self, body: dict, __user__: dict | None = None, __request__: Any = None) -> str:
         session_key = self._get_session_key(body, __user__)
