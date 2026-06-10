@@ -197,11 +197,55 @@ $Cases = @(
         message = "Summarize the ecosystem status."
         confirm = $false
         expected_handoff = "direct_status"
-        expected_response_contains = "dashboard is showing degraded health"
+        expected_response_contains = "Current Model: local-llama"
         expected_dispatch_ready = $false
         expected_dispatch = $false
         expected_command = "/status"
         marker = "chat-status-summary-$([guid]::NewGuid().ToString())"
+    }
+    [pscustomobject]@{
+        name = "model identity"
+        message = "What model are you running?"
+        confirm = $false
+        expected_handoff = "runtime_self_awareness"
+        expected_response_contains = "Current Model: local-llama"
+        expected_dispatch_ready = $false
+        expected_dispatch = $false
+        expected_command = ""
+        marker = "chat-model-identity-$([guid]::NewGuid().ToString())"
+    }
+    [pscustomobject]@{
+        name = "provider identity"
+        message = "Who is your provider?"
+        confirm = $false
+        expected_handoff = "runtime_self_awareness"
+        expected_response_contains = "Provider: Ollama"
+        expected_dispatch_ready = $false
+        expected_dispatch = $false
+        expected_command = ""
+        marker = "chat-provider-identity-$([guid]::NewGuid().ToString())"
+    }
+    [pscustomobject]@{
+        name = "backend identity"
+        message = "What backend are you using?"
+        confirm = $false
+        expected_handoff = "runtime_self_awareness"
+        expected_response_contains = "Backend: ollama/llama3.2"
+        expected_dispatch_ready = $false
+        expected_dispatch = $false
+        expected_command = ""
+        marker = "chat-backend-identity-$([guid]::NewGuid().ToString())"
+    }
+    [pscustomobject]@{
+        name = "self identity"
+        message = "Who are you?"
+        confirm = $false
+        expected_handoff = "runtime_self_awareness"
+        expected_response_contains = "Assistant Identity: COOPER"
+        expected_dispatch_ready = $false
+        expected_dispatch = $false
+        expected_command = ""
+        marker = "chat-self-identity-$([guid]::NewGuid().ToString())"
     }
     [pscustomobject]@{
         name = "roadmap request"
@@ -307,7 +351,7 @@ $Cases = @(
         message = "/status"
         confirm = $false
         expected_handoff = "mapped"
-        expected_response_contains = "COOPER Operator Console: Status"
+        expected_response_contains = "Current Model: local-llama"
         expected_dispatch_ready = $false
         expected_dispatch = $false
         expected_command = "/status"
@@ -390,7 +434,7 @@ if ($SkipDispatch) {
 }
 
 if ($DashboardMode) {
-    $Cases = @($Cases | Where-Object { [string]$_.name -in @("known message", "ambiguous message", "unknown message", "research request") })
+    $Cases = @($Cases | Where-Object { [string]$_.name -in @("known message", "ambiguous message", "unknown message", "research request", "model identity", "provider identity", "backend identity", "self identity") })
 }
 
 if (-not $SkipDispatch -and -not $DashboardMode) {

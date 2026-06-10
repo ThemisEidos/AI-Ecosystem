@@ -22,11 +22,15 @@ $DashboardStatusScript = Join-Path $PSScriptRoot "Get-PDADashboardStatus.ps1"
 $TaskResultScript = Join-Path $PSScriptRoot "Get-PDATaskResult.ps1"
 $MemoryCandidateSummaryScript = Join-Path $PSScriptRoot "Get-PDAMemoryCandidateSummary.ps1"
 $DispatchStatusScript = Join-Path $PSScriptRoot "Get-PDADispatchStatus.ps1"
+$RuntimeStatusScript = Join-Path $PSScriptRoot "Get-COOPERRuntimeStatus.ps1"
 $EnvironmentHelperScript = Join-Path $PSScriptRoot "PDA_Environment.ps1"
 $ExecutorRegistryScript = Join-Path $PSScriptRoot "PDA_ExecutorRegistry.ps1"
 $ParserPath = Join-Path $PSScriptRoot "PDA_OutputParsing.ps1"
 if (Test-Path -LiteralPath $ParserPath -PathType Leaf) {
     . $ParserPath
+}
+if (Test-Path -LiteralPath $RuntimeStatusScript -PathType Leaf) {
+    . $RuntimeStatusScript
 }
 if (Test-Path -LiteralPath $EnvironmentHelperScript -PathType Leaf) {
     . $EnvironmentHelperScript
@@ -221,6 +225,33 @@ function Test-PDAConversationalDirectStatus {
     )
 }
 
+function Test-PDAConversationalRuntimeSelfAwareness {
+    param([Parameter(Mandatory = $true)][string]$NormalizedText)
+
+    $Patterns = @(
+        '\bwhat model are you(?: running| using)?\b',
+        '\bwhat llm are you\b',
+        '\bwhat provider are you\b',
+        '\bwho is your provider\b',
+        '\bwhat backend are you using\b',
+        '\bwhat backend are you on\b',
+        '\bwhat are you running on\b',
+        '\bwhat version are you\b',
+        '\bwho are you\b',
+        '\bwho made you\b',
+        '\bwhat is your model\b',
+        "\bwhat's your model\b"
+    )
+
+    foreach ($Pattern in $Patterns) {
+        if ($NormalizedText -match $Pattern) {
+            return $true
+        }
+    }
+
+    return $false
+}
+
 function Test-PDAConversationalTaskLookup {
     param([Parameter(Mandatory = $true)][string]$NormalizedText)
 
@@ -377,6 +408,15 @@ function Resolve-PDAConversationalRoute {
         $Route.response_mode = "direct_answer"
         $Route.recommended_command = "/status"
         $Route.reason = "Direct status request."
+        $Route.confidence = 1
+        return [pscustomobject]$Route
+    }
+
+    if (Test-PDAConversationalRuntimeSelfAwareness -NormalizedText $Normalized) {
+        $Route.route_type = "runtime_self_awareness"
+        $Route.response_mode = "direct_answer"
+        $Route.recommended_command = ""
+        $Route.reason = "Runtime identity or backend awareness request."
         $Route.confidence = 1
         return [pscustomobject]$Route
     }
@@ -584,6 +624,7 @@ function Get-PDAConversationalNaturalResponse {
         model_result             = $null
         goal_plan                = $null
         execution_plan           = $null
+        runtime_status           = $null
     }
 
     switch ([string]$Route.route_type) {
@@ -593,14 +634,73 @@ function Get-PDAConversationalNaturalResponse {
             $QueueDepth = if ($Dashboard -and $Dashboard.PSObject.Properties.Name -contains "queue_status") { [int]$Dashboard.queue_status.queue_depth } else { 0 }
             $PendingApprovals = if ($Dashboard -and $Dashboard.PSObject.Properties.Name -contains "pending_approvals") { @($Dashboard.pending_approvals).Count } else { 0 }
             $RecentTasks = if ($Dashboard -and $Dashboard.PSObject.Properties.Name -contains "recent_tasks") { @($Dashboard.recent_tasks).Count } else { 0 }
+            $RuntimeStatus = if (Get-Command -Name Get-COOPERRuntimeStatus -ErrorAction SilentlyContinue) {
+                try {
+                    Get-COOPERRuntimeStatus -Root $Root
+                }
+                catch {
+                    $null
+                }
+            }
+            else {
+                $null
+            }
             $HealthSentence = if ($Health -eq "pass") { "PDA is reachable and healthy." } elseif ($Health -eq "warning") { "PDA is reachable, but the dashboard is showing warning-level health." } elseif ($Health -eq "degraded") { "PDA is reachable, but the dashboard is showing degraded health." } else { "PDA status is available, but the dashboard health is unknown." }
-            $BaseResponse.response_text = "{0} Queue depth is {1}, with {2} pending approvals and {3} recent tasks." -f $HealthSentence, $QueueDepth, $PendingApprovals, $RecentTasks
-            $BaseResponse.next_action = "Ask for /status to see the full operator console or ask about workers, tasks, reports, or memory."
+            $StatusLines = New-Object System.Collections.Generic.List[string]
+            $StatusLines.Add("COOPER Operator Console: Status")
+            $StatusLines.Add($HealthSentence)
+            $StatusLines.Add(("Queue depth is {0}, with {1} pending approvals and {2} recent tasks." -f $QueueDepth, $PendingApprovals, $RecentTasks))
+            if ($RuntimeStatus -and $RuntimeStatus.PSObject.Properties.Name -contains "summary_lines") {
+                foreach ($Line in @($RuntimeStatus.summary_lines)) {
+                    if (-not [string]::IsNullOrWhiteSpace([string]$Line)) {
+                        $StatusLines.Add([string]$Line)
+                    }
+                }
+            }
+            $BaseResponse.response_text = $StatusLines -join "`r`n"
+            $BaseResponse.next_action = "Ask for /status to see the full operator console or ask about workers, tasks, reports, identity, or memory."
             $BaseResponse.latest_result_response_text = $BaseResponse.response_text
         }
         "direct_help" {
             $BaseResponse.response_text = "I can check status, give you a briefing, summarize tasks, list workers, show reports, summarize memory, review memory candidates, plan goals, run Fabric patterns, create NotebookLM packages, and route governed requests. Ask a plain-language question or use /help."
             $BaseResponse.next_action = "Ask for a briefing, a status question, a goal plan, or use /help for the full command list."
+        }
+        "runtime_self_awareness" {
+            $RuntimeStatus = if (Get-Command -Name Get-COOPERRuntimeStatus -ErrorAction SilentlyContinue) {
+                try {
+                    Get-COOPERRuntimeStatus -Root $Root
+                }
+                catch {
+                    $null
+                }
+            }
+            else {
+                $null
+            }
+
+            if ($RuntimeStatus) {
+                $BaseResponse.response_text = @(
+                    "COOPER Status"
+                    ("Current Model: {0}" -f $RuntimeStatus.current_model)
+                    ("Provider: {0}" -f $RuntimeStatus.provider)
+                    ("Gateway: {0}" -f $RuntimeStatus.gateway)
+                    ("Backend: {0}" -f $RuntimeStatus.backend)
+                    ("Interface: {0}" -f $RuntimeStatus.interface)
+                    ("Assistant Identity: {0}" -f $RuntimeStatus.assistant_identity)
+                    ("Current Explosions: {0}" -f $RuntimeStatus.current_explosions)
+                ) -join "`r`n"
+                $BaseResponse.runtime_status = $RuntimeStatus
+                $BaseResponse.selected_model = [string]$RuntimeStatus.current_model
+                $BaseResponse.model_status = "bypassed"
+                $BaseResponse.model_error_message = ""
+                $BaseResponse.model_routing_reason = "Runtime self-awareness requests are answered from metadata."
+                $BaseResponse.next_action = "Ask about status, tasks, reports, or /help."
+                $BaseResponse.latest_result_response_text = $BaseResponse.response_text
+            }
+            else {
+                $BaseResponse.response_text = "COOPER runtime metadata is unavailable."
+                $BaseResponse.next_action = "Ask /status or retry once the runtime metadata helper is available."
+            }
         }
         "task_lookup" {
             $TaskResult = Invoke-PDAConversationalJsonScript -Path $TaskResultScript -Arguments @(

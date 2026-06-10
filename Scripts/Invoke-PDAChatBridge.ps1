@@ -34,6 +34,7 @@ $DecisionEngineScript = Join-Path $PSScriptRoot "PDA_DecisionEngine.ps1"
 $EnvironmentHelperScript = Join-Path $PSScriptRoot "PDA_Environment.ps1"
 $ApprovalWorkflowScript = Join-Path $PSScriptRoot "PDA_ApprovalWorkflow.ps1"
 $COOPERIdentityScript = Join-Path $PSScriptRoot "Get-COOPERIdentity.ps1"
+$COOPERRuntimeStatusScript = Join-Path $PSScriptRoot "Get-COOPERRuntimeStatus.ps1"
 . (Join-Path $PSScriptRoot "PDA_OutputParsing.ps1")
 if (Test-Path -Path $ConversationalRouterScript -PathType Leaf) {
     . $ConversationalRouterScript
@@ -49,6 +50,9 @@ if (Test-Path -Path $ApprovalWorkflowScript -PathType Leaf) {
 }
 if (Test-Path -Path $COOPERIdentityScript -PathType Leaf) {
     . $COOPERIdentityScript
+}
+if (Test-Path -Path $COOPERRuntimeStatusScript -PathType Leaf) {
+    . $COOPERRuntimeStatusScript
 }
 
 if (-not (Test-Path -Path $HandoffScript -PathType Leaf)) {
@@ -200,6 +204,18 @@ function Get-PDACommanderRuntimeContext {
         operational_modes = if ($Identity -and $Identity.PSObject.Properties.Name -contains "operational_modes") { @($Identity.operational_modes) } else { @("Analyst Mode", "Operator Mode", "TARS Mode", "Overlord Mode", "Emergency Mode") }
     }
 
+    $RuntimeStatus = if (Get-Command -Name Get-COOPERRuntimeStatus -ErrorAction SilentlyContinue) {
+        try {
+            Get-COOPERRuntimeStatus -Root $Root
+        }
+        catch {
+            $null
+        }
+    }
+    else {
+        $null
+    }
+
     return [pscustomobject]@{
         cooper_layers_loaded = [bool]$RuntimeLayers.cooper_layers_loaded
         personality_loaded = [bool]$RuntimeLayers.personality_loaded
@@ -210,6 +226,7 @@ function Get-PDACommanderRuntimeContext {
         provider_routing_available = [bool]$RuntimeLayers.provider_routing_available
         identity = $IdentitySummary
         runtime_layers = $RuntimeLayers
+        runtime_status = $RuntimeStatus
         cooper_interface = "COOPER"
         source_of_truth = "Scripts/Get-COOPERIdentity.ps1"
     }
@@ -235,6 +252,11 @@ function Add-PDACommanderRuntimeContextFields {
         capability_registry_available = [bool]$RuntimeContext.capability_registry_available
         agent_registry_available = [bool]$RuntimeContext.agent_registry_available
         cooper_context = $RuntimeContext
+        runtime_status = if ($RuntimeContext.PSObject.Properties.Name -contains "runtime_status") { $RuntimeContext.runtime_status } else { $null }
+        current_model = if ($RuntimeContext.runtime_status -and $RuntimeContext.runtime_status.PSObject.Properties.Name -contains "current_model") { [string]$RuntimeContext.runtime_status.current_model } else { "" }
+        provider = if ($RuntimeContext.runtime_status -and $RuntimeContext.runtime_status.PSObject.Properties.Name -contains "provider") { [string]$RuntimeContext.runtime_status.provider } else { "" }
+        gateway = if ($RuntimeContext.runtime_status -and $RuntimeContext.runtime_status.PSObject.Properties.Name -contains "gateway") { [string]$RuntimeContext.runtime_status.gateway } else { "" }
+        interface = if ($RuntimeContext.runtime_status -and $RuntimeContext.runtime_status.PSObject.Properties.Name -contains "interface") { [string]$RuntimeContext.runtime_status.interface } else { "" }
     }
 
     foreach ($Entry in $Fields.GetEnumerator()) {
@@ -851,6 +873,27 @@ if (Get-Command -Name Resolve-PDAConversationalRoute -ErrorAction SilentlyContin
                 $DirectResult = Set-PDABridgeDecisionMetadata -Result $DirectResult -RouteType ([string]$ConversationRoute.route_type) -Decision $script:PDACommanderDecision
                 Invoke-PDAConversationStateUpdate -ConversationId $ConversationId -SessionId $SessionId -UserId $UserId -ConversationTitle $ConversationTitle -Message $Message -TaskId ([string]$DirectResult.latest_task_id) -TaskStatus ([string]$DirectResult.latest_task_status) -TaskFilePath "" -ApprovalFilePath "" -ResultPath ([string]$DirectResult.latest_result_path) -ResultSummary "" -BridgeStatus ([string]$DirectResult.bridge_status) -DispatchStatus ([string]$DirectResult.dispatch_status) -NextAction ([string]$DirectResult.next_action) -ResponseText ([string]$DirectResult.response_text) -RecommendedCommand ([string]$DirectResult.recommended_command) -Intent ([string]$DirectResult.intent) -Confidence ([double]$DirectResult.confidence) -RequiresConfirmation:$false | Out-Null
 
+                $DirectResult = Add-PDACommanderRuntimeContextFields -Result $DirectResult
+
+                if ($AsJson) {
+                    $DirectResult | ConvertTo-Json -Depth 20
+                    return
+                }
+
+                Write-Host "[OK] PDA chat bridge result:"
+                Write-Host ("Response text        : {0}" -f $DirectResult.response_text)
+                Write-Host ("Recommended command  : {0}" -f $(if ($DirectResult.recommended_command) { $DirectResult.recommended_command } else { "(none)" }))
+                Write-Host ("Intent               : {0}" -f $(if ($DirectResult.intent) { $DirectResult.intent } else { "(none)" }))
+                Write-Host ("Confidence           : {0}" -f $DirectResult.confidence)
+                Write-Host ("Dispatch ready       : {0}" -f $DirectResult.dispatch_ready)
+                Write-Host ("Dispatch status      : {0}" -f $DirectResult.dispatch_status)
+                Write-Host ("Next action          : {0}" -f $DirectResult.next_action)
+                return
+            }
+            "runtime_self_awareness" {
+                $DirectResult = Get-PDAConversationalNaturalResponse -Route $ConversationRoute -ConversationId $ConversationId -SessionId $SessionId -UserId $UserId -ConversationTitle $ConversationTitle -Text $Message -Root $Root
+                $DirectResult = Set-PDABridgeDecisionMetadata -Result $DirectResult -RouteType ([string]$ConversationRoute.route_type) -Decision $script:PDACommanderDecision
+                Invoke-PDAConversationStateUpdate -ConversationId $ConversationId -SessionId $SessionId -UserId $UserId -ConversationTitle $ConversationTitle -Message $Message -TaskId "" -TaskStatus "" -TaskFilePath "" -ApprovalFilePath "" -ResultPath "" -ResultSummary "" -BridgeStatus ([string]$DirectResult.bridge_status) -DispatchStatus ([string]$DirectResult.dispatch_status) -NextAction ([string]$DirectResult.next_action) -ResponseText ([string]$DirectResult.response_text) -RecommendedCommand "" -Intent ([string]$DirectResult.intent) -Confidence ([double]$DirectResult.confidence) -RequiresConfirmation:$false | Out-Null
                 $DirectResult = Add-PDACommanderRuntimeContextFields -Result $DirectResult
 
                 if ($AsJson) {

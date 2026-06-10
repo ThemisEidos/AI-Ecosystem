@@ -50,6 +50,30 @@ $Cases = @(
         expected_command = "/status"
     }
     [pscustomobject]@{
+        name = "model identity"
+        input = "What model are you running?"
+        expected_route = "runtime_self_awareness"
+        expected_command = ""
+    }
+    [pscustomobject]@{
+        name = "provider identity"
+        input = "Who is your provider?"
+        expected_route = "runtime_self_awareness"
+        expected_command = ""
+    }
+    [pscustomobject]@{
+        name = "backend identity"
+        input = "What backend are you using?"
+        expected_route = "runtime_self_awareness"
+        expected_command = ""
+    }
+    [pscustomobject]@{
+        name = "self identity"
+        input = "Who are you?"
+        expected_route = "runtime_self_awareness"
+        expected_command = ""
+    }
+    [pscustomobject]@{
         name = "roadmap request"
         input = "Build me a roadmap."
         expected_route = "goal_planning"
@@ -113,6 +137,12 @@ $DirectConversationId = "router-test-conv"
 $DirectSessionId = "router-test-sess"
 $DirectUserId = "router-test-user"
 $DirectTitle = "PDA Conversational Router Test"
+$OriginalDefaultModelChat = if (Get-Command -Name Invoke-COOPERDefaultModelChat -ErrorAction SilentlyContinue) {
+    (Get-Item function:Invoke-COOPERDefaultModelChat).ScriptBlock
+}
+else {
+    $null
+}
 
 foreach ($Case in $Cases) {
     $Route = Resolve-PDAConversationalRoute -Text $Case.input -Root $Root
@@ -191,6 +221,56 @@ foreach ($Case in $Cases) {
                 $CasePassed = $false
                 $Issues.Add("Fallback model failure did not report a useful error.")
             }
+        }
+    }
+    elseif ($Route.route_type -eq "runtime_self_awareness") {
+        $script:COOPERModelInvocationCount = 0
+        $StubScript = {
+            param(
+                [Parameter(Mandatory = $true)][string]$Text,
+                [Parameter(Mandatory = $false)][string]$Root
+            )
+
+            $script:COOPERModelInvocationCount++
+            return [pscustomobject]@{
+                status = "pass"
+                default_model = "stub"
+                selected_model = "stub"
+                model_status = "pass"
+                model_error_message = ""
+                routing_reason = "stub"
+                response_text = "stub"
+                next_action = "stub"
+                bridge_mode = "model_chat"
+                handoff_status = "fallback"
+                source_of_truth = "test_stub"
+            }
+        }
+
+        try {
+            Set-Item -Path function:Invoke-COOPERDefaultModelChat -Value $StubScript
+            $Direct = Get-PDAConversationalNaturalResponse -Route $Route -ConversationId $DirectConversationId -SessionId $DirectSessionId -UserId $DirectUserId -ConversationTitle $DirectTitle -Text $Case.input -Root $Root
+        }
+        finally {
+            if ($null -ne $OriginalDefaultModelChat) {
+                Set-Item -Path function:Invoke-COOPERDefaultModelChat -Value $OriginalDefaultModelChat
+            }
+            else {
+                Remove-Item -Path function:Invoke-COOPERDefaultModelChat -ErrorAction SilentlyContinue
+            }
+        }
+
+        if ([string]::IsNullOrWhiteSpace([string]$Direct.response_text)) {
+            $CasePassed = $false
+            $Issues.Add("Runtime self-awareness response text was empty.")
+        }
+        if ($Direct.response_text -notmatch '(?i)Current Model: local-llama|Assistant Identity: COOPER|Provider: Ollama|Gateway: LiteLLM|Backend: ollama/llama3\.2') {
+            $CasePassed = $false
+            $Issues.Add("Runtime self-awareness response did not include the expected metadata.")
+        }
+        if ($script:COOPERModelInvocationCount -ne 0) {
+            $CasePassed = $false
+            $Issues.Add("Runtime self-awareness response should bypass model invocation.")
         }
     }
 
