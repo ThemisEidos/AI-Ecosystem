@@ -12,8 +12,10 @@ flowchart TD
     D --> E["Agent Selection"]
     E --> F["Provider Selection"]
     F --> G["Execution Plan"]
-    G --> H["Approval Check"]
-    H --> I["Execution"]
+    G --> H["Tool Resolution"]
+    H --> I["Execution Request"]
+    I --> J["Approval Check"]
+    J --> K["Execution"]
 ```
 
 ## Routing Inputs
@@ -264,6 +266,64 @@ Agents should choose tools based on task requirements, not model popularity.
 - Browser is for inspection, validation, and local targets.
 - MCP tools should stay bounded and auditable.
 
+## Tool Resolution
+
+Tool resolution is the deterministic layer that sits after provider selection and execution planning.
+
+### Inputs
+
+- capability
+- agent
+- provider
+- category
+
+### Outputs
+
+- selected_tool
+- candidate_tools
+- routing_reason
+- approval_required
+- restricted_local_only
+
+### Decision Rules
+
+1. Match the capability to the registered tool set first.
+2. Prefer the agent-compatible tool order when multiple tools fit.
+3. Enforce Category 2 local-only routing before final selection.
+4. Preserve provider context in the routing reason without changing governance.
+5. Never execute a tool during resolution.
+
+## Execution Request
+
+The execution request layer packages the routed work into a governed request record.
+
+### Purpose
+
+- Translate capability, agent, provider, and tool into an auditable request package.
+- Persist the request locally so it survives restarts.
+- Reference approval records without changing approval authority.
+
+### Outputs
+
+- request_id
+- request_type
+- capability
+- agent
+- provider
+- tool
+- approval_required
+- restricted_local_only
+- expected_inputs
+- expected_outputs
+- execution_plan_id
+
+### Rules
+
+- Execution requests are preparatory only.
+- Execution requests do not dispatch workflows.
+- Execution requests do not call models.
+- Approval remains authoritative.
+
 ## Worker Evolution Plan
 
 ### Current
@@ -312,8 +372,10 @@ The long-term path is:
 5. Agent Selection
 6. Model / Provider Selection
 7. Execution Plan
-8. Approval Check
-9. Execution
+8. Tool Resolution
+9. Execution Request
+10. Approval Check
+11. Execution
 
 ## Routing Examples
 

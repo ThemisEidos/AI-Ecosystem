@@ -219,6 +219,30 @@ The execution planning layer sits after capability, agent, and provider routing 
 - Category 2 plans must remain local-only.
 - A planning result is advisory until the approval workflow authorizes execution.
 
+### Tool Resolution
+
+After the execution plan is selected, COOPER should resolve the most appropriate tool surface for the work:
+
+- choose the tool deterministically from capability and agent context
+- keep Category 2 work on local-only tools
+- preserve candidate tools and routing rationale for auditability
+- never execute the tool during resolution
+
+### Execution Request Foundation
+
+COOPER should package routed work into a governed execution request before any approval:
+
+- request type
+- capability
+- agent
+- provider
+- tool
+- expected inputs and outputs
+- execution plan reference
+- approval reference
+
+Execution requests are preparation artifacts only. They do not dispatch workflows, invoke models, or modify files.
+
 ## 7. Implementation Roadmap
 
 Recommended order:
@@ -252,11 +276,15 @@ Recommended order:
 
 - Let agents reason over tool harnesses without replacing governance.
 
-### H. Subagent profiles
+### H. Execution request foundation
+
+- Add governed work packages that record what would happen without executing it.
+
+### I. Subagent profiles
 
 - Introduce isolated profile boundaries for specialized agents.
 
-### I. Messaging gateway
+### J. Messaging gateway
 
 - Add a future message broker or gateway after the orchestration model is stable.
 
@@ -291,4 +319,4 @@ Recommended order:
 
 ## Summary
 
-COOPER’s next phase should preserve the current governed runtime while adding the architectural foundation for personality-aware orchestration, reusable memory, and specialized agent routing. Governance stays first; autonomy comes later.
+COOPER’s next phase should preserve the current governed runtime while adding the architectural foundation for personality-aware orchestration, reusable memory, specialized agent routing, and governed execution requests. Governance stays first; autonomy comes later.

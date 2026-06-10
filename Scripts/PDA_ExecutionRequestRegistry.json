@@ -1,0 +1,366 @@
+{
+  "schema_version": "1.0",
+  "registry_name": "PDA Execution Request Registry",
+  "generated_at": "2026-06-09T00:00:00Z",
+  "request_templates": [
+    {
+      "request_type": "research_execution_request",
+      "capability": "research",
+      "agent": "research_agent",
+      "provider": "gemini",
+      "tool": "browser",
+      "approval_required": false,
+      "restricted_local_only": false,
+      "category_allowed": [
+        "category_1"
+      ],
+      "execution_plan_id": "research_standard",
+      "expected_inputs": [
+        "search_scope",
+        "source_targets",
+        "context_notes"
+      ],
+      "expected_outputs": [
+        "research_summary",
+        "citations",
+        "source_notes"
+      ],
+      "notes": "Research request packages prepare source discovery and synthesis without executing work."
+    },
+    {
+      "request_type": "source_discovery_execution_request",
+      "capability": "source_discovery",
+      "agent": "research_agent",
+      "provider": "gemini",
+      "tool": "browser",
+      "approval_required": false,
+      "restricted_local_only": false,
+      "category_allowed": [
+        "category_1"
+      ],
+      "execution_plan_id": "source_discovery_standard",
+      "expected_inputs": [
+        "search_scope",
+        "source_filters",
+        "notes"
+      ],
+      "expected_outputs": [
+        "source_inventory",
+        "links",
+        "citations"
+      ],
+      "notes": "Source discovery requests remain planning-only."
+    },
+    {
+      "request_type": "large_context_analysis_execution_request",
+      "capability": "large_context_analysis",
+      "agent": "research_agent",
+      "provider": "gemini",
+      "tool": "browser",
+      "approval_required": false,
+      "restricted_local_only": false,
+      "category_allowed": [
+        "category_1"
+      ],
+      "execution_plan_id": "large_context_analysis_standard",
+      "expected_inputs": [
+        "documents",
+        "context_notes",
+        "comparison_scope"
+      ],
+      "expected_outputs": [
+        "analysis_summary",
+        "briefing",
+        "comparison_notes"
+      ],
+      "notes": "Large context analysis packages are advisory and non-executing."
+    },
+    {
+      "request_type": "report_writing_execution_request",
+      "capability": "report_writing",
+      "agent": "reporting_agent",
+      "provider": "claude",
+      "tool": "open_webui",
+      "approval_required": false,
+      "restricted_local_only": false,
+      "category_allowed": [
+        "category_1"
+      ],
+      "execution_plan_id": "report_writing_standard",
+      "expected_inputs": [
+        "outline",
+        "source_notes",
+        "tone_guidance"
+      ],
+      "expected_outputs": [
+        "report",
+        "markdown",
+        "briefing"
+      ],
+      "notes": "Report writing packages produce the governed drafting brief only."
+    },
+    {
+      "request_type": "report_review_execution_request",
+      "capability": "report_review",
+      "agent": "review_agent",
+      "provider": "claude",
+      "tool": "codex",
+      "approval_required": false,
+      "restricted_local_only": false,
+      "category_allowed": [
+        "category_1"
+      ],
+      "execution_plan_id": "report_review_standard",
+      "expected_inputs": [
+        "draft",
+        "review_scope",
+        "acceptance_criteria"
+      ],
+      "expected_outputs": [
+        "review_notes",
+        "findings",
+        "recommendations"
+      ],
+      "notes": "Review requests stay separate from implementation."
+    },
+    {
+      "request_type": "code_implementation_execution_request",
+      "capability": "code_implementation",
+      "agent": "build_agent",
+      "provider": "claude_code",
+      "tool": "claude_code",
+      "approval_required": true,
+      "restricted_local_only": false,
+      "category_allowed": [
+        "category_1"
+      ],
+      "execution_plan_id": "code_implementation_standard",
+      "expected_inputs": [
+        "repo_context",
+        "patch_scope",
+        "test_notes"
+      ],
+      "expected_outputs": [
+        "patch",
+        "implementation_summary",
+        "test_notes"
+      ],
+      "notes": "Code implementation requests prepare governed repo work."
+    },
+    {
+      "request_type": "code_review_execution_request",
+      "capability": "code_review",
+      "agent": "review_agent",
+      "provider": "codex",
+      "tool": "codex",
+      "approval_required": false,
+      "restricted_local_only": false,
+      "category_allowed": [
+        "category_1"
+      ],
+      "execution_plan_id": "code_review_standard",
+      "expected_inputs": [
+        "diff",
+        "context",
+        "review_scope"
+      ],
+      "expected_outputs": [
+        "review_notes",
+        "findings",
+        "recommendations"
+      ],
+      "notes": "Code review requests are inspection-only."
+    },
+    {
+      "request_type": "repo_modification_execution_request",
+      "capability": "repo_modification",
+      "agent": "build_agent",
+      "provider": "claude_code",
+      "tool": "file_system",
+      "approval_required": true,
+      "restricted_local_only": false,
+      "category_allowed": [
+        "category_1"
+      ],
+      "execution_plan_id": "repo_modification_standard",
+      "expected_inputs": [
+        "repo_context",
+        "file_list",
+        "change_scope"
+      ],
+      "expected_outputs": [
+        "patch",
+        "summary",
+        "test_notes"
+      ],
+      "notes": "Repository modifications are governed and approval-gated."
+    },
+    {
+      "request_type": "automation_design_execution_request",
+      "capability": "automation_design",
+      "agent": "automation_agent",
+      "provider": "claude_code",
+      "tool": "n8n",
+      "approval_required": true,
+      "restricted_local_only": false,
+      "category_allowed": [
+        "category_1"
+      ],
+      "execution_plan_id": "automation_design_standard",
+      "expected_inputs": [
+        "workflow_scope",
+        "trigger_notes",
+        "state_model"
+      ],
+      "expected_outputs": [
+        "workflow",
+        "json",
+        "summary"
+      ],
+      "notes": "Workflow design requests do not create workflows."
+    },
+    {
+      "request_type": "n8n_workflow_design_execution_request",
+      "capability": "n8n_workflow_design",
+      "agent": "automation_agent",
+      "provider": "claude_code",
+      "tool": "n8n",
+      "approval_required": true,
+      "restricted_local_only": false,
+      "category_allowed": [
+        "category_1"
+      ],
+      "execution_plan_id": "n8n_workflow_design_standard",
+      "expected_inputs": [
+        "node_map",
+        "workflow_scope",
+        "validation_notes"
+      ],
+      "expected_outputs": [
+        "workflow",
+        "json",
+        "summary"
+      ],
+      "notes": "n8n workflow design requests remain planning-only."
+    },
+    {
+      "request_type": "local_restricted_analysis_execution_request",
+      "capability": "local_restricted_analysis",
+      "agent": "restricted_agent",
+      "provider": "local-llama",
+      "tool": "local_llm",
+      "approval_required": true,
+      "restricted_local_only": true,
+      "category_allowed": [
+        "category_2"
+      ],
+      "execution_plan_id": "local_restricted_analysis_local_only",
+      "expected_inputs": [
+        "local_documents",
+        "restricted_scope",
+        "safety_notes"
+      ],
+      "expected_outputs": [
+        "restricted_analysis",
+        "local_summary"
+      ],
+      "notes": "Restricted analysis must remain on the local boundary."
+    },
+    {
+      "request_type": "file_processing_execution_request",
+      "capability": "file_processing",
+      "agent": "restricted_agent",
+      "provider": "local-llama",
+      "tool": "file_system",
+      "approval_required": false,
+      "restricted_local_only": true,
+      "category_allowed": [
+        "category_2"
+      ],
+      "execution_plan_id": "file_processing_local_only",
+      "expected_inputs": [
+        "file_paths",
+        "processing_notes",
+        "local_scope"
+      ],
+      "expected_outputs": [
+        "file_summary",
+        "extract",
+        "markdown"
+      ],
+      "notes": "Local file processing stays bounded and auditable."
+    },
+    {
+      "request_type": "dashboard_status_generation_execution_request",
+      "capability": "dashboard_status_generation",
+      "agent": "restricted_agent",
+      "provider": "local-llama",
+      "tool": "powershell",
+      "approval_required": false,
+      "restricted_local_only": true,
+      "category_allowed": [
+        "category_2"
+      ],
+      "execution_plan_id": "dashboard_status_generation_local_only",
+      "expected_inputs": [
+        "status_inputs",
+        "snapshot_scope",
+        "local_state"
+      ],
+      "expected_outputs": [
+        "status_report",
+        "summary",
+        "markdown"
+      ],
+      "notes": "Status generation reads local state only."
+    },
+    {
+      "request_type": "memory_summarization_execution_request",
+      "capability": "memory_summarization",
+      "agent": "restricted_agent",
+      "provider": "local-llama",
+      "tool": "obsidian",
+      "approval_required": false,
+      "restricted_local_only": true,
+      "category_allowed": [
+        "category_2"
+      ],
+      "execution_plan_id": "memory_summarization_local_only",
+      "expected_inputs": [
+        "memory_candidates",
+        "lesson_notes",
+        "local_scope"
+      ],
+      "expected_outputs": [
+        "memory_packet",
+        "summary",
+        "index_entry"
+      ],
+      "notes": "Memory summarization stays curated and local."
+    },
+    {
+      "request_type": "skill_promotion_review_execution_request",
+      "capability": "skill_promotion_review",
+      "agent": "review_agent",
+      "provider": "local-llama",
+      "tool": "fabric",
+      "approval_required": false,
+      "restricted_local_only": true,
+      "category_allowed": [
+        "category_2"
+      ],
+      "execution_plan_id": "skill_promotion_review_local_only",
+      "expected_inputs": [
+        "candidate_workflow",
+        "review_scope",
+        "local_notes"
+      ],
+      "expected_outputs": [
+        "skill_candidate_review",
+        "recommendation",
+        "summary"
+      ],
+      "notes": "Skill promotion review remains bounded and advisory."
+    }
+  ]
+}

@@ -1,0 +1,485 @@
+{
+  "schema_version": "1.0",
+  "registry_name": "PDA Runtime Tool Registry",
+  "generated_at": "2026-06-09T00:00:00Z",
+  "tools": [
+    {
+      "tool_id": "powershell",
+      "display_name": "PowerShell",
+      "description": "Local command harness for deterministic repository and system operations.",
+      "supported_capabilities": [
+        "research",
+        "source_discovery",
+        "large_context_analysis",
+        "report_writing",
+        "report_review",
+        "code_implementation",
+        "code_review",
+        "repo_modification",
+        "automation_design",
+        "n8n_workflow_design",
+        "local_restricted_analysis",
+        "file_processing",
+        "dashboard_status_generation",
+        "memory_summarization",
+        "skill_promotion_review"
+      ],
+      "supported_agents": [
+        "research_agent",
+        "reporting_agent",
+        "review_agent",
+        "build_agent",
+        "automation_agent",
+        "restricted_agent"
+      ],
+      "local_only": true,
+      "category_allowed": [
+        "category_1",
+        "category_2"
+      ],
+      "approval_required": true,
+      "risk_level": "medium",
+      "inputs": [
+        "command",
+        "path",
+        "parameters",
+        "json",
+        "markdown"
+      ],
+      "outputs": [
+        "stdout",
+        "stderr",
+        "json",
+        "markdown",
+        "status"
+      ],
+      "notes": "Universal local harness; does not reason or dispatch work on its own."
+    },
+    {
+      "tool_id": "python",
+      "display_name": "Python",
+      "description": "Local scripting harness for parsing, transforms, and bounded analysis.",
+      "supported_capabilities": [
+        "research",
+        "source_discovery",
+        "large_context_analysis",
+        "report_writing",
+        "report_review",
+        "code_implementation",
+        "code_review",
+        "repo_modification",
+        "automation_design",
+        "n8n_workflow_design",
+        "local_restricted_analysis",
+        "file_processing",
+        "dashboard_status_generation",
+        "memory_summarization",
+        "skill_promotion_review"
+      ],
+      "supported_agents": [
+        "research_agent",
+        "reporting_agent",
+        "review_agent",
+        "build_agent",
+        "automation_agent",
+        "restricted_agent"
+      ],
+      "local_only": true,
+      "category_allowed": [
+        "category_1",
+        "category_2"
+      ],
+      "approval_required": true,
+      "risk_level": "medium",
+      "inputs": [
+        "script",
+        "data",
+        "json",
+        "csv",
+        "markdown"
+      ],
+      "outputs": [
+        "stdout",
+        "json",
+        "markdown",
+        "artifact"
+      ],
+      "notes": "Local scripting only; best for transforms and bounded parsing."
+    },
+    {
+      "tool_id": "n8n",
+      "display_name": "n8n",
+      "description": "Deterministic workflow orchestrator for explicit automation graphs.",
+      "supported_capabilities": [
+        "automation_design",
+        "n8n_workflow_design"
+      ],
+      "supported_agents": [
+        "automation_agent",
+        "build_agent"
+      ],
+      "local_only": true,
+      "category_allowed": [
+        "category_1"
+      ],
+      "approval_required": true,
+      "risk_level": "high",
+      "inputs": [
+        "workflow_definition",
+        "node_configuration",
+        "json"
+      ],
+      "outputs": [
+        "workflow_json",
+        "execution_summary",
+        "validation_notes"
+      ],
+      "notes": "Workflow specification surface only; no execution is performed here."
+    },
+    {
+      "tool_id": "browser",
+      "display_name": "Browser",
+      "description": "Local browser inspection surface for verification, research, and review.",
+      "supported_capabilities": [
+        "research",
+        "source_discovery",
+        "large_context_analysis",
+        "report_review",
+        "skill_promotion_review"
+      ],
+      "supported_agents": [
+        "research_agent",
+        "reporting_agent",
+        "review_agent",
+        "restricted_agent"
+      ],
+      "local_only": true,
+      "category_allowed": [
+        "category_1",
+        "category_2"
+      ],
+      "approval_required": false,
+      "risk_level": "low",
+      "inputs": [
+        "url",
+        "query",
+        "page_state",
+        "screenshot"
+      ],
+      "outputs": [
+        "observations",
+        "captures",
+        "notes",
+        "references"
+      ],
+      "notes": "Inspection-only surface; it can observe local or controlled web targets."
+    },
+    {
+      "tool_id": "lite_llm",
+      "display_name": "LiteLLM",
+      "description": "Provider routing layer for governed model access and local-first escalation.",
+      "supported_capabilities": [
+        "research",
+        "source_discovery",
+        "large_context_analysis",
+        "report_writing",
+        "report_review",
+        "code_review",
+        "code_implementation",
+        "automation_design",
+        "n8n_workflow_design"
+      ],
+      "supported_agents": [
+        "research_agent",
+        "reporting_agent",
+        "review_agent",
+        "build_agent",
+        "automation_agent"
+      ],
+      "local_only": false,
+      "category_allowed": [
+        "category_1"
+      ],
+      "approval_required": true,
+      "risk_level": "medium",
+      "inputs": [
+        "messages",
+        "model",
+        "provider_policy"
+      ],
+      "outputs": [
+        "model_response",
+        "routing_metadata",
+        "usage_summary"
+      ],
+      "notes": "Provider routing is not a governance authority."
+    },
+    {
+      "tool_id": "claude_code",
+      "display_name": "Claude Code",
+      "description": "Code-oriented reasoning and patch synthesis surface.",
+      "supported_capabilities": [
+        "code_implementation",
+        "repo_modification",
+        "automation_design",
+        "n8n_workflow_design"
+      ],
+      "supported_agents": [
+        "build_agent",
+        "automation_agent"
+      ],
+      "local_only": false,
+      "category_allowed": [
+        "category_1"
+      ],
+      "approval_required": true,
+      "risk_level": "high",
+      "inputs": [
+        "repo_context",
+        "patch_plan",
+        "files"
+      ],
+      "outputs": [
+        "patch",
+        "diff",
+        "summary"
+      ],
+      "notes": "Preferred implementation path for governed build work."
+    },
+    {
+      "tool_id": "codex",
+      "display_name": "Codex",
+      "description": "Code review and implementation fallback surface.",
+      "supported_capabilities": [
+        "code_implementation",
+        "code_review",
+        "repo_modification",
+        "report_review"
+      ],
+      "supported_agents": [
+        "build_agent",
+        "review_agent"
+      ],
+      "local_only": false,
+      "category_allowed": [
+        "category_1"
+      ],
+      "approval_required": true,
+      "risk_level": "high",
+      "inputs": [
+        "diff",
+        "instructions",
+        "context"
+      ],
+      "outputs": [
+        "review",
+        "patch",
+        "summary"
+      ],
+      "notes": "Secondary implementation and review path."
+    },
+    {
+      "tool_id": "gemini_cli",
+      "display_name": "Gemini CLI",
+      "description": "Cloud research and synthesis surface for broad context work.",
+      "supported_capabilities": [
+        "research",
+        "source_discovery",
+        "large_context_analysis",
+        "report_writing"
+      ],
+      "supported_agents": [
+        "research_agent",
+        "reporting_agent"
+      ],
+      "local_only": false,
+      "category_allowed": [
+        "category_1"
+      ],
+      "approval_required": true,
+      "risk_level": "medium",
+      "inputs": [
+        "prompt",
+        "sources",
+        "context"
+      ],
+      "outputs": [
+        "synthesis",
+        "citations",
+        "summary"
+      ],
+      "notes": "Cloud research surface; not allowed for Category 2."
+    },
+    {
+      "tool_id": "open_webui",
+      "display_name": "Open WebUI",
+      "description": "Operator-facing drafting and review surface.",
+      "supported_capabilities": [
+        "report_writing",
+        "report_review",
+        "dashboard_status_generation"
+      ],
+      "supported_agents": [
+        "reporting_agent",
+        "review_agent",
+        "restricted_agent"
+      ],
+      "local_only": true,
+      "category_allowed": [
+        "category_1",
+        "category_2"
+      ],
+      "approval_required": false,
+      "risk_level": "low",
+      "inputs": [
+        "prompt",
+        "conversation_state",
+        "notes"
+      ],
+      "outputs": [
+        "draft",
+        "review_notes",
+        "operator_briefing"
+      ],
+      "notes": "Interface surface for drafting and review."
+    },
+    {
+      "tool_id": "local_llm",
+      "display_name": "Local LLM",
+      "description": "Local model surface for restricted analysis and bounded summaries.",
+      "supported_capabilities": [
+        "local_restricted_analysis",
+        "file_processing",
+        "dashboard_status_generation",
+        "memory_summarization"
+      ],
+      "supported_agents": [
+        "restricted_agent",
+        "review_agent"
+      ],
+      "local_only": true,
+      "category_allowed": [
+        "category_2"
+      ],
+      "approval_required": true,
+      "risk_level": "high",
+      "inputs": [
+        "prompt",
+        "documents",
+        "local_context"
+      ],
+      "outputs": [
+        "analysis",
+        "summary",
+        "structured_notes"
+      ],
+      "notes": "Local-only model surface for restricted work."
+    },
+    {
+      "tool_id": "file_system",
+      "display_name": "File System",
+      "description": "Local file access surface for repository and artifact manipulation.",
+      "supported_capabilities": [
+        "code_implementation",
+        "repo_modification",
+        "automation_design",
+        "n8n_workflow_design",
+        "local_restricted_analysis",
+        "file_processing",
+        "dashboard_status_generation",
+        "memory_summarization"
+      ],
+      "supported_agents": [
+        "build_agent",
+        "automation_agent",
+        "restricted_agent"
+      ],
+      "local_only": true,
+      "category_allowed": [
+        "category_1",
+        "category_2"
+      ],
+      "approval_required": true,
+      "risk_level": "high",
+      "inputs": [
+        "path",
+        "content",
+        "fs_operation"
+      ],
+      "outputs": [
+        "files",
+        "paths",
+        "reports"
+      ],
+      "notes": "Local file access only; no remote data exchange."
+    },
+    {
+      "tool_id": "obsidian",
+      "display_name": "Obsidian",
+      "description": "Vault-first note and memory surface for bounded documentation work.",
+      "supported_capabilities": [
+        "report_writing",
+        "memory_summarization",
+        "skill_promotion_review",
+        "dashboard_status_generation"
+      ],
+      "supported_agents": [
+        "reporting_agent",
+        "review_agent",
+        "restricted_agent"
+      ],
+      "local_only": true,
+      "category_allowed": [
+        "category_1",
+        "category_2"
+      ],
+      "approval_required": false,
+      "risk_level": "low",
+      "inputs": [
+        "note",
+        "vault_path",
+        "markdown"
+      ],
+      "outputs": [
+        "note",
+        "index_entry",
+        "summary"
+      ],
+      "notes": "Best for bounded local notes and memory artifacts."
+    },
+    {
+      "tool_id": "fabric",
+      "display_name": "Fabric",
+      "description": "Patterned local synthesis surface for structured outputs and skill review.",
+      "supported_capabilities": [
+        "research",
+        "report_writing",
+        "report_review",
+        "skill_promotion_review"
+      ],
+      "supported_agents": [
+        "research_agent",
+        "reporting_agent",
+        "review_agent"
+      ],
+      "local_only": true,
+      "category_allowed": [
+        "category_1",
+        "category_2"
+      ],
+      "approval_required": false,
+      "risk_level": "low",
+      "inputs": [
+        "pattern_name",
+        "input_text",
+        "context"
+      ],
+      "outputs": [
+        "structured_output",
+        "summary",
+        "pattern_notes"
+      ],
+      "notes": "Useful for repeatable report and review patterns."
+    }
+  ]
+}
