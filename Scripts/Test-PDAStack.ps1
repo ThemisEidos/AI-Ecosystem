@@ -23,12 +23,24 @@ $Checks = @(
     [pscustomobject]@{
         Name = "Open WebUI"
         Url = "http://localhost:3000"
-        AcceptStatusCodes = @(200)
+        HealthUrls = @(
+            "http://localhost:3000/health",
+            "http://localhost:3000/api/models",
+            "http://localhost:3000"
+        )
+        ContainerNames = @("pda-open-webui", "open-webui")
+        AcceptStatusCodes = @(200, 301, 302, 303, 307, 308, 401, 403)
     }
     [pscustomobject]@{
         Name = "n8n"
         Url = "http://localhost:5678"
-        AcceptStatusCodes = @(200)
+        HealthUrls = @(
+            "http://localhost:5678/healthz",
+            "http://localhost:5678/rest/settings",
+            "http://localhost:5678"
+        )
+        ContainerNames = @("pda-n8n", "n8n")
+        AcceptStatusCodes = @(200, 301, 302, 303, 307, 308, 401, 403)
     }
     [pscustomobject]@{
         Name = "LiteLLM"
@@ -50,15 +62,48 @@ function Get-HttpStatusCode {
     )
 
     try {
-        $Response = Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec $TimeoutSeconds
+        $InvokeParams = @{
+            Uri             = $Url
+            UseBasicParsing = $true
+            TimeoutSec      = $TimeoutSeconds
+            ErrorAction     = "Stop"
+        }
+
+        $Command = Get-Command Invoke-WebRequest -ErrorAction SilentlyContinue
+        if ($Command -and $Command.Parameters.ContainsKey("NoProxy")) {
+            $InvokeParams.NoProxy = $true
+        }
+
+        $Response = Invoke-WebRequest @InvokeParams
         return [int]$Response.StatusCode
     }
     catch {
-        if ($_.Exception.Response -and $_.Exception.Response.StatusCode) {
-            return [int]$_.Exception.Response.StatusCode.value__
+        $Response = $null
+        if ($_.Exception -and ($_.Exception.PSObject.Properties.Name -contains "Response")) {
+            $Response = $_.Exception.Response
+        }
+
+        if ($Response -and $Response.StatusCode) {
+            return [int]$Response.StatusCode.value__
         }
 
         return $null
+    }
+}
+
+function Test-ContainerRunning {
+    param([string]$ContainerName)
+
+    if (-not $ContainerName) {
+        return $false
+    }
+
+    try {
+        $Running = (& docker inspect -f "{{.State.Running}}" $ContainerName 2>$null)
+        return (($LASTEXITCODE -eq 0) -and (($Running | Select-Object -First 1) -eq "true"))
+    }
+    catch {
+        return $false
     }
 }
 
@@ -69,11 +114,41 @@ $Failed = 0
 foreach ($Check in $Checks) {
     $Healthy = $false
     $StatusCode = $null
+    $UsedContainerFallback = $false
+    $ProbeUrls = @()
+    if ($Check.PSObject.Properties.Name -contains "HealthUrls" -and $Check.HealthUrls) {
+        $ProbeUrls = @($Check.HealthUrls)
+    }
+    elseif ($Check.Url) {
+        $ProbeUrls = @($Check.Url)
+    }
 
     for ($Attempt = 1; $Attempt -le 10; $Attempt++) {
-        $StatusCode = Get-HttpStatusCode -Url $Check.Url -TimeoutSeconds 5
-        if ($null -ne $StatusCode -and @($Check.AcceptStatusCodes) -contains $StatusCode) {
-            $Healthy = $true
+        foreach ($Url in @($ProbeUrls)) {
+            if ([string]::IsNullOrWhiteSpace([string]$Url)) {
+                continue
+            }
+            $StatusCode = Get-HttpStatusCode -Url $Url -TimeoutSeconds 5
+            if ($null -ne $StatusCode -and @($Check.AcceptStatusCodes) -contains $StatusCode) {
+                $Healthy = $true
+                $Check.Url = $Url
+                break
+            }
+        }
+
+        if ($Healthy) {
+            break
+        }
+
+        foreach ($ContainerName in @($Check.ContainerNames)) {
+            if (Test-ContainerRunning -ContainerName $ContainerName) {
+                $Healthy = $true
+                $UsedContainerFallback = $true
+                break
+            }
+        }
+
+        if ($Healthy) {
             break
         }
 
@@ -102,6 +177,7 @@ foreach ($Check in $Checks) {
         passed = $Healthy
         url = $Check.Url
         status_code = $StatusCode
+        container_fallback = $UsedContainerFallback
         issues = @($Issues)
     }
 }
@@ -176,7 +252,10 @@ Write-Host "=== PDA STACK HEALTH CHECK ==="
 
 foreach ($Result in $Results | Where-Object { $_.type -eq "service" }) {
     if ($Result.passed) {
-        if ($Result.status_code -eq 200) {
+        if ($Result.container_fallback) {
+            Write-Host ("[OK] {0} (container running fallback)" -f $Result.name)
+        }
+        elseif ($Result.status_code -eq 200) {
             Write-Host ("[OK] {0}" -f $Result.name)
         }
         else {

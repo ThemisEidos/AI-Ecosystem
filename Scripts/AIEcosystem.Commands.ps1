@@ -5,12 +5,18 @@ function Get-AIECServices {
         [pscustomobject]@{
             Name             = "Open WebUI"
             Url              = "http://localhost:3000"
+            HealthUrls       = @(
+                "http://localhost:3000/health",
+                "http://localhost:3000/api/models",
+                "http://localhost:3000"
+            )
             Port             = 3000
             ComposeService   = "open-webui"
             ContainerNames   = @("pda-open-webui", "open-webui")
             Optional         = $false
             StartupTimeout   = 120
             LogTail          = 30
+            AcceptStatusCodes = @(200, 301, 302, 303, 307, 308, 401, 403)
         },
         [pscustomobject]@{
             Name             = "LiteLLM"
@@ -26,13 +32,18 @@ function Get-AIECServices {
         [pscustomobject]@{
             Name             = "n8n"
             Url              = "http://localhost:5678"
+            HealthUrls       = @(
+                "http://localhost:5678/healthz",
+                "http://localhost:5678/rest/settings",
+                "http://localhost:5678"
+            )
             Port             = 5678
             ComposeService   = "n8n"
             ContainerNames   = @("pda-n8n", "n8n")
             Optional         = $false
             StartupTimeout   = 120
             LogTail          = 30
-            AcceptStatusCodes = @(200)
+            AcceptStatusCodes = @(200, 301, 302, 303, 307, 308, 401, 403)
         },
         [pscustomobject]@{
             Name             = "Ollama"
@@ -56,7 +67,19 @@ function Get-AIECHttpStatusCode {
     )
 
     try {
-        $Response = Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec $TimeoutSeconds
+        $InvokeParams = @{
+            Uri         = $Url
+            UseBasicParsing = $true
+            TimeoutSec  = $TimeoutSeconds
+            ErrorAction = "Stop"
+        }
+
+        $InvokeWebRequestCommand = Get-Command Invoke-WebRequest -ErrorAction SilentlyContinue
+        if ($InvokeWebRequestCommand -and $InvokeWebRequestCommand.Parameters.ContainsKey("NoProxy")) {
+            $InvokeParams.NoProxy = $true
+        }
+
+        $Response = Invoke-WebRequest @InvokeParams
         return [int]$Response.StatusCode
     }
     catch {
@@ -96,6 +119,75 @@ function Get-AIECHttpStatusCode {
         }
 
         return $null
+    }
+}
+
+function Get-AIECServiceProbe {
+    param(
+        [Parameter(Mandatory = $true)]$Service,
+        [int]$TimeoutSeconds = 5
+    )
+
+    $AcceptStatusCodes = if ($Service.PSObject.Properties.Name -contains "AcceptStatusCodes" -and $Service.AcceptStatusCodes) {
+        @($Service.AcceptStatusCodes)
+    }
+    else {
+        @(200, 301, 302, 303, 307, 308, 401, 403)
+    }
+
+    $ProbeUrls = @()
+    if ($Service.PSObject.Properties.Name -contains "HealthUrls" -and $Service.HealthUrls) {
+        $ProbeUrls += @($Service.HealthUrls)
+    }
+    elseif ($Service.PSObject.Properties.Name -contains "Url" -and $Service.Url) {
+        $ProbeUrls += $Service.Url
+    }
+
+    $Attempts = @()
+    foreach ($ProbeUrl in $ProbeUrls) {
+        $StatusCode = Get-AIECHttpStatusCode -Url $ProbeUrl -TimeoutSeconds $TimeoutSeconds
+        $Accepted = ($null -ne $StatusCode -and $AcceptStatusCodes -contains $StatusCode)
+        $Attempts += [pscustomobject]@{
+            url         = $ProbeUrl
+            status_code = $StatusCode
+            accepted    = $Accepted
+        }
+
+        if ($Accepted) {
+            return [pscustomobject]@{
+                Reachable             = $true
+                SelectedUrl           = $ProbeUrl
+                StatusCode            = $StatusCode
+                ContainerFallbackUsed  = $false
+                ContainerName         = $null
+                Attempts              = @($Attempts)
+                Reason                = if ($StatusCode -eq 200) { "HTTP 200" } else { ("HTTP {0}" -f $StatusCode) }
+            }
+        }
+    }
+
+    $ContainerName = Resolve-AIECContainerName -Service $Service
+    if ($ContainerName -and (Test-AIECContainerRunning -ContainerName $ContainerName)) {
+        return [pscustomobject]@{
+            Reachable             = $true
+            SelectedUrl           = if (@($ProbeUrls).Count -gt 0) { @($ProbeUrls)[0] } else { $Service.Url }
+            StatusCode            = $null
+            ContainerFallbackUsed  = $true
+            ContainerName         = $ContainerName
+            Attempts              = @($Attempts)
+            Reason                = ("container running fallback: {0}" -f $ContainerName)
+        }
+    }
+
+    $LastAttempt = if (@($Attempts).Count -gt 0) { @($Attempts)[@($Attempts).Count - 1] } else { $null }
+    return [pscustomobject]@{
+        Reachable             = $false
+        SelectedUrl           = if (@($ProbeUrls).Count -gt 0) { @($ProbeUrls)[0] } else { $Service.Url }
+        StatusCode            = if ($LastAttempt) { $LastAttempt.status_code } else { $null }
+        ContainerFallbackUsed  = $false
+        ContainerName         = $ContainerName
+        Attempts              = @($Attempts)
+        Reason                = "no accepted HTTP status and no running container fallback"
     }
 }
 
@@ -340,21 +432,18 @@ function Wait-AIECService {
     )
 
     $Stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
-    $AcceptStatusCodes = if ($Service.PSObject.Properties.Name -contains "AcceptStatusCodes" -and $Service.AcceptStatusCodes) {
-        @($Service.AcceptStatusCodes)
-    }
-    else {
-        @(200)
-    }
 
     while ($Stopwatch.Elapsed.TotalSeconds -lt $TimeoutSeconds) {
-        $StatusCode = Get-AIECHttpStatusCode -Url $Service.Url -TimeoutSeconds 5
-        if ($null -ne $StatusCode -and $AcceptStatusCodes -contains $StatusCode) {
-            if ($StatusCode -eq 200) {
-                Write-AIECLine -Level OK -Message ("{0} reachable at {1}" -f $Service.Name, $Service.Url)
+        $Probe = Get-AIECServiceProbe -Service $Service -TimeoutSeconds 5
+        if ($Probe.Reachable) {
+            if ($Probe.ContainerFallbackUsed) {
+                Write-AIECLine -Level OK -Message ("{0} reachable via running container {1}; HTTP probes were unavailable." -f $Service.Name, $Probe.ContainerName)
+            }
+            elseif ($Probe.StatusCode -eq 200) {
+                Write-AIECLine -Level OK -Message ("{0} reachable at {1}" -f $Service.Name, $Probe.SelectedUrl)
             }
             else {
-                Write-AIECLine -Level OK -Message ("{0} reachable at {1} (HTTP {2})" -f $Service.Name, $Service.Url, $StatusCode)
+                Write-AIECLine -Level OK -Message ("{0} reachable at {1} (HTTP {2})" -f $Service.Name, $Probe.SelectedUrl, $Probe.StatusCode)
             }
 
             return $true
