@@ -60,8 +60,39 @@ function Get-AIECHttpStatusCode {
         return [int]$Response.StatusCode
     }
     catch {
-        if ($_.Exception.Response -and $_.Exception.Response.StatusCode) {
-            return [int]$_.Exception.Response.StatusCode.value__
+        $Exception = $_.Exception
+        $Response = $null
+        if ($Exception -and ($Exception.PSObject.Properties.Name -contains "Response")) {
+            try {
+                $Response = $Exception.Response
+            }
+            catch {
+                $Response = $null
+            }
+        }
+
+        if ($Response) {
+            $StatusCode = $null
+            if ($Response.PSObject.Properties.Name -contains "StatusCode") {
+                try {
+                    $StatusCode = $Response.StatusCode
+                }
+                catch {
+                    $StatusCode = $null
+                }
+            }
+
+            if ($StatusCode) {
+                try {
+                    if ($StatusCode.PSObject.Properties.Name -contains "value__") {
+                        return [int]$StatusCode.value__
+                    }
+                    return [int]$StatusCode
+                }
+                catch {
+                    return $null
+                }
+            }
         }
 
         return $null
