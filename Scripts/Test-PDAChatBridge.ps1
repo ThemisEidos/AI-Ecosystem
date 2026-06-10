@@ -204,6 +204,61 @@ $Cases = @(
         marker = "chat-status-summary-$([guid]::NewGuid().ToString())"
     }
     [pscustomobject]@{
+        name = "status report"
+        message = "Good morning COOPER. Status report."
+        confirm = $false
+        expected_handoff = "direct_status"
+        expected_response_contains = "COOPER Status"
+        expected_dispatch_ready = $false
+        expected_dispatch = $false
+        expected_command = "/status"
+        marker = "chat-status-report-$([guid]::NewGuid().ToString())"
+    }
+    [pscustomobject]@{
+        name = "morning briefing"
+        message = "Morning briefing please."
+        confirm = $false
+        expected_handoff = "direct_status"
+        expected_response_contains = "COOPER Status"
+        expected_dispatch_ready = $false
+        expected_dispatch = $false
+        expected_command = "/status"
+        marker = "chat-morning-briefing-$([guid]::NewGuid().ToString())"
+    }
+    [pscustomobject]@{
+        name = "how are things going"
+        message = "How are things going?"
+        confirm = $false
+        expected_handoff = "direct_status"
+        expected_response_contains = "COOPER Status"
+        expected_dispatch_ready = $false
+        expected_dispatch = $false
+        expected_command = "/status"
+        marker = "chat-how-are-things-$([guid]::NewGuid().ToString())"
+    }
+    [pscustomobject]@{
+        name = "system status"
+        message = "System status."
+        confirm = $false
+        expected_handoff = "direct_status"
+        expected_response_contains = "COOPER Status"
+        expected_dispatch_ready = $false
+        expected_dispatch = $false
+        expected_command = "/status"
+        marker = "chat-system-status-$([guid]::NewGuid().ToString())"
+    }
+    [pscustomobject]@{
+        name = "health report"
+        message = "Health report."
+        confirm = $false
+        expected_handoff = "direct_status"
+        expected_response_contains = "COOPER Status"
+        expected_dispatch_ready = $false
+        expected_dispatch = $false
+        expected_command = "/status"
+        marker = "chat-health-report-$([guid]::NewGuid().ToString())"
+    }
+    [pscustomobject]@{
         name = "model identity"
         message = "What model are you running?"
         confirm = $false
@@ -434,7 +489,7 @@ if ($SkipDispatch) {
 }
 
 if ($DashboardMode) {
-    $Cases = @($Cases | Where-Object { [string]$_.name -in @("known message", "ambiguous message", "unknown message", "research request", "model identity", "provider identity", "backend identity", "self identity") })
+    $Cases = @($Cases | Where-Object { [string]$_.name -in @("known message", "ambiguous message", "unknown message", "research request", "status report", "morning briefing", "how are things going", "system status", "health report", "model identity", "provider identity", "backend identity", "self identity") })
 }
 
 if (-not $SkipDispatch -and -not $DashboardMode) {

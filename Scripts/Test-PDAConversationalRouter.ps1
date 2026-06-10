@@ -75,6 +75,36 @@ $Cases = @(
         expected_command = "/status"
     }
     [pscustomobject]@{
+        name = "status report"
+        input = "Good morning COOPER. Status report."
+        expected_route = "direct_status"
+        expected_command = "/status"
+    }
+    [pscustomobject]@{
+        name = "morning briefing"
+        input = "Morning briefing please."
+        expected_route = "direct_status"
+        expected_command = "/status"
+    }
+    [pscustomobject]@{
+        name = "how are things going"
+        input = "How are things going?"
+        expected_route = "direct_status"
+        expected_command = "/status"
+    }
+    [pscustomobject]@{
+        name = "system status"
+        input = "System status."
+        expected_route = "direct_status"
+        expected_command = "/status"
+    }
+    [pscustomobject]@{
+        name = "health report"
+        input = "Health report."
+        expected_route = "direct_status"
+        expected_command = "/status"
+    }
+    [pscustomobject]@{
         name = "model identity"
         input = "What model are you running?"
         expected_route = "runtime_self_awareness"
@@ -240,7 +270,7 @@ foreach ($Case in $Cases) {
             $CasePassed = $false
             $Issues.Add("Direct response text was empty.")
         }
-        if ($Route.route_type -eq "direct_status" -and $Direct.response_text -notmatch '(?i)pda is reachable|dashboard') {
+        if ($Route.route_type -eq "direct_status" -and $Direct.response_text -notmatch '(?i)COOPER Status|Current Model: local-llama|Provider: Ollama') {
             $CasePassed = $false
             $Issues.Add("Direct status response did not look like a status summary.")
         }

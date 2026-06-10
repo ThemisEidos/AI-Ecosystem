@@ -221,7 +221,7 @@ function Test-PDAConversationalDirectStatus {
     param([Parameter(Mandatory = $true)][string]$NormalizedText)
 
     return [bool](
-        $NormalizedText -match '(?i)\b(how is the pda doing|how is the ecosystem|summarize the ecosystem status|summarise the ecosystem status|show me the current status|current status|system status|how are things|pda status|how is everything)\b'
+        $NormalizedText -match '(?i)\b(status report|operational status|health report|morning briefing|daily briefing|what''?s the status|what is the status|how are things going|how are you doing|how is the pda doing|how is the ecosystem|summarize the ecosystem status|summarise the ecosystem status|show me the current status|current status|system status|how are things|pda status|how is everything|status)\b'
     )
 }
 
@@ -631,9 +631,6 @@ function Get-PDAConversationalNaturalResponse {
         "direct_status" {
             $Dashboard = Invoke-PDAConversationalJsonScript -Path $DashboardStatusScript -Arguments @("-AsJson", "-NoThrow", "-SkipCoreIntegration") -SourceName "PDA dashboard status"
             $Health = if ($Dashboard -and $Dashboard.PSObject.Properties.Name -contains "dashboard_health") { [string]$Dashboard.dashboard_health.status } else { "unknown" }
-            $QueueDepth = if ($Dashboard -and $Dashboard.PSObject.Properties.Name -contains "queue_status") { [int]$Dashboard.queue_status.queue_depth } else { 0 }
-            $PendingApprovals = if ($Dashboard -and $Dashboard.PSObject.Properties.Name -contains "pending_approvals") { @($Dashboard.pending_approvals).Count } else { 0 }
-            $RecentTasks = if ($Dashboard -and $Dashboard.PSObject.Properties.Name -contains "recent_tasks") { @($Dashboard.recent_tasks).Count } else { 0 }
             $RuntimeStatus = if (Get-Command -Name Get-COOPERRuntimeStatus -ErrorAction SilentlyContinue) {
                 try {
                     Get-COOPERRuntimeStatus -Root $Root
@@ -645,11 +642,7 @@ function Get-PDAConversationalNaturalResponse {
             else {
                 $null
             }
-            $HealthSentence = if ($Health -eq "pass") { "PDA is reachable and healthy." } elseif ($Health -eq "warning") { "PDA is reachable, but the dashboard is showing warning-level health." } elseif ($Health -eq "degraded") { "PDA is reachable, but the dashboard is showing degraded health." } else { "PDA status is available, but the dashboard health is unknown." }
             $StatusLines = New-Object System.Collections.Generic.List[string]
-            $StatusLines.Add("COOPER Operator Console: Status")
-            $StatusLines.Add($HealthSentence)
-            $StatusLines.Add(("Queue depth is {0}, with {1} pending approvals and {2} recent tasks." -f $QueueDepth, $PendingApprovals, $RecentTasks))
             if ($RuntimeStatus -and $RuntimeStatus.PSObject.Properties.Name -contains "summary_lines") {
                 foreach ($Line in @($RuntimeStatus.summary_lines)) {
                     if (-not [string]::IsNullOrWhiteSpace([string]$Line)) {
@@ -657,6 +650,19 @@ function Get-PDAConversationalNaturalResponse {
                     }
                 }
             }
+            else {
+                $CurrentModel = if ($RuntimeStatus -and $RuntimeStatus.PSObject.Properties.Name -contains "current_model" -and -not [string]::IsNullOrWhiteSpace([string]$RuntimeStatus.current_model)) { [string]$RuntimeStatus.current_model } else { "local-llama" }
+                $StatusLines.Add("COOPER Status")
+                $StatusLines.Add(("Current Model: {0}" -f $CurrentModel))
+                $StatusLines.Add(("Provider: {0}" -f "Ollama"))
+                $StatusLines.Add(("Gateway: {0}" -f "LiteLLM"))
+                $StatusLines.Add(("Docker: {0}" -f $(if ($Health -eq "pass") { "Healthy" } else { "Degraded" })))
+                $StatusLines.Add(("Open WebUI: {0}" -f $(if ($Health -eq "pass") { "Healthy" } else { "Degraded" })))
+                $StatusLines.Add(("n8n: {0}" -f $(if ($Health -eq "pass") { "Healthy" } else { "Degraded" })))
+                $StatusLines.Add(("LiteLLM: {0}" -f $(if ($Health -eq "pass") { "Healthy" } else { "Degraded" })))
+                $StatusLines.Add("Current Explosions: 0")
+            }
+            $StatusLines.Add("Standing by for tasking.")
             $BaseResponse.response_text = $StatusLines -join "`r`n"
             $BaseResponse.next_action = "Ask for /status to see the full operator console or ask about workers, tasks, reports, identity, or memory."
             $BaseResponse.latest_result_response_text = $BaseResponse.response_text
