@@ -101,6 +101,67 @@ with socketserver.TCPServer(("127.0.0.1", port), Handler) as server:
     }
 }
 
+function Start-PDACaptureServer {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ResponseBody,
+
+        [Parameter(Mandatory = $false)]
+        [string]$ContentType = "application/json"
+    )
+
+    $TempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("pda-model-capture-{0}" -f ([guid]::NewGuid().ToString("N")))
+    New-Item -ItemType Directory -Path $TempRoot -Force | Out-Null
+    $ServerScript = Join-Path $TempRoot "capture_server.py"
+    $CapturePath = Join-Path $TempRoot "request.json"
+    $ResponseBodyBase64 = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($ResponseBody))
+    $ServerCode = @'
+import http.server
+import base64
+import socketserver
+import sys
+
+payload = base64.b64decode(sys.argv[1]).decode("utf-8").encode("utf-8")
+capture_path = sys.argv[2]
+content_type = sys.argv[3]
+port = int(sys.argv[4])
+
+class Handler(http.server.BaseHTTPRequestHandler):
+    def do_POST(self):
+        length = int(self.headers.get("content-length", "0"))
+        body = self.rfile.read(length).decode("utf-8", errors="replace") if length > 0 else ""
+        with open(capture_path, "w", encoding="utf-8") as handle:
+            handle.write(body)
+        self.send_response(200)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(payload)))
+        self.end_headers()
+        self.wfile.write(payload)
+
+    def log_message(self, format, *args):
+        return
+
+with socketserver.TCPServer(("127.0.0.1", port), Handler) as server:
+    server.handle_request()
+'@
+    Set-Content -LiteralPath $ServerScript -Value $ServerCode -Encoding UTF8
+
+    $Listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 0)
+    $Listener.Start()
+    $Port = [int]$Listener.LocalEndpoint.Port
+    $Listener.Stop()
+
+    $Process = Start-Process -FilePath "python" -ArgumentList @("-u", $ServerScript, $ResponseBodyBase64, $CapturePath, $ContentType, [string]$Port) -PassThru -WindowStyle Hidden
+    Start-Sleep -Milliseconds 500
+
+    return [pscustomobject]@{
+        process = $Process
+        endpoint = "http://127.0.0.1:$Port/v1/chat/completions"
+        temp_root = $TempRoot
+        capture_path = $CapturePath
+    }
+}
+
 function Invoke-TestCase {
     param(
         [Parameter(Mandatory = $true)]
@@ -259,6 +320,10 @@ function Invoke-TestCase {
         elseif (-not [string]::IsNullOrWhiteSpace($ExpectedToken) -and $Result.response_text -notmatch [regex]::Escape($ExpectedToken)) {
             $Issues.Add("Response text did not contain expected token '$ExpectedToken'.")
         }
+
+        if ($Result.PSObject.Properties.Name -contains "next_action" -and [string]$Result.next_action -match '(?i)provider metadata|raw response') {
+            $Issues.Add("Successful invocation should not expose the provider metadata trailer in next_action.")
+        }
     }
 
     return [pscustomobject]@{
@@ -272,6 +337,7 @@ function Invoke-TestCase {
         expected_token = $ExpectedToken
         selected_model = [string]$Result.routing.selected_model
         response_text = [string]$Result.response_text
+        next_action = [string]$Result.next_action
         status = [string]$Result.status
         routing_surface = [string]$Result.routing.routing_surface
         route_source = [string]$Result.routing.route_source
@@ -334,6 +400,19 @@ $Cases = @(
         use_plain_text_server = $true
     }
     [pscustomobject]@{
+        name = "system prompt injection"
+        worker_name = "cooper-chat"
+        task_type = "conversational"
+        sensitivity = "standard"
+        prompt = "Return a brief plain acknowledgement."
+        expected_model = "local-llama"
+        expected_token = "Acknowledged. Standing by."
+        selected_model_override = "local-llama"
+        use_capture_server = $true
+        endpoint = $null
+        expected_prompt_pattern = '(?is)You are COOPER.*Tone: concise, dry, operational, mildly humorous.*Personality controls: humor 25/100, directness 90/100, formality 55/100, risk tolerance 20/100.*Do not mention provider metadata trailers'
+    }
+    [pscustomobject]@{
         name = "missing backend diagnostic"
         worker_name = "cooper-chat"
         task_type = "conversational"
@@ -349,6 +428,7 @@ $Cases = @(
 
 $EnvReady = Initialize-PDALiteLLMMasterKey
 $PlainTextServer = $null
+$CaptureServer = $null
 foreach ($Case in $Cases) {
     if ($Case.PSObject.Properties.Name -contains "use_plain_text_server" -and [bool]$Case.use_plain_text_server) {
         if (-not $EnvReady) {
@@ -357,6 +437,15 @@ foreach ($Case in $Cases) {
 
         $PlainTextServer = Start-PDALocalPlainTextServer -ResponseText "plain-text-ok"
         $Case.endpoint = $PlainTextServer.endpoint
+    }
+
+    if ($Case.PSObject.Properties.Name -contains "use_capture_server" -and [bool]$Case.use_capture_server) {
+        if (-not $EnvReady) {
+            continue
+        }
+
+        $CaptureServer = Start-PDACaptureServer -ResponseBody '{"choices":[{"index":0,"message":{"role":"assistant","content":"Acknowledged. Standing by."},"finish_reason":"stop"}],"usage":{"prompt_tokens":1,"completion_tokens":4,"total_tokens":5}}'
+        $Case.endpoint = $CaptureServer.endpoint
     }
 }
 
@@ -369,8 +458,39 @@ foreach ($Case in $Cases) {
     if ($Case.PSObject.Properties.Name -contains "use_plain_text_server" -and [bool]$Case.use_plain_text_server -and -not $PlainTextServer) {
         continue
     }
+    if ($Case.PSObject.Properties.Name -contains "use_capture_server" -and [bool]$Case.use_capture_server -and -not $CaptureServer) {
+        continue
+    }
 
     $CaseResult = Invoke-TestCase -Name $Case.name -WorkerName $Case.worker_name -TaskType $Case.task_type -Sensitivity $Case.sensitivity -Prompt $Case.prompt -ExpectedModel $Case.expected_model -ExpectedToken $Case.expected_token -SelectedModelOverride $Case.selected_model_override -Endpoint $Case.endpoint -ExpectedErrorPattern $Case.expected_error_pattern -ClearMasterKey:([bool]$Case.clear_master_key) -AllowUnavailable:([bool]$Case.allow_unavailable)
+    if ($Case.PSObject.Properties.Name -contains "use_capture_server" -and [bool]$Case.use_capture_server -and $CaptureServer -and (Test-Path -LiteralPath $CaptureServer.capture_path -PathType Leaf)) {
+        try {
+            $CapturedRequest = Get-Content -LiteralPath $CaptureServer.capture_path -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+            $SystemMessage = @($CapturedRequest.messages | Where-Object { [string]$_.role -eq "system" } | Select-Object -First 1)
+            if (-not $SystemMessage -or [string]::IsNullOrWhiteSpace([string]$SystemMessage[0].content)) {
+                $CaseResult.issues += "Capture server did not receive a system prompt."
+            }
+            else {
+                $SystemContent = [string]$SystemMessage[0].content
+                foreach ($Pattern in @(
+                    'You are COOPER',
+                    'concise, dry, operational, mildly humorous',
+                    'humor 25/100',
+                    'directness 90/100',
+                    'formality 55/100',
+                    'risk tolerance 20/100',
+                    'Do not mention provider metadata trailers'
+                )) {
+                    if ($SystemContent -notmatch [regex]::Escape($Pattern)) {
+                        $CaseResult.issues += "System prompt missing expected COOPER personality text: $Pattern"
+                    }
+                }
+            }
+        }
+        catch {
+            $CaseResult.issues += "Failed to inspect capture server request body: $($_.Exception.Message)"
+        }
+    }
     $Results += $CaseResult
     if ($CaseResult.skipped) {
         $Skipped++

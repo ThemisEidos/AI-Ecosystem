@@ -18,6 +18,31 @@ if (-not (Test-Path -LiteralPath $RouterScript -PathType Leaf)) {
 
 . $RouterScript
 
+$DefaultModelChatFallback = {
+    param(
+        [Parameter(Mandatory = $true)][string]$Text,
+        [Parameter(Mandatory = $false)][string]$Root
+    )
+
+    return [pscustomobject]@{
+        status = "pass"
+        default_model = "local-llama"
+        selected_model = "local-llama"
+        model_status = "pass"
+        model_error_message = ""
+        routing_reason = "router test stub"
+        response_text = "Acknowledged. Standing by."
+        next_action = "Continue the conversation."
+        bridge_mode = "model_chat"
+        handoff_status = "fallback"
+        source_of_truth = "test_stub"
+    }
+}
+
+if (-not (Get-Command -Name Invoke-COOPERDefaultModelChat -ErrorAction SilentlyContinue)) {
+    Set-Item -Path function:Invoke-COOPERDefaultModelChat -Value $DefaultModelChatFallback
+}
+
 $Cases = @(
     [pscustomobject]@{
         name = "slash status"
@@ -128,6 +153,15 @@ $Cases = @(
         expected_command = ""
         expected_default_model = "local-llama"
     }
+    [pscustomobject]@{
+        name = "normal greeting"
+        input = "Hello COOPER."
+        expected_route = "fallback"
+        expected_command = ""
+        expected_default_model = "local-llama"
+        expected_token = "Acknowledged. Standing by."
+        stub_model_response = "Acknowledged. Standing by."
+    }
 )
 
 $Results = @()
@@ -141,7 +175,7 @@ $OriginalDefaultModelChat = if (Get-Command -Name Invoke-COOPERDefaultModelChat 
     (Get-Item function:Invoke-COOPERDefaultModelChat).ScriptBlock
 }
 else {
-    $null
+    $DefaultModelChatFallback
 }
 
 foreach ($Case in $Cases) {
@@ -166,7 +200,42 @@ foreach ($Case in $Cases) {
     }
 
     if ($Route.route_type -in @("direct_status", "direct_help", "task_lookup", "dispatch_guidance", "goal_planning", "ambiguous", "fallback")) {
+        $OriginalDefaultModelChat = $null
+        $StubbedModelInvocation = $false
+        if ($Case.PSObject.Properties.Name -contains "stub_model_response" -and -not [string]::IsNullOrWhiteSpace([string]$Case.stub_model_response)) {
+            $StubbedModelInvocation = $true
+            if (Get-Command -Name Invoke-COOPERDefaultModelChat -ErrorAction SilentlyContinue) {
+                $OriginalDefaultModelChat = (Get-Item function:Invoke-COOPERDefaultModelChat).ScriptBlock
+            }
+            $StubScript = {
+                param(
+                    [Parameter(Mandatory = $true)][string]$Text,
+                    [Parameter(Mandatory = $false)][string]$Root
+                )
+
+                return [pscustomobject]@{
+                    status = "pass"
+                    default_model = "local-llama"
+                    selected_model = "local-llama"
+                    model_status = "pass"
+                    model_error_message = ""
+                    routing_reason = "stub"
+                    response_text = "Acknowledged. Standing by."
+                    next_action = "Continue the conversation."
+                    bridge_mode = "model_chat"
+                    handoff_status = "fallback"
+                    source_of_truth = "test_stub"
+                }
+            }
+            Set-Item -Path function:Invoke-COOPERDefaultModelChat -Value $StubScript
+        }
+
         $Direct = Get-PDAConversationalNaturalResponse -Route $Route -ConversationId $DirectConversationId -SessionId $DirectSessionId -UserId $DirectUserId -ConversationTitle $DirectTitle -Text $Case.input -Root $Root
+
+        if ($StubbedModelInvocation) {
+            Set-Item -Path function:Invoke-COOPERDefaultModelChat -Value $DefaultModelChatFallback
+        }
+
         if ([string]::IsNullOrWhiteSpace([string]$Direct.response_text)) {
             $CasePassed = $false
             $Issues.Add("Direct response text was empty.")
@@ -221,6 +290,16 @@ foreach ($Case in $Cases) {
                 $CasePassed = $false
                 $Issues.Add("Fallback model failure did not report a useful error.")
             }
+            if ($Direct.PSObject.Properties.Name -contains "next_action" -and [string]$Direct.next_action -match '(?i)provider metadata|raw response') {
+                $CasePassed = $false
+                $Issues.Add("Fallback response exposed the provider metadata trailer in next_action.")
+            }
+        }
+        if ($Case.PSObject.Properties.Name -contains "expected_token" -and -not [string]::IsNullOrWhiteSpace([string]$Case.expected_token)) {
+            if ($Direct.response_text -notmatch [regex]::Escape([string]$Case.expected_token)) {
+                $CasePassed = $false
+                $Issues.Add("Expected response text to contain '$([string]$Case.expected_token)'.")
+            }
         }
     }
     elseif ($Route.route_type -eq "runtime_self_awareness") {
@@ -252,12 +331,7 @@ foreach ($Case in $Cases) {
             $Direct = Get-PDAConversationalNaturalResponse -Route $Route -ConversationId $DirectConversationId -SessionId $DirectSessionId -UserId $DirectUserId -ConversationTitle $DirectTitle -Text $Case.input -Root $Root
         }
         finally {
-            if ($null -ne $OriginalDefaultModelChat) {
-                Set-Item -Path function:Invoke-COOPERDefaultModelChat -Value $OriginalDefaultModelChat
-            }
-            else {
-                Remove-Item -Path function:Invoke-COOPERDefaultModelChat -ErrorAction SilentlyContinue
-            }
+            Set-Item -Path function:Invoke-COOPERDefaultModelChat -Value $DefaultModelChatFallback
         }
 
         if ([string]::IsNullOrWhiteSpace([string]$Direct.response_text)) {
