@@ -2,6 +2,8 @@ Write-Host ""
 Write-Host "=== STARTING PDA STACK ===" -ForegroundColor Cyan
 Write-Host ""
 
+. (Join-Path $PSScriptRoot "AIEcosystem.Commands.ps1")
+
 function Resolve-ContainerName {
     param([string[]]$Candidates)
 
@@ -126,6 +128,13 @@ Wait-ForService -Name "Ollama" -Urls @("http://localhost:11434/api/tags") -Conta
 Write-Host ""
 Write-Host "=== SERVICE STATUS ===" -ForegroundColor Green
 docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+
+try {
+    Show-AIECDockerRelayDiagnostics -Services (Get-AIECServices) | Out-Null
+}
+catch {
+    Write-Host "[WARN] Relay diagnostics unavailable."
+}
 
 Write-Host ""
 Write-Host "=== OPENING INTERFACES ===" -ForegroundColor Cyan

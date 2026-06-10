@@ -5,6 +5,7 @@ function Get-AIECServices {
         [pscustomobject]@{
             Name             = "Open WebUI"
             Url              = "http://localhost:3000"
+            ContainerPort    = 8080
             HealthUrls       = @(
                 "http://localhost:3000/health",
                 "http://localhost:3000/api/models",
@@ -21,6 +22,7 @@ function Get-AIECServices {
         [pscustomobject]@{
             Name             = "LiteLLM"
             Url              = "http://localhost:4000/v1/models"
+            ContainerPort    = 4000
             Port             = 4000
             ComposeService   = "litellm"
             ContainerNames   = @("pda-litellm", "litellm")
@@ -32,6 +34,7 @@ function Get-AIECServices {
         [pscustomobject]@{
             Name             = "n8n"
             Url              = "http://localhost:5678"
+            ContainerPort    = 5678
             HealthUrls       = @(
                 "http://localhost:5678/healthz",
                 "http://localhost:5678/rest/settings",
@@ -48,6 +51,7 @@ function Get-AIECServices {
         [pscustomobject]@{
             Name             = "Ollama"
             Url              = "http://localhost:11434/api/tags"
+            ContainerPort    = 11434
             Port             = 11434
             ComposeService   = "ollama"
             ContainerNames   = @("pda-ollama", "ollama")
@@ -596,6 +600,405 @@ function Get-AIECListeningProcess {
     }
 }
 
+function ConvertTo-AIECContainerUrl {
+    param(
+        [Parameter(Mandatory = $true)][string]$Url,
+        [Parameter(Mandatory = $true)][int]$ContainerPort
+    )
+
+    return (ConvertTo-AIECUrlEndpoint -Url $Url -HostName "localhost" -Port $ContainerPort)
+}
+
+function ConvertTo-AIECUrlEndpoint {
+    param(
+        [Parameter(Mandatory = $true)][string]$Url,
+        [Parameter(Mandatory = $true)][string]$HostName,
+        [Parameter(Mandatory = $true)][int]$Port
+    )
+
+    try {
+        $Builder = [System.UriBuilder]::new($Url)
+        $Builder.Host = $HostName
+        $Builder.Port = $Port
+        return $Builder.Uri.AbsoluteUri
+    }
+    catch {
+        return $Url
+    }
+}
+
+function Get-AIECDockerRelayPortOwner {
+    param([int]$Port)
+
+    $Listener = Get-AIECListeningProcess -Port $Port
+    if (-not $Listener) {
+        return $null
+    }
+
+    $ProcessName = [string]$Listener.ProcessName
+    $IsWslRelay = ($ProcessName -match '(?i)wslrelay')
+
+    [pscustomobject]@{
+        port            = $Listener.Port
+        process_id      = $Listener.ProcessId
+        process_name    = $ProcessName
+        is_wslrelay     = $IsWslRelay
+        relay_healthy   = $IsWslRelay
+        owner_summary   = if ($ProcessName -and $Listener.ProcessId) { "{0} (PID {1})" -f $ProcessName, $Listener.ProcessId } else { $ProcessName }
+    }
+}
+
+function Invoke-AIECHostCurlProbe {
+    param(
+        [Parameter(Mandatory = $true)][string]$Url,
+        [int]$TimeoutSeconds = 8
+    )
+
+    $Raw = @(& curl.exe -sS --max-time $TimeoutSeconds -o NUL -w "HTTP_CODE:%{http_code}`n" $Url 2>&1)
+    $Text = [string]($Raw -join "`n").Trim()
+    $StatusCode = $null
+    if ($Text -match 'HTTP_CODE:(\d{3})') {
+        $StatusCode = [int]$Matches[1]
+    }
+
+    $ErrorMessage = $null
+    if ($Text -match '(?mi)^curl: \(\d+\) (.+)$') {
+        $ErrorMessage = $Matches[1].Trim()
+    }
+
+    [pscustomobject]@{
+        url         = $Url
+        status_code = $StatusCode
+        reachable   = ($null -ne $StatusCode -and $StatusCode -in 200,301,302,303,307,308,401,403)
+        raw_output  = $Text
+        error       = $ErrorMessage
+    }
+}
+
+function Invoke-AIECContainerCurlProbe {
+    param(
+        [Parameter(Mandatory = $true)][string]$ContainerName,
+        [Parameter(Mandatory = $true)][string]$Url,
+        [int]$TimeoutSeconds = 8
+    )
+
+    $Tool = @(& docker exec $ContainerName sh -lc "command -v curl || command -v wget || command -v python || command -v node" 2>$null | Select-Object -First 1)
+    $Tool = [string]$Tool
+    if ([string]::IsNullOrWhiteSpace($Tool)) {
+        return [pscustomobject]@{
+            url         = $Url
+            status_code = $null
+            reachable   = $false
+            tool_used   = ""
+            raw_output  = ""
+            error       = "No curl, wget, python, or node executable available inside container."
+        }
+    }
+
+    switch -Regex ($Tool) {
+        'curl$' {
+            $Raw = @(& docker exec $ContainerName curl -sS --max-time $TimeoutSeconds -o /dev/null -w "HTTP_CODE:%{http_code}`n" $Url 2>&1)
+            $Text = [string]($Raw -join "`n").Trim()
+        }
+        'wget$' {
+            $Raw = @(& docker exec $ContainerName wget -S -O /dev/null $Url 2>&1)
+            $Text = [string]($Raw -join "`n").Trim()
+        }
+        'python$' {
+            $PythonProbe = @'
+import sys
+import urllib.error
+import urllib.request
+
+url = sys.argv[1]
+timeout = float(sys.argv[2])
+try:
+    with urllib.request.urlopen(url, timeout=timeout) as response:
+        print(f"HTTP_CODE:{response.status}")
+except urllib.error.HTTPError as exc:
+    print(f"HTTP_CODE:{exc.code}")
+except Exception as exc:
+    print(f"ERROR:{exc}")
+'@
+            $Raw = @(& docker exec $ContainerName python -c $PythonProbe $Url $TimeoutSeconds 2>&1)
+            $Text = [string]($Raw -join "`n").Trim()
+        }
+        'node$' {
+            $NodeProbe = @'
+const http = require("http");
+const https = require("https");
+const url = process.argv[1];
+const timeout = Number(process.argv[2]) * 1000;
+const lib = url.startsWith("https:") ? https : http;
+const req = lib.get(url, (res) => {
+  console.log(`HTTP_CODE:${res.statusCode}`);
+  res.resume();
+});
+req.on("error", (err) => {
+  console.log(`ERROR:${err.message}`);
+});
+req.setTimeout(timeout, () => {
+  req.destroy(new Error("timeout"));
+});
+'@
+            $Raw = @(& docker exec $ContainerName node -e $NodeProbe $Url $TimeoutSeconds 2>&1)
+            $Text = [string]($Raw -join "`n").Trim()
+        }
+        default {
+            return [pscustomobject]@{
+                url         = $Url
+                status_code = $null
+                reachable   = $false
+                tool_used   = $Tool
+                raw_output  = ""
+                error       = "Unsupported probe tool: $Tool"
+            }
+        }
+    }
+
+    $StatusCode = $null
+    if ($Text -match 'HTTP_CODE:(\d{3})') {
+        $StatusCode = [int]$Matches[1]
+    }
+    elseif ($Text -match 'HTTP/[^ ]+\s+(\d{3})') {
+        $StatusCode = [int]$Matches[1]
+    }
+
+    $ErrorMessage = $null
+    if ($Text -match '(?mi)^ERROR:(.+)$') {
+        $ErrorMessage = $Matches[1].Trim()
+    }
+
+    [pscustomobject]@{
+        url         = $Url
+        status_code = $StatusCode
+        reachable   = ($null -ne $StatusCode -and $StatusCode -in 200,301,302,303,307,308,401,403)
+        tool_used   = $Tool
+        raw_output  = $Text
+        error       = $ErrorMessage
+    }
+}
+
+function Get-AIECDockerRelay {
+    param(
+        [Parameter(Mandatory = $true)]$Services
+    )
+
+    $RelayServices = @(
+        $Services | Where-Object { $_.Name -in @("Open WebUI", "LiteLLM", "n8n") }
+    )
+
+    $Results = @()
+    foreach ($Service in $RelayServices) {
+        $ContainerName = Resolve-AIECContainerName -Service $Service
+        $ContainerRunning = [bool]($ContainerName -and (Test-AIECContainerRunning -ContainerName $ContainerName))
+        $BaseUrls = @()
+        if ($Service.PSObject.Properties.Name -contains "Url" -and $Service.Url) {
+            $BaseUrls += @($Service.Url)
+        }
+        if ($Service.PSObject.Properties.Name -contains "HealthUrls" -and $Service.HealthUrls) {
+            $BaseUrls += @($Service.HealthUrls)
+        }
+
+        $HostUrls = @()
+        foreach ($BaseUrl in ($BaseUrls | Select-Object -Unique)) {
+            foreach ($HostName in @("localhost", "127.0.0.1")) {
+                $HostUrls += (ConvertTo-AIECUrlEndpoint -Url $BaseUrl -HostName $HostName -Port $Service.Port)
+            }
+        }
+
+        $ContainerUrls = @()
+        foreach ($BaseUrl in ($BaseUrls | Select-Object -Unique)) {
+            $ContainerUrls += (ConvertTo-AIECContainerUrl -Url $BaseUrl -ContainerPort $Service.ContainerPort)
+        }
+
+        $HostProbes = @()
+        foreach ($HostUrl in $HostUrls) {
+            $HostProbes += Invoke-AIECHostCurlProbe -Url $HostUrl -TimeoutSeconds 8
+        }
+
+        $ContainerProbes = @()
+        if ($ContainerRunning) {
+            foreach ($ContainerUrl in ($ContainerUrls | Select-Object -Unique)) {
+                if ([string]::IsNullOrWhiteSpace([string]$ContainerUrl)) {
+                    continue
+                }
+                $ContainerProbes += Invoke-AIECContainerCurlProbe -ContainerName $ContainerName -Url $ContainerUrl -TimeoutSeconds 8
+            }
+        }
+
+        $AnyHostReachable = [bool](@($HostProbes | Where-Object { $_.reachable }).Count)
+        $AnyContainerReachable = [bool](@($ContainerProbes | Where-Object { $_.reachable }).Count)
+        $PortOwner = Get-AIECDockerRelayPortOwner -Port $Service.Port
+
+        $Status = "unknown"
+        $RecommendedFix = ""
+        $Issue = ""
+        if (-not $ContainerRunning) {
+            $Status = "container_unavailable"
+            $Issue = "Container is not running."
+        }
+        elseif ($AnyHostReachable -and $AnyContainerReachable) {
+            $Status = "healthy"
+        }
+        elseif (-not $AnyHostReachable -and $AnyContainerReachable) {
+            $Status = "relay_broken"
+            $Issue = "Container is healthy, but the Windows localhost relay is failing."
+            $RecommendedFix = "Restart Docker Desktop or start com.docker.service."
+        }
+        elseif ($AnyHostReachable -and -not $AnyContainerReachable) {
+            $Status = "container_unhealthy"
+            $Issue = "Host relay responds, but the container-local service probe failed."
+        }
+        else {
+            $Status = "unreachable"
+            $Issue = "Neither host nor container probes returned a usable response."
+            if ($ContainerRunning) {
+                $RecommendedFix = "Restart Docker Desktop or start com.docker.service."
+            }
+        }
+
+        if ($PortOwner -and $PortOwner.is_wslrelay -and $Status -eq "relay_broken" -and -not $RecommendedFix) {
+            $RecommendedFix = "Restart Docker Desktop or start com.docker.service."
+        }
+
+        $Results += [pscustomobject]@{
+            name                  = $Service.Name
+            port                  = $Service.Port
+            container_port        = if ($Service.PSObject.Properties.Name -contains "ContainerPort") { $Service.ContainerPort } else { $Service.Port }
+            container_name        = $ContainerName
+            container_running     = $ContainerRunning
+            status                = $Status
+            host_probes           = @($HostProbes)
+            container_probes      = @($ContainerProbes)
+            port_owner            = $PortOwner
+            issue                 = $Issue
+            recommended_fix       = $RecommendedFix
+            relay_broken          = ($Status -eq "relay_broken")
+        }
+    }
+
+    $OverallStatus = if (@($Results | Where-Object { $_.status -eq "relay_broken" }).Count -gt 0) {
+        "degraded"
+    }
+    elseif (@($Results | Where-Object { $_.status -in @("container_unavailable", "container_unhealthy", "unreachable") }).Count -gt 0) {
+        "warning"
+    }
+    else {
+        "healthy"
+    }
+
+    $RecommendedFix = if ($OverallStatus -eq "degraded") {
+        "Restart Docker Desktop or start com.docker.service."
+    }
+    else {
+        ""
+    }
+
+    [pscustomobject]@{
+        status           = $OverallStatus
+        services         = @($Results)
+        recommended_fix  = $RecommendedFix
+    }
+}
+
+function Show-AIECDockerRelayDiagnostics {
+    param(
+        [Parameter(Mandatory = $true)]$Services
+    )
+
+    $Relay = Get-AIECDockerRelay -Services $Services
+    if ($Relay.status -eq "healthy") {
+        return $Relay
+    }
+
+    Write-Host ""
+    Write-Host "Relay diagnostics" -ForegroundColor Yellow
+    foreach ($Service in $Relay.services) {
+        switch ($Service.status) {
+            "relay_broken" {
+                Write-AIECLine -Level WARN -Message ("{0} relay status: broken (host relay failing while container is healthy)." -f $Service.name)
+            }
+            "container_unhealthy" {
+                Write-AIECLine -Level WARN -Message ("{0} relay status: container probe failed." -f $Service.name)
+            }
+            "container_unavailable" {
+                Write-AIECLine -Level WARN -Message ("{0} relay status: container not running." -f $Service.name)
+            }
+            default {
+                Write-AIECLine -Level INFO -Message ("{0} relay status: {1}" -f $Service.name, $Service.status)
+            }
+        }
+
+        if ($Service.port_owner -and $Service.port_owner.owner_summary) {
+            Write-AIECLine -Level INFO -Message ("{0} port owner: {1}" -f $Service.name, $Service.port_owner.owner_summary)
+        }
+
+        if ($Service.recommended_fix) {
+            Write-AIECLine -Level INFO -Message ("Recommended fix: {0}" -f $Service.recommended_fix)
+        }
+    }
+
+    return $Relay
+}
+
+function Test-AIECDockerRelay {
+    [CmdletBinding()]
+    param(
+        [switch]$AsJson,
+        [switch]$NoThrow
+    )
+
+    $Services = Get-AIECServices
+    $Relay = Get-AIECDockerRelay -Services $Services
+    $Results = @($Relay.services)
+    $FailedCount = @($Results | Where-Object { $_.status -ne "healthy" }).Count
+    $Result = [ordered]@{
+        status          = if ($Relay.status -eq "healthy") { "pass" } elseif ($Relay.status -eq "degraded") { "fail" } else { "warn" }
+        relay_status    = $Relay.status
+        recommended_fix = $Relay.recommended_fix
+        services        = $Results
+        issues          = @(
+            $Results |
+                Where-Object { $_.status -ne "healthy" } |
+                ForEach-Object {
+                    if ($_.name -and $_.issue) {
+                        "{0}: {1}" -f $_.name, $_.issue
+                    }
+                    elseif ($_.name) {
+                        "{0}: relay issue detected." -f $_.name
+                    }
+                }
+        )
+    }
+
+    if ($AsJson) {
+        $Result | ConvertTo-Json -Depth 20
+        if (-not $NoThrow -and $Result.status -eq "fail") {
+            throw "Docker Desktop relay validation failed."
+        }
+        return
+    }
+
+    Write-Host "[*] Docker Desktop relay health"
+    Write-Host ("Status          : {0}" -f $Result.status)
+    Write-Host ("Relay status    : {0}" -f $Result.relay_status)
+    Write-Host ("Recommended fix : {0}" -f $(if ($Result.recommended_fix) { $Result.recommended_fix } else { "(none)" }))
+    foreach ($Service in $Result.services) {
+        Write-Host ("- {0}: {1}" -f $Service.name, $Service.status)
+        if ($Service.port_owner -and $Service.port_owner.owner_summary) {
+            Write-Host ("  Port owner: {0}" -f $Service.port_owner.owner_summary)
+        }
+        if ($Service.recommended_fix) {
+            Write-Host ("  Fix: {0}" -f $Service.recommended_fix)
+        }
+    }
+
+    if (-not $NoThrow -and $Result.status -eq "fail") {
+        throw "Docker Desktop relay validation failed."
+    }
+}
+
 function Redact-AIECLogLine {
     param([string]$Line)
 
@@ -965,6 +1368,7 @@ function Invoke-AIECStart {
 
     Show-AIECContainerSummary
     Show-AIECDuplicateContainerWarnings -Services $Services
+    Show-AIECDockerRelayDiagnostics -Services $Services | Out-Null
 
     if (-not $NoBrowser) {
         foreach ($Url in @("http://localhost:3000", "http://localhost:5678")) {
@@ -1018,6 +1422,7 @@ function Invoke-AIECStatus {
 
     Show-AIECContainerSummary
     Show-AIECDuplicateContainerWarnings -Services $Services
+    Show-AIECDockerRelayDiagnostics -Services $Services | Out-Null
 
     Write-Host ""
     Write-Host "Services" -ForegroundColor Cyan
