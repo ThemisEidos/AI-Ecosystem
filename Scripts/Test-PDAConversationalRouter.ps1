@@ -183,7 +183,7 @@ foreach ($Case in $Cases) {
                 $CasePassed = $false
                 $Issues.Add("Fallback response did not include model_status.")
             }
-            elseif ($Direct.model_status -eq "pass" -and $Direct.response_text -match '(?i)i can help with status, briefing, blocked work, recent changes, tasks, workers, reports, memory, fabric, notebooklm, environment analysis, goal planning, research, review, and execution\.)') {
+            elseif ($Direct.model_status -eq "pass" -and $Direct.response_text -match [regex]::Escape("I can help with status, briefing, blocked work, recent changes, tasks, workers, reports, memory, Fabric, NotebookLM, environment analysis, goal planning, research, review, and execution.")) {
                 $CasePassed = $false
                 $Issues.Add("Fallback response returned legacy static help even though the model path succeeded.")
             }

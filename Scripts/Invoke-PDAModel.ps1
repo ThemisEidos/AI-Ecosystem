@@ -210,6 +210,29 @@ function Get-PDARequiredEnvironmentVariable {
     return [string]$Value
 }
 
+function Get-PDAModelNormalizedCategory {
+    param(
+        [Parameter(Mandatory = $false)]
+        [string]$CategoryValue,
+
+        [Parameter(Mandatory = $false)]
+        [string]$SensitivityValue
+    )
+
+    $CategoryText = ([string]$CategoryValue).Trim().ToLowerInvariant()
+    $SensitivityText = ([string]$SensitivityValue).Trim().ToLowerInvariant()
+
+    if ($CategoryText -eq "category_2") {
+        return "category_2"
+    }
+
+    if ($SensitivityText -in @("restricted_local", "sensitive", "local", "local_only", "category_2")) {
+        return "restricted_local"
+    }
+
+    return "category_1"
+}
+
 function New-PDARoutingAuditRecord {
     param(
         [Parameter(Mandatory = $true)]
@@ -319,11 +342,20 @@ function Invoke-PDAModelAttempt {
         $HttpStatus = [int]$Response.StatusCode
         $HttpStatusDescription = [string]$Response.StatusDescription
         $ResponsePayload = $null
+        $RawContent = [string]$Response.Content
         if (-not [string]::IsNullOrWhiteSpace($Response.Content)) {
-            $ResponsePayload = $Response.Content | ConvertFrom-Json -ErrorAction Stop
+            try {
+                $ResponsePayload = $Response.Content | ConvertFrom-Json -ErrorAction Stop
+            }
+            catch {
+                $ResponsePayload = $null
+            }
         }
 
         $ResponseText = Get-PDAChatContent -Payload $ResponsePayload
+        if ([string]::IsNullOrWhiteSpace($ResponseText) -and -not [string]::IsNullOrWhiteSpace($RawContent)) {
+            $ResponseText = $RawContent.Trim()
+        }
         $Usage = Get-PDAChatUsage -Payload $ResponsePayload
         $Choice = $null
         if ($ResponsePayload -and $ResponsePayload.PSObject.Properties.Name -contains "choices") {
@@ -384,6 +416,9 @@ if (-not (Test-Path -Path $ResolvedPolicyPath -PathType Leaf)) {
     throw "Model routing policy missing: $ResolvedPolicyPath"
 }
 
+$NormalizedSensitivity = [string]$Sensitivity
+$NormalizedCategory = Get-PDAModelNormalizedCategory -CategoryValue $Category -SensitivityValue $Sensitivity
+
 $RouteArgs = @(
     "-WorkerName", $WorkerName,
     "-Sensitivity", $Sensitivity,
@@ -398,32 +433,11 @@ if (-not [string]::IsNullOrWhiteSpace($Command)) {
     $RouteArgs += @("-Command", $Command)
 }
 
-$RouteRaw = & pwsh -NoProfile -File $RouteScript @RouteArgs 2>&1
-if ($LASTEXITCODE -ne 0) {
-    throw "Routing lookup failed for worker '$WorkerName'."
-}
-
-$RouteJson = [string]($RouteRaw -join "`n").Trim()
-if ([string]::IsNullOrWhiteSpace($RouteJson)) {
-    throw "Routing lookup returned no output."
-}
-
-$Route = $RouteJson | ConvertFrom-Json
-if (-not $Route) {
-    throw "Routing lookup returned invalid JSON."
-}
-
-$NormalizedSensitivity = [string]$Route.sensitivity
-$NormalizedCategory = [string]$Route.category
-$PrimaryModel = [string]$Route.primary_model
-$SelectedModel = [string]$Route.selected_model
-$FallbackChain = @($Route.fallback_chain | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | ForEach-Object { [string]$_ })
-$CloudAllowed = [bool]$Route.cloud_allowed
-
 if (-not [string]::IsNullOrWhiteSpace([string]$SelectedModelOverride)) {
     $SelectedModel = [string]$SelectedModelOverride
     $PrimaryModel = [string]$SelectedModelOverride
     $FallbackChain = @()
+    $CloudAllowed = $false
     $Route = [pscustomobject]@{
         status = "pass"
         policy_path = $ResolvedPolicyPath
@@ -439,7 +453,7 @@ if (-not [string]::IsNullOrWhiteSpace([string]$SelectedModelOverride)) {
         selected_model = $SelectedModel
         fallback_chain = @()
         model_candidates = @($SelectedModel)
-        provider_families = @()
+        provider_families = @("local")
         routing_surface = "direct_chat"
         cloud_allowed = $false
         via_litellm = $true
@@ -447,6 +461,29 @@ if (-not [string]::IsNullOrWhiteSpace([string]$SelectedModelOverride)) {
         reason = "Explicit model override selected by COOPER default routing."
         message = $Prompt
     }
+}
+else {
+    $RouteRaw = & pwsh -NoProfile -File $RouteScript @RouteArgs 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "Routing lookup failed for worker '$WorkerName'."
+    }
+
+    $RouteJson = [string]($RouteRaw -join "`n").Trim()
+    if ([string]::IsNullOrWhiteSpace($RouteJson)) {
+        throw "Routing lookup returned no output."
+    }
+
+    $Route = $RouteJson | ConvertFrom-Json
+    if (-not $Route) {
+        throw "Routing lookup returned invalid JSON."
+    }
+
+    $PrimaryModel = [string]$Route.primary_model
+    $SelectedModel = [string]$Route.selected_model
+    $FallbackChain = @($Route.fallback_chain | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | ForEach-Object { [string]$_ })
+    $CloudAllowed = [bool]$Route.cloud_allowed
+    $NormalizedSensitivity = [string]$Route.sensitivity
+    $NormalizedCategory = [string]$Route.category
 }
 
 if ($NormalizedCategory -in @("category_2", "restricted_local") -and $SelectedModel -ne "local-llama") {
@@ -739,7 +776,7 @@ $Normalized = [pscustomobject]@{
         created = if ($SuccessfulAttempt.response_payload -and $SuccessfulAttempt.response_payload.PSObject.Properties.Name -contains "created") { $SuccessfulAttempt.response_payload.created } else { $null }
         finish_reason = if ($SuccessfulAttempt.choice -and $SuccessfulAttempt.choice.PSObject.Properties.Name -contains "finish_reason") { [string]$SuccessfulAttempt.choice.finish_reason } else { "" }
         usage = $SuccessfulAttempt.usage
-        raw = ConvertTo-PDAHashtable -Value $SuccessfulAttempt.response_payload
+        raw = if ($SuccessfulAttempt.response_payload) { ConvertTo-PDAHashtable -Value $SuccessfulAttempt.response_payload } else { $null }
     }
     response_text = [string]$SuccessfulAttempt.response_text
     normalized_response_text = [string]$SuccessfulAttempt.response_text

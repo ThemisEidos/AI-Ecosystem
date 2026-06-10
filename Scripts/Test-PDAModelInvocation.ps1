@@ -21,6 +21,86 @@ if (Test-Path -LiteralPath $ParserPath -PathType Leaf) {
     . $ParserPath
 }
 
+function Initialize-PDALiteLLMMasterKey {
+    if (-not [string]::IsNullOrWhiteSpace([string]$env:LITELLM_MASTER_KEY)) {
+        return $true
+    }
+
+    $EnvFile = Join-Path $Root "litellm\.env.local"
+    if (-not (Test-Path -LiteralPath $EnvFile -PathType Leaf)) {
+        return $false
+    }
+
+    try {
+        $KeyLine = Get-Content -LiteralPath $EnvFile | Where-Object { $_ -match '^LITELLM_MASTER_KEY=' } | Select-Object -First 1
+        if ([string]::IsNullOrWhiteSpace([string]$KeyLine)) {
+            return $false
+        }
+
+        $KeyValue = ([string]$KeyLine -split '=', 2)[1]
+        if ([string]::IsNullOrWhiteSpace($KeyValue)) {
+            return $false
+        }
+
+        [Environment]::SetEnvironmentVariable("LITELLM_MASTER_KEY", $KeyValue, "Process")
+        return $true
+    }
+    catch {
+        return $false
+    }
+}
+
+function Start-PDALocalPlainTextServer {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ResponseText
+    )
+
+    $TempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("pda-model-plain-{0}" -f ([guid]::NewGuid().ToString("N")))
+    New-Item -ItemType Directory -Path $TempRoot -Force | Out-Null
+    $ServerScript = Join-Path $TempRoot "plain_text_server.py"
+    $ServerCode = @'
+import http.server
+import socketserver
+import sys
+
+payload = sys.argv[1].encode("utf-8")
+port = int(sys.argv[2])
+
+class Handler(http.server.BaseHTTPRequestHandler):
+    def do_POST(self):
+        length = int(self.headers.get("content-length", "0"))
+        if length > 0:
+            self.rfile.read(length)
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.send_header("Content-Length", str(len(payload)))
+        self.end_headers()
+        self.wfile.write(payload)
+
+    def log_message(self, format, *args):
+        return
+
+with socketserver.TCPServer(("127.0.0.1", port), Handler) as server:
+    server.handle_request()
+'@
+    Set-Content -LiteralPath $ServerScript -Value $ServerCode -Encoding UTF8
+
+    $Listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 0)
+    $Listener.Start()
+    $Port = [int]$Listener.LocalEndpoint.Port
+    $Listener.Stop()
+
+    $Process = Start-Process -FilePath "python" -ArgumentList @("-u", $ServerScript, $ResponseText, [string]$Port) -PassThru -WindowStyle Hidden
+    Start-Sleep -Milliseconds 500
+
+    return [pscustomobject]@{
+        process = $Process
+        endpoint = "http://127.0.0.1:$Port/v1/chat/completions"
+        temp_root = $TempRoot
+    }
+}
+
 function Invoke-TestCase {
     param(
         [Parameter(Mandatory = $true)]
@@ -41,8 +121,17 @@ function Invoke-TestCase {
         [Parameter(Mandatory = $true)]
     [string]$ExpectedModel,
 
-    [Parameter(Mandatory = $true)]
-    [string]$ExpectedToken,
+    [Parameter(Mandatory = $false)]
+    [string]$ExpectedToken = "",
+
+    [Parameter(Mandatory = $false)]
+    [string]$SelectedModelOverride,
+
+    [Parameter(Mandatory = $false)]
+    [string]$Endpoint = "http://localhost:4000/v1/chat/completions",
+
+    [Parameter(Mandatory = $false)]
+    [string]$ExpectedErrorPattern,
 
     [Parameter(Mandatory = $false)]
     [switch]$AllowUnavailable
@@ -57,6 +146,12 @@ function Invoke-TestCase {
     )
     if (-not [string]::IsNullOrWhiteSpace($TaskType)) {
         $Args += @("-TaskType", $TaskType)
+    }
+    if (-not [string]::IsNullOrWhiteSpace($SelectedModelOverride)) {
+        $Args += @("-SelectedModelOverride", $SelectedModelOverride)
+    }
+    if (-not [string]::IsNullOrWhiteSpace($Endpoint)) {
+        $Args += @("-Endpoint", $Endpoint)
     }
 
     $Raw = & pwsh -NoProfile -File $InvokeScript @Args 2>&1
@@ -78,7 +173,25 @@ function Invoke-TestCase {
         $MissingSecret = [bool]($Result.response.error_message -match '(?i)LITELLM_MASTER_KEY|approved runtime secret source')
     }
 
-    if (($AllowUnavailable -or $MissingSecret) -and $Result.status -ne "pass" -and ($MissingSecret -or $Result.response.http_status -in @(401, 403, 404, 429, 500, 502, 503, 504))) {
+    if (-not [string]::IsNullOrWhiteSpace($ExpectedErrorPattern)) {
+        if ($Result.status -eq "pass") {
+            $Issues.Add("Expected a failure diagnostic but got pass status.")
+        }
+        $CombinedError = ""
+        if ($Result.PSObject.Properties.Name -contains "response" -and $Result.response -and $Result.response.PSObject.Properties.Name -contains "error_message") {
+            $CombinedError = [string]$Result.response.error_message
+        }
+        elseif ($Result.PSObject.Properties.Name -contains "model_error_message") {
+            $CombinedError = [string]$Result.model_error_message
+        }
+        if ([string]::IsNullOrWhiteSpace($CombinedError)) {
+            $Issues.Add("Expected an error diagnostic, but no error message was returned.")
+        }
+        elseif ($CombinedError -notmatch $ExpectedErrorPattern) {
+            $Issues.Add("Error diagnostic did not match pattern '$ExpectedErrorPattern'.")
+        }
+    }
+    elseif (($AllowUnavailable -or $MissingSecret) -and $Result.status -ne "pass" -and ($MissingSecret -or $Result.response.http_status -in @(401, 403, 404, 429, 500, 502, 503, 504))) {
         $Skipped = $true
     }
     else {
@@ -124,10 +237,10 @@ function Invoke-TestCase {
                 $Issues.Add("Routing audit outcome does not match invocation status.")
             }
         }
-        if ([string]::IsNullOrWhiteSpace([string]$Result.response_text)) {
+        if ([string]::IsNullOrWhiteSpace([string]$Result.response_text) -and [string]::IsNullOrWhiteSpace($ExpectedErrorPattern)) {
             $Issues.Add("Response text is empty.")
         }
-        elseif ($Result.response_text -notmatch [regex]::Escape($ExpectedToken)) {
+        elseif (-not [string]::IsNullOrWhiteSpace($ExpectedToken) -and $Result.response_text -notmatch [regex]::Escape($ExpectedToken)) {
             $Issues.Add("Response text did not contain expected token '$ExpectedToken'.")
         }
     }
@@ -153,6 +266,16 @@ function Invoke-TestCase {
 
 $Cases = @(
     [pscustomobject]@{
+        name = "cooper override local-llama"
+        worker_name = "cooper-chat"
+        task_type = "conversational"
+        sensitivity = "standard"
+        prompt = "Return a brief plain acknowledgement."
+        expected_model = "local-llama"
+        expected_token = ""
+        selected_model_override = "local-llama"
+    }
+    [pscustomobject]@{
         name = "restricted local invocation"
         worker_name = "review-worker"
         task_type = "review"
@@ -171,7 +294,44 @@ $Cases = @(
         expected_token = "gemini-ok"
         allow_unavailable = $true
     }
+    [pscustomobject]@{
+        name = "plain text backend response"
+        worker_name = "cooper-chat"
+        task_type = "conversational"
+        sensitivity = "standard"
+        prompt = "Return plain-text-ok."
+        expected_model = "local-llama"
+        expected_token = "plain-text-ok"
+        selected_model_override = "local-llama"
+        endpoint = $null
+        use_plain_text_server = $true
+    }
+    [pscustomobject]@{
+        name = "missing backend diagnostic"
+        worker_name = "cooper-chat"
+        task_type = "conversational"
+        sensitivity = "standard"
+        prompt = "Return an error diagnostic."
+        expected_model = "local-llama"
+        expected_token = ""
+        selected_model_override = "local-llama"
+        endpoint = "http://127.0.0.1:1/v1/chat/completions"
+        expected_error_pattern = '(?i)connection|refused|failed|error'
+    }
 )
+
+$EnvReady = Initialize-PDALiteLLMMasterKey
+$PlainTextServer = $null
+foreach ($Case in $Cases) {
+    if ($Case.PSObject.Properties.Name -contains "use_plain_text_server" -and [bool]$Case.use_plain_text_server) {
+        if (-not $EnvReady) {
+            continue
+        }
+
+        $PlainTextServer = Start-PDALocalPlainTextServer -ResponseText "plain-text-ok"
+        $Case.endpoint = $PlainTextServer.endpoint
+    }
+}
 
 $Results = @()
 $Passed = 0
@@ -179,7 +339,11 @@ $Failed = 0
 $Skipped = 0
 
 foreach ($Case in $Cases) {
-    $CaseResult = Invoke-TestCase -Name $Case.name -WorkerName $Case.worker_name -TaskType $Case.task_type -Sensitivity $Case.sensitivity -Prompt $Case.prompt -ExpectedModel $Case.expected_model -ExpectedToken $Case.expected_token -AllowUnavailable:([bool]$Case.allow_unavailable)
+    if ($Case.PSObject.Properties.Name -contains "use_plain_text_server" -and [bool]$Case.use_plain_text_server -and -not $PlainTextServer) {
+        continue
+    }
+
+    $CaseResult = Invoke-TestCase -Name $Case.name -WorkerName $Case.worker_name -TaskType $Case.task_type -Sensitivity $Case.sensitivity -Prompt $Case.prompt -ExpectedModel $Case.expected_model -ExpectedToken $Case.expected_token -SelectedModelOverride $Case.selected_model_override -Endpoint $Case.endpoint -ExpectedErrorPattern $Case.expected_error_pattern -AllowUnavailable:([bool]$Case.allow_unavailable)
     $Results += $CaseResult
     if ($CaseResult.skipped) {
         $Skipped++
