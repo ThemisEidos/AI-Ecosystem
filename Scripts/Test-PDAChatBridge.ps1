@@ -351,11 +351,22 @@ $Cases = @(
         message = "Set humor to 50."
         confirm = $false
         expected_handoff = "personality_update"
-        expected_response_contains = "Update noted."
+        expected_response_contains = "Proposed update"
         expected_dispatch_ready = $false
         expected_dispatch = $false
         expected_command = ""
         marker = "chat-personality-update-$([guid]::NewGuid().ToString())"
+    }
+    [pscustomobject]@{
+        name = "personality cancel"
+        message = "Cancel personality change."
+        confirm = $false
+        expected_handoff = "personality_cancelled"
+        expected_response_contains = "Change cancelled"
+        expected_dispatch_ready = $false
+        expected_dispatch = $false
+        expected_command = ""
+        marker = "chat-personality-cancel-$([guid]::NewGuid().ToString())"
     }
     [pscustomobject]@{
         name = "roadmap request"
@@ -544,7 +555,7 @@ if ($SkipDispatch) {
 }
 
 if ($DashboardMode) {
-    $Cases = @($Cases | Where-Object { [string]$_.name -in @("known message", "ambiguous message", "unknown message", "research request", "status report", "morning briefing", "how are things going", "system status", "health report", "model identity", "provider identity", "backend identity", "self identity", "personality settings query", "humor setting update") })
+    $Cases = @($Cases | Where-Object { [string]$_.name -in @("known message", "ambiguous message", "unknown message", "research request", "status report", "morning briefing", "how are things going", "system status", "health report", "model identity", "provider identity", "backend identity", "self identity", "personality settings query", "humor setting update", "personality cancel") })
 }
 
 if (-not $SkipDispatch -and -not $DashboardMode) {

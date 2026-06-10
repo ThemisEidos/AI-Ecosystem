@@ -441,6 +441,28 @@ function Get-PDAConversationPendingAction {
     }
 }
 
+function Get-PDAConversationPendingPersonalityChange {
+    param([Parameter(Mandatory = $true)]$Conversation)
+
+    $Setting = [string]$Conversation.pending_personality_setting
+    if ([string]::IsNullOrWhiteSpace($Setting)) {
+        return $null
+    }
+
+    return [pscustomobject]@{
+        setting_key          = $Setting
+        label                = [string]$Conversation.pending_personality_label
+        property             = [string]$Conversation.pending_personality_property
+        previous_value       = [string]$Conversation.pending_personality_previous_value
+        proposed_value       = [string]$Conversation.pending_personality_proposed_value
+        change_mode          = [string]$Conversation.pending_personality_change_mode
+        status               = if ([string]::IsNullOrWhiteSpace([string]$Conversation.pending_personality_status)) { "awaiting_confirmation" } else { [string]$Conversation.pending_personality_status }
+        source_message       = [string]$Conversation.last_message
+        timestamp            = if ($Conversation.updated_at) { [string]$Conversation.updated_at } else { "" }
+        is_expired           = $false
+    }
+}
+
 function Get-PDAConversationSummary {
     param(
         [Parameter(Mandatory = $true)]$State,
@@ -467,6 +489,7 @@ function Get-PDAConversationSummary {
     )
 
     $PendingAction = Get-PDAConversationPendingAction -Conversation $Conversation
+    $PendingPersonalityChange = Get-PDAConversationPendingPersonalityChange -Conversation $Conversation
     $ApprovalRecord = $null
     if (Get-Command -Name Get-PDAApprovalRequest -ErrorAction SilentlyContinue) {
         try {
@@ -584,6 +607,11 @@ function Get-PDAConversationSummary {
         $NextAction = "Confirm the pending governed action to dispatch it."
     }
 
+    if ($PendingPersonalityChange -and -not $PendingPersonalityChange.is_expired -and [string]::IsNullOrWhiteSpace([string]$ResponseText)) {
+        $ResponseText = "Pending personality change for $($PendingPersonalityChange.label): $($PendingPersonalityChange.previous_value) -> $($PendingPersonalityChange.proposed_value). Reply confirm to persist it or cancel personality change."
+        $NextAction = "Confirm the personality change or cancel it."
+    }
+
     if ($LatestResult -and $LatestResult.result_path) {
         $ResponseText = "Latest result for this conversation is available at $($LatestResult.result_path)."
         $NextAction = "Open the result artifact or ask for a summary of the latest output."
@@ -625,6 +653,7 @@ function Get-PDAConversationSummary {
         submitted_tasks   = @($SubmittedTasks)
         completed_tasks   = @($CompletedTasks)
         pending_action    = $PendingAction
+        pending_personality_change = $PendingPersonalityChange
         approval          = if ($ApprovalRecord) { $ApprovalRecord } else { $null }
         latest_task       = if ($LatestTask) { $LatestTask } else { $null }
         latest_result     = if ($LatestResult) { $LatestResult } else { $null }
@@ -667,6 +696,7 @@ $Report = [pscustomobject]@{
     response_text         = if ($ConversationSummary) { $ConversationSummary.response_text } else { "No tracked PDA task found for this conversation." }
     next_action           = if ($ConversationSummary) { $ConversationSummary.next_action } else { "Ask the PDA to start a new task or confirm a queued request." }
     pending_approval_count = if ($ConversationSummary) { $ConversationSummary.pending_approvals.Count } else { 0 }
+    pending_personality_change = if ($ConversationSummary) { $ConversationSummary.pending_personality_change } else { $null }
     approval               = if ($ConversationSummary) { $ConversationSummary.approval } else { $null }
     active_task_count     = if ($ConversationSummary) { $ConversationSummary.active_tasks.Count } else { 0 }
     submitted_task_count  = if ($ConversationSummary) { $ConversationSummary.submitted_tasks.Count } else { 0 }

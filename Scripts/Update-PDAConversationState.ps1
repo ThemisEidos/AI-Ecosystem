@@ -103,6 +103,27 @@ param(
     [string]$PendingStatus,
 
     [Parameter(Mandatory = $false)]
+    [string]$PendingPersonalitySetting,
+
+    [Parameter(Mandatory = $false)]
+    [string]$PendingPersonalityLabel,
+
+    [Parameter(Mandatory = $false)]
+    [string]$PendingPersonalityProperty,
+
+    [Parameter(Mandatory = $false)]
+    [string]$PendingPersonalityPreviousValue,
+
+    [Parameter(Mandatory = $false)]
+    [string]$PendingPersonalityProposedValue,
+
+    [Parameter(Mandatory = $false)]
+    [string]$PendingPersonalityChangeMode,
+
+    [Parameter(Mandatory = $false)]
+    [string]$PendingPersonalityStatus,
+
+    [Parameter(Mandatory = $false)]
     [string]$RouteType,
 
     [Parameter(Mandatory = $false)]
@@ -131,6 +152,9 @@ param(
 
     [Parameter(Mandatory = $false)]
     [switch]$ClearPendingAction,
+
+    [Parameter(Mandatory = $false)]
+    [switch]$ClearPendingPersonalityChange,
 
     [Parameter(Mandatory = $false)]
     [string]$Source,
@@ -468,6 +492,19 @@ if ($ClearPendingAction) {
         Remove-PDAFieldIfPresent -Record $Conversation -Name $Field
     }
 }
+if ($ClearPendingAction -or $ClearPendingPersonalityChange) {
+    foreach ($Field in @(
+        "pending_personality_setting",
+        "pending_personality_label",
+        "pending_personality_property",
+        "pending_personality_previous_value",
+        "pending_personality_proposed_value",
+        "pending_personality_change_mode",
+        "pending_personality_status"
+    )) {
+        Remove-PDAFieldIfPresent -Record $Conversation -Name $Field
+    }
+}
 elseif (
     -not [string]::IsNullOrWhiteSpace($PendingRecommendedCommand) -or
     -not [string]::IsNullOrWhiteSpace($PendingDispatchCategory) -or
@@ -482,6 +519,24 @@ elseif (
     Set-PDAFieldIfPresent -Record $Conversation -Name "pending_timestamp" -Value $PendingTimestamp
     Set-PDAFieldIfPresent -Record $Conversation -Name "pending_expires_at" -Value $PendingExpiresAt
     Set-PDAFieldIfPresent -Record $Conversation -Name "pending_status" -Value $(if ([string]::IsNullOrWhiteSpace($PendingStatus)) { "pending" } else { $PendingStatus })
+}
+
+if (
+    -not [string]::IsNullOrWhiteSpace($PendingPersonalitySetting) -or
+    -not [string]::IsNullOrWhiteSpace($PendingPersonalityLabel) -or
+    -not [string]::IsNullOrWhiteSpace($PendingPersonalityProperty) -or
+    -not [string]::IsNullOrWhiteSpace($PendingPersonalityPreviousValue) -or
+    -not [string]::IsNullOrWhiteSpace($PendingPersonalityProposedValue) -or
+    -not [string]::IsNullOrWhiteSpace($PendingPersonalityChangeMode) -or
+    -not [string]::IsNullOrWhiteSpace($PendingPersonalityStatus)
+) {
+    Set-PDAFieldIfPresent -Record $Conversation -Name "pending_personality_setting" -Value $PendingPersonalitySetting
+    Set-PDAFieldIfPresent -Record $Conversation -Name "pending_personality_label" -Value $PendingPersonalityLabel
+    Set-PDAFieldIfPresent -Record $Conversation -Name "pending_personality_property" -Value $PendingPersonalityProperty
+    Set-PDAFieldIfPresent -Record $Conversation -Name "pending_personality_previous_value" -Value $PendingPersonalityPreviousValue
+    Set-PDAFieldIfPresent -Record $Conversation -Name "pending_personality_proposed_value" -Value $PendingPersonalityProposedValue
+    Set-PDAFieldIfPresent -Record $Conversation -Name "pending_personality_change_mode" -Value $PendingPersonalityChangeMode
+    Set-PDAFieldIfPresent -Record $Conversation -Name "pending_personality_status" -Value $(if ([string]::IsNullOrWhiteSpace($PendingPersonalityStatus)) { "awaiting_confirmation" } else { $PendingPersonalityStatus })
 }
 
 if (-not [string]::IsNullOrWhiteSpace($SessionId)) {
@@ -567,6 +622,24 @@ if (-not [string]::IsNullOrWhiteSpace($TaskId)) {
         Set-PDAFieldIfPresent -Record $TaskRecord -Name "pending_timestamp" -Value $PendingTimestamp
         Set-PDAFieldIfPresent -Record $TaskRecord -Name "pending_expires_at" -Value $PendingExpiresAt
         Set-PDAFieldIfPresent -Record $TaskRecord -Name "pending_status" -Value $(if ([string]::IsNullOrWhiteSpace($PendingStatus)) { "pending" } else { $PendingStatus })
+    }
+
+    if (
+        -not [string]::IsNullOrWhiteSpace($PendingPersonalitySetting) -or
+        -not [string]::IsNullOrWhiteSpace($PendingPersonalityLabel) -or
+        -not [string]::IsNullOrWhiteSpace($PendingPersonalityProperty) -or
+        -not [string]::IsNullOrWhiteSpace($PendingPersonalityPreviousValue) -or
+        -not [string]::IsNullOrWhiteSpace($PendingPersonalityProposedValue) -or
+        -not [string]::IsNullOrWhiteSpace($PendingPersonalityChangeMode) -or
+        -not [string]::IsNullOrWhiteSpace($PendingPersonalityStatus)
+    ) {
+        Set-PDAFieldIfPresent -Record $TaskRecord -Name "pending_personality_setting" -Value $PendingPersonalitySetting
+        Set-PDAFieldIfPresent -Record $TaskRecord -Name "pending_personality_label" -Value $PendingPersonalityLabel
+        Set-PDAFieldIfPresent -Record $TaskRecord -Name "pending_personality_property" -Value $PendingPersonalityProperty
+        Set-PDAFieldIfPresent -Record $TaskRecord -Name "pending_personality_previous_value" -Value $PendingPersonalityPreviousValue
+        Set-PDAFieldIfPresent -Record $TaskRecord -Name "pending_personality_proposed_value" -Value $PendingPersonalityProposedValue
+        Set-PDAFieldIfPresent -Record $TaskRecord -Name "pending_personality_change_mode" -Value $PendingPersonalityChangeMode
+        Set-PDAFieldIfPresent -Record $TaskRecord -Name "pending_personality_status" -Value $(if ([string]::IsNullOrWhiteSpace($PendingPersonalityStatus)) { "awaiting_confirmation" } else { $PendingPersonalityStatus })
     }
 
     $Conversation.latest_task_id = $TaskId

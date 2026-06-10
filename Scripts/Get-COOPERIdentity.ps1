@@ -19,7 +19,126 @@ function Get-COOPERIdentity {
         return $Fallback
     }
 
-    $ProfilePath = Join-Path $Root "Scripts\COOPER_Personality.json"
+    function Get-COOPERPersonalityProfilePath {
+        param(
+            [Parameter(Mandatory = $false)]
+            [string]$Root = (Split-Path -Parent $PSScriptRoot)
+        )
+
+        $Override = [string]$env:COOPER_PERSONALITY_PATH
+        if (-not [string]::IsNullOrWhiteSpace($Override)) {
+            return $Override.Trim()
+        }
+
+        return (Join-Path $Root "Scripts\COOPER_Personality.json")
+    }
+
+    function ConvertTo-COOPERPersonalityInt {
+        param(
+            [Parameter(Mandatory = $false)]
+            [AllowNull()]
+            $Value,
+
+            [Parameter(Mandatory = $false)]
+            [int]$Fallback = 0
+        )
+
+        if ($null -eq $Value) {
+            return $Fallback
+        }
+
+        $Number = 0
+        if ($Value -is [string]) {
+            if ([string]::IsNullOrWhiteSpace([string]$Value)) {
+                return $Fallback
+            }
+            if (-not [double]::TryParse([string]$Value, [ref]$Number)) {
+                return $Fallback
+            }
+        }
+        elseif ($Value -is [int] -or $Value -is [long] -or $Value -is [double] -or $Value -is [decimal]) {
+            $Number = [double]$Value
+        }
+        else {
+            try {
+                $Number = [double]$Value
+            }
+            catch {
+                return $Fallback
+            }
+        }
+
+        if ([double]::IsNaN($Number) -or [double]::IsInfinity($Number)) {
+            return $Fallback
+        }
+
+        $Rounded = [int][math]::Round($Number, 0, [MidpointRounding]::AwayFromZero)
+        if ($Rounded -lt 0) {
+            return 0
+        }
+        if ($Rounded -gt 100) {
+            return 100
+        }
+
+        return $Rounded
+    }
+
+    function Normalize-COOPERPersonalityProfile {
+        param(
+            [Parameter(Mandatory = $false)]
+            [AllowNull()]
+            $Personality
+        )
+
+        $Defaults = New-COOPERPersonalityProfile
+        if ($null -eq $Personality) {
+            return $Defaults
+        }
+
+        foreach ($Property in $Defaults.PSObject.Properties) {
+            if (-not ($Personality.PSObject.Properties.Name -contains $Property.Name)) {
+                $Personality | Add-Member -NotePropertyName $Property.Name -NotePropertyValue $Property.Value -Force
+            }
+        }
+
+        $NumericProperties = @(
+            "humor_level",
+            "honesty_level",
+            "directness_level",
+            "formality_level",
+            "risk_tolerance",
+            "discretion_level",
+            "verbosity_level",
+            "confidence_level",
+            "truthfulness",
+            "humor_frequency",
+            "formality",
+            "autonomy",
+            "skepticism",
+            "mission_focus",
+            "diplomacy",
+            "humor",
+            "sarcasm",
+            "honesty",
+            "brevity",
+            "verbosity",
+            "initiative",
+            "caution",
+            "persistence",
+            "confidence",
+            "discretion"
+        )
+
+        foreach ($PropertyName in $NumericProperties) {
+            if ($Personality.PSObject.Properties.Name -contains $PropertyName) {
+                $Personality.$PropertyName = ConvertTo-COOPERPersonalityInt -Value $Personality.$PropertyName -Fallback ([int]$Defaults.$PropertyName)
+            }
+        }
+
+        return $Personality
+    }
+
+    $ProfilePath = Get-COOPERPersonalityProfilePath -Root $Root
     $CapabilityRegistryPath = Join-Path $Root "Scripts\PDA_CapabilityRegistry.json"
     $AgentProfileRegistryPath = Join-Path $Root "Scripts\PDA_AgentProfileRegistry.json"
     $ProviderRoutingPolicyPath = Join-Path $Root "Scripts\PDA_ProviderRoutingPolicy.json"
@@ -152,11 +271,13 @@ function Get-COOPERIdentity {
         return (New-COOPERDefaultProfile -ProfilePath $ProfilePath)
     }
 
-    try {
-        $Profile = Get-Content -LiteralPath $ProfilePath -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
-        if ($null -eq $Profile) {
-            return (New-COOPERDefaultProfile -ProfilePath $ProfilePath)
-        }
+        try {
+            $Profile = Get-Content -LiteralPath $ProfilePath -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+            if ($null -eq $Profile) {
+                return (New-COOPERDefaultProfile -ProfilePath $ProfilePath)
+            }
+
+            $Profile.personality = Normalize-COOPERPersonalityProfile -Personality $Profile.personality
 
         $Profile | Add-Member -NotePropertyName status -NotePropertyValue "pass" -Force
         $Profile | Add-Member -NotePropertyName profile_path -NotePropertyValue $ProfilePath -Force
@@ -195,28 +316,7 @@ function Get-COOPERIdentity {
             $Profile | Add-Member -NotePropertyName personality -NotePropertyValue (New-COOPERPersonalityProfile) -Force
         }
         else {
-            $Personality = $Profile.personality
-            $Defaults = New-COOPERPersonalityProfile
-            foreach ($Property in $Defaults.PSObject.Properties) {
-                if (-not ($Personality.PSObject.Properties.Name -contains $Property.Name)) {
-                    $Personality | Add-Member -NotePropertyName $Property.Name -NotePropertyValue $Property.Value -Force
-                }
-            }
-            if ($Personality.PSObject.Properties.Name -contains "humor_level" -and [int]$Personality.humor_level -lt 65) {
-                $Personality.humor_level = 65
-            }
-            if ($Personality.PSObject.Properties.Name -contains "honesty_level" -and [int]$Personality.honesty_level -lt 99) {
-                $Personality.honesty_level = 99
-            }
-            if ($Personality.PSObject.Properties.Name -contains "directness_level" -and [int]$Personality.directness_level -lt 90) {
-                $Personality.directness_level = 90
-            }
-            if ($Personality.PSObject.Properties.Name -contains "formality_level" -and [int]$Personality.formality_level -gt 35) {
-                $Personality.formality_level = 35
-            }
-            if ($Personality.PSObject.Properties.Name -contains "risk_tolerance" -and [int]$Personality.risk_tolerance -gt 20) {
-                $Personality.risk_tolerance = 20
-            }
+            $Profile.personality = Normalize-COOPERPersonalityProfile -Personality $Profile.personality
         }
         if (-not ($Profile.PSObject.Properties.Name -contains "governance")) {
             $Profile | Add-Member -NotePropertyName governance -NotePropertyValue ([pscustomobject]@{

@@ -219,7 +219,7 @@ function Get-COOPERConversationSystemPrompt {
     $Personality = if ($Profile -and $Profile.PSObject.Properties.Name -contains "personality") { $Profile.personality } else { $null }
     $Humor = if ($Personality -and $Personality.PSObject.Properties.Name -contains "humor_level") { [int]$Personality.humor_level } else { 25 }
     $Directness = if ($Personality -and $Personality.PSObject.Properties.Name -contains "directness_level") { [int]$Personality.directness_level } else { 90 }
-    $Formality = if ($Personality -and $Personality.PSObject.Properties.Name -contains "formality_level") { [int]$Personality.formality_level } else { 55 }
+    $Formality = if ($Personality -and $Personality.PSObject.Properties.Name -contains "formality_level") { [int]$Personality.formality_level } else { 35 }
     $RiskTolerance = if ($Personality -and $Personality.PSObject.Properties.Name -contains "risk_tolerance") { [int]$Personality.risk_tolerance } else { 20 }
     $Honesty = if ($Personality -and $Personality.PSObject.Properties.Name -contains "honesty_level") { [int]$Personality.honesty_level } else { 99 }
     $Discretion = if ($Personality -and $Personality.PSObject.Properties.Name -contains "discretion_level") { [int]$Personality.discretion_level } else { 90 }
@@ -236,6 +236,7 @@ function Get-COOPERConversationSystemPrompt {
         "Personality controls: humor $Humor/100, honesty $Honesty/100, discretion $Discretion/100, directness $Directness/100, verbosity $Verbosity/100, confidence $Confidence/100, formality $Formality/100, risk tolerance $RiskTolerance/100."
         "Style note: $IdentityNote."
         "Keep normal chat responses short and practical unless the task requires detail."
+        "If the user asks to change your personality, treat it as a governed request and wait for explicit confirmation before any persistent update."
         "Do not use cheerful customer-service language."
         "Do not overuse jokes, catchphrases, or explosion references."
         "Do not invent runtime, provider, gateway, backend, or model metadata."

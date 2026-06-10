@@ -25,7 +25,7 @@ function Test-PDACommanderDecisionDirectAnswer {
     param([Parameter(Mandatory = $true)][string]$NormalizedText)
 
     return [bool](
-        $NormalizedText -match '(?i)\b(status|help|what can you do|what commands|available commands|task status|where is my result|result location|what happened|briefing|what should i work on next|what changed recently|what needs attention|what is blocked|memory candidates|workers|reports|personality settings|your personality|humor level|humour level|honesty level|discretion level|directness level|verbosity level|confidence level|risk tolerance|set humor|update humor|set directness|update directness|set formality|update formality|set discretion|update discretion)\b'
+        $NormalizedText -match '(?i)\b(status|help|what can you do|what commands|available commands|task status|where is my result|result location|what happened|briefing|what should i work on next|what changed recently|what needs attention|what is blocked|memory candidates|workers|reports|personality settings|personality profile|your personality|humor level|humour level|honesty level|discretion level|directness level|verbosity level|confidence level|risk tolerance|set humor|update humor|set directness|update directness|set formality|update formality|set discretion|update discretion|increase directness|lower verbosity|cancel personality change)\b'
     )
 }
 
@@ -153,6 +153,7 @@ function Get-PDACommanderDecisionRecommendedCommand {
                 "task_lookup" { return "/tasks" }
                 "personality_status" { return "" }
                 "personality_update" { return "" }
+                "personality_cancel" { return "" }
                 default { return "" }
             }
         }
@@ -240,6 +241,11 @@ function New-PDACommanderDecision {
             $Intent = "personality_update"
             $Reason = "Direct personality adjustment request."
             $MatchedRules.Add("personality_update") | Out-Null
+        }
+        elseif ($Normalized -match '(?i)\b(cancel personality change|cancel the personality change|cancel personality update|abort personality change|discard personality change|never mind the personality change)\b') {
+            $Intent = "personality_cancel"
+            $Reason = "Direct personality cancellation request."
+            $MatchedRules.Add("personality_cancel") | Out-Null
         }
         elseif ($Normalized -match '(?i)\b(memory candidates|pending memory promotions|memory promotion|what did the pda learn)\b') {
             $Intent = "memory_candidates"

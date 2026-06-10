@@ -265,7 +265,7 @@ function Test-PDAConversationalPersonalityQuery {
     param([Parameter(Mandatory = $true)][string]$NormalizedText)
 
     return [bool](
-        $NormalizedText -match '(?i)\b(humor level|humour level|honesty level|discretion level|directness level|formality level|verbosity level|confidence level|risk tolerance|personality settings|your settings|your personality|how humorous are you|how direct are you|how formal are you|how verbose are you|how confident are you|how discreet are you|what are your settings)\b'
+        $NormalizedText -match '(?i)\b(humor level|humour level|honesty level|discretion level|directness level|formality level|verbosity level|confidence level|risk tolerance|personality settings|personality profile|your settings|your personality|how humorous are you|how direct are you|how formal are you|how verbose are you|how confident are you|how discreet are you|what are your settings|what is my personality profile|show personality settings)\b'
     )
 }
 
@@ -273,9 +273,137 @@ function Test-PDAConversationalPersonalityUpdate {
     param([Parameter(Mandatory = $true)][string]$NormalizedText)
 
     return [bool](
-        $NormalizedText -match '(?i)\b(set|update|adjust|change)\b.*\b(humor|humour|honesty|discretion|directness|formality|verbosity|confidence|risk tolerance)\b' -or
+        $NormalizedText -match '(?i)\b(set|update|adjust|change|propose|increase|decrease|lower|raise|boost|reduce)\b.*\b(humor|humour|honesty|discretion|directness|formality|verbosity|confidence|risk tolerance)\b' -or
+        $NormalizedText -match '(?i)\b(lower|raise|increase|decrease|boost|reduce|turn up|turn down|dial up|dial down)\b.*\b(humor|humour|honesty|discretion|directness|formality|verbosity|confidence|risk tolerance)\b' -or
         $NormalizedText -match '(?i)\b(make yourself|be more|be less|sound more|sound less)\b.*\b(dry|terse|concise|direct|formal|honest|discreet|confident|sarcastic)\b'
     )
+}
+
+function Test-PDAConversationalPersonalityCancel {
+    param([Parameter(Mandatory = $true)][string]$NormalizedText)
+
+    return [bool](
+        $NormalizedText -match '(?i)\b(cancel personality change|cancel the personality change|cancel personality update|cancel the personality update|abort personality change|discard personality change|never mind the personality change)\b'
+    )
+}
+
+function Get-COOPERPersonalitySettingDefinition {
+    param([Parameter(Mandatory = $true)][string]$NormalizedText)
+
+    $Definitions = @(
+        [pscustomobject]@{ key = "humor"; property = "humor_level"; label = "Humor"; aliases = @("humor", "humour") }
+        [pscustomobject]@{ key = "honesty"; property = "honesty_level"; label = "Honesty"; aliases = @("honesty") }
+        [pscustomobject]@{ key = "discretion"; property = "discretion_level"; label = "Discretion"; aliases = @("discretion") }
+        [pscustomobject]@{ key = "directness"; property = "directness_level"; label = "Directness"; aliases = @("directness") }
+        [pscustomobject]@{ key = "verbosity"; property = "verbosity_level"; label = "Verbosity"; aliases = @("verbosity") }
+        [pscustomobject]@{ key = "confidence"; property = "confidence_level"; label = "Confidence"; aliases = @("confidence") }
+        [pscustomobject]@{ key = "formality"; property = "formality_level"; label = "Formality"; aliases = @("formality") }
+        [pscustomobject]@{ key = "risk_tolerance"; property = "risk_tolerance"; label = "Risk Tolerance"; aliases = @("risk tolerance", "risk_tolerance", "risk-tolerance") }
+    )
+
+    foreach ($Definition in $Definitions) {
+        foreach ($Alias in @($Definition.aliases)) {
+            if ($NormalizedText -match ('(?i)\b{0}\b' -f [regex]::Escape([string]$Alias))) {
+                return $Definition
+            }
+        }
+    }
+
+    return $null
+}
+
+function Get-COOPERPersonalityChangeProposal {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Text,
+
+        [Parameter(Mandatory = $false)]
+        [string]$Root = (Split-Path -Parent $PSScriptRoot)
+    )
+
+    $NormalizedText = Normalize-PDAConversationalText -Value $Text
+    $Definition = Get-COOPERPersonalitySettingDefinition -NormalizedText $NormalizedText
+    if (-not $Definition) {
+        return [pscustomobject]@{
+            status = "clarify"
+            reason = "No supported personality setting was recognized."
+            response_text = "Specify one setting to update: humor, honesty, discretion, directness, verbosity, confidence, formality, or risk tolerance."
+            next_action = "Pick a single supported setting and value."
+        }
+    }
+
+    $Identity = $null
+    if (Get-Command -Name Get-COOPERIdentity -ErrorAction SilentlyContinue) {
+        try {
+            $Identity = Get-COOPERIdentity -Root $Root
+        }
+        catch {
+            $Identity = $null
+        }
+    }
+
+    $Personality = if ($Identity -and $Identity.PSObject.Properties.Name -contains "personality") { $Identity.personality } else { $null }
+    $CurrentValue = if ($Personality -and $Personality.PSObject.Properties.Name -contains $Definition.property) { [int]$Personality.($Definition.property) } else { 0 }
+
+    $ExplicitValue = $null
+    foreach ($Pattern in @(
+        '(?i)\b(?:to|=|->)\s*(\d{1,3})\b',
+        '(?i)\b(?:set|update|adjust|change|propose|increase|decrease|lower|raise|boost|reduce)\s+(?:humor|humour|honesty|discretion|directness|formality|verbosity|confidence|risk tolerance)\s+(?:to\s+)?(\d{1,3})\b'
+    )) {
+        if ($Text -match $Pattern) {
+            $ExplicitValue = [int]$Matches[1]
+            break
+        }
+    }
+
+    $Delta = 0
+    if ($NormalizedText -match '(?i)\b(lower|decrease|reduce|less|turn down|dial down|dial back)\b') {
+        $Delta = -10
+    }
+    elseif ($NormalizedText -match '(?i)\b(increase|raise|boost|more|higher|turn up|dial up|dial higher)\b') {
+        $Delta = 10
+    }
+
+    $ProposedValue = $null
+    $ChangeMode = "unspecified"
+    if ($null -ne $ExplicitValue) {
+        $ProposedValue = [int]([math]::Max(0, [math]::Min(100, $ExplicitValue)))
+        $ChangeMode = "absolute"
+    }
+    elseif ($Delta -ne 0) {
+        $ProposedValue = [int]([math]::Max(0, [math]::Min(100, ($CurrentValue + $Delta))))
+        $ChangeMode = "relative"
+    }
+
+    if ($null -eq $ProposedValue) {
+        return [pscustomobject]@{
+            status = "clarify"
+            reason = "No numeric value or relative adjustment could be derived."
+            setting_key = [string]$Definition.key
+            setting_label = [string]$Definition.label
+            current_value = $CurrentValue
+            response_text = ("{0}: {1}. Specify a value from 0 to 100, or say lower/increase." -f $Definition.label, $CurrentValue)
+            next_action = "Specify a value from 0 to 100 and confirm."
+        }
+    }
+
+    return [pscustomobject]@{
+        status = "pass"
+        reason = "Personality change proposal resolved."
+        setting_key = [string]$Definition.key
+        setting_label = [string]$Definition.label
+        setting_property = [string]$Definition.property
+        current_value = $CurrentValue
+        proposed_value = [int]$ProposedValue
+        change_mode = $ChangeMode
+        response_text = @(
+            "COOPER Personality"
+            "Proposed update:"
+            ("{0}: {1} -> {2}" -f $Definition.label, $CurrentValue, $ProposedValue)
+            "Confirm?"
+        ) -join "`r`n"
+        next_action = "Reply Confirm to persist the update, or cancel personality change."
+    }
 }
 
 function Test-PDAConversationalTaskLookup {
@@ -452,6 +580,15 @@ function Resolve-PDAConversationalRoute {
         $Route.response_mode = "direct_answer"
         $Route.recommended_command = ""
         $Route.reason = "Direct personality profile request."
+        $Route.confidence = 1
+        return [pscustomobject]$Route
+    }
+
+    if (Test-PDAConversationalPersonalityCancel -NormalizedText $Normalized) {
+        $Route.route_type = "personality_cancel"
+        $Route.response_mode = "direct_answer"
+        $Route.recommended_command = ""
+        $Route.reason = "Direct personality cancellation request."
         $Route.confidence = 1
         return [pscustomobject]$Route
     }
@@ -806,15 +943,32 @@ function Get-PDAConversationalNaturalResponse {
             $BaseResponse.runtime_status = $RuntimeStatus
         }
         "personality_update" {
-            $RequestedTone = if ($Text -match '(?i)\b(dry|terse|concise|direct|formal|honest|discreet|confident|sarcastic)\b') { [string]$Matches[0] } else { "requested" }
+            $Proposal = Get-COOPERPersonalityChangeProposal -Text $Text -Root $Root
+            if ($Proposal.status -eq "pass") {
+                $BaseResponse.response_text = $Proposal.response_text
+                $BaseResponse.next_action = $Proposal.next_action
+                $BaseResponse.personality_setting = $Proposal.setting_key
+                $BaseResponse.personality_label = $Proposal.setting_label
+                $BaseResponse.personality_property = $Proposal.setting_property
+                $BaseResponse.personality_current_value = $Proposal.current_value
+                $BaseResponse.personality_proposed_value = $Proposal.proposed_value
+                $BaseResponse.personality_change_mode = $Proposal.change_mode
+                $BaseResponse.personality_proposal = $Proposal
+            }
+            else {
+                $BaseResponse.response_text = $Proposal.response_text
+                $BaseResponse.next_action = $Proposal.next_action
+                $BaseResponse.personality_proposal = $Proposal
+            }
+            $BaseResponse.latest_result_response_text = $BaseResponse.response_text
+        }
+        "personality_cancel" {
             $BaseResponse.response_text = @(
                 "COOPER Personality"
-                "Update noted."
-                "Persistent profile edits are not applied automatically."
-                "Tone stays dry, concise, and operational."
-                ("Requested adjustment: {0}" -f $RequestedTone)
+                "Change cancelled."
+                "No write was performed."
             ) -join "`r`n"
-            $BaseResponse.next_action = "If you want a persistent change, edit Scripts/COOPER_Personality.json."
+            $BaseResponse.next_action = "Standing by."
             $BaseResponse.latest_result_response_text = $BaseResponse.response_text
         }
         "task_lookup" {

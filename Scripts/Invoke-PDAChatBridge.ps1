@@ -143,6 +143,98 @@ function Get-PDAConversationPendingActionFromSummary {
     return $null
 }
 
+function Get-PDAConversationPendingPersonalityChangeFromSummary {
+    param([Parameter(Mandatory = $false)]$ConversationState)
+
+    if (-not $ConversationState) {
+        return $null
+    }
+
+    if ($ConversationState.pending_personality_change) {
+        return $ConversationState.pending_personality_change
+    }
+
+    if ($ConversationState.conversation -and $ConversationState.conversation.pending_personality_setting) {
+        return [pscustomobject]@{
+            setting_key    = [string]$ConversationState.conversation.pending_personality_setting
+            label          = [string]$ConversationState.conversation.pending_personality_label
+            property       = [string]$ConversationState.conversation.pending_personality_property
+            previous_value = [string]$ConversationState.conversation.pending_personality_previous_value
+            proposed_value = [string]$ConversationState.conversation.pending_personality_proposed_value
+            change_mode    = [string]$ConversationState.conversation.pending_personality_change_mode
+            status         = [string]$ConversationState.conversation.pending_personality_status
+            is_expired     = $false
+        }
+    }
+
+    return $null
+}
+
+function Get-PDAConversationPendingPersonalityChangeFromStateFile {
+    param(
+        [Parameter(Mandatory = $false)]
+        [string]$Root,
+
+        [Parameter(Mandatory = $false)]
+        [string]$ConversationId,
+
+        [Parameter(Mandatory = $false)]
+        [string]$SessionId
+    )
+
+    $StatePath = Join-Path $Root "PDA-Runtime\data\conversation-state.json"
+    if (-not (Test-Path -LiteralPath $StatePath -PathType Leaf)) {
+        return $null
+    }
+
+    try {
+        $State = Get-Content -LiteralPath $StatePath -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+    }
+    catch {
+        return $null
+    }
+
+    $ConversationEntry = $null
+    if ($ConversationId -and $State.conversations) {
+        $ConversationEntry = @($State.conversations.PSObject.Properties | Where-Object { [string]$_.Name -eq $ConversationId } | Select-Object -First 1).Value
+    }
+
+    if (-not $ConversationEntry -and $SessionId -and $State.conversations) {
+        foreach ($Property in @($State.conversations.PSObject.Properties)) {
+            $Candidate = $Property.Value
+            if ($Candidate -and [string]$Candidate.session_id -eq $SessionId) {
+                $ConversationEntry = $Candidate
+                break
+            }
+        }
+    }
+
+    if (-not $ConversationEntry -and $State.conversations) {
+        foreach ($Property in @($State.conversations.PSObject.Properties)) {
+            $Candidate = $Property.Value
+            if ($Candidate -and $Candidate.pending_personality_setting) {
+                $ConversationEntry = $Candidate
+                break
+            }
+        }
+    }
+
+    if (-not $ConversationEntry -or -not $ConversationEntry.pending_personality_setting) {
+        return $null
+    }
+
+    return [pscustomobject]@{
+        setting_key    = [string]$ConversationEntry.pending_personality_setting
+        label          = [string]$ConversationEntry.pending_personality_label
+        property       = [string]$ConversationEntry.pending_personality_property
+        previous_value = [string]$ConversationEntry.pending_personality_previous_value
+        proposed_value = [string]$ConversationEntry.pending_personality_proposed_value
+        change_mode    = [string]$ConversationEntry.pending_personality_change_mode
+        status         = [string]$ConversationEntry.pending_personality_status
+        is_expired     = $false
+    }
+}
+
 function Get-PDAPendingConfirmationTimeoutMinutes {
     $DefaultMinutes = 30
     $EnvValue = [string]$env:PDA_PENDING_CONFIRMATION_TIMEOUT_MINUTES
@@ -434,6 +526,13 @@ function Invoke-PDAConversationStateUpdate {
         [string]$PendingTimestamp,
         [string]$PendingExpiresAt,
         [string]$PendingStatus,
+        [string]$PendingPersonalitySetting,
+        [string]$PendingPersonalityLabel,
+        [string]$PendingPersonalityProperty,
+        [string]$PendingPersonalityPreviousValue,
+        [string]$PendingPersonalityProposedValue,
+        [string]$PendingPersonalityChangeMode,
+        [string]$PendingPersonalityStatus,
         [string]$RouteType,
         [object]$Decision,
         [object]$COOPERContext,
@@ -443,7 +542,8 @@ function Invoke-PDAConversationStateUpdate {
         [bool]$GovernanceAvailable = $false,
         [bool]$CapabilityRegistryAvailable = $false,
         [bool]$AgentRegistryAvailable = $false,
-        [switch]$ClearPendingAction
+        [switch]$ClearPendingAction,
+        [switch]$ClearPendingPersonalityChange
     )
 
     if (-not (Test-Path -Path $UpdateConversationStateScript -PathType Leaf)) {
@@ -506,8 +606,32 @@ function Invoke-PDAConversationStateUpdate {
     if (-not [string]::IsNullOrWhiteSpace($PendingStatus)) {
         $UpdateArgs += @("-PendingStatus", $PendingStatus)
     }
+    if (-not [string]::IsNullOrWhiteSpace($PendingPersonalitySetting)) {
+        $UpdateArgs += @("-PendingPersonalitySetting", $PendingPersonalitySetting)
+    }
+    if (-not [string]::IsNullOrWhiteSpace($PendingPersonalityLabel)) {
+        $UpdateArgs += @("-PendingPersonalityLabel", $PendingPersonalityLabel)
+    }
+    if (-not [string]::IsNullOrWhiteSpace($PendingPersonalityProperty)) {
+        $UpdateArgs += @("-PendingPersonalityProperty", $PendingPersonalityProperty)
+    }
+    if (-not [string]::IsNullOrWhiteSpace($PendingPersonalityPreviousValue)) {
+        $UpdateArgs += @("-PendingPersonalityPreviousValue", $PendingPersonalityPreviousValue)
+    }
+    if (-not [string]::IsNullOrWhiteSpace($PendingPersonalityProposedValue)) {
+        $UpdateArgs += @("-PendingPersonalityProposedValue", $PendingPersonalityProposedValue)
+    }
+    if (-not [string]::IsNullOrWhiteSpace($PendingPersonalityChangeMode)) {
+        $UpdateArgs += @("-PendingPersonalityChangeMode", $PendingPersonalityChangeMode)
+    }
+    if (-not [string]::IsNullOrWhiteSpace($PendingPersonalityStatus)) {
+        $UpdateArgs += @("-PendingPersonalityStatus", $PendingPersonalityStatus)
+    }
     if ($ClearPendingAction) {
         $UpdateArgs += "-ClearPendingAction"
+    }
+    if ($ClearPendingPersonalityChange) {
+        $UpdateArgs += "-ClearPendingPersonalityChange"
     }
     if (-not [string]::IsNullOrWhiteSpace($RouteType)) {
         $UpdateArgs += @("-RouteType", $RouteType)
@@ -689,12 +813,18 @@ $UseLegacyStatusLookup = $true
 $HandoffInputMessage = $Message
 
 $ConversationState = $null
-if ($IsConfirmationMessage -or $ConfirmDispatch -or (Test-PDAApprovalActionMessage -Text $Message)) {
+if ($IsConfirmationMessage -or $ConfirmDispatch -or (Test-PDAApprovalActionMessage -Text $Message) -or ($Message -match '(?i)\b(cancel personality change|cancel the personality change|cancel personality update|abort personality change|discard personality change|never mind the personality change)\b')) {
     $ConversationState = Invoke-PDAConversationStateQuery -ConversationId $ConversationId -SessionId $SessionId -Message $Message
 }
 
 $PendingAction = Get-PDAConversationPendingActionFromSummary -ConversationState $ConversationState
 $HasPendingAction = $PendingAction -and -not [bool]$PendingAction.is_expired
+$PendingPersonalityChange = Get-PDAConversationPendingPersonalityChangeFromSummary -ConversationState $ConversationState
+$HasPendingPersonalityChange = $PendingPersonalityChange -and -not [bool]$PendingPersonalityChange.is_expired
+if (-not $HasPendingPersonalityChange) {
+    $PendingPersonalityChange = Get-PDAConversationPendingPersonalityChangeFromStateFile -Root $Root -ConversationId $ConversationId -SessionId $SessionId
+    $HasPendingPersonalityChange = $PendingPersonalityChange -and -not [bool]$PendingPersonalityChange.is_expired
+}
 
 $ApprovalRecord = $null
 if (Get-Command -Name Get-PDAApprovalRequest -ErrorAction SilentlyContinue) {
@@ -839,12 +969,174 @@ if (-not [string]::IsNullOrWhiteSpace($ApprovalActionStatus) -and ($HasPendingAc
     }
 }
 
+if ($HasPendingPersonalityChange -and (-not $HasPendingAction) -and ($IsConfirmationMessage -or $ConfirmDispatch)) {
+    $PersonalityUpdateScript = Join-Path $PSScriptRoot "Update-COOPERPersonality.ps1"
+    if (-not (Test-Path -Path $PersonalityUpdateScript -PathType Leaf)) {
+        $Result = [pscustomobject]@{
+            original_message         = $Message
+            response_text            = "COOPER personality updater is unavailable."
+            recommended_command      = ""
+            intent                   = "personality_update"
+            route_type               = "personality_update"
+            confidence               = 1
+            requires_confirmation    = $false
+            dispatch_ready           = $false
+            dispatch_status          = "not_dispatched"
+            next_action              = "Restore the updater script."
+            bridge_status            = "ready"
+            handoff_status           = "personality_update_failed"
+            source_of_truth          = "Scripts/Update-COOPERPersonality.ps1"
+            confirmation_mode        = [bool]$ConfirmDispatch
+            dispatch_path            = ""
+            dispatch_category        = ""
+            conversation_id          = $(if ($ConversationId) { $ConversationId } elseif ($ConversationState -and $ConversationState.conversation_id) { [string]$ConversationState.conversation_id } else { "" })
+            session_id               = $SessionId
+            conversation_state_status = if ($ConversationState) { [string]$ConversationState.status } else { "empty" }
+            latest_task_id           = if ($ConversationState -and $ConversationState.latest_task) { [string]$ConversationState.latest_task.task_id } else { "" }
+            latest_task_status       = if ($ConversationState -and $ConversationState.latest_task) { [string]$ConversationState.latest_task.task_status } else { "" }
+            latest_result_path       = if ($ConversationState -and $ConversationState.latest_result) { [string]$ConversationState.latest_result.result_path } else { "" }
+            latest_result_response_text = if ($ConversationState) { [string]$ConversationState.response_text } else { "" }
+            result_artifact_path     = if ($ConversationState -and $ConversationState.latest_result) { [string]$ConversationState.latest_result.result_path } else { "" }
+            result_artifact          = if ($ConversationState) { $ConversationState.latest_result } else { $null }
+            decision                 = $script:PDACommanderDecision
+            bridge_mode              = "personality_update"
+            pending_action           = if ($PendingAction) { $PendingAction } else { $null }
+            pending_personality_change = $PendingPersonalityChange
+        }
+        $Result = Add-PDACommanderRuntimeContextFields -Result $Result
+        if ($AsJson) {
+            $Result | ConvertTo-Json -Depth 20
+            return
+        }
+        Write-Host "[ERR] PDA chat bridge result:"
+        Write-Host ("Response text        : {0}" -f $Result.response_text)
+        return
+    }
+
+    $UpdateArgs = @(
+        "-Setting", [string]$PendingPersonalityChange.setting_key,
+        "-Value", [string]$PendingPersonalityChange.proposed_value,
+        "-ConversationId", $(if ($ConversationId) { $ConversationId } else { "" }),
+        "-SessionId", $(if ($SessionId) { $SessionId } else { "" }),
+        "-UserId", $(if ($UserId) { $UserId } else { "" }),
+        "-ConversationTitle", $(if ($ConversationTitle) { $ConversationTitle } else { "" }),
+        "-Message", $(if ($Message) { $Message } else { "" }),
+        "-AsJson",
+        "-NoThrow"
+    )
+    $UpdateRaw = & pwsh -NoProfile -File $PersonalityUpdateScript @UpdateArgs 2>&1
+    $UpdateText = [string]($UpdateRaw -join "`n").Trim()
+    $UpdateResult = $null
+    try {
+        if (-not [string]::IsNullOrWhiteSpace($UpdateText)) {
+            $UpdateResult = ConvertFrom-PDAMixedJson -Text $UpdateText -SourceName $PersonalityUpdateScript
+        }
+    }
+    catch {
+        $UpdateResult = $null
+    }
+
+    if (-not $UpdateResult -or [string]$UpdateResult.status -ne "pass") {
+        $FailureText = if ($UpdateResult -and $UpdateResult.message) { [string]$UpdateResult.message } elseif (-not [string]::IsNullOrWhiteSpace($UpdateText)) { $UpdateText } else { "COOPER personality update failed." }
+        $Result = [pscustomobject]@{
+            original_message         = $Message
+            response_text            = "COOPER personality update failed. $FailureText"
+            recommended_command      = ""
+            intent                   = "personality_update"
+            route_type               = "personality_update"
+            confidence               = 1
+            requires_confirmation    = $false
+            dispatch_ready           = $false
+            dispatch_status          = "not_dispatched"
+            next_action              = "Try the update again or cancel the pending personality change."
+            bridge_status            = "ready"
+            handoff_status           = "personality_update_failed"
+            source_of_truth          = "Scripts/Update-COOPERPersonality.ps1"
+            confirmation_mode        = [bool]$ConfirmDispatch
+            dispatch_path            = ""
+            dispatch_category        = ""
+            conversation_id          = $(if ($ConversationId) { $ConversationId } elseif ($ConversationState -and $ConversationState.conversation_id) { [string]$ConversationState.conversation_id } else { "" })
+            session_id               = $SessionId
+            conversation_state_status = if ($ConversationState) { [string]$ConversationState.status } else { "empty" }
+            latest_task_id           = if ($ConversationState -and $ConversationState.latest_task) { [string]$ConversationState.latest_task.task_id } else { "" }
+            latest_task_status       = if ($ConversationState -and $ConversationState.latest_task) { [string]$ConversationState.latest_task.task_status } else { "" }
+            latest_result_path       = if ($ConversationState -and $ConversationState.latest_result) { [string]$ConversationState.latest_result.result_path } else { "" }
+            latest_result_response_text = if ($ConversationState) { [string]$ConversationState.response_text } else { "" }
+            result_artifact_path     = if ($ConversationState -and $ConversationState.latest_result) { [string]$ConversationState.latest_result.result_path } else { "" }
+            result_artifact          = if ($ConversationState) { $ConversationState.latest_result } else { $null }
+            decision                 = $script:PDACommanderDecision
+            bridge_mode              = "personality_update"
+            pending_action           = if ($PendingAction) { $PendingAction } else { $null }
+            pending_personality_change = $PendingPersonalityChange
+        }
+        $Result = Add-PDACommanderRuntimeContextFields -Result $Result
+        if ($AsJson) {
+            $Result | ConvertTo-Json -Depth 20
+            return
+        }
+        Write-Host "[ERR] PDA chat bridge result:"
+        Write-Host ("Response text        : {0}" -f $Result.response_text)
+        return
+    }
+
+    Invoke-PDAConversationStateUpdate -ConversationId $ConversationId -SessionId $SessionId -UserId $UserId -ConversationTitle $ConversationTitle -Message $Message -TaskId "" -TaskStatus "confirmed" -TaskFilePath "" -ApprovalFilePath "" -ResultPath "" -ResultSummary "" -BridgeStatus "ready" -DispatchStatus "not_dispatched" -NextAction "Standing by." -ResponseText ([string]$UpdateResult.message) -RecommendedCommand "" -Intent "personality_update" -Confidence 1 -RequiresConfirmation:$false -ClearPendingAction -ClearPendingPersonalityChange | Out-Null
+
+    $Result = [pscustomobject]@{
+        original_message         = $Message
+        response_text            = [string]$UpdateResult.message
+        recommended_command      = ""
+        intent                   = "personality_update"
+        route_type               = "personality_update"
+        confidence               = 1
+        requires_confirmation    = $false
+        dispatch_ready           = $false
+        dispatch_status          = "not_dispatched"
+        next_action              = "Standing by."
+        bridge_status            = "ready"
+        handoff_status           = "personality_update_applied"
+        source_of_truth          = "Scripts/Update-COOPERPersonality.ps1"
+        confirmation_mode        = [bool]$ConfirmDispatch
+        dispatch_path            = ""
+        dispatch_category        = ""
+        conversation_id          = $(if ($ConversationId) { $ConversationId } elseif ($ConversationState -and $ConversationState.conversation_id) { [string]$ConversationState.conversation_id } else { "" })
+        session_id               = $SessionId
+        conversation_state_status = if ($ConversationState) { [string]$ConversationState.status } else { "empty" }
+        latest_task_id           = if ($ConversationState -and $ConversationState.latest_task) { [string]$ConversationState.latest_task.task_id } else { "" }
+        latest_task_status       = if ($ConversationState -and $ConversationState.latest_task) { [string]$ConversationState.latest_task.task_status } else { "" }
+        latest_result_path       = if ($ConversationState -and $ConversationState.latest_result) { [string]$ConversationState.latest_result.result_path } else { "" }
+        latest_result_response_text = if ($ConversationState) { [string]$ConversationState.response_text } else { "" }
+        result_artifact_path     = if ($ConversationState -and $ConversationState.latest_result) { [string]$ConversationState.latest_result.result_path } else { "" }
+        result_artifact          = if ($ConversationState) { $ConversationState.latest_result } else { $null }
+        decision                 = $script:PDACommanderDecision
+        bridge_mode              = "personality_update"
+        pending_action           = $null
+        pending_personality_change = $null
+        personality_update       = $UpdateResult
+    }
+    $Result = Add-PDACommanderRuntimeContextFields -Result $Result
+
+    if ($AsJson) {
+        $Result | ConvertTo-Json -Depth 20
+        return
+    }
+
+    Write-Host "[OK] PDA chat bridge result:"
+    Write-Host ("Response text        : {0}" -f $Result.response_text)
+    Write-Host ("Recommended command  : (none)")
+    Write-Host ("Intent               : {0}" -f $Result.intent)
+    Write-Host ("Confidence           : {0}" -f $Result.confidence)
+    Write-Host ("Dispatch ready       : {0}" -f $Result.dispatch_ready)
+    Write-Host ("Dispatch status      : {0}" -f $Result.dispatch_status)
+    Write-Host ("Next action          : {0}" -f $Result.next_action)
+    return
+}
+
 $ConversationRoute = $null
 if (Get-Command -Name Resolve-PDAConversationalRoute -ErrorAction SilentlyContinue) {
     $ConversationRoute = Resolve-PDAConversationalRoute -Text $Message -Root $Root
     $script:PDAConversationRouteType = if ($ConversationRoute -and $ConversationRoute.PSObject.Properties.Name -contains "route_type") { [string]$ConversationRoute.route_type } else { "" }
     $script:PDACommanderDecision = Get-PDABridgeCommanderDecision -Text $Message -ConversationRoute $ConversationRoute -Root $Root
-    if ($ConversationRoute -and -not ($IsConfirmationMessage -and $HasPendingAction)) {
+    if ($ConversationRoute -and -not ($IsConfirmationMessage -and ($HasPendingAction -or $HasPendingPersonalityChange))) {
         switch ([string]$ConversationRoute.route_type) {
             "direct_status" {
                 $DirectResult = Get-PDAConversationalNaturalResponse -Route $ConversationRoute -ConversationId $ConversationId -SessionId $SessionId -UserId $UserId -ConversationTitle $ConversationTitle -Text $Message -Root $Root
@@ -935,7 +1227,7 @@ if (Get-Command -Name Resolve-PDAConversationalRoute -ErrorAction SilentlyContin
             "personality_update" {
                 $DirectResult = Get-PDAConversationalNaturalResponse -Route $ConversationRoute -ConversationId $ConversationId -SessionId $SessionId -UserId $UserId -ConversationTitle $ConversationTitle -Text $Message -Root $Root
                 $DirectResult = Set-PDABridgeDecisionMetadata -Result $DirectResult -RouteType ([string]$ConversationRoute.route_type) -Decision $script:PDACommanderDecision
-                Invoke-PDAConversationStateUpdate -ConversationId $ConversationId -SessionId $SessionId -UserId $UserId -ConversationTitle $ConversationTitle -Message $Message -TaskId "" -TaskStatus "" -TaskFilePath "" -ApprovalFilePath "" -ResultPath "" -ResultSummary "" -BridgeStatus ([string]$DirectResult.bridge_status) -DispatchStatus ([string]$DirectResult.dispatch_status) -NextAction ([string]$DirectResult.next_action) -ResponseText ([string]$DirectResult.response_text) -RecommendedCommand "" -Intent ([string]$DirectResult.intent) -Confidence ([double]$DirectResult.confidence) -RequiresConfirmation:$false | Out-Null
+                Invoke-PDAConversationStateUpdate -ConversationId $ConversationId -SessionId $SessionId -UserId $UserId -ConversationTitle $ConversationTitle -Message $Message -TaskId "" -TaskStatus "pending_confirmation" -TaskFilePath "" -ApprovalFilePath "" -ResultPath "" -ResultSummary "" -BridgeStatus ([string]$DirectResult.bridge_status) -DispatchStatus ([string]$DirectResult.dispatch_status) -NextAction ([string]$DirectResult.next_action) -ResponseText ([string]$DirectResult.response_text) -RecommendedCommand "" -Intent ([string]$DirectResult.intent) -Confidence ([double]$DirectResult.confidence) -RequiresConfirmation:$true -PendingPersonalitySetting $(if ($DirectResult.PSObject.Properties.Name -contains "personality_setting") { [string]$DirectResult.personality_setting } else { "" }) -PendingPersonalityLabel $(if ($DirectResult.PSObject.Properties.Name -contains "personality_label") { [string]$DirectResult.personality_label } else { "" }) -PendingPersonalityProperty $(if ($DirectResult.PSObject.Properties.Name -contains "personality_property") { [string]$DirectResult.personality_property } else { "" }) -PendingPersonalityPreviousValue $(if ($DirectResult.PSObject.Properties.Name -contains "personality_current_value") { [string]$DirectResult.personality_current_value } else { "" }) -PendingPersonalityProposedValue $(if ($DirectResult.PSObject.Properties.Name -contains "personality_proposed_value") { [string]$DirectResult.personality_proposed_value } else { "" }) -PendingPersonalityChangeMode $(if ($DirectResult.PSObject.Properties.Name -contains "personality_change_mode") { [string]$DirectResult.personality_change_mode } else { "" }) -PendingPersonalityStatus "awaiting_confirmation" | Out-Null
                 $DirectResult = Add-PDACommanderRuntimeContextFields -Result $DirectResult
 
                 if ($AsJson) {
@@ -951,6 +1243,64 @@ if (Get-Command -Name Resolve-PDAConversationalRoute -ErrorAction SilentlyContin
                 Write-Host ("Dispatch ready       : {0}" -f $DirectResult.dispatch_ready)
                 Write-Host ("Dispatch status      : {0}" -f $DirectResult.dispatch_status)
                 Write-Host ("Next action          : {0}" -f $DirectResult.next_action)
+                return
+            }
+            "personality_cancel" {
+                $CancelResponseText = if ($ConversationState -and $ConversationState.conversation -and $ConversationState.conversation.PSObject.Properties.Name -contains "pending_personality_label" -and -not [string]::IsNullOrWhiteSpace([string]$ConversationState.conversation.pending_personality_label)) {
+                    "Personality change cancelled for $([string]$ConversationState.conversation.pending_personality_label)."
+                }
+                else {
+                    "Personality change cancelled."
+                }
+
+                Invoke-PDAConversationStateUpdate -ConversationId $ConversationId -SessionId $SessionId -UserId $UserId -ConversationTitle $ConversationTitle -Message $Message -TaskId "" -TaskStatus "" -TaskFilePath "" -ApprovalFilePath "" -ResultPath "" -ResultSummary "" -BridgeStatus "ready" -DispatchStatus "not_dispatched" -NextAction "Standing by." -ResponseText $CancelResponseText -RecommendedCommand "" -Intent ([string]$ConversationRoute.route_type) -Confidence 1 -RequiresConfirmation:$false -ClearPendingAction -ClearPendingPersonalityChange | Out-Null
+
+                $CancelResult = [pscustomobject]@{
+                    original_message         = $Message
+                    response_text            = $CancelResponseText
+                    recommended_command      = ""
+                    intent                   = "personality_cancel"
+                    route_type               = [string]$ConversationRoute.route_type
+                    confidence               = 1
+                    requires_confirmation    = $false
+                    dispatch_ready           = $false
+                    dispatch_status          = "not_dispatched"
+                    next_action              = "Standing by."
+                    bridge_status            = "ready"
+                    handoff_status           = "personality_cancelled"
+                    source_of_truth          = "Scripts/COOPER_ConversationalRouter.ps1"
+                    confirmation_mode        = [bool]$ConfirmDispatch
+                    dispatch_path            = ""
+                    dispatch_category        = ""
+                    conversation_id          = $(if ($ConversationId) { $ConversationId } elseif ($ConversationState -and $ConversationState.conversation_id) { [string]$ConversationState.conversation_id } else { "" })
+                    session_id               = $SessionId
+                    conversation_state_status = if ($ConversationState) { [string]$ConversationState.status } else { "empty" }
+                    latest_task_id           = if ($ConversationState -and $ConversationState.latest_task) { [string]$ConversationState.latest_task.task_id } else { "" }
+                    latest_task_status       = if ($ConversationState -and $ConversationState.latest_task) { [string]$ConversationState.latest_task.task_status } else { "" }
+                    latest_result_path       = if ($ConversationState -and $ConversationState.latest_result) { [string]$ConversationState.latest_result.result_path } else { "" }
+                    latest_result_response_text = if ($ConversationState) { [string]$ConversationState.response_text } else { "" }
+                    result_artifact_path     = if ($ConversationState -and $ConversationState.latest_result) { [string]$ConversationState.latest_result.result_path } else { "" }
+                    result_artifact          = if ($ConversationState) { $ConversationState.latest_result } else { $null }
+                    decision                 = $script:PDACommanderDecision
+                    bridge_mode              = "personality_cancel"
+                    pending_action           = if ($PendingAction) { $PendingAction } else { $null }
+                    pending_personality_change = $null
+                }
+                $CancelResult = Add-PDACommanderRuntimeContextFields -Result $CancelResult
+
+                if ($AsJson) {
+                    $CancelResult | ConvertTo-Json -Depth 20
+                    return
+                }
+
+                Write-Host "[OK] PDA chat bridge result:"
+                Write-Host ("Response text        : {0}" -f $CancelResult.response_text)
+                Write-Host ("Recommended command  : (none)")
+                Write-Host ("Intent               : {0}" -f $CancelResult.intent)
+                Write-Host ("Confidence           : {0}" -f $CancelResult.confidence)
+                Write-Host ("Dispatch ready       : {0}" -f $CancelResult.dispatch_ready)
+                Write-Host ("Dispatch status      : {0}" -f $CancelResult.dispatch_status)
+                Write-Host ("Next action          : {0}" -f $CancelResult.next_action)
                 return
             }
             "task_lookup" {
@@ -1262,7 +1612,169 @@ if (Get-Command -Name Resolve-PDAConversationalRoute -ErrorAction SilentlyContin
     }
 }
 
-if ($IsConfirmationMessage -and -not $HasPendingAction) {
+if ($HasPendingPersonalityChange -and (-not $HasPendingAction) -and ($IsConfirmationMessage -or $ConfirmDispatch)) {
+    $PersonalityUpdateScript = Join-Path $PSScriptRoot "Update-COOPERPersonality.ps1"
+    if (-not (Test-Path -Path $PersonalityUpdateScript -PathType Leaf)) {
+        $Result = [pscustomobject]@{
+            original_message         = $Message
+            response_text            = "COOPER personality updater is unavailable."
+            recommended_command      = ""
+            intent                   = "personality_update"
+            route_type               = "personality_update"
+            confidence               = 1
+            requires_confirmation    = $false
+            dispatch_ready           = $false
+            dispatch_status          = "not_dispatched"
+            next_action              = "Restore the updater script."
+            bridge_status            = "ready"
+            handoff_status           = "personality_update_failed"
+            source_of_truth          = "Scripts/Update-COOPERPersonality.ps1"
+            confirmation_mode        = [bool]$ConfirmDispatch
+            dispatch_path            = ""
+            dispatch_category        = ""
+            conversation_id          = $(if ($ConversationId) { $ConversationId } elseif ($ConversationState -and $ConversationState.conversation_id) { [string]$ConversationState.conversation_id } else { "" })
+            session_id               = $SessionId
+            conversation_state_status = if ($ConversationState) { [string]$ConversationState.status } else { "empty" }
+            latest_task_id           = if ($ConversationState -and $ConversationState.latest_task) { [string]$ConversationState.latest_task.task_id } else { "" }
+            latest_task_status       = if ($ConversationState -and $ConversationState.latest_task) { [string]$ConversationState.latest_task.task_status } else { "" }
+            latest_result_path       = if ($ConversationState -and $ConversationState.latest_result) { [string]$ConversationState.latest_result.result_path } else { "" }
+            latest_result_response_text = if ($ConversationState) { [string]$ConversationState.response_text } else { "" }
+            result_artifact_path     = if ($ConversationState -and $ConversationState.latest_result) { [string]$ConversationState.latest_result.result_path } else { "" }
+            result_artifact          = if ($ConversationState) { $ConversationState.latest_result } else { $null }
+            decision                 = $script:PDACommanderDecision
+            bridge_mode              = "personality_update"
+            pending_action           = if ($PendingAction) { $PendingAction } else { $null }
+            pending_personality_change = $PendingPersonalityChange
+        }
+        $Result = Add-PDACommanderRuntimeContextFields -Result $Result
+        if ($AsJson) {
+            $Result | ConvertTo-Json -Depth 20
+            return
+        }
+        Write-Host "[ERR] PDA chat bridge result:"
+        Write-Host ("Response text        : {0}" -f $Result.response_text)
+        return
+    }
+
+    $UpdateArgs = @(
+        "-Setting", [string]$PendingPersonalityChange.setting_key,
+        "-Value", [string]$PendingPersonalityChange.proposed_value,
+        "-ConversationId", $(if ($ConversationId) { $ConversationId } else { "" }),
+        "-SessionId", $(if ($SessionId) { $SessionId } else { "" }),
+        "-UserId", $(if ($UserId) { $UserId } else { "" }),
+        "-ConversationTitle", $(if ($ConversationTitle) { $ConversationTitle } else { "" }),
+        "-Message", $(if ($Message) { $Message } else { "" }),
+        "-AsJson",
+        "-NoThrow"
+    )
+    $UpdateRaw = & pwsh -NoProfile -File $PersonalityUpdateScript @UpdateArgs 2>&1
+    $UpdateText = [string]($UpdateRaw -join "`n").Trim()
+    $UpdateResult = $null
+    try {
+        if (-not [string]::IsNullOrWhiteSpace($UpdateText)) {
+            $UpdateResult = ConvertFrom-PDAMixedJson -Text $UpdateText -SourceName $PersonalityUpdateScript
+        }
+    }
+    catch {
+        $UpdateResult = $null
+    }
+
+    if (-not $UpdateResult -or [string]$UpdateResult.status -ne "pass") {
+        $FailureText = if ($UpdateResult -and $UpdateResult.message) { [string]$UpdateResult.message } elseif (-not [string]::IsNullOrWhiteSpace($UpdateText)) { $UpdateText } else { "COOPER personality update failed." }
+        $Result = [pscustomobject]@{
+            original_message         = $Message
+            response_text            = "COOPER personality update failed. $FailureText"
+            recommended_command      = ""
+            intent                   = "personality_update"
+            route_type               = "personality_update"
+            confidence               = 1
+            requires_confirmation    = $false
+            dispatch_ready           = $false
+            dispatch_status          = "not_dispatched"
+            next_action              = "Try the update again or cancel the pending personality change."
+            bridge_status            = "ready"
+            handoff_status           = "personality_update_failed"
+            source_of_truth          = "Scripts/Update-COOPERPersonality.ps1"
+            confirmation_mode        = [bool]$ConfirmDispatch
+            dispatch_path            = ""
+            dispatch_category        = ""
+            conversation_id          = $(if ($ConversationId) { $ConversationId } elseif ($ConversationState -and $ConversationState.conversation_id) { [string]$ConversationState.conversation_id } else { "" })
+            session_id               = $SessionId
+            conversation_state_status = if ($ConversationState) { [string]$ConversationState.status } else { "empty" }
+            latest_task_id           = if ($ConversationState -and $ConversationState.latest_task) { [string]$ConversationState.latest_task.task_id } else { "" }
+            latest_task_status       = if ($ConversationState -and $ConversationState.latest_task) { [string]$ConversationState.latest_task.task_status } else { "" }
+            latest_result_path       = if ($ConversationState -and $ConversationState.latest_result) { [string]$ConversationState.latest_result.result_path } else { "" }
+            latest_result_response_text = if ($ConversationState) { [string]$ConversationState.response_text } else { "" }
+            result_artifact_path     = if ($ConversationState -and $ConversationState.latest_result) { [string]$ConversationState.latest_result.result_path } else { "" }
+            result_artifact          = if ($ConversationState) { $ConversationState.latest_result } else { $null }
+            decision                 = $script:PDACommanderDecision
+            bridge_mode              = "personality_update"
+            pending_action           = if ($PendingAction) { $PendingAction } else { $null }
+            pending_personality_change = $PendingPersonalityChange
+        }
+        $Result = Add-PDACommanderRuntimeContextFields -Result $Result
+        if ($AsJson) {
+            $Result | ConvertTo-Json -Depth 20
+            return
+        }
+        Write-Host "[ERR] PDA chat bridge result:"
+        Write-Host ("Response text        : {0}" -f $Result.response_text)
+        return
+    }
+
+    Invoke-PDAConversationStateUpdate -ConversationId $ConversationId -SessionId $SessionId -UserId $UserId -ConversationTitle $ConversationTitle -Message $Message -TaskId "" -TaskStatus "confirmed" -TaskFilePath "" -ApprovalFilePath "" -ResultPath "" -ResultSummary "" -BridgeStatus "ready" -DispatchStatus "not_dispatched" -NextAction "Standing by." -ResponseText ([string]$UpdateResult.message) -RecommendedCommand "" -Intent "personality_update" -Confidence 1 -RequiresConfirmation:$false -ClearPendingAction -ClearPendingPersonalityChange | Out-Null
+
+    $Result = [pscustomobject]@{
+        original_message         = $Message
+        response_text            = [string]$UpdateResult.message
+        recommended_command      = ""
+        intent                   = "personality_update"
+        route_type               = "personality_update"
+        confidence               = 1
+        requires_confirmation    = $false
+        dispatch_ready           = $false
+        dispatch_status          = "not_dispatched"
+        next_action              = "Standing by."
+        bridge_status            = "ready"
+        handoff_status           = "personality_update_applied"
+        source_of_truth          = "Scripts/Update-COOPERPersonality.ps1"
+        confirmation_mode        = [bool]$ConfirmDispatch
+        dispatch_path            = ""
+        dispatch_category        = ""
+        conversation_id          = $(if ($ConversationId) { $ConversationId } elseif ($ConversationState -and $ConversationState.conversation_id) { [string]$ConversationState.conversation_id } else { "" })
+        session_id               = $SessionId
+        conversation_state_status = if ($ConversationState) { [string]$ConversationState.status } else { "empty" }
+        latest_task_id           = if ($ConversationState -and $ConversationState.latest_task) { [string]$ConversationState.latest_task.task_id } else { "" }
+        latest_task_status       = if ($ConversationState -and $ConversationState.latest_task) { [string]$ConversationState.latest_task.task_status } else { "" }
+        latest_result_path       = if ($ConversationState -and $ConversationState.latest_result) { [string]$ConversationState.latest_result.result_path } else { "" }
+        latest_result_response_text = if ($ConversationState) { [string]$ConversationState.response_text } else { "" }
+        result_artifact_path     = if ($ConversationState -and $ConversationState.latest_result) { [string]$ConversationState.latest_result.result_path } else { "" }
+        result_artifact          = if ($ConversationState) { $ConversationState.latest_result } else { $null }
+        decision                 = $script:PDACommanderDecision
+        bridge_mode              = "personality_update"
+        pending_action           = $null
+        pending_personality_change = $null
+        personality_update       = $UpdateResult
+    }
+    $Result = Add-PDACommanderRuntimeContextFields -Result $Result
+
+    if ($AsJson) {
+        $Result | ConvertTo-Json -Depth 20
+        return
+    }
+
+    Write-Host "[OK] PDA chat bridge result:"
+    Write-Host ("Response text        : {0}" -f $Result.response_text)
+    Write-Host ("Recommended command  : (none)")
+    Write-Host ("Intent               : {0}" -f $Result.intent)
+    Write-Host ("Confidence           : {0}" -f $Result.confidence)
+    Write-Host ("Dispatch ready       : {0}" -f $Result.dispatch_ready)
+    Write-Host ("Dispatch status      : {0}" -f $Result.dispatch_status)
+    Write-Host ("Next action          : {0}" -f $Result.next_action)
+    return
+}
+
+if ($IsConfirmationMessage -and -not $HasPendingAction -and -not $HasPendingPersonalityChange) {
     if ($PendingAction -and [bool]$PendingAction.is_expired) {
         Invoke-PDAConversationStateUpdate -ConversationId $ConversationId -SessionId $SessionId -UserId $UserId -ConversationTitle $ConversationTitle -Message $Message -TaskId "" -TaskStatus "" -ResultPath "" -BridgeStatus "ready" -DispatchStatus "not_dispatched" -NextAction "Start a new request or ask for a status refresh." -ResponseText "Pending confirmation expired for this conversation." -RecommendedCommand "" -Intent "confirmation" -Confidence 1 -RequiresConfirmation:$false -ClearPendingAction | Out-Null
     }

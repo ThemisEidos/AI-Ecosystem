@@ -151,6 +151,18 @@ $Cases = @(
         expected_command = ""
     }
     [pscustomobject]@{
+        name = "personality proposal"
+        input = "Lower verbosity."
+        expected_route = "personality_update"
+        expected_command = ""
+    }
+    [pscustomobject]@{
+        name = "personality cancel"
+        input = "Cancel personality change."
+        expected_route = "personality_cancel"
+        expected_command = ""
+    }
+    [pscustomobject]@{
         name = "roadmap request"
         input = "Build me a roadmap."
         expected_route = "goal_planning"
@@ -311,9 +323,13 @@ foreach ($Case in $Cases) {
             $CasePassed = $false
             $Issues.Add("Personality query response did not include the expected profile values.")
         }
-        if ($Route.route_type -eq "personality_update" -and $Direct.response_text -notmatch '(?i)Update noted|Persistent profile edits are not applied automatically|Requested adjustment') {
+        if ($Route.route_type -eq "personality_update" -and $Direct.response_text -notmatch '(?i)COOPER Personality|Proposed update|Confirm\?') {
             $CasePassed = $false
-            $Issues.Add("Personality update response did not acknowledge the requested adjustment.")
+            $Issues.Add("Personality update response did not propose a confirmed update.")
+        }
+        if ($Route.route_type -eq "personality_cancel" -and $Direct.response_text -notmatch '(?i)Change cancelled|No write was performed|Standing by') {
+            $CasePassed = $false
+            $Issues.Add("Personality cancel response did not acknowledge the cancellation.")
         }
         if ($Route.route_type -eq "ambiguous" -and $Direct.response_text -notmatch '(?i)one action|clarify') {
             $CasePassed = $false
