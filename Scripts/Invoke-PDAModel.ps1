@@ -204,6 +204,31 @@ function Get-PDARequiredEnvironmentVariable {
 
     $Value = [Environment]::GetEnvironmentVariable($Name)
     if ([string]::IsNullOrWhiteSpace([string]$Value)) {
+        $EnvFileCandidates = @(
+            (Join-Path $Root "litellm\.env.local"),
+            (Join-Path $Root ".env.local")
+        )
+
+        foreach ($Candidate in $EnvFileCandidates) {
+            if (-not (Test-Path -LiteralPath $Candidate -PathType Leaf)) {
+                continue
+            }
+
+            try {
+                $EnvLine = Get-Content -LiteralPath $Candidate | Where-Object { $_ -match ('^{0}=' -f [regex]::Escape($Name)) } | Select-Object -First 1
+                if ([string]::IsNullOrWhiteSpace([string]$EnvLine)) {
+                    continue
+                }
+
+                $EnvValue = ([string]$EnvLine -split '=', 2)[1]
+                if (-not [string]::IsNullOrWhiteSpace([string]$EnvValue)) {
+                    [Environment]::SetEnvironmentVariable($Name, $EnvValue, "Process")
+                    return [string]$EnvValue
+                }
+            }
+            catch {}
+        }
+
         throw "LITELLM_MASTER_KEY is not set. Configure it in the approved runtime secret source."
     }
 
@@ -629,6 +654,50 @@ if ($SuccessfulAttempt -and $Attempts.Count -gt 1) {
     $FallbackUsed = $true
 }
 
+function New-COOPERModelFallbackDiagnostics {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$DefaultModel,
+
+        [Parameter(Mandatory = $true)]
+        [string]$EndpointText,
+
+        [Parameter(Mandatory = $false)]
+        $AttemptResult,
+
+        [Parameter(Mandatory = $false)]
+        [string]$UnusableReason = ""
+    )
+
+    $RawResponse = $null
+    $RawResponseType = ""
+    if ($AttemptResult -and $AttemptResult.response_payload) {
+        $RawResponse = $AttemptResult.response_payload
+        $RawResponseType = $AttemptResult.response_payload.GetType().Name
+    }
+    elseif ($AttemptResult -and $AttemptResult.response_text) {
+        $RawResponse = $AttemptResult.response_text
+        $RawResponseType = "String"
+    }
+    elseif ($AttemptResult -and $AttemptResult.error_payload) {
+        $RawResponse = $AttemptResult.error_payload
+        $RawResponseType = $AttemptResult.error_payload.GetType().Name
+    }
+    else {
+        $RawResponseType = "None"
+    }
+
+    return [pscustomobject]@{
+        selected_model = $DefaultModel
+        endpoint = $EndpointText
+        http_status = if ($AttemptResult) { $AttemptResult.http_status } else { $null }
+        raw_response_type = $RawResponseType
+        raw_response_length = if ($null -ne $RawResponse) { [string]$RawResponse.Length } else { 0 }
+        assistant_text_length = if ($AttemptResult -and $AttemptResult.response_text) { [int]([string]$AttemptResult.response_text).Length } else { 0 }
+        unusable_reason = $UnusableReason
+    }
+}
+
 if (-not $SuccessfulAttempt) {
     $FailureMessage = if ($FinalAttempt -and -not [string]::IsNullOrWhiteSpace($FinalAttempt.error_message)) { $FinalAttempt.error_message } elseif ($FinalAttempt -and $FinalAttempt.http_status) { "HTTP $($FinalAttempt.http_status) from LiteLLM." } else { "PDA model invocation failed." }
     $Failure = [pscustomobject]@{
@@ -695,6 +764,10 @@ if (-not $SuccessfulAttempt) {
         normalized_response_text = ""
         next_action = "Inspect LiteLLM routing, upstream provider credentials, and the local proxy logs."
         source_of_truth = "Scripts/Get-PDAModelRoute.ps1"
+    }
+
+    if ([bool]($env:COOPER_DEBUG_MODEL_FALLBACK -match '^(?i:1|true|yes|on)$')) {
+        $Failure | Add-Member -NotePropertyName fallback_diagnostics -NotePropertyValue (New-COOPERModelFallbackDiagnostics -DefaultModel $SelectedModel -EndpointText $Endpoint -AttemptResult $FinalAttempt -UnusableReason $FailureMessage)
     }
 
     $FailureAuditRecord = New-PDARoutingAuditRecord -Outcome "fail" -WorkerNameText $WorkerName -CommandText ([string]$Route.command) -CategoryText $NormalizedCategory -SelectedModelText $(if ($FinalAttempt) { [string]$FinalAttempt.logical_model } else { $SelectedModel }) -FallbackChainText $FallbackChain -RoutingReasonText ([string]$Route.routing_reason) -FallbackUsed $FallbackUsed -CloudAllowed $CloudAllowed -RoutingSurface ([string]$Route.routing_surface) -TransportModelText $(if ($FinalAttempt) { [string]$FinalAttempt.transport_model } else { Get-PDAModelTransportModel -LogicalModel $SelectedModel })
@@ -782,6 +855,10 @@ $Normalized = [pscustomobject]@{
     normalized_response_text = [string]$SuccessfulAttempt.response_text
     next_action = if (-not [string]::IsNullOrWhiteSpace([string]$SuccessfulAttempt.response_text)) { "Use the response text or inspect the raw response if you need provider metadata." } else { "Inspect LiteLLM routing, upstream provider credentials, and the local proxy logs." }
     source_of_truth = "Scripts/Get-PDAModelRoute.ps1"
+}
+
+if ([bool]($env:COOPER_DEBUG_MODEL_FALLBACK -match '^(?i:1|true|yes|on)$')) {
+    $Normalized | Add-Member -NotePropertyName fallback_diagnostics -NotePropertyValue (New-COOPERModelFallbackDiagnostics -DefaultModel $SelectedModel -EndpointText $Endpoint -AttemptResult $SuccessfulAttempt -UnusableReason "")
 }
 
 $SuccessAuditRecord = New-PDARoutingAuditRecord -Outcome "pass" -WorkerNameText $WorkerName -CommandText ([string]$Route.command) -CategoryText $NormalizedCategory -SelectedModelText ([string]$SuccessfulAttempt.logical_model) -FallbackChainText $FallbackChain -RoutingReasonText ([string]$Route.routing_reason) -FallbackUsed $FallbackUsed -CloudAllowed $CloudAllowed -RoutingSurface ([string]$Route.routing_surface) -TransportModelText ([string]$SuccessfulAttempt.transport_model)

@@ -130,11 +130,14 @@ function Invoke-TestCase {
     [Parameter(Mandatory = $false)]
     [string]$Endpoint = "http://localhost:4000/v1/chat/completions",
 
-    [Parameter(Mandatory = $false)]
-    [string]$ExpectedErrorPattern,
+        [Parameter(Mandatory = $false)]
+        [string]$ExpectedErrorPattern,
 
-    [Parameter(Mandatory = $false)]
-    [switch]$AllowUnavailable
+        [Parameter(Mandatory = $false)]
+        [switch]$ClearMasterKey,
+
+        [Parameter(Mandatory = $false)]
+        [switch]$AllowUnavailable
     )
 
     $Args = @(
@@ -154,7 +157,20 @@ function Invoke-TestCase {
         $Args += @("-Endpoint", $Endpoint)
     }
 
-    $Raw = & pwsh -NoProfile -File $InvokeScript @Args 2>&1
+    $SavedMasterKey = $null
+    if ($ClearMasterKey) {
+        $SavedMasterKey = [Environment]::GetEnvironmentVariable("LITELLM_MASTER_KEY")
+        [Environment]::SetEnvironmentVariable("LITELLM_MASTER_KEY", $null, "Process")
+    }
+
+    try {
+        $Raw = & pwsh -NoProfile -File $InvokeScript @Args 2>&1
+    }
+    finally {
+        if ($ClearMasterKey) {
+            [Environment]::SetEnvironmentVariable("LITELLM_MASTER_KEY", $SavedMasterKey, "Process")
+        }
+    }
 
     $JsonText = [string]($Raw -join "`n").Trim()
     if ([string]::IsNullOrWhiteSpace($JsonText)) {
@@ -276,6 +292,17 @@ $Cases = @(
         selected_model_override = "local-llama"
     }
     [pscustomobject]@{
+        name = "live context env fallback"
+        worker_name = "cooper-chat"
+        task_type = "conversational"
+        sensitivity = "standard"
+        prompt = "Return plain acknowledgement."
+        expected_model = "local-llama"
+        expected_token = "Acknowledged."
+        selected_model_override = "local-llama"
+        clear_master_key = $true
+    }
+    [pscustomobject]@{
         name = "restricted local invocation"
         worker_name = "review-worker"
         task_type = "review"
@@ -343,7 +370,7 @@ foreach ($Case in $Cases) {
         continue
     }
 
-    $CaseResult = Invoke-TestCase -Name $Case.name -WorkerName $Case.worker_name -TaskType $Case.task_type -Sensitivity $Case.sensitivity -Prompt $Case.prompt -ExpectedModel $Case.expected_model -ExpectedToken $Case.expected_token -SelectedModelOverride $Case.selected_model_override -Endpoint $Case.endpoint -ExpectedErrorPattern $Case.expected_error_pattern -AllowUnavailable:([bool]$Case.allow_unavailable)
+    $CaseResult = Invoke-TestCase -Name $Case.name -WorkerName $Case.worker_name -TaskType $Case.task_type -Sensitivity $Case.sensitivity -Prompt $Case.prompt -ExpectedModel $Case.expected_model -ExpectedToken $Case.expected_token -SelectedModelOverride $Case.selected_model_override -Endpoint $Case.endpoint -ExpectedErrorPattern $Case.expected_error_pattern -ClearMasterKey:([bool]$Case.clear_master_key) -AllowUnavailable:([bool]$Case.allow_unavailable)
     $Results += $CaseResult
     if ($CaseResult.skipped) {
         $Skipped++
