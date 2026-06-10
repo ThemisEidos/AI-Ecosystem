@@ -139,10 +139,17 @@ $Lines.Add("")
 $Lines.Add("## COOPER Status")
 $Lines.Add("")
 if ($StatusReport.cooper_status) {
+    if ($StatusReport.cooper_status.summary_lines) {
+        foreach ($Line in @($StatusReport.cooper_status.summary_lines)) {
+            $Lines.Add([string]$Line)
+        }
+        $Lines.Add("")
+    }
     $Lines.Add((ConvertTo-PDAMarkdownTable -Rows @(
         [pscustomobject]@{ metric = "Identity"; value = $StatusReport.cooper_status.display_name }
     [pscustomobject]@{ metric = "Official name"; value = $StatusReport.cooper_status.official_name }
     [pscustomobject]@{ metric = "Tagline"; value = $StatusReport.cooper_status.tagline }
+    [pscustomobject]@{ metric = "Identity note"; value = $StatusReport.cooper_status.identity_note }
     [pscustomobject]@{ metric = "Mode options"; value = $StatusReport.cooper_status.modes }
     [pscustomobject]@{ metric = "Current explosions"; value = $StatusReport.cooper_status.current_explosions }
     [pscustomobject]@{ metric = "Runtime layers loaded"; value = if ($StatusReport.cooper_status.runtime_layers) { $StatusReport.cooper_status.runtime_layers.cooper_layers_loaded } else { $false } }
@@ -161,6 +168,12 @@ if ($StatusReport.cooper_status) {
     $Lines.Add("### Personality Baseline")
     $Lines.Add("")
     $Lines.Add((ConvertTo-PDAMarkdownTable -Rows @(
+        [pscustomobject]@{ trait = "Humor level"; value = $StatusReport.cooper_status.personality.humor_level }
+        [pscustomobject]@{ trait = "Honesty level"; value = $StatusReport.cooper_status.personality.honesty_level }
+        [pscustomobject]@{ trait = "Directness level"; value = $StatusReport.cooper_status.personality.directness_level }
+        [pscustomobject]@{ trait = "Formality level"; value = $StatusReport.cooper_status.personality.formality_level }
+        [pscustomobject]@{ trait = "Risk tolerance"; value = $StatusReport.cooper_status.personality.risk_tolerance }
+        [pscustomobject]@{ trait = "TARS-inspired"; value = $StatusReport.cooper_status.personality.tars_inspired_not_copyrighted_imitation }
         [pscustomobject]@{ trait = "Humor"; value = $StatusReport.cooper_status.personality.humor }
         [pscustomobject]@{ trait = "Sarcasm"; value = $StatusReport.cooper_status.personality.sarcasm }
         [pscustomobject]@{ trait = "Honesty"; value = $StatusReport.cooper_status.personality.honesty }
@@ -594,6 +607,43 @@ if ($StatusReport.approval_workflow) {
 }
 else {
     $Lines.Add("- Approval workflow data unavailable.")
+    $Lines.Add("")
+}
+
+$Lines.Add("## Execution Requests")
+$Lines.Add("")
+if ($StatusReport.execution_requests) {
+    $Lines.Add((ConvertTo-PDAMarkdownTable -Rows @(
+        [pscustomobject]@{ metric = "Status"; value = $StatusReport.execution_requests.status }
+        [pscustomobject]@{ metric = "Request count"; value = $StatusReport.execution_requests.request_count }
+        [pscustomobject]@{ metric = "Draft requests"; value = $StatusReport.execution_requests.draft_count }
+        [pscustomobject]@{ metric = "Pending approval"; value = $StatusReport.execution_requests.pending_approval_count }
+        [pscustomobject]@{ metric = "Approved requests"; value = $StatusReport.execution_requests.approved_count }
+        [pscustomobject]@{ metric = "Approval required"; value = $StatusReport.execution_requests.approval_required_count }
+        [pscustomobject]@{ metric = "Restricted local-only"; value = $StatusReport.execution_requests.restricted_local_only_count }
+    ) -Columns @("metric", "value")))
+    $Lines.Add("")
+    $Lines.Add("### Pending Execution Requests")
+    $Lines.Add("")
+    if ($StatusReport.execution_requests.recent_pending_requests -and @($StatusReport.execution_requests.recent_pending_requests).Count -gt 0) {
+        $Lines.Add((ConvertTo-PDAMarkdownTable -Rows @($StatusReport.execution_requests.recent_pending_requests) -Columns @("request_id", "capability", "agent", "provider", "tool", "approval_status", "request_path", "updated_at")))
+    }
+    else {
+        $Lines.Add("- No pending execution requests.")
+    }
+    $Lines.Add("")
+    $Lines.Add("### Recent Execution Requests")
+    $Lines.Add("")
+    if ($StatusReport.execution_requests.recent_requests -and @($StatusReport.execution_requests.recent_requests).Count -gt 0) {
+        $Lines.Add((ConvertTo-PDAMarkdownTable -Rows @($StatusReport.execution_requests.recent_requests) -Columns @("request_id", "request_type", "capability", "agent", "provider", "tool", "request_status", "approval_status", "updated_at")))
+    }
+    else {
+        $Lines.Add("- No execution requests found.")
+    }
+    $Lines.Add("")
+}
+else {
+    $Lines.Add("- Execution request data unavailable.")
     $Lines.Add("")
 }
 

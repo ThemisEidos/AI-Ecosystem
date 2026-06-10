@@ -17,6 +17,8 @@ Open WebUI now serves three distinct model access patterns:
 - **OpenRouter Catalog**: `https://openrouter.ai/api/v1`
   - Large external catalog for discovery and ad hoc use
 - **COOPER**: preserved as the `COOPER` Pipe Function in Open WebUI
+  - Current selectable model id: `pda_chat_bridge.cooper`
+  - Historical `PDA Commander` chat and debug references are safe and kept for audit continuity
 
 ### Governance Notes
 
@@ -89,6 +91,12 @@ Use a **Pipe Function**.
 6. Set the Pipe Function's `N8N_WEBHOOK_URL` valve to `http://host.docker.internal:5678/webhook/pda-chat-bridge-http` if Open WebUI runs in Docker, or `http://localhost:5678/webhook/pda-chat-bridge-http` if it runs on the host.
 7. Enable the Pipe Function and select `COOPER` as the active model in the chat sidebar.
 8. Confirm that the Open WebUI model points to the COOPER Pipe, not to queue files, workers, or a provider alias.
+
+## Rename Notes
+
+- The Open WebUI function record was renamed from `pda_chat_bridge.pda_commander` to `pda_chat_bridge.cooper`.
+- The visible label is `COOPER`.
+- Historical `PDA Commander` references remain in past chats and debug logs only. They are safe and should not be deleted unless a separate cleanup is explicitly requested.
 
 ## NotebookLM Command Flow
 

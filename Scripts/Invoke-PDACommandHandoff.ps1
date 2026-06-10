@@ -142,12 +142,28 @@ function Get-PDAOperatorConsoleResponse {
 
     switch ($Command.ToLowerInvariant()) {
         "/status" {
+            $StatusReport = Invoke-PDACommandScriptJson -Path $DashboardStatusScript -Arguments @("-NoThrow", "-SkipCoreIntegration", "-AsJson") 
             $Body = Invoke-PDACommandScriptText -Path $DashboardStatusScript -Arguments @("-NoThrow", "-SkipCoreIntegration")
+            $SummaryLines = @()
+            if ($StatusReport -and $StatusReport.PSObject.Properties.Name -contains "cooper_status" -and $StatusReport.cooper_status -and $StatusReport.cooper_status.PSObject.Properties.Name -contains "summary_lines") {
+                $SummaryLines = @($StatusReport.cooper_status.summary_lines)
+            }
+            if ($SummaryLines.Count -eq 0) {
+                $SummaryLines = @(
+                    "COOPER Status"
+                    "Chief Officer of Preventing Everything from Randomly Exploding"
+                )
+            }
+            $ResponseLines = New-Object System.Collections.Generic.List[string]
+            [void]$ResponseLines.Add("COOPER Operator Console: Status")
+            [void]$ResponseLines.Add("")
+            foreach ($Line in $SummaryLines) {
+                [void]$ResponseLines.Add([string]$Line)
+            }
+            [void]$ResponseLines.Add("")
+            [void]$ResponseLines.Add($Body)
             return [pscustomobject]@{
-                response_text = @(
-                    "COOPER Operator Console: Status"
-                    $Body
-                ) -join "`n"
+                response_text = ($ResponseLines -join "`n")
                 next_action = "Use /tasks, /approvals, /workers, /reports, /memory, or /help for a narrower operator view."
             }
         }

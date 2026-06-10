@@ -30,6 +30,7 @@ $ParserPath = Join-Path $PSScriptRoot "PDA_OutputParsing.ps1"
 $EnvironmentHelperScript = Join-Path $PSScriptRoot "PDA_Environment.ps1"
 $COOPERProfileScript = Join-Path $PSScriptRoot "Get-COOPERIdentity.ps1"
 $ApprovalWorkflowScript = Join-Path $PSScriptRoot "PDA_ApprovalWorkflow.ps1"
+$ExecutionRequestScript = Join-Path $PSScriptRoot "Get-PDAExecutionRequest.ps1"
 if (Test-Path -LiteralPath $ParserPath -PathType Leaf) {
     . $ParserPath
 }
@@ -1150,6 +1151,30 @@ foreach ($Candidate in @(
 }
 
 $COOPERProfile = Get-COOPERIdentity -Root $Root
+$COOPERPersonalityFallback = [pscustomobject]@{
+    humor_level = 25
+    honesty_level = 100
+    directness_level = 90
+    formality_level = 55
+    risk_tolerance = 20
+    tars_inspired_not_copyrighted_imitation = $true
+    truthfulness = 100
+    humor_frequency = 25
+    humor_style = @("dry", "deadpan", "military", "operational")
+    directness = 90
+    formality = 55
+    autonomy = 25
+    skepticism = 100
+    mission_focus = 100
+    diplomacy = 65
+    humor = 25
+    sarcasm = 30
+    honesty = 100
+    brevity = 55
+    initiative = 70
+    caution = 90
+    persistence = 85
+}
 $COOPERSystems = [pscustomobject]@{
     docker = Get-PDAServiceHealth -EnvironmentServices $EnvironmentAwareness.services -ServiceName "Docker" -Default (Get-PDAFriendlyHealthLabel -Value $StackReport.status)
     open_webui = Get-PDAServiceHealth -EnvironmentServices $EnvironmentAwareness.services -ServiceName "Open WebUI"
@@ -1183,11 +1208,21 @@ $Report = [pscustomobject]@{
         official_name = if ($COOPERProfile -and $COOPERProfile.PSObject.Properties.Name -contains "official_name") { [string]$COOPERProfile.official_name } else { "Command Operations Orchestrator for Planning, Execution, and Reporting" }
         secondary_expansion = if ($COOPERProfile -and $COOPERProfile.PSObject.Properties.Name -contains "secondary_expansion") { [string]$COOPERProfile.secondary_expansion } else { "Collaborative Operational Planning, Execution, and Reasoning" }
         tagline = if ($COOPERProfile -and $COOPERProfile.PSObject.Properties.Name -contains "tagline") { [string]$COOPERProfile.tagline } else { "Chief Officer of Preventing Everything from Randomly Exploding" }
+        identity_note = if ($COOPERProfile -and $COOPERProfile.PSObject.Properties.Name -contains "identity_note") { [string]$COOPERProfile.identity_note } else { "TARS-inspired, not copyrighted imitation" }
         current_explosions = 0
         modes = if ($COOPERProfile -and $COOPERProfile.PSObject.Properties.Name -contains "operational_modes") { @($COOPERProfile.operational_modes) } else { @("Analyst Mode", "Operator Mode", "TARS Mode", "Overlord Mode", "Emergency Mode") }
-        personality = if ($COOPERProfile -and $COOPERProfile.PSObject.Properties.Name -contains "personality") { $COOPERProfile.personality } else { [pscustomobject]@{ humor = 75; sarcasm = 60; honesty = 100; directness = 85; brevity = 40; initiative = 85; caution = 80; persistence = 90 } }
+        personality = if ($COOPERProfile -and $COOPERProfile.PSObject.Properties.Name -contains "personality") { $COOPERProfile.personality } else { $COOPERPersonalityFallback }
         runtime_layers = if ($COOPERProfile -and $COOPERProfile.PSObject.Properties.Name -contains "runtime_layers") { $COOPERProfile.runtime_layers } else { $null }
         systems = $COOPERSystems
+        summary_lines = @(
+            "COOPER Status"
+            $(if ($COOPERProfile -and $COOPERProfile.PSObject.Properties.Name -contains "tagline") { [string]$COOPERProfile.tagline } else { "Chief Officer of Preventing Everything from Randomly Exploding" })
+            ("Docker health: {0}" -f $COOPERSystems.docker)
+            ("Open WebUI health: {0}" -f $COOPERSystems.open_webui)
+            ("n8n health: {0}" -f $COOPERSystems.n8n)
+            ("LiteLLM health: {0}" -f $COOPERSystems.litellm)
+            "Current Explosions: 0"
+        )
     }
     system_health = [pscustomobject]@{
         status = Get-PDASafeString $StackReport.status
@@ -1242,6 +1277,7 @@ $Report = [pscustomobject]@{
     commander_plan_orchestration = $null
     commander_agent_loop = $null
     approval_workflow = $null
+    execution_requests = $null
     environment_awareness = $EnvironmentAwareness
     dispatch_status = $DispatchSnapshot
     memory_summary = [pscustomobject]@{
@@ -1266,7 +1302,6 @@ $Report = [pscustomobject]@{
     }
 }
 
-if ($AsJson) {
 if (-not $SkipCommanderBriefing -and (Test-Path -LiteralPath $CommanderBriefingScript -PathType Leaf)) {
     try {
         $CommanderBriefingRaw = & pwsh -NoProfile -File $CommanderBriefingScript -DashboardStatus $Report -Root $Root -AsJson 2>&1
@@ -1339,7 +1374,7 @@ if (-not $SkipCommanderBriefing -and (Test-Path -LiteralPath $CommanderBriefingS
             if (-not (Get-Command -Name Get-PDAApprovalWorkflowStatus -ErrorAction SilentlyContinue) -and (Test-Path -LiteralPath $ApprovalWorkflowScriptPath -PathType Leaf)) {
                 . $ApprovalWorkflowScriptPath
             }
-            if (Get-Command -Name Get-PDAApprovalWorkflowStatus -ErrorAction SilentlyContinue) {
+    if (Get-Command -Name Get-PDAApprovalWorkflowStatus -ErrorAction SilentlyContinue) {
                 $Report.approval_workflow = Get-PDAApprovalWorkflowStatus -Root $Root -Latest 10
             }
         }
@@ -1368,6 +1403,38 @@ if (-not $SkipCommanderBriefing -and (Test-Path -LiteralPath $CommanderBriefingS
                 recent_approvals = @()
                 recent_pending = @()
                 error = $_.Exception.Message
+            }
+        }
+    }
+
+    if (Test-Path -LiteralPath $ExecutionRequestScript -PathType Leaf) {
+        try {
+            $ExecutionRequestRaw = & pwsh -NoProfile -File $ExecutionRequestScript -Root $Root -AsJson -NoThrow 2>&1
+            $ExecutionRequestText = [string]($ExecutionRequestRaw -join "`n").Trim()
+            if (-not [string]::IsNullOrWhiteSpace($ExecutionRequestText)) {
+                $Report.execution_requests = ConvertFrom-PDAMixedJson -Text $ExecutionRequestText -SourceName $ExecutionRequestScript
+            }
+        }
+        catch {
+            $Report.execution_requests = [pscustomobject]@{
+                status = "error"
+                error = $_.Exception.Message
+                generated_at = (Get-Date).ToUniversalTime().ToString("o")
+                root_path = $Root
+                store_path = Join-Path $Root "PDA-Runtime\data\execution-requests"
+                index_path = Join-Path $Root "PDA-Runtime\data\execution-requests\index.json"
+                request_count = 0
+                draft_count = 0
+                pending_approval_count = 0
+                approved_count = 0
+                rejected_count = 0
+                cancelled_count = 0
+                completed_count = 0
+                approval_required_count = 0
+                restricted_local_only_count = 0
+                recent_requests = @()
+                recent_pending_requests = @()
+                recent_approved_requests = @()
             }
         }
     }
@@ -1478,6 +1545,7 @@ if (-not $SkipCommanderBriefing -and (Test-Path -LiteralPath $CommanderBriefingS
             }
         }
     }
+if ($AsJson) {
     $Report | ConvertTo-Json -Depth 30
     if (-not $NoThrow -and $Report.status -ne "pass") {
         throw "PDA dashboard status collection failed."

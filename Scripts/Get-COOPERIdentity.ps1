@@ -12,6 +12,33 @@ function Get-COOPERIdentity {
     $ApprovalWorkflowPath = Join-Path $Root "Scripts\PDA_ApprovalWorkflow.ps1"
     $MemoryArchitecturePath = Join-Path $Root "Documentation\COOPER-Memory-Architecture.md"
 
+    function New-COOPERPersonalityProfile {
+        return [pscustomobject]@{
+            humor_level = 25
+            honesty_level = 100
+            directness_level = 90
+            formality_level = 55
+            risk_tolerance = 20
+            tars_inspired_not_copyrighted_imitation = $true
+            truthfulness = 100
+            humor_frequency = 25
+            humor_style = @("dry", "deadpan", "military", "operational")
+            directness = 90
+            formality = 55
+            autonomy = 25
+            skepticism = 100
+            mission_focus = 100
+            diplomacy = 65
+            humor = 25
+            sarcasm = 30
+            honesty = 100
+            brevity = 55
+            initiative = 70
+            caution = 90
+            persistence = 85
+        }
+    }
+
     function Get-COOPERRuntimeLayerStatus {
         param(
             [Parameter(Mandatory = $true)]
@@ -74,21 +101,13 @@ function Get-COOPERIdentity {
             official_name = "Command Operations Orchestrator for Planning, Execution, and Reporting"
             secondary_expansion = "Collaborative Operational Planning, Execution, and Reasoning"
             tagline = "Chief Officer of Preventing Everything from Randomly Exploding"
+            identity_note = "TARS-inspired, not copyrighted imitation"
             easter_egg_expansions = @(
                 "Computational Overlord of Operations, Planning, Execution, and Reporting"
                 "Chief Officer of Preventing Everything from Randomly Exploding"
             )
             runtime_layers = Get-COOPERRuntimeLayerStatus -ProfilePath $ProfilePath -CapabilityRegistryPath $CapabilityRegistryPath -AgentProfileRegistryPath $AgentProfileRegistryPath -ProviderRoutingPolicyPath $ProviderRoutingPolicyPath -ApprovalWorkflowPath $ApprovalWorkflowPath -MemoryArchitecturePath $MemoryArchitecturePath
-            personality = [pscustomobject]@{
-                humor = 75
-                sarcasm = 60
-                honesty = 100
-                directness = 85
-                brevity = 40
-                initiative = 85
-                caution = 80
-                persistence = 90
-            }
+            personality = New-COOPERPersonalityProfile
             operational_modes = @(
                 "Analyst Mode"
                 "Operator Mode"
@@ -133,6 +152,9 @@ function Get-COOPERIdentity {
         if (-not ($Profile.PSObject.Properties.Name -contains "tagline")) {
             $Profile | Add-Member -NotePropertyName tagline -NotePropertyValue "Chief Officer of Preventing Everything from Randomly Exploding" -Force
         }
+        if (-not ($Profile.PSObject.Properties.Name -contains "identity_note")) {
+            $Profile | Add-Member -NotePropertyName identity_note -NotePropertyValue "TARS-inspired, not copyrighted imitation" -Force
+        }
         if (-not ($Profile.PSObject.Properties.Name -contains "operational_modes")) {
             $Profile | Add-Member -NotePropertyName operational_modes -NotePropertyValue @("Analyst Mode", "Operator Mode", "TARS Mode", "Overlord Mode", "Emergency Mode") -Force
         }
@@ -146,16 +168,16 @@ function Get-COOPERIdentity {
             $Profile | Add-Member -NotePropertyName runtime_layers -NotePropertyValue (Get-COOPERRuntimeLayerStatus -ProfilePath $ProfilePath -CapabilityRegistryPath $CapabilityRegistryPath -AgentProfileRegistryPath $AgentProfileRegistryPath -ProviderRoutingPolicyPath $ProviderRoutingPolicyPath -ApprovalWorkflowPath $ApprovalWorkflowPath -MemoryArchitecturePath $MemoryArchitecturePath) -Force
         }
         if (-not ($Profile.PSObject.Properties.Name -contains "personality")) {
-            $Profile | Add-Member -NotePropertyName personality -NotePropertyValue ([pscustomobject]@{
-                humor = 75
-                sarcasm = 60
-                honesty = 100
-                directness = 85
-                brevity = 40
-                initiative = 85
-                caution = 80
-                persistence = 90
-            }) -Force
+            $Profile | Add-Member -NotePropertyName personality -NotePropertyValue (New-COOPERPersonalityProfile) -Force
+        }
+        else {
+            $Personality = $Profile.personality
+            $Defaults = New-COOPERPersonalityProfile
+            foreach ($Property in $Defaults.PSObject.Properties) {
+                if (-not ($Personality.PSObject.Properties.Name -contains $Property.Name)) {
+                    $Personality | Add-Member -NotePropertyName $Property.Name -NotePropertyValue $Property.Value -Force
+                }
+            }
         }
         if (-not ($Profile.PSObject.Properties.Name -contains "governance")) {
             $Profile | Add-Member -NotePropertyName governance -NotePropertyValue ([pscustomobject]@{
