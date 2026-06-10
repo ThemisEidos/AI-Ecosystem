@@ -28,8 +28,41 @@ if (Test-Path -Path $ParserPath -PathType Leaf) {
     . $ParserPath
 }
 
+$UseLiveModel = [bool](
+    -not [string]::IsNullOrWhiteSpace([string]$env:COOPER_TEST_USE_LIVE_MODEL) -and
+    [string]$env:COOPER_TEST_USE_LIVE_MODEL -notmatch '^(0|false|no)$'
+)
+if (-not $UseLiveModel -and [string]::IsNullOrWhiteSpace([string]$env:COOPER_LIGHTWEIGHT_STATUS)) {
+    $env:COOPER_LIGHTWEIGHT_STATUS = "1"
+}
+
 if (-not (Test-Path -Path $BridgeScript -PathType Leaf)) {
     throw "Chat bridge missing: $BridgeScript"
+}
+
+$DefaultModelChatFallback = {
+    param(
+        [Parameter(Mandatory = $true)][string]$Text,
+        [Parameter(Mandatory = $false)][string]$Root
+    )
+
+    return [pscustomobject]@{
+        status = "pass"
+        default_model = "local-llama"
+        selected_model = "local-llama"
+        model_status = "pass"
+        model_error_message = ""
+        routing_reason = "chat bridge test stub"
+        response_text = "Acknowledged. Standing by."
+        next_action = "Continue the conversation."
+        bridge_mode = "model_chat"
+        handoff_status = "fallback"
+        source_of_truth = "test_stub"
+    }
+}.GetNewClosure()
+
+if (-not $UseLiveModel) {
+    Set-Item -Path function:Invoke-COOPERDefaultModelChat -Value $DefaultModelChatFallback
 }
 
 function Find-QueueArtifactByMarker {
@@ -572,179 +605,181 @@ if (-not $SkipDispatch -and -not $DashboardMode) {
     }
 }
 
-$GoalApprovalConversationId = "conv-goal-approval-$([guid]::NewGuid().ToString('N').Substring(0, 12))"
-$GoalApprovalSessionId = "sess-goal-approval-$([guid]::NewGuid().ToString('N').Substring(0, 12))"
-$GoalApprovalMarker = "goal-approval-flow-$([guid]::NewGuid().ToString())"
-$GoalApprovalIssues = New-Object System.Collections.Generic.List[string]
+if (-not $SkipDispatch -and -not $DashboardMode) {
+    $GoalApprovalConversationId = "conv-goal-approval-$([guid]::NewGuid().ToString('N').Substring(0, 12))"
+    $GoalApprovalSessionId = "sess-goal-approval-$([guid]::NewGuid().ToString('N').Substring(0, 12))"
+    $GoalApprovalMarker = "goal-approval-flow-$([guid]::NewGuid().ToString())"
+    $GoalApprovalIssues = New-Object System.Collections.Generic.List[string]
 
-$GoalApprovalRequestRaw = & $BridgeScript -Message "I want to start reading classic literature. Can you search the internet, create a list of top books from famous authors, write a report, include links and synopses, and make it a PDF? [$GoalApprovalMarker]" -ConversationId $GoalApprovalConversationId -SessionId $GoalApprovalSessionId -AsJson 2>&1
-$GoalApprovalRequest = ConvertFrom-PDAMixedJson -Text ([string]($GoalApprovalRequestRaw -join "`n")) -SourceName $BridgeScript
-$GoalApprovalStateAfterRequestRaw = & $StateScript -ConversationId $GoalApprovalConversationId -SessionId $GoalApprovalSessionId -AsJson 2>&1
-$GoalApprovalStateAfterRequest = ConvertFrom-PDAMixedJson -Text ([string]($GoalApprovalStateAfterRequestRaw -join "`n")) -SourceName $StateScript
+    $GoalApprovalRequestRaw = & $BridgeScript -Message "I want to start reading classic literature. Can you search the internet, create a list of top books from famous authors, write a report, include links and synopses, and make it a PDF? [$GoalApprovalMarker]" -ConversationId $GoalApprovalConversationId -SessionId $GoalApprovalSessionId -AsJson 2>&1
+    $GoalApprovalRequest = ConvertFrom-PDAMixedJson -Text ([string]($GoalApprovalRequestRaw -join "`n")) -SourceName $BridgeScript
+    $GoalApprovalStateAfterRequestRaw = & $StateScript -ConversationId $GoalApprovalConversationId -SessionId $GoalApprovalSessionId -AsJson 2>&1
+    $GoalApprovalStateAfterRequest = ConvertFrom-PDAMixedJson -Text ([string]($GoalApprovalStateAfterRequestRaw -join "`n")) -SourceName $StateScript
 
-if (-not ($GoalApprovalRequest.PSObject.Properties.Name -contains "goal_plan")) {
-    $GoalApprovalIssues.Add("Goal plan response did not include goal_plan data.")
-}
-if (-not ($GoalApprovalRequest.PSObject.Properties.Name -contains "execution_plan")) {
-    $GoalApprovalIssues.Add("Goal plan response did not include execution_plan data.")
-}
-if (-not ($GoalApprovalRequest.PSObject.Properties.Name -contains "decision") -or -not $GoalApprovalRequest.decision -or $GoalApprovalRequest.decision.decision_type -ne "plan") {
-    $GoalApprovalIssues.Add("Goal plan response did not persist a plan decision object.")
-}
-if (-not [bool]$GoalApprovalRequest.requires_confirmation) {
-    $GoalApprovalIssues.Add("Approval-required goal plan should require confirmation.")
-}
-if ($GoalApprovalRequest.dispatch_status -ne "not_dispatched") {
-    $GoalApprovalIssues.Add("Goal plan request should not dispatch before approval.")
-}
-if ([string]::IsNullOrWhiteSpace([string]$GoalApprovalStateAfterRequest.conversation.pending_recommended_command)) {
-    $GoalApprovalIssues.Add("Goal plan pending command was not stored in conversation state.")
-}
-if ($GoalApprovalStateAfterRequest.conversation.pending_status -ne "awaiting_confirmation") {
-    $GoalApprovalIssues.Add("Goal plan pending status was not stored as awaiting_confirmation.")
-}
-if ([string]::IsNullOrWhiteSpace([string]$GoalApprovalStateAfterRequest.conversation.pending_dispatch_category)) {
-    $GoalApprovalIssues.Add("Goal plan pending dispatch category was not stored in conversation state.")
-}
-if ($GoalApprovalStateAfterRequest.pending_approval_count -lt 1) {
-    $GoalApprovalIssues.Add("Goal plan pending approval count should be at least one after request.")
-}
-if ([string]::IsNullOrWhiteSpace([string]$GoalApprovalStateAfterRequest.pending_recommended_command) -and
-    [string]::IsNullOrWhiteSpace([string]$GoalApprovalStateAfterRequest.conversation.pending_recommended_command)) {
-    $GoalApprovalIssues.Add("Goal plan pending command was not exposed by the conversation state.")
-}
-if ([string]::IsNullOrWhiteSpace([string]$GoalApprovalStateAfterRequest.pending_dispatch_category) -and
-    [string]::IsNullOrWhiteSpace([string]$GoalApprovalStateAfterRequest.conversation.pending_dispatch_category)) {
-    $GoalApprovalIssues.Add("Goal plan pending dispatch category was not exposed by the conversation state.")
-}
-if ([string]::IsNullOrWhiteSpace([string]$GoalApprovalStateAfterRequest.pending_status) -and
-    [string]::IsNullOrWhiteSpace([string]$GoalApprovalStateAfterRequest.conversation.pending_status)) {
-$GoalApprovalIssues.Add("Goal plan pending status was not exposed by the conversation state.")
-}
-if ($GoalApprovalStateAfterRequest.conversation -and $GoalApprovalStateAfterRequest.conversation.last_decision -and $GoalApprovalStateAfterRequest.conversation.last_decision.decision_type -ne "plan") {
-    $GoalApprovalIssues.Add("Goal plan decision object was not persisted as a plan decision.")
-}
-if (-not ($GoalApprovalRequest.decision -and $GoalApprovalRequest.decision.decision_type -eq "plan")) {
-    $GoalApprovalIssues.Add("Goal plan response did not persist a plan decision object.")
-}
+    if (-not ($GoalApprovalRequest.PSObject.Properties.Name -contains "goal_plan")) {
+        $GoalApprovalIssues.Add("Goal plan response did not include goal_plan data.")
+    }
+    if (-not ($GoalApprovalRequest.PSObject.Properties.Name -contains "execution_plan")) {
+        $GoalApprovalIssues.Add("Goal plan response did not include execution_plan data.")
+    }
+    if (-not ($GoalApprovalRequest.PSObject.Properties.Name -contains "decision") -or -not $GoalApprovalRequest.decision -or $GoalApprovalRequest.decision.decision_type -ne "plan") {
+        $GoalApprovalIssues.Add("Goal plan response did not persist a plan decision object.")
+    }
+    if (-not [bool]$GoalApprovalRequest.requires_confirmation) {
+        $GoalApprovalIssues.Add("Approval-required goal plan should require confirmation.")
+    }
+    if ($GoalApprovalRequest.dispatch_status -ne "not_dispatched") {
+        $GoalApprovalIssues.Add("Goal plan request should not dispatch before approval.")
+    }
+    if ([string]::IsNullOrWhiteSpace([string]$GoalApprovalStateAfterRequest.conversation.pending_recommended_command)) {
+        $GoalApprovalIssues.Add("Goal plan pending command was not stored in conversation state.")
+    }
+    if ($GoalApprovalStateAfterRequest.conversation.pending_status -ne "awaiting_confirmation") {
+        $GoalApprovalIssues.Add("Goal plan pending status was not stored as awaiting_confirmation.")
+    }
+    if ([string]::IsNullOrWhiteSpace([string]$GoalApprovalStateAfterRequest.conversation.pending_dispatch_category)) {
+        $GoalApprovalIssues.Add("Goal plan pending dispatch category was not stored in conversation state.")
+    }
+    if ($GoalApprovalStateAfterRequest.pending_approval_count -lt 1) {
+        $GoalApprovalIssues.Add("Goal plan pending approval count should be at least one after request.")
+    }
+    if ([string]::IsNullOrWhiteSpace([string]$GoalApprovalStateAfterRequest.pending_recommended_command) -and
+        [string]::IsNullOrWhiteSpace([string]$GoalApprovalStateAfterRequest.conversation.pending_recommended_command)) {
+        $GoalApprovalIssues.Add("Goal plan pending command was not exposed by the conversation state.")
+    }
+    if ([string]::IsNullOrWhiteSpace([string]$GoalApprovalStateAfterRequest.pending_dispatch_category) -and
+        [string]::IsNullOrWhiteSpace([string]$GoalApprovalStateAfterRequest.conversation.pending_dispatch_category)) {
+        $GoalApprovalIssues.Add("Goal plan pending dispatch category was not exposed by the conversation state.")
+    }
+    if ([string]::IsNullOrWhiteSpace([string]$GoalApprovalStateAfterRequest.pending_status) -and
+        [string]::IsNullOrWhiteSpace([string]$GoalApprovalStateAfterRequest.conversation.pending_status)) {
+        $GoalApprovalIssues.Add("Goal plan pending status was not exposed by the conversation state.")
+    }
+    if ($GoalApprovalStateAfterRequest.conversation -and $GoalApprovalStateAfterRequest.conversation.last_decision -and $GoalApprovalStateAfterRequest.conversation.last_decision.decision_type -ne "plan") {
+        $GoalApprovalIssues.Add("Goal plan decision object was not persisted as a plan decision.")
+    }
+    if (-not ($GoalApprovalRequest.decision -and $GoalApprovalRequest.decision.decision_type -eq "plan")) {
+        $GoalApprovalIssues.Add("Goal plan response did not persist a plan decision object.")
+    }
 
-$GoalApprovalApprovedRaw = & $BridgeScript -Message "approved [$GoalApprovalMarker]" -ConversationId $GoalApprovalConversationId -SessionId $GoalApprovalSessionId -AsJson 2>&1
-$GoalApprovalApproved = ConvertFrom-PDAMixedJson -Text ([string]($GoalApprovalApprovedRaw -join "`n")) -SourceName $BridgeScript
-if ($GoalApprovalApproved.response_text -match 'No pending governed action found for this conversation\.') {
-    $GoalApprovalIssues.Add("Approved goal-plan reply should not report that no pending governed action exists.")
-}
-if (-not ($GoalApprovalApproved.PSObject.Properties.Name -contains "pending_action")) {
-    $GoalApprovalIssues.Add("Approved goal-plan reply should preserve pending action context.")
-}
-if ($GoalApprovalApproved.handoff_status -eq "no_pending_confirmation") {
-    $GoalApprovalIssues.Add("Approved goal-plan reply should stay attached to the existing pending action.")
-}
+    $GoalApprovalApprovedRaw = & $BridgeScript -Message "approved [$GoalApprovalMarker]" -ConversationId $GoalApprovalConversationId -SessionId $GoalApprovalSessionId -AsJson 2>&1
+    $GoalApprovalApproved = ConvertFrom-PDAMixedJson -Text ([string]($GoalApprovalApprovedRaw -join "`n")) -SourceName $BridgeScript
+    if ($GoalApprovalApproved.response_text -match 'No pending governed action found for this conversation\.') {
+        $GoalApprovalIssues.Add("Approved goal-plan reply should not report that no pending governed action exists.")
+    }
+    if (-not ($GoalApprovalApproved.PSObject.Properties.Name -contains "pending_action")) {
+        $GoalApprovalIssues.Add("Approved goal-plan reply should preserve pending action context.")
+    }
+    if ($GoalApprovalApproved.handoff_status -eq "no_pending_confirmation") {
+        $GoalApprovalIssues.Add("Approved goal-plan reply should stay attached to the existing pending action.")
+    }
 
-$GoalApprovalDispatchRaw = & $BridgeScript -Message "dispatch [$GoalApprovalMarker]" -ConversationId $GoalApprovalConversationId -SessionId $GoalApprovalSessionId -AsJson 2>&1
-$GoalApprovalDispatch = ConvertFrom-PDAMixedJson -Text ([string]($GoalApprovalDispatchRaw -join "`n")) -SourceName $BridgeScript
-if ($GoalApprovalDispatch.response_text -match 'No pending governed action found for this conversation\.') {
-    $GoalApprovalIssues.Add("Dispatch goal-plan reply should not report that no pending governed action exists.")
-}
-if (-not ($GoalApprovalDispatch.PSObject.Properties.Name -contains "pending_action")) {
-    $GoalApprovalIssues.Add("Dispatch goal-plan reply should preserve pending action context.")
-}
-if ($GoalApprovalDispatch.handoff_status -eq "no_pending_confirmation") {
-    $GoalApprovalIssues.Add("Dispatch goal-plan reply should stay attached to the existing pending action.")
-}
+    $GoalApprovalDispatchRaw = & $BridgeScript -Message "dispatch [$GoalApprovalMarker]" -ConversationId $GoalApprovalConversationId -SessionId $GoalApprovalSessionId -AsJson 2>&1
+    $GoalApprovalDispatch = ConvertFrom-PDAMixedJson -Text ([string]($GoalApprovalDispatchRaw -join "`n")) -SourceName $BridgeScript
+    if ($GoalApprovalDispatch.response_text -match 'No pending governed action found for this conversation\.') {
+        $GoalApprovalIssues.Add("Dispatch goal-plan reply should not report that no pending governed action exists.")
+    }
+    if (-not ($GoalApprovalDispatch.PSObject.Properties.Name -contains "pending_action")) {
+        $GoalApprovalIssues.Add("Dispatch goal-plan reply should preserve pending action context.")
+    }
+    if ($GoalApprovalDispatch.handoff_status -eq "no_pending_confirmation") {
+        $GoalApprovalIssues.Add("Dispatch goal-plan reply should stay attached to the existing pending action.")
+    }
 
-$Results += [pscustomobject]@{
-    name = "goal plan approval replay"
-    passed = ($GoalApprovalIssues.Count -eq 0)
-    status = $GoalApprovalApproved.dispatch_status
-    response_text = $GoalApprovalDispatch.response_text
-    dispatch_status = $GoalApprovalDispatch.dispatch_status
-    dispatch_ready = $GoalApprovalDispatch.dispatch_ready
-    issues = @($GoalApprovalIssues)
-}
+    $Results += [pscustomobject]@{
+        name = "goal plan approval replay"
+        passed = ($GoalApprovalIssues.Count -eq 0)
+        status = $GoalApprovalApproved.dispatch_status
+        response_text = $GoalApprovalDispatch.response_text
+        dispatch_status = $GoalApprovalDispatch.dispatch_status
+        dispatch_ready = $GoalApprovalDispatch.dispatch_ready
+        issues = @($GoalApprovalIssues)
+    }
 
-if ($GoalApprovalIssues.Count -eq 0) {
-    $Passed++
-}
-else {
-    $Failed++
-}
+    if ($GoalApprovalIssues.Count -eq 0) {
+        $Passed++
+    }
+    else {
+        $Failed++
+    }
 
-$SpreadsheetGoalConversationId = "conv-spreadsheet-goal-$([guid]::NewGuid().ToString('N').Substring(0, 12))"
-$SpreadsheetGoalSessionId = "sess-spreadsheet-goal-$([guid]::NewGuid().ToString('N').Substring(0, 12))"
-$SpreadsheetGoalMarker = "spreadsheet-goal-flow-$([guid]::NewGuid().ToString())"
-$SpreadsheetGoalIssues = New-Object System.Collections.Generic.List[string]
+    $SpreadsheetGoalConversationId = "conv-spreadsheet-goal-$([guid]::NewGuid().ToString('N').Substring(0, 12))"
+    $SpreadsheetGoalSessionId = "sess-spreadsheet-goal-$([guid]::NewGuid().ToString('N').Substring(0, 12))"
+    $SpreadsheetGoalMarker = "spreadsheet-goal-flow-$([guid]::NewGuid().ToString())"
+    $SpreadsheetGoalIssues = New-Object System.Collections.Generic.List[string]
 
-$SpreadsheetGoalMessage = "Validate first 10 website links from an XLSX, rate-limit requests, write Markdown report to Obsidian. [$SpreadsheetGoalMarker]"
-$SpreadsheetGoalRequestRaw = & $BridgeScript -Message $SpreadsheetGoalMessage -ConversationId $SpreadsheetGoalConversationId -SessionId $SpreadsheetGoalSessionId -AsJson 2>&1
-$SpreadsheetGoalRequest = ConvertFrom-PDAMixedJson -Text ([string]($SpreadsheetGoalRequestRaw -join "`n")) -SourceName $BridgeScript
+    $SpreadsheetGoalMessage = "Validate first 10 website links from an XLSX, rate-limit requests, write Markdown report to Obsidian. [$SpreadsheetGoalMarker]"
+    $SpreadsheetGoalRequestRaw = & $BridgeScript -Message $SpreadsheetGoalMessage -ConversationId $SpreadsheetGoalConversationId -SessionId $SpreadsheetGoalSessionId -AsJson 2>&1
+    $SpreadsheetGoalRequest = ConvertFrom-PDAMixedJson -Text ([string]($SpreadsheetGoalRequestRaw -join "`n")) -SourceName $BridgeScript
 
-if ($SpreadsheetGoalRequest.response_text -match 'I can help with one action at a time') {
-    $SpreadsheetGoalIssues.Add("Detailed spreadsheet workflow should not be treated as ambiguous multi-action guidance.")
-}
-if (-not ($SpreadsheetGoalRequest.PSObject.Properties.Name -contains "goal_plan")) {
-    $SpreadsheetGoalIssues.Add("Spreadsheet workflow did not return goal_plan data.")
-}
-if (-not ($SpreadsheetGoalRequest.PSObject.Properties.Name -contains "execution_plan")) {
-    $SpreadsheetGoalIssues.Add("Spreadsheet workflow did not return execution_plan data.")
-}
-if (-not ($SpreadsheetGoalRequest.PSObject.Properties.Name -contains "decision") -or -not $SpreadsheetGoalRequest.decision -or $SpreadsheetGoalRequest.decision.decision_type -ne "plan") {
-    $SpreadsheetGoalIssues.Add("Spreadsheet workflow did not persist a plan decision object.")
-}
-if (-not ($SpreadsheetGoalRequest.decision.PSObject.Properties.Name -contains "task_type") -or $SpreadsheetGoalRequest.decision.task_type -ne "data_validation_report") {
-    $SpreadsheetGoalIssues.Add("Spreadsheet workflow decision should advertise task_type data_validation_report.")
-}
-if (-not ($SpreadsheetGoalRequest.decision.PSObject.Properties.Name -contains "recommended_executor") -or [string]::IsNullOrWhiteSpace([string]$SpreadsheetGoalRequest.decision.recommended_executor)) {
-    $SpreadsheetGoalIssues.Add("Spreadsheet workflow decision should recommend an executor.")
-}
-if ($SpreadsheetGoalRequest.decision.recommended_executor -notin @("execute-worker", "reporter-worker")) {
-    $SpreadsheetGoalIssues.Add("Spreadsheet workflow decision should recommend execute-worker or reporter-worker.")
-}
-if (-not [bool]$SpreadsheetGoalRequest.requires_confirmation) {
-    $SpreadsheetGoalIssues.Add("Spreadsheet workflow should require confirmation.")
-}
-if ($SpreadsheetGoalRequest.dispatch_status -ne "not_dispatched") {
-    $SpreadsheetGoalIssues.Add("Spreadsheet workflow should not dispatch before approval.")
-}
-if ($SpreadsheetGoalRequest.route_type -ne "goal_planning") {
-    $SpreadsheetGoalIssues.Add("Spreadsheet workflow should route through goal planning.")
-}
-if ($SpreadsheetGoalRequest.goal_plan.goal_type -ne "data_validation_report") {
-    $SpreadsheetGoalIssues.Add("Spreadsheet workflow should classify as data_validation_report.")
-}
-if ($SpreadsheetGoalRequest.goal_plan.category -ne "category_1") {
-    $SpreadsheetGoalIssues.Add("Spreadsheet workflow should remain category_1.")
-}
-if (@($SpreadsheetGoalRequest.goal_plan.subtasks).recommended_executor -notcontains "execute-worker") {
-    $SpreadsheetGoalIssues.Add("Spreadsheet workflow should recommend execute-worker for the validation step.")
-}
-if (@($SpreadsheetGoalRequest.goal_plan.subtasks).recommended_executor -notcontains "reporter-worker") {
-    $SpreadsheetGoalIssues.Add("Spreadsheet workflow should recommend reporter-worker for reporting.")
-}
-if ($SpreadsheetGoalRequest.response_text -notmatch 'Executor: execute-worker') {
-    $SpreadsheetGoalIssues.Add("Spreadsheet workflow response text should show execute-worker in the execution plan.")
-}
-if ($SpreadsheetGoalRequest.response_text -notmatch 'Executor: reporter-worker') {
-    $SpreadsheetGoalIssues.Add("Spreadsheet workflow response text should show reporter-worker in the execution plan.")
-}
-if (($SpreadsheetGoalRequest.goal_plan.deliverables -join ' ') -notmatch '(?i)markdown') {
-    $SpreadsheetGoalIssues.Add("Spreadsheet workflow should include a Markdown deliverable.")
-}
+    if ($SpreadsheetGoalRequest.response_text -match 'I can help with one action at a time') {
+        $SpreadsheetGoalIssues.Add("Detailed spreadsheet workflow should not be treated as ambiguous multi-action guidance.")
+    }
+    if (-not ($SpreadsheetGoalRequest.PSObject.Properties.Name -contains "goal_plan")) {
+        $SpreadsheetGoalIssues.Add("Spreadsheet workflow did not return goal_plan data.")
+    }
+    if (-not ($SpreadsheetGoalRequest.PSObject.Properties.Name -contains "execution_plan")) {
+        $SpreadsheetGoalIssues.Add("Spreadsheet workflow did not return execution_plan data.")
+    }
+    if (-not ($SpreadsheetGoalRequest.PSObject.Properties.Name -contains "decision") -or -not $SpreadsheetGoalRequest.decision -or $SpreadsheetGoalRequest.decision.decision_type -ne "plan") {
+        $SpreadsheetGoalIssues.Add("Spreadsheet workflow did not persist a plan decision object.")
+    }
+    if (-not ($SpreadsheetGoalRequest.decision.PSObject.Properties.Name -contains "task_type") -or $SpreadsheetGoalRequest.decision.task_type -ne "data_validation_report") {
+        $SpreadsheetGoalIssues.Add("Spreadsheet workflow decision should advertise task_type data_validation_report.")
+    }
+    if (-not ($SpreadsheetGoalRequest.decision.PSObject.Properties.Name -contains "recommended_executor") -or [string]::IsNullOrWhiteSpace([string]$SpreadsheetGoalRequest.decision.recommended_executor)) {
+        $SpreadsheetGoalIssues.Add("Spreadsheet workflow decision should recommend an executor.")
+    }
+    if ($SpreadsheetGoalRequest.decision.recommended_executor -notin @("execute-worker", "reporter-worker")) {
+        $SpreadsheetGoalIssues.Add("Spreadsheet workflow decision should recommend execute-worker or reporter-worker.")
+    }
+    if (-not [bool]$SpreadsheetGoalRequest.requires_confirmation) {
+        $SpreadsheetGoalIssues.Add("Spreadsheet workflow should require confirmation.")
+    }
+    if ($SpreadsheetGoalRequest.dispatch_status -ne "not_dispatched") {
+        $SpreadsheetGoalIssues.Add("Spreadsheet workflow should not dispatch before approval.")
+    }
+    if ($SpreadsheetGoalRequest.route_type -ne "goal_planning") {
+        $SpreadsheetGoalIssues.Add("Spreadsheet workflow should route through goal planning.")
+    }
+    if ($SpreadsheetGoalRequest.goal_plan.goal_type -ne "data_validation_report") {
+        $SpreadsheetGoalIssues.Add("Spreadsheet workflow should classify as data_validation_report.")
+    }
+    if ($SpreadsheetGoalRequest.goal_plan.category -ne "category_1") {
+        $SpreadsheetGoalIssues.Add("Spreadsheet workflow should remain category_1.")
+    }
+    if (@($SpreadsheetGoalRequest.goal_plan.subtasks).recommended_executor -notcontains "execute-worker") {
+        $SpreadsheetGoalIssues.Add("Spreadsheet workflow should recommend execute-worker for the validation step.")
+    }
+    if (@($SpreadsheetGoalRequest.goal_plan.subtasks).recommended_executor -notcontains "reporter-worker") {
+        $SpreadsheetGoalIssues.Add("Spreadsheet workflow should recommend reporter-worker for reporting.")
+    }
+    if ($SpreadsheetGoalRequest.response_text -notmatch 'Executor: execute-worker') {
+        $SpreadsheetGoalIssues.Add("Spreadsheet workflow response text should show execute-worker in the execution plan.")
+    }
+    if ($SpreadsheetGoalRequest.response_text -notmatch 'Executor: reporter-worker') {
+        $SpreadsheetGoalIssues.Add("Spreadsheet workflow response text should show reporter-worker in the execution plan.")
+    }
+    if (($SpreadsheetGoalRequest.goal_plan.deliverables -join ' ') -notmatch '(?i)markdown') {
+        $SpreadsheetGoalIssues.Add("Spreadsheet workflow should include a Markdown deliverable.")
+    }
 
-$Results += [pscustomobject]@{
-    name = "spreadsheet validation goal"
-    passed = ($SpreadsheetGoalIssues.Count -eq 0)
-    status = $SpreadsheetGoalRequest.dispatch_status
-    response_text = $SpreadsheetGoalRequest.response_text
-    dispatch_status = $SpreadsheetGoalRequest.dispatch_status
-    dispatch_ready = $SpreadsheetGoalRequest.dispatch_ready
-    issues = @($SpreadsheetGoalIssues)
-}
+    $Results += [pscustomobject]@{
+        name = "spreadsheet validation goal"
+        passed = ($SpreadsheetGoalIssues.Count -eq 0)
+        status = $SpreadsheetGoalRequest.dispatch_status
+        response_text = $SpreadsheetGoalRequest.response_text
+        dispatch_status = $SpreadsheetGoalRequest.dispatch_status
+        dispatch_ready = $SpreadsheetGoalRequest.dispatch_ready
+        issues = @($SpreadsheetGoalIssues)
+    }
 
-if ($SpreadsheetGoalIssues.Count -eq 0) {
-    $Passed++
-}
-else {
-    $Failed++
+    if ($SpreadsheetGoalIssues.Count -eq 0) {
+        $Passed++
+    }
+    else {
+        $Failed++
+    }
 }
 
 foreach ($Case in $Cases) {

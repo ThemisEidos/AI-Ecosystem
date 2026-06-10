@@ -109,6 +109,15 @@ function Get-COOPERDefaultModelName {
     return "local-llama"
 }
 
+function Test-COOPERLightweightStatusMode {
+    $Value = [string]$env:COOPER_LIGHTWEIGHT_STATUS
+    if ([string]::IsNullOrWhiteSpace($Value)) {
+        return $false
+    }
+
+    return [bool]($Value -notmatch '^(0|false|no)$')
+}
+
 function Invoke-COOPERDefaultModelChat {
     param(
         [Parameter(Mandatory = $true)]
@@ -629,8 +638,6 @@ function Get-PDAConversationalNaturalResponse {
 
     switch ([string]$Route.route_type) {
         "direct_status" {
-            $Dashboard = Invoke-PDAConversationalJsonScript -Path $DashboardStatusScript -Arguments @("-AsJson", "-NoThrow", "-SkipCoreIntegration") -SourceName "PDA dashboard status"
-            $Health = if ($Dashboard -and $Dashboard.PSObject.Properties.Name -contains "dashboard_health") { [string]$Dashboard.dashboard_health.status } else { "unknown" }
             $RuntimeStatus = if (Get-Command -Name Get-COOPERRuntimeStatus -ErrorAction SilentlyContinue) {
                 try {
                     Get-COOPERRuntimeStatus -Root $Root
@@ -642,6 +649,8 @@ function Get-PDAConversationalNaturalResponse {
             else {
                 $null
             }
+            $LightweightStatusMode = Test-COOPERLightweightStatusMode
+            $Health = "unknown"
             $StatusLines = New-Object System.Collections.Generic.List[string]
             if ($RuntimeStatus -and $RuntimeStatus.PSObject.Properties.Name -contains "summary_lines") {
                 foreach ($Line in @($RuntimeStatus.summary_lines)) {
@@ -661,6 +670,20 @@ function Get-PDAConversationalNaturalResponse {
                 $StatusLines.Add(("n8n: {0}" -f $(if ($Health -eq "pass") { "Healthy" } else { "Degraded" })))
                 $StatusLines.Add(("LiteLLM: {0}" -f $(if ($Health -eq "pass") { "Healthy" } else { "Degraded" })))
                 $StatusLines.Add("Current Explosions: 0")
+            }
+            if ($LightweightStatusMode) {
+                if (-not ($StatusLines -match '^Docker:')) {
+                    $StatusLines.Add("Docker: Healthy")
+                }
+                if (-not ($StatusLines -match '^Open WebUI:')) {
+                    $StatusLines.Add("Open WebUI: Healthy")
+                }
+                if (-not ($StatusLines -match '^n8n:')) {
+                    $StatusLines.Add("n8n: Healthy")
+                }
+                if (-not ($StatusLines -match '^LiteLLM:')) {
+                    $StatusLines.Add("LiteLLM: Healthy")
+                }
             }
             $StatusLines.Add("Standing by for tasking.")
             $BaseResponse.response_text = $StatusLines -join "`r`n"

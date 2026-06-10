@@ -11,6 +11,13 @@ $ErrorActionPreference = "Stop"
 
 $Root = Split-Path -Parent $PSScriptRoot
 $RouterScript = Join-Path $PSScriptRoot "COOPER_ConversationalRouter.ps1"
+$UseLiveModel = [bool](
+    -not [string]::IsNullOrWhiteSpace([string]$env:COOPER_TEST_USE_LIVE_MODEL) -and
+    [string]$env:COOPER_TEST_USE_LIVE_MODEL -notmatch '^(0|false|no)$'
+)
+if (-not $UseLiveModel -and [string]::IsNullOrWhiteSpace([string]$env:COOPER_LIGHTWEIGHT_STATUS)) {
+    $env:COOPER_LIGHTWEIGHT_STATUS = "1"
+}
 
 if (-not (Test-Path -LiteralPath $RouterScript -PathType Leaf)) {
     throw "Conversational router missing: $RouterScript"
@@ -40,6 +47,9 @@ $DefaultModelChatFallback = {
 }
 
 if (-not (Get-Command -Name Invoke-COOPERDefaultModelChat -ErrorAction SilentlyContinue)) {
+    Set-Item -Path function:Invoke-COOPERDefaultModelChat -Value $DefaultModelChatFallback
+}
+elseif (-not $UseLiveModel) {
     Set-Item -Path function:Invoke-COOPERDefaultModelChat -Value $DefaultModelChatFallback
 }
 
@@ -232,10 +242,16 @@ foreach ($Case in $Cases) {
     if ($Route.route_type -in @("direct_status", "direct_help", "task_lookup", "dispatch_guidance", "goal_planning", "ambiguous", "fallback")) {
         $OriginalDefaultModelChat = $null
         $StubbedModelInvocation = $false
-        if ($Case.PSObject.Properties.Name -contains "stub_model_response" -and -not [string]::IsNullOrWhiteSpace([string]$Case.stub_model_response)) {
+        if (-not $UseLiveModel -or ($Case.PSObject.Properties.Name -contains "stub_model_response" -and -not [string]::IsNullOrWhiteSpace([string]$Case.stub_model_response))) {
             $StubbedModelInvocation = $true
             if (Get-Command -Name Invoke-COOPERDefaultModelChat -ErrorAction SilentlyContinue) {
                 $OriginalDefaultModelChat = (Get-Item function:Invoke-COOPERDefaultModelChat).ScriptBlock
+            }
+            $StubResponse = if ($Case.PSObject.Properties.Name -contains "stub_model_response" -and -not [string]::IsNullOrWhiteSpace([string]$Case.stub_model_response)) {
+                [string]$Case.stub_model_response
+            }
+            else {
+                "Acknowledged. Standing by."
             }
             $StubScript = {
                 param(
@@ -249,21 +265,22 @@ foreach ($Case in $Cases) {
                     selected_model = "local-llama"
                     model_status = "pass"
                     model_error_message = ""
-                    routing_reason = "stub"
-                    response_text = "Acknowledged. Standing by."
+                    routing_reason = "router test stub"
+                    response_text = $StubResponse
                     next_action = "Continue the conversation."
                     bridge_mode = "model_chat"
                     handoff_status = "fallback"
                     source_of_truth = "test_stub"
                 }
-            }
+            }.GetNewClosure()
             Set-Item -Path function:Invoke-COOPERDefaultModelChat -Value $StubScript
         }
 
         $Direct = Get-PDAConversationalNaturalResponse -Route $Route -ConversationId $DirectConversationId -SessionId $DirectSessionId -UserId $DirectUserId -ConversationTitle $DirectTitle -Text $Case.input -Root $Root
 
         if ($StubbedModelInvocation) {
-            Set-Item -Path function:Invoke-COOPERDefaultModelChat -Value $DefaultModelChatFallback
+            $RestoreScript = if ($OriginalDefaultModelChat) { $OriginalDefaultModelChat } else { $DefaultModelChatFallback }
+            Set-Item -Path function:Invoke-COOPERDefaultModelChat -Value $RestoreScript
         }
 
         if ([string]::IsNullOrWhiteSpace([string]$Direct.response_text)) {
@@ -361,7 +378,8 @@ foreach ($Case in $Cases) {
             $Direct = Get-PDAConversationalNaturalResponse -Route $Route -ConversationId $DirectConversationId -SessionId $DirectSessionId -UserId $DirectUserId -ConversationTitle $DirectTitle -Text $Case.input -Root $Root
         }
         finally {
-            Set-Item -Path function:Invoke-COOPERDefaultModelChat -Value $DefaultModelChatFallback
+            $RestoreScript = if ($OriginalDefaultModelChat) { $OriginalDefaultModelChat } else { $DefaultModelChatFallback }
+            Set-Item -Path function:Invoke-COOPERDefaultModelChat -Value $RestoreScript
         }
 
         if ([string]::IsNullOrWhiteSpace([string]$Direct.response_text)) {
