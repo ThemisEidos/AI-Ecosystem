@@ -1,0 +1,574 @@
+{
+  "schema_version": "1.0",
+  "policy_name": "PDA Execution Plan Registry",
+  "policy_version": "1.0",
+  "updated_at": "2026-06-09T00:00:00Z",
+  "execution_plans": [
+    {
+      "capability_id": "research",
+      "execution_plan_id": "research_standard",
+      "display_name": "Research Execution Plan",
+      "description": "Collect sources, validate evidence, synthesize findings, and produce a research brief.",
+      "agent": "research_agent",
+      "provider_strategy": {
+        "local_first": true,
+        "default_provider": "local-llama",
+        "preferred_providers": [ "local-llama", "gemini" ],
+        "fallback_providers": [ "claude", "openrouter" ],
+        "escalation_conditions": [
+          "source discovery requires broader web access",
+          "large context analysis exceeds local confidence",
+          "the task requires stronger research synthesis"
+        ],
+        "cloud_allowed": true,
+        "restricted_local_only": false
+      },
+      "approval_required": false,
+      "restricted_local_only": false,
+      "estimated_complexity": "medium",
+      "estimated_steps": 5,
+      "execution_steps": [
+        "collect_sources",
+        "validate_sources",
+        "analyze_evidence",
+        "synthesize_findings",
+        "prepare_research_brief"
+      ],
+      "success_criteria": [
+        "Relevant sources are collected and validated.",
+        "Key findings are synthesized into a concise brief.",
+        "The result can be traced back to cited evidence."
+      ],
+      "outputs": [ "research_summary", "citations", "source_notes" ],
+      "notes": "Research is local-first by default and escalates only when broader source discovery or stronger synthesis is justified."
+    },
+    {
+      "capability_id": "source_discovery",
+      "execution_plan_id": "source_discovery_standard",
+      "display_name": "Source Discovery Execution Plan",
+      "description": "Locate, filter, and organize source candidates for later analysis or reporting.",
+      "agent": "research_agent",
+      "provider_strategy": {
+        "local_first": true,
+        "default_provider": "local-llama",
+        "preferred_providers": [ "local-llama", "gemini" ],
+        "fallback_providers": [ "claude", "openrouter" ],
+        "escalation_conditions": [
+          "broader discovery is needed",
+          "the candidate set is sparse",
+          "the search space benefits from cloud retrieval support"
+        ],
+        "cloud_allowed": true,
+        "restricted_local_only": false
+      },
+      "approval_required": false,
+      "restricted_local_only": false,
+      "estimated_complexity": "low",
+      "estimated_steps": 4,
+      "execution_steps": [
+        "define_search_scope",
+        "collect_candidates",
+        "validate_sources",
+        "summarize_source_inventory"
+      ],
+      "success_criteria": [
+        "Source candidates are collected from relevant channels.",
+        "Each candidate has enough metadata to evaluate usefulness.",
+        "The output is ready for later research or reporting."
+      ],
+      "outputs": [ "source_inventory", "links", "citations" ],
+      "notes": "This plan stops at discovery and does not perform full synthesis."
+    },
+    {
+      "capability_id": "large_context_analysis",
+      "execution_plan_id": "large_context_analysis_standard",
+      "display_name": "Large Context Analysis Execution Plan",
+      "description": "Ingest large inputs, segment them, compare themes, and produce structured findings.",
+      "agent": "research_agent",
+      "provider_strategy": {
+        "local_first": true,
+        "default_provider": "local-llama",
+        "preferred_providers": [ "local-llama", "gemini" ],
+        "fallback_providers": [ "claude", "openrouter" ],
+        "escalation_conditions": [
+          "context length exceeds local capacity",
+          "cross-document synthesis requires a stronger reasoning model",
+          "confidence metadata indicates a better provider"
+        ],
+        "cloud_allowed": true,
+        "restricted_local_only": false
+      },
+      "approval_required": false,
+      "restricted_local_only": false,
+      "estimated_complexity": "medium",
+      "estimated_steps": 5,
+      "execution_steps": [
+        "ingest_context",
+        "segment_inputs",
+        "compare_patterns",
+        "synthesize_findings",
+        "prepare_briefing"
+      ],
+      "success_criteria": [
+        "Large inputs are organized into manageable segments.",
+        "Cross-source patterns are identified and summarized.",
+        "The result is concise enough for operator review."
+      ],
+      "outputs": [ "analysis_summary", "briefing", "comparison_notes" ],
+      "notes": "This plan emphasizes synthesis and comparison rather than source gathering."
+    },
+    {
+      "capability_id": "report_writing",
+      "execution_plan_id": "report_writing_standard",
+      "display_name": "Report Writing Execution Plan",
+      "description": "Draft a structured report or briefing from prepared inputs.",
+      "agent": "reporting_agent",
+      "provider_strategy": {
+        "local_first": true,
+        "default_provider": "local-llama",
+        "preferred_providers": [ "local-llama", "claude" ],
+        "fallback_providers": [ "gemini", "openrouter" ],
+        "escalation_conditions": [
+          "the draft needs stronger prose quality",
+          "the report requires polished structure",
+          "the source material is large or complex"
+        ],
+        "cloud_allowed": true,
+        "restricted_local_only": false
+      },
+      "approval_required": false,
+      "restricted_local_only": false,
+      "estimated_complexity": "medium",
+      "estimated_steps": 4,
+      "execution_steps": [
+        "outline_report",
+        "draft_sections",
+        "check_clarity",
+        "format_final_report"
+      ],
+      "success_criteria": [
+        "The report follows a clear structure.",
+        "The text is readable and operator-friendly.",
+        "The output matches the requested format."
+      ],
+      "outputs": [ "report", "markdown", "briefing" ],
+      "notes": "Prefer strong writing quality, but keep the plan deterministic and explainable."
+    },
+    {
+      "capability_id": "report_review",
+      "execution_plan_id": "report_review_standard",
+      "display_name": "Report Review Execution Plan",
+      "description": "Inspect a draft for clarity, correctness, and actionable findings.",
+      "agent": "review_agent",
+      "provider_strategy": {
+        "local_first": true,
+        "default_provider": "local-llama",
+        "preferred_providers": [ "local-llama", "claude" ],
+        "fallback_providers": [ "codex", "openrouter" ],
+        "escalation_conditions": [
+          "the review requires stronger critique",
+          "the draft is lengthy or subtle",
+          "the operator requested a cloud review model"
+        ],
+        "cloud_allowed": true,
+        "restricted_local_only": false
+      },
+      "approval_required": false,
+      "restricted_local_only": false,
+      "estimated_complexity": "low",
+      "estimated_steps": 4,
+      "execution_steps": [
+        "read_draft",
+        "identify_findings",
+        "rank_findings",
+        "prepare_review_notes"
+      ],
+      "success_criteria": [
+        "Findings are specific and actionable.",
+        "The review distinguishes high-priority issues from minor ones.",
+        "The review does not modify the source draft."
+      ],
+      "outputs": [ "review_notes", "findings", "recommendations" ],
+      "notes": "Review is inspection only and stays separate from execution."
+    },
+    {
+      "capability_id": "code_implementation",
+      "execution_plan_id": "code_implementation_standard",
+      "display_name": "Code Implementation Execution Plan",
+      "description": "Plan repository or code changes, tests, and implementation notes.",
+      "agent": "build_agent",
+      "provider_strategy": {
+        "local_first": true,
+        "default_provider": "local-llama",
+        "preferred_providers": [ "local-llama", "claude_code" ],
+        "fallback_providers": [ "codex", "openrouter" ],
+        "escalation_conditions": [
+          "the implementation benefits from a code-oriented cloud model",
+          "the repository scope is large",
+          "the task requires stronger patch synthesis"
+        ],
+        "cloud_allowed": true,
+        "restricted_local_only": false
+      },
+      "approval_required": true,
+      "restricted_local_only": false,
+      "estimated_complexity": "high",
+      "estimated_steps": 6,
+      "execution_steps": [
+        "inspect_scope",
+        "plan_changes",
+        "prepare_patch",
+        "define_test_strategy",
+        "record_risks",
+        "prepare_implementation_summary"
+      ],
+      "success_criteria": [
+        "The intended code change is described precisely.",
+        "The plan names the expected test or validation steps.",
+        "The work remains approval-gated before any modification."
+      ],
+      "outputs": [ "patch", "implementation_summary", "test_notes" ],
+      "notes": "Planning may describe repository changes, but no modification occurs here."
+    },
+    {
+      "capability_id": "code_review",
+      "execution_plan_id": "code_review_standard",
+      "display_name": "Code Review Execution Plan",
+      "description": "Inspect code changes and surface review findings before any merge or release.",
+      "agent": "review_agent",
+      "provider_strategy": {
+        "local_first": true,
+        "default_provider": "local-llama",
+        "preferred_providers": [ "local-llama", "claude" ],
+        "fallback_providers": [ "codex", "openrouter" ],
+        "escalation_conditions": [
+          "the diff is large",
+          "the review needs a stronger critique model",
+          "the operator explicitly selects a cloud reviewer"
+        ],
+        "cloud_allowed": true,
+        "restricted_local_only": false
+      },
+      "approval_required": false,
+      "restricted_local_only": false,
+      "estimated_complexity": "medium",
+      "estimated_steps": 4,
+      "execution_steps": [
+        "scan_diff",
+        "assess_risk",
+        "identify_findings",
+        "prepare_review_summary"
+      ],
+      "success_criteria": [
+        "Potential issues are listed and prioritized.",
+        "The review explains the impact of each finding.",
+        "The result stays separate from implementation."
+      ],
+      "outputs": [ "review_notes", "findings", "recommendations" ],
+      "notes": "Use this plan for inspection, not implementation."
+    },
+    {
+      "capability_id": "repo_modification",
+      "execution_plan_id": "repo_modification_standard",
+      "display_name": "Repository Modification Execution Plan",
+      "description": "Plan repository changes and the checks required before committing them.",
+      "agent": "build_agent",
+      "provider_strategy": {
+        "local_first": true,
+        "default_provider": "local-llama",
+        "preferred_providers": [ "local-llama", "claude_code" ],
+        "fallback_providers": [ "codex", "openrouter" ],
+        "escalation_conditions": [
+          "repository edits are large or cross-cutting",
+          "the change benefits from a code-oriented cloud model",
+          "additional patch synthesis is required"
+        ],
+        "cloud_allowed": true,
+        "restricted_local_only": false
+      },
+      "approval_required": true,
+      "restricted_local_only": false,
+      "estimated_complexity": "high",
+      "estimated_steps": 6,
+      "execution_steps": [
+        "inspect_repository_scope",
+        "map_required_changes",
+        "prepare_patch_sequence",
+        "plan_validation_checks",
+        "capture_change_notes",
+        "prepare_commit_summary"
+      ],
+      "success_criteria": [
+        "The repository impact is described in a bounded sequence.",
+        "The validation work is named before execution.",
+        "Approval remains required before any file change."
+      ],
+      "outputs": [ "patch", "summary", "test_notes" ],
+      "notes": "Repository modification remains governed and cannot execute inside this layer."
+    },
+    {
+      "capability_id": "automation_design",
+      "execution_plan_id": "automation_design_standard",
+      "display_name": "Automation Design Execution Plan",
+      "description": "Design deterministic automation logic and orchestration flow before implementation.",
+      "agent": "automation_agent",
+      "provider_strategy": {
+        "local_first": true,
+        "default_provider": "local-llama",
+        "preferred_providers": [ "local-llama", "claude_code" ],
+        "fallback_providers": [ "codex", "openrouter" ],
+        "escalation_conditions": [
+          "workflow design needs code-oriented synthesis",
+          "the control flow is large or branching",
+          "the operator wants a stronger automation model"
+        ],
+        "cloud_allowed": true,
+        "restricted_local_only": false
+      },
+      "approval_required": true,
+      "restricted_local_only": false,
+      "estimated_complexity": "high",
+      "estimated_steps": 5,
+      "execution_steps": [
+        "map_inputs",
+        "define_states",
+        "draft_workflow",
+        "validate_determinism",
+        "prepare_design_summary"
+      ],
+      "success_criteria": [
+        "The workflow logic is deterministic and bounded.",
+        "Inputs, states, and outputs are identified.",
+        "The design does not execute or dispatch anything."
+      ],
+      "outputs": [ "workflow", "json", "summary" ],
+      "notes": "Automation design is a specification step, not an execution step."
+    },
+    {
+      "capability_id": "n8n_workflow_design",
+      "execution_plan_id": "n8n_workflow_design_standard",
+      "display_name": "n8n Workflow Design Execution Plan",
+      "description": "Prepare an n8n workflow design for later governed implementation.",
+      "agent": "automation_agent",
+      "provider_strategy": {
+        "local_first": true,
+        "default_provider": "local-llama",
+        "preferred_providers": [ "local-llama", "claude_code" ],
+        "fallback_providers": [ "codex", "openrouter" ],
+        "escalation_conditions": [
+          "the n8n graph is large",
+          "node selection benefits from code-oriented synthesis",
+          "the workflow requires a stronger provider"
+        ],
+        "cloud_allowed": true,
+        "restricted_local_only": false
+      },
+      "approval_required": true,
+      "restricted_local_only": false,
+      "estimated_complexity": "high",
+      "estimated_steps": 5,
+      "execution_steps": [
+        "map_triggers",
+        "define_nodes",
+        "draft_workflow_graph",
+        "validate_routes",
+        "prepare_handoff_notes"
+      ],
+      "success_criteria": [
+        "The n8n workflow is described in a deterministic graph form.",
+        "Control flow and data flow are explicit.",
+        "No workflow is generated or executed here."
+      ],
+      "outputs": [ "workflow", "json", "summary" ],
+      "notes": "The planning layer may describe n8n, but it does not call n8n."
+    },
+    {
+      "capability_id": "local_restricted_analysis",
+      "execution_plan_id": "local_restricted_analysis_local_only",
+      "display_name": "Local Restricted Analysis Execution Plan",
+      "description": "Analyze restricted material locally without cloud exposure.",
+      "agent": "restricted_agent",
+      "provider_strategy": {
+        "local_first": true,
+        "default_provider": "local-llama",
+        "preferred_providers": [ "local-llama" ],
+        "fallback_providers": [ "local-llama" ],
+        "escalation_conditions": [
+          "cloud escalation is prohibited",
+          "restricted material must remain local",
+          "category 2 work cannot leave the machine"
+        ],
+        "cloud_allowed": false,
+        "restricted_local_only": true
+      },
+      "approval_required": true,
+      "restricted_local_only": true,
+      "estimated_complexity": "high",
+      "estimated_steps": 5,
+      "execution_steps": [
+        "ingest_local_material",
+        "bound_scope",
+        "analyze_locally",
+        "prepare_local_summary",
+        "record_restrictions"
+      ],
+      "success_criteria": [
+        "All inputs remain local-only.",
+        "No cloud provider is suggested or required.",
+        "The result makes the restriction boundary explicit."
+      ],
+      "outputs": [ "restricted_analysis", "local_summary" ],
+      "notes": "Category 2 work is local-only and cannot be routed to a cloud provider."
+    },
+    {
+      "capability_id": "file_processing",
+      "execution_plan_id": "file_processing_local_only",
+      "display_name": "File Processing Execution Plan",
+      "description": "Inspect or transform local files while keeping the route local-only.",
+      "agent": "restricted_agent",
+      "provider_strategy": {
+        "local_first": true,
+        "default_provider": "local-llama",
+        "preferred_providers": [ "local-llama" ],
+        "fallback_providers": [ "local-llama" ],
+        "escalation_conditions": [
+          "cloud escalation is prohibited",
+          "file work stays local",
+          "the task must not expose local data"
+        ],
+        "cloud_allowed": false,
+        "restricted_local_only": true
+      },
+      "approval_required": false,
+      "restricted_local_only": true,
+      "estimated_complexity": "medium",
+      "estimated_steps": 5,
+      "execution_steps": [
+        "scan_files",
+        "classify_content",
+        "extract_structured_data",
+        "normalize_output",
+        "prepare_file_summary"
+      ],
+      "success_criteria": [
+        "The files are processed without leaving the local boundary.",
+        "The output is structured for operator review.",
+        "No cloud path appears in the plan."
+      ],
+      "outputs": [ "file_summary", "extract", "markdown" ],
+      "notes": "Category 2 file operations stay local even when the content is simple."
+    },
+    {
+      "capability_id": "dashboard_status_generation",
+      "execution_plan_id": "dashboard_status_generation_local_only",
+      "display_name": "Dashboard Status Generation Execution Plan",
+      "description": "Summarize local system state into a dashboard-ready status report.",
+      "agent": "restricted_agent",
+      "provider_strategy": {
+        "local_first": true,
+        "default_provider": "local-llama",
+        "preferred_providers": [ "local-llama" ],
+        "fallback_providers": [ "local-llama" ],
+        "escalation_conditions": [
+          "dashboard status must stay local",
+          "cloud escalation is prohibited",
+          "the status snapshot is derived from local state"
+        ],
+        "cloud_allowed": false,
+        "restricted_local_only": true
+      },
+      "approval_required": false,
+      "restricted_local_only": true,
+      "estimated_complexity": "low",
+      "estimated_steps": 4,
+      "execution_steps": [
+        "collect_local_state",
+        "compute_status_metrics",
+        "compose_dashboard_summary",
+        "prepare_status_payload"
+      ],
+      "success_criteria": [
+        "Status is derived from local state only.",
+        "The summary is concise and dashboard-ready.",
+        "No cloud escalation is possible."
+      ],
+      "outputs": [ "status_report", "summary", "markdown" ],
+      "notes": "Dashboard reporting remains within the restricted local boundary."
+    },
+    {
+      "capability_id": "memory_summarization",
+      "execution_plan_id": "memory_summarization_local_only",
+      "display_name": "Memory Summarization Execution Plan",
+      "description": "Distill bounded memory candidates into a usable local memory packet.",
+      "agent": "restricted_agent",
+      "provider_strategy": {
+        "local_first": true,
+        "default_provider": "local-llama",
+        "preferred_providers": [ "local-llama" ],
+        "fallback_providers": [ "local-llama" ],
+        "escalation_conditions": [
+          "memory packets stay local",
+          "cloud escalation is prohibited",
+          "the summary must not expose restricted data"
+        ],
+        "cloud_allowed": false,
+        "restricted_local_only": true
+      },
+      "approval_required": false,
+      "restricted_local_only": true,
+      "estimated_complexity": "medium",
+      "estimated_steps": 5,
+      "execution_steps": [
+        "collect_memory_candidates",
+        "filter_relevant_items",
+        "distill_lessons",
+        "compose_memory_packet",
+        "prepare_index_entry"
+      ],
+      "success_criteria": [
+        "The memory packet is short, bounded, and local-only.",
+        "Reusable lessons are captured without overfitting.",
+        "No cloud provider appears in the route."
+      ],
+      "outputs": [ "memory_packet", "summary", "index_entry" ],
+      "notes": "Memory summarization is intended for controlled, local knowledge capture."
+    },
+    {
+      "capability_id": "skill_promotion_review",
+      "execution_plan_id": "skill_promotion_review_local_only",
+      "display_name": "Skill Promotion Review Execution Plan",
+      "description": "Review a successful workflow as a candidate for future skill promotion.",
+      "agent": "review_agent",
+      "provider_strategy": {
+        "local_first": true,
+        "default_provider": "local-llama",
+        "preferred_providers": [ "local-llama" ],
+        "fallback_providers": [ "local-llama" ],
+        "escalation_conditions": [
+          "skill promotion review stays local",
+          "cloud escalation is prohibited",
+          "the review should remain bounded and auditable"
+        ],
+        "cloud_allowed": false,
+        "restricted_local_only": true
+      },
+      "approval_required": false,
+      "restricted_local_only": true,
+      "estimated_complexity": "medium",
+      "estimated_steps": 4,
+      "execution_steps": [
+        "review_candidate",
+        "assess_reusability",
+        "document_promotion_rationale",
+        "prepare_recommendation"
+      ],
+      "success_criteria": [
+        "The candidate workflow is evaluated locally.",
+        "The review explains why promotion is or is not warranted.",
+        "The output remains advisory rather than executable."
+      ],
+      "outputs": [ "skill_candidate_review", "recommendation", "summary" ],
+      "notes": "Skill promotion review remains local-only so the evaluation surface stays bounded."
+    }
+  ]
+}

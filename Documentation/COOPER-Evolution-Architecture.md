@@ -186,7 +186,40 @@ Routing should consider:
 - Restricted work must remain local even if a cloud model is preferred for the task type.
 - Fallback agents should never violate category policy.
 
-## 6. Implementation Roadmap
+## 6. Execution Planning Layer
+
+### Purpose
+
+COOPER should be able to explain how work would be performed without performing the work automatically.
+
+The execution planning layer sits after capability, agent, and provider routing and before approval.
+
+### Responsibilities
+
+- produce a deterministic execution plan for the selected capability
+- keep the plan explainable and repeatable
+- describe steps, outputs, and success criteria
+- preserve local-only enforcement for Category 2 work
+- describe approval requirements without enforcing them
+
+### Non-Responsibilities
+
+- execute tools
+- dispatch tasks
+- invoke models
+- generate n8n workflows
+- override approval
+- override category policy
+
+### Design Rules
+
+- The same inputs should produce the same plan.
+- Planning should not mutate state.
+- Provider context can shape the explanation, but not the authority of approval.
+- Category 2 plans must remain local-only.
+- A planning result is advisory until the approval workflow authorizes execution.
+
+## 7. Implementation Roadmap
 
 Recommended order:
 
@@ -249,13 +282,13 @@ Recommended order:
 2. Expand personality settings and tone controls.
 3. Add memory packet foundation.
 4. Add agent profile and routing policy docs.
-5. Update Claude Code and Codex routing policy.
-6. Add Fabric-to-Skill library design.
-7. Introduce agent harness integration.
-8. Add subagent profile architecture.
-9. Add messaging gateway architecture last.
+5. Add execution plan registry and deterministic plan resolver.
+6. Update Claude Code and Codex routing policy.
+7. Add Fabric-to-Skill library design.
+8. Introduce agent harness integration.
+9. Add subagent profile architecture.
+10. Add messaging gateway architecture last.
 
 ## Summary
 
 COOPER’s next phase should preserve the current governed runtime while adding the architectural foundation for personality-aware orchestration, reusable memory, and specialized agent routing. Governance stays first; autonomy comes later.
-

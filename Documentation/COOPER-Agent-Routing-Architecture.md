@@ -1,6 +1,6 @@
 # COOPER Agent Routing Architecture
 
-COOPER routes work by classifying the task, classifying sensitivity, matching capabilities, selecting an agent, selecting tools, selecting a provider, checking approval state, and only then permitting execution.
+COOPER routes work by classifying the task, classifying sensitivity, matching capabilities, selecting an agent, selecting a provider, generating an execution plan, checking approval state, and only then permitting execution.
 
 ## Routing Flow
 
@@ -10,8 +10,8 @@ flowchart TD
     B --> C["Sensitivity Classification"]
     C --> D["Capability Selection"]
     D --> E["Agent Selection"]
-    E --> F["Tool Selection"]
-    F --> G["Provider Selection"]
+    E --> F["Provider Selection"]
+    F --> G["Execution Plan"]
     G --> H["Approval Check"]
     H --> I["Execution"]
 ```
@@ -28,6 +28,7 @@ Routing should consider:
 - required capabilities
 - preferred providers
 - fallback providers
+- execution plan registry
 
 ## Capability Selection
 
@@ -87,13 +88,9 @@ Determine whether the task is:
 
 Pick the best agent profile based on the selected capability set and sensitivity rules.
 
-### Tool Selection
-
-Choose a tool harness that can execute the required action without violating policy.
-
 ### Model / Provider Selection
 
-Provider selection is lower-level than capability selection.
+Provider selection is lower-level than capability selection and higher-level than execution planning.
 
 Selection criteria:
 
@@ -105,6 +102,25 @@ Selection criteria:
 - fallback availability
 - explicit user override if safe
 - local-first default routing
+
+### Execution Planning
+
+The execution planning layer is deterministic and planning-only.
+
+It answers:
+
+- what steps the work would take
+- whether the route is local-only
+- whether approval is still required
+- what outputs the route should produce
+
+It does not:
+
+- execute tools
+- invoke models
+- generate workflows
+- modify files
+- bypass approval
 
 Examples:
 
@@ -130,6 +146,7 @@ LiteLLM remains the routing layer for provider/model selection, not the governan
 - Build and automation capabilities should prefer Claude Code, with Codex as secondary.
 - Restricted capability should stay local and avoid cloud routing.
 - Local-llama remains the default starting point for COOPER.
+- Execution planning should remain explainable and deterministic after provider routing.
 
 ### Fallback Strategy
 
@@ -193,6 +210,38 @@ Provider selection should be driven by a dedicated policy and resolver layer.
 3. Use the capability or agent preference when escalation is justified.
 4. Escalate on low local confidence when metadata exists.
 5. Fall back to local-llama when no stronger reason exists.
+
+## Execution Plan Resolver
+
+The execution plan layer sits after provider selection and before approval.
+
+### Inputs
+
+- capability
+- selected agent
+- selected provider
+- category
+- restricted-local flag
+
+### Outputs
+
+- execution_plan_id
+- execution_steps
+- approval_required
+- restricted_local_only
+- estimated_complexity
+- estimated_steps
+- success_criteria
+- outputs
+- routing_reason
+
+### Decision Rules
+
+1. Match the capability to its registered execution plan.
+2. Force local-only plans when Category 2 or restricted-local routing applies.
+3. Keep the plan deterministic for the same inputs.
+4. Preserve provider context in the routing reason without turning planning into execution.
+5. Leave approval authoritative and unchanged.
 
 ## Tool Selection Strategy
 
@@ -261,8 +310,8 @@ The long-term path is:
 3. Sensitivity Classification
 4. Capability Selection
 5. Agent Selection
-6. Tool Selection
-7. Model / Provider Selection
+6. Model / Provider Selection
+7. Execution Plan
 8. Approval Check
 9. Execution
 
