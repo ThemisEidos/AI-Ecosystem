@@ -8,6 +8,7 @@ function Get-COOPERIdentity {
     $ProfilePath = Join-Path $Root "Scripts\COOPER_Personality.json"
     $CapabilityRegistryPath = Join-Path $Root "Scripts\PDA_CapabilityRegistry.json"
     $AgentProfileRegistryPath = Join-Path $Root "Scripts\PDA_AgentProfileRegistry.json"
+    $ProviderRoutingPolicyPath = Join-Path $Root "Scripts\PDA_ProviderRoutingPolicy.json"
     $ApprovalWorkflowPath = Join-Path $Root "Scripts\PDA_ApprovalWorkflow.ps1"
     $MemoryArchitecturePath = Join-Path $Root "Documentation\COOPER-Memory-Architecture.md"
 
@@ -23,6 +24,9 @@ function Get-COOPERIdentity {
             [string]$AgentProfileRegistryPath,
 
             [Parameter(Mandatory = $true)]
+            [string]$ProviderRoutingPolicyPath,
+
+            [Parameter(Mandatory = $true)]
             [string]$ApprovalWorkflowPath,
 
             [Parameter(Mandatory = $true)]
@@ -34,8 +38,9 @@ function Get-COOPERIdentity {
         $GovernanceAvailable = (Test-Path -LiteralPath $ApprovalWorkflowPath -PathType Leaf) -and (Test-Path -LiteralPath (Join-Path (Split-Path -Parent $ApprovalWorkflowPath) "New-PDAApprovalRequest.ps1") -PathType Leaf)
         $CapabilityRegistryAvailable = Test-Path -LiteralPath $CapabilityRegistryPath -PathType Leaf
         $AgentRegistryAvailable = Test-Path -LiteralPath $AgentProfileRegistryPath -PathType Leaf
+        $ProviderRoutingAvailable = Test-Path -LiteralPath $ProviderRoutingPolicyPath -PathType Leaf
 
-        $Loaded = $PersonalityLoaded -and $MemoryAvailable -and $GovernanceAvailable -and $CapabilityRegistryAvailable -and $AgentRegistryAvailable
+        $Loaded = $PersonalityLoaded -and $MemoryAvailable -and $GovernanceAvailable -and $CapabilityRegistryAvailable -and $AgentRegistryAvailable -and $ProviderRoutingAvailable
 
         return [pscustomobject]@{
             cooper_layers_loaded = [bool]$Loaded
@@ -44,12 +49,14 @@ function Get-COOPERIdentity {
             governance_available = [bool]$GovernanceAvailable
             capability_registry_available = [bool]$CapabilityRegistryAvailable
             agent_registry_available = [bool]$AgentRegistryAvailable
+            provider_routing_available = [bool]$ProviderRoutingAvailable
             source_paths = [pscustomobject]@{
                 personality = $ProfilePath
                 memory = $MemoryArchitecturePath
                 governance = $ApprovalWorkflowPath
                 capability_registry = $CapabilityRegistryPath
                 agent_registry = $AgentProfileRegistryPath
+                provider_routing_policy = $ProviderRoutingPolicyPath
             }
         }
     }
@@ -71,7 +78,7 @@ function Get-COOPERIdentity {
                 "Computational Overlord of Operations, Planning, Execution, and Reporting"
                 "Chief Officer of Preventing Everything from Randomly Exploding"
             )
-            runtime_layers = Get-COOPERRuntimeLayerStatus -ProfilePath $ProfilePath -CapabilityRegistryPath $CapabilityRegistryPath -AgentProfileRegistryPath $AgentProfileRegistryPath -ApprovalWorkflowPath $ApprovalWorkflowPath -MemoryArchitecturePath $MemoryArchitecturePath
+            runtime_layers = Get-COOPERRuntimeLayerStatus -ProfilePath $ProfilePath -CapabilityRegistryPath $CapabilityRegistryPath -AgentProfileRegistryPath $AgentProfileRegistryPath -ProviderRoutingPolicyPath $ProviderRoutingPolicyPath -ApprovalWorkflowPath $ApprovalWorkflowPath -MemoryArchitecturePath $MemoryArchitecturePath
             personality = [pscustomobject]@{
                 humor = 75
                 sarcasm = 60
@@ -94,6 +101,7 @@ function Get-COOPERIdentity {
                 approval_gates_unchanged = $true
                 category_restrictions_unchanged = $true
                 local_only_restrictions_unchanged = $true
+                provider_routing_unchanged = $true
                 dispatch_governance_unchanged = $true
                 audit_logging_unchanged = $true
             }
@@ -135,7 +143,7 @@ function Get-COOPERIdentity {
             ) -Force
         }
         if (-not ($Profile.PSObject.Properties.Name -contains "runtime_layers")) {
-            $Profile | Add-Member -NotePropertyName runtime_layers -NotePropertyValue (Get-COOPERRuntimeLayerStatus -ProfilePath $ProfilePath -CapabilityRegistryPath $CapabilityRegistryPath -AgentProfileRegistryPath $AgentProfileRegistryPath -ApprovalWorkflowPath $ApprovalWorkflowPath -MemoryArchitecturePath $MemoryArchitecturePath) -Force
+            $Profile | Add-Member -NotePropertyName runtime_layers -NotePropertyValue (Get-COOPERRuntimeLayerStatus -ProfilePath $ProfilePath -CapabilityRegistryPath $CapabilityRegistryPath -AgentProfileRegistryPath $AgentProfileRegistryPath -ProviderRoutingPolicyPath $ProviderRoutingPolicyPath -ApprovalWorkflowPath $ApprovalWorkflowPath -MemoryArchitecturePath $MemoryArchitecturePath) -Force
         }
         if (-not ($Profile.PSObject.Properties.Name -contains "personality")) {
             $Profile | Add-Member -NotePropertyName personality -NotePropertyValue ([pscustomobject]@{
@@ -155,6 +163,7 @@ function Get-COOPERIdentity {
                 approval_gates_unchanged = $true
                 category_restrictions_unchanged = $true
                 local_only_restrictions_unchanged = $true
+                provider_routing_unchanged = $true
                 dispatch_governance_unchanged = $true
                 audit_logging_unchanged = $true
             }) -Force
@@ -167,7 +176,7 @@ function Get-COOPERIdentity {
         $Default | Add-Member -NotePropertyName status -NotePropertyValue "error" -Force
         $Default | Add-Member -NotePropertyName error -NotePropertyValue $_.Exception.Message -Force
         if (-not ($Default.PSObject.Properties.Name -contains "runtime_layers")) {
-            $Default | Add-Member -NotePropertyName runtime_layers -NotePropertyValue (Get-COOPERRuntimeLayerStatus -ProfilePath $ProfilePath -CapabilityRegistryPath $CapabilityRegistryPath -AgentProfileRegistryPath $AgentProfileRegistryPath -ApprovalWorkflowPath $ApprovalWorkflowPath -MemoryArchitecturePath $MemoryArchitecturePath) -Force
+            $Default | Add-Member -NotePropertyName runtime_layers -NotePropertyValue (Get-COOPERRuntimeLayerStatus -ProfilePath $ProfilePath -CapabilityRegistryPath $CapabilityRegistryPath -AgentProfileRegistryPath $AgentProfileRegistryPath -ProviderRoutingPolicyPath $ProviderRoutingPolicyPath -ApprovalWorkflowPath $ApprovalWorkflowPath -MemoryArchitecturePath $MemoryArchitecturePath) -Force
         }
         return $Default
     }

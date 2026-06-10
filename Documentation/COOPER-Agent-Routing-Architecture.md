@@ -1,6 +1,6 @@
 # COOPER Agent Routing Architecture
 
-COOPER routes work by classifying the task, classifying sensitivity, matching capabilities, selecting an agent, selecting tools, selecting a provider/model, checking approval state, and only then permitting execution.
+COOPER routes work by classifying the task, classifying sensitivity, matching capabilities, selecting an agent, selecting tools, selecting a provider, checking approval state, and only then permitting execution.
 
 ## Routing Flow
 
@@ -11,7 +11,7 @@ flowchart TD
     C --> D["Capability Selection"]
     D --> E["Agent Selection"]
     E --> F["Tool Selection"]
-    F --> G["Model / Provider Selection"]
+    F --> G["Provider Selection"]
     G --> H["Approval Check"]
     H --> I["Execution"]
 ```
@@ -103,6 +103,8 @@ Selection criteria:
 - approval state
 - cost / speed / capability tradeoff
 - fallback availability
+- explicit user override if safe
+- local-first default routing
 
 Examples:
 
@@ -127,6 +129,7 @@ LiteLLM remains the routing layer for provider/model selection, not the governan
 - Review capability should prefer Claude, with Codex as secondary.
 - Build and automation capabilities should prefer Claude Code, with Codex as secondary.
 - Restricted capability should stay local and avoid cloud routing.
+- Local-llama remains the default starting point for COOPER.
 
 ### Fallback Strategy
 
@@ -136,12 +139,15 @@ Fallbacks should be chosen for capability and availability, not to bypass policy
 - Claude can fall back to Gemini for reporting if needed.
 - Codex remains the secondary implementation and review path.
 - Local-only tasks must not fall back to cloud models.
+- OpenRouter is an escalation path, not a default.
+- Provider fallback should not weaken category restrictions.
 
 ### Category 2 Enforcement
 
 - Category 2 work must remain local-only.
 - LiteLLM can participate only if the route is explicitly allowed.
 - Any cloud model path must be blocked if policy requires local-only.
+- `local-llama` is the enforced provider for Category 2 and restricted-local routes.
 
 ### Governance Boundary
 
@@ -151,6 +157,42 @@ LiteLLM must never decide approval state.
 - It cannot authorize execution.
 - It cannot override category restrictions.
 - It cannot override the approval workflow.
+
+## Provider Resolver
+
+Provider selection should be driven by a dedicated policy and resolver layer.
+
+### Inputs
+
+- capability
+- selected agent
+- category
+- restricted-local flag
+- approved providers
+- preferred providers
+- fallback providers
+- explicit requested provider
+- local confidence metadata, if available
+
+### Outputs
+
+- selected_provider
+- candidate_providers
+- routing_reason
+- defaulted_to_local
+- escalation_required
+- escalation_reason
+- cloud_allowed
+- restricted_local_only
+- approval_required
+
+### Decision Order
+
+1. Force local-llama for restricted-local and Category 2 routes.
+2. Honor a safe explicit user override when policy allows it.
+3. Use the capability or agent preference when escalation is justified.
+4. Escalate on low local confidence when metadata exists.
+5. Fall back to local-llama when no stronger reason exists.
 
 ## Tool Selection Strategy
 
@@ -258,6 +300,15 @@ The long-term path is:
 - Provider/tool: local model only
 - Approval: required
 - Cloud: prohibited
+
+### Example 5
+
+- Task: COOPER chat about a code patch
+- Capability: code implementation
+- Agent: Build Agent
+- Provider/tool: Claude Code or Codex, depending availability
+- Approval: required
+- Cloud: allowed, but only as an escalation path
 
 The decision remains governed even as agent capabilities expand.
 

@@ -4,11 +4,11 @@ This document defines the Open WebUI chat path for COOPER.
 
 ## Dual-Provider Model Access
 
-Open WebUI now serves two distinct model access patterns:
+Open WebUI now serves three distinct model access patterns:
 
 - **LiteLLM** is the governed PDA gateway. It exposes the curated PDA aliases used for approved workflow routing and stable day-to-day use.
 - **OpenRouter direct** is connected separately as an OpenAI-compatible provider for exploration and broad model catalog browsing.
-- **COOPER** remains a preserved Pipe Function workflow and is not replaced by either provider connection.
+- **COOPER** remains a preserved Pipe Function workflow and is the selectable operator interface. It is not a model and is not replaced by either provider connection.
 
 ### Current Model Sources
 
@@ -88,7 +88,7 @@ Use a **Pipe Function**.
 5. In Open WebUI, create a Pipe Function from [Open WebUI/PDA_ChatBridge_Pipe.py](C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\Open WebUI\PDA_ChatBridge_Pipe.py).
 6. Set the Pipe Function's `N8N_WEBHOOK_URL` valve to `http://host.docker.internal:5678/webhook/pda-chat-bridge-http` if Open WebUI runs in Docker, or `http://localhost:5678/webhook/pda-chat-bridge-http` if it runs on the host.
 7. Enable the Pipe Function and select `COOPER` as the active model in the chat sidebar.
-8. Confirm that the Open WebUI model points to the COOPER Pipe, not to queue files or workers.
+8. Confirm that the Open WebUI model points to the COOPER Pipe, not to queue files, workers, or a provider alias.
 
 ## NotebookLM Command Flow
 
@@ -228,6 +228,7 @@ Pattern setup:
 5. Leave the model filter blank only if you want the full catalog visible.
 6. Enable `Cache Base Model List` in Open WebUI to reduce repeated provider list fetches.
 7. If the selector becomes too noisy, add an allowlist or create Open WebUI model presets and tags for the few OpenRouter models you actually want exposed.
+8. Treat `COOPER` as the operator entrypoint and the direct providers as bypass paths for users who already know the model they want.
 
 ## API Health Validation
 
@@ -260,3 +261,4 @@ pwsh -File Scripts\Test-OpenWebUIChatCompletion.ps1 -AsJson -NoThrow
 - An Action Function can be added later if you want a button-driven confirmation step, but it is not required for the working chat flow.
 - The integration assumes the Open WebUI container can reach the host via `host.docker.internal`, which matches the documented Docker setup.
 - The dual-provider setup is intentional: LiteLLM for governance, OpenRouter direct for exploration, and COOPER for workflow dispatch.
+- COOPER is the operator layer. `local-llama` is the default provider below it.

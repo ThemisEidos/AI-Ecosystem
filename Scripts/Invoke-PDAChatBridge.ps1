@@ -180,15 +180,17 @@ function Get-PDACommanderRuntimeContext {
             governance_available = (Test-Path -LiteralPath (Join-Path $Root "Scripts\PDA_ApprovalWorkflow.ps1") -PathType Leaf)
             capability_registry_available = (Test-Path -LiteralPath (Join-Path $Root "Scripts\PDA_CapabilityRegistry.json") -PathType Leaf)
             agent_registry_available = (Test-Path -LiteralPath (Join-Path $Root "Scripts\PDA_AgentProfileRegistry.json") -PathType Leaf)
+            provider_routing_available = (Test-Path -LiteralPath (Join-Path $Root "Scripts\PDA_ProviderRoutingPolicy.json") -PathType Leaf)
             source_paths = [pscustomobject]@{
                 personality = Join-Path $Root "Scripts\COOPER_Personality.json"
                 memory = Join-Path $Root "Documentation\COOPER-Memory-Architecture.md"
                 governance = Join-Path $Root "Scripts\PDA_ApprovalWorkflow.ps1"
                 capability_registry = Join-Path $Root "Scripts\PDA_CapabilityRegistry.json"
                 agent_registry = Join-Path $Root "Scripts\PDA_AgentProfileRegistry.json"
+                provider_routing_policy = Join-Path $Root "Scripts\PDA_ProviderRoutingPolicy.json"
             }
         }
-        $RuntimeLayers.cooper_layers_loaded = [bool]($RuntimeLayers.personality_loaded -and $RuntimeLayers.memory_available -and $RuntimeLayers.governance_available -and $RuntimeLayers.capability_registry_available -and $RuntimeLayers.agent_registry_available)
+        $RuntimeLayers.cooper_layers_loaded = [bool]($RuntimeLayers.personality_loaded -and $RuntimeLayers.memory_available -and $RuntimeLayers.governance_available -and $RuntimeLayers.capability_registry_available -and $RuntimeLayers.agent_registry_available -and $RuntimeLayers.provider_routing_available)
     }
 
     $IdentitySummary = [pscustomobject]@{
@@ -205,6 +207,7 @@ function Get-PDACommanderRuntimeContext {
         governance_available = [bool]$RuntimeLayers.governance_available
         capability_registry_available = [bool]$RuntimeLayers.capability_registry_available
         agent_registry_available = [bool]$RuntimeLayers.agent_registry_available
+        provider_routing_available = [bool]$RuntimeLayers.provider_routing_available
         identity = $IdentitySummary
         runtime_layers = $RuntimeLayers
         cooper_interface = "COOPER"

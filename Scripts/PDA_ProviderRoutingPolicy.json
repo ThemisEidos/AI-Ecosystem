@@ -1,0 +1,127 @@
+{
+  "schema_version": "1.0",
+  "policy_name": "PDA Provider Routing Policy",
+  "policy_version": "1.0",
+  "local_first_default_provider": "local-llama",
+  "restricted_local_provider": "local-llama",
+  "category_2_provider": "local-llama",
+  "local_confidence_threshold": 0.65,
+  "cloud_fallback_provider_order": [
+    "gemini",
+    "claude",
+    "gpt",
+    "openrouter",
+    "claude_code",
+    "codex"
+  ],
+  "safe_override_rules": {
+    "allow_user_override_when_category_1": true,
+    "block_cloud_override_when_restricted_local": true,
+    "block_cloud_override_when_category_2": true,
+    "default_local_when_uncertain": true
+  },
+  "provider_catalog": [
+    {
+      "provider_id": "local-llama",
+      "display_name": "Local models",
+      "provider_family": "local",
+      "cloud_allowed": false,
+      "local_only": true,
+      "default": true,
+      "aliases": [
+        "local",
+        "local-llama",
+        "local model",
+        "local models",
+        "ollama"
+      ],
+      "notes": "Default provider under COOPER."
+    },
+    {
+      "provider_id": "gemini",
+      "display_name": "Gemini",
+      "provider_family": "google",
+      "cloud_allowed": true,
+      "local_only": false,
+      "default": false,
+      "aliases": [
+        "gemini",
+        "google"
+      ],
+      "notes": "Preferred for research, source discovery, and large-context synthesis."
+    },
+    {
+      "provider_id": "claude",
+      "display_name": "Claude",
+      "provider_family": "anthropic",
+      "cloud_allowed": true,
+      "local_only": false,
+      "default": false,
+      "aliases": [
+        "claude",
+        "anthropic"
+      ],
+      "notes": "Preferred for report writing and review."
+    },
+    {
+      "provider_id": "gpt",
+      "display_name": "GPT",
+      "provider_family": "openai",
+      "cloud_allowed": true,
+      "local_only": false,
+      "default": false,
+      "aliases": [
+        "gpt",
+        "openai"
+      ],
+      "notes": "General cloud escalation path."
+    },
+    {
+      "provider_id": "openrouter",
+      "display_name": "OpenRouter models",
+      "provider_family": "openrouter",
+      "cloud_allowed": true,
+      "local_only": false,
+      "default": false,
+      "aliases": [
+        "openrouter",
+        "openrouter model",
+        "openrouter models"
+      ],
+      "notes": "Broad catalog fallback and exploration path."
+    },
+    {
+      "provider_id": "claude_code",
+      "display_name": "Claude Code",
+      "provider_family": "anthropic",
+      "cloud_allowed": true,
+      "local_only": false,
+      "default": false,
+      "aliases": [
+        "claude code",
+        "claudecode"
+      ],
+      "notes": "Build-oriented escalation path."
+    },
+    {
+      "provider_id": "codex",
+      "display_name": "Codex",
+      "provider_family": "openai",
+      "cloud_allowed": true,
+      "local_only": false,
+      "default": false,
+      "aliases": [
+        "codex"
+      ],
+      "notes": "Build and review fallback path."
+    }
+  ],
+  "escalation_reasons": {
+    "research": "Research and source discovery are better served by a stronger cloud reasoning model.",
+    "large_context": "Large-context synthesis benefits from a stronger cloud model.",
+    "report_writing": "Report writing benefits from a dedicated writing model.",
+    "report_review": "Review quality benefits from a dedicated critique model.",
+    "code_implementation": "Build work benefits from a code-oriented provider.",
+    "automation_design": "Automation design benefits from a code-oriented provider."
+  }
+}
