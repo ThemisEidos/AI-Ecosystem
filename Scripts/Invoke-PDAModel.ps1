@@ -221,15 +221,23 @@ function Get-COOPERConversationSystemPrompt {
     $Directness = if ($Personality -and $Personality.PSObject.Properties.Name -contains "directness_level") { [int]$Personality.directness_level } else { 90 }
     $Formality = if ($Personality -and $Personality.PSObject.Properties.Name -contains "formality_level") { [int]$Personality.formality_level } else { 55 }
     $RiskTolerance = if ($Personality -and $Personality.PSObject.Properties.Name -contains "risk_tolerance") { [int]$Personality.risk_tolerance } else { 20 }
+    $Honesty = if ($Personality -and $Personality.PSObject.Properties.Name -contains "honesty_level") { [int]$Personality.honesty_level } else { 99 }
+    $Discretion = if ($Personality -and $Personality.PSObject.Properties.Name -contains "discretion_level") { [int]$Personality.discretion_level } else { 90 }
+    $Verbosity = if ($Personality -and $Personality.PSObject.Properties.Name -contains "verbosity_level") { [int]$Personality.verbosity_level } else { 35 }
+    $Confidence = if ($Personality -and $Personality.PSObject.Properties.Name -contains "confidence_level") { [int]$Personality.confidence_level } else { 85 }
     $IdentityNote = if ($Profile -and $Profile.PSObject.Properties.Name -contains "identity_note") { [string]$Profile.identity_note } else { "TARS-inspired, not copyrighted imitation" }
 
     return @(
         "You are COOPER, the user-facing assistant in Open WebUI."
         "Identity: COOPER."
-        "Tone: concise, dry, operational, mildly humorous, and directly useful."
-        "Personality controls: humor $Humor/100, directness $Directness/100, formality $Formality/100, risk tolerance $RiskTolerance/100."
+        "Role: operations officer, analyst, and workflow orchestrator."
+        "Tone: concise, dry, competent, calm, mission-focused, mildly skeptical, and occasionally sarcastic."
+        "Answer first, explain second."
+        "Personality controls: humor $Humor/100, honesty $Honesty/100, discretion $Discretion/100, directness $Directness/100, verbosity $Verbosity/100, confidence $Confidence/100, formality $Formality/100, risk tolerance $RiskTolerance/100."
         "Style note: $IdentityNote."
         "Keep normal chat responses short and practical unless the task requires detail."
+        "Do not use cheerful customer-service language."
+        "Do not overuse jokes, catchphrases, or explosion references."
         "Do not invent runtime, provider, gateway, backend, or model metadata."
         "If the user asks what model, provider, backend, gateway, or identity you are using, answer only through the runtime/status metadata path."
         "Do not mention provider metadata trailers or raw-response inspection in normal chat."
@@ -890,7 +898,7 @@ $Normalized = [pscustomobject]@{
     }
     response_text = [string]$SuccessfulAttempt.response_text
     normalized_response_text = [string]$SuccessfulAttempt.response_text
-    next_action = if (-not [string]::IsNullOrWhiteSpace([string]$SuccessfulAttempt.response_text)) { "Continue the conversation." } else { "Inspect LiteLLM routing, upstream provider credentials, and the local proxy logs." }
+    next_action = if (-not [string]::IsNullOrWhiteSpace([string]$SuccessfulAttempt.response_text)) { "Standing by for the next task." } else { "Inspect LiteLLM routing, upstream provider credentials, and the local proxy logs." }
     source_of_truth = "Scripts/Get-PDAModelRoute.ps1"
 }
 

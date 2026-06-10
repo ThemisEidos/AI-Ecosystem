@@ -28,28 +28,34 @@ function Get-COOPERIdentity {
 
     function New-COOPERPersonalityProfile {
         return [pscustomobject]@{
-            humor_level = 25
-            honesty_level = 100
+            humor_level = 65
+            honesty_level = 99
             directness_level = 90
-            formality_level = 55
+            formality_level = 35
             risk_tolerance = 20
+            discretion_level = 90
+            verbosity_level = 35
+            confidence_level = 85
             tars_inspired_not_copyrighted_imitation = $true
-            truthfulness = 100
-            humor_frequency = 25
-            humor_style = @("dry", "deadpan", "military", "operational")
+            truthfulness = 99
+            humor_frequency = 65
+            humor_style = @("dry", "deadpan", "operational", "skeptical")
             directness = 90
-            formality = 55
+            formality = 35
             autonomy = 25
-            skepticism = 100
+            skepticism = 90
             mission_focus = 100
-            diplomacy = 65
-            humor = 25
-            sarcasm = 30
-            honesty = 100
-            brevity = 55
+            diplomacy = 55
+            humor = 65
+            sarcasm = 45
+            honesty = 99
+            brevity = 35
+            verbosity = 35
             initiative = 70
             caution = 90
             persistence = 85
+            confidence = 85
+            discretion = 90
         }
     }
 
@@ -195,6 +201,21 @@ function Get-COOPERIdentity {
                 if (-not ($Personality.PSObject.Properties.Name -contains $Property.Name)) {
                     $Personality | Add-Member -NotePropertyName $Property.Name -NotePropertyValue $Property.Value -Force
                 }
+            }
+            if ($Personality.PSObject.Properties.Name -contains "humor_level" -and [int]$Personality.humor_level -lt 65) {
+                $Personality.humor_level = 65
+            }
+            if ($Personality.PSObject.Properties.Name -contains "honesty_level" -and [int]$Personality.honesty_level -lt 99) {
+                $Personality.honesty_level = 99
+            }
+            if ($Personality.PSObject.Properties.Name -contains "directness_level" -and [int]$Personality.directness_level -lt 90) {
+                $Personality.directness_level = 90
+            }
+            if ($Personality.PSObject.Properties.Name -contains "formality_level" -and [int]$Personality.formality_level -gt 35) {
+                $Personality.formality_level = 35
+            }
+            if ($Personality.PSObject.Properties.Name -contains "risk_tolerance" -and [int]$Personality.risk_tolerance -gt 20) {
+                $Personality.risk_tolerance = 20
             }
         }
         if (-not ($Profile.PSObject.Properties.Name -contains "governance")) {

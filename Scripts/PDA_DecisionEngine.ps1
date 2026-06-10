@@ -25,7 +25,7 @@ function Test-PDACommanderDecisionDirectAnswer {
     param([Parameter(Mandatory = $true)][string]$NormalizedText)
 
     return [bool](
-        $NormalizedText -match '(?i)\b(status|help|what can you do|what commands|available commands|task status|where is my result|result location|what happened|briefing|what should i work on next|what changed recently|what needs attention|what is blocked|memory candidates|workers|reports)\b'
+        $NormalizedText -match '(?i)\b(status|help|what can you do|what commands|available commands|task status|where is my result|result location|what happened|briefing|what should i work on next|what changed recently|what needs attention|what is blocked|memory candidates|workers|reports|personality settings|your personality|humor level|humour level|honesty level|discretion level|directness level|verbosity level|confidence level|risk tolerance|set humor|update humor|set directness|update directness|set formality|update formality|set discretion|update discretion)\b'
     )
 }
 
@@ -87,6 +87,8 @@ function Get-PDACommanderDecisionLegacyRouteType {
                 "task_lookup" { return "task_lookup" }
                 "memory_candidates" { return "memory_candidates" }
                 "commander_briefing" { return "commander_briefing" }
+                "personality_status" { return "personality_status" }
+                "personality_update" { return "personality_update" }
                 "environment_awareness" { return "environment_awareness" }
                 "goal_planning" { return "goal_planning" }
                 "dispatch_guidance" { return "dispatch_guidance" }
@@ -149,6 +151,8 @@ function Get-PDACommanderDecisionRecommendedCommand {
                 "memory_candidates" { return "/memory" }
                 "commander_briefing" { return "/status" }
                 "task_lookup" { return "/tasks" }
+                "personality_status" { return "" }
+                "personality_update" { return "" }
                 default { return "" }
             }
         }
@@ -226,6 +230,16 @@ function New-PDACommanderDecision {
             $Intent = "operator_help"
             $Reason = "Direct help request."
             $MatchedRules.Add("direct_help") | Out-Null
+        }
+        elseif ($Normalized -match '(?i)\b(personality settings|your personality|humor level|humour level|honesty level|discretion level|directness level|verbosity level|confidence level|risk tolerance)\b') {
+            $Intent = "personality_status"
+            $Reason = "Direct personality profile request."
+            $MatchedRules.Add("personality_status") | Out-Null
+        }
+        elseif ($Normalized -match '(?i)\b(set|update|adjust|change)\b.*\b(humor|humour|honesty|discretion|directness|formality|verbosity|confidence|risk tolerance)\b' -or $Normalized -match '(?i)\b(make yourself|be more|be less|sound more|sound less)\b.*\b(dry|terse|concise|direct|formal|honest|discreet|confident|sarcastic)\b') {
+            $Intent = "personality_update"
+            $Reason = "Direct personality adjustment request."
+            $MatchedRules.Add("personality_update") | Out-Null
         }
         elseif ($Normalized -match '(?i)\b(memory candidates|pending memory promotions|memory promotion|what did the pda learn)\b') {
             $Intent = "memory_candidates"

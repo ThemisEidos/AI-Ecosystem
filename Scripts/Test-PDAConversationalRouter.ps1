@@ -38,8 +38,8 @@ $DefaultModelChatFallback = {
         model_status = "pass"
         model_error_message = ""
         routing_reason = "router test stub"
-        response_text = "Acknowledged. Standing by."
-        next_action = "Continue the conversation."
+        response_text = "Morning. Standing by."
+        next_action = "Standing by for the next task."
         bridge_mode = "model_chat"
         handoff_status = "fallback"
         source_of_truth = "test_stub"
@@ -139,6 +139,18 @@ $Cases = @(
         expected_command = ""
     }
     [pscustomobject]@{
+        name = "personality settings query"
+        input = "What are your personality settings?"
+        expected_route = "personality_status"
+        expected_command = ""
+    }
+    [pscustomobject]@{
+        name = "humor setting update"
+        input = "Set humor to 50."
+        expected_route = "personality_update"
+        expected_command = ""
+    }
+    [pscustomobject]@{
         name = "roadmap request"
         input = "Build me a roadmap."
         expected_route = "goal_planning"
@@ -199,8 +211,8 @@ $Cases = @(
         expected_route = "fallback"
         expected_command = ""
         expected_default_model = "local-llama"
-        expected_token = "Acknowledged. Standing by."
-        stub_model_response = "Acknowledged. Standing by."
+        expected_token = "Standing by."
+        stub_model_response = "Morning. Standing by."
     }
 )
 
@@ -251,7 +263,7 @@ foreach ($Case in $Cases) {
                 [string]$Case.stub_model_response
             }
             else {
-                "Acknowledged. Standing by."
+                "Morning. Standing by."
             }
             $StubScript = {
                 param(
@@ -267,7 +279,7 @@ foreach ($Case in $Cases) {
                     model_error_message = ""
                     routing_reason = "router test stub"
                     response_text = $StubResponse
-                    next_action = "Continue the conversation."
+                    next_action = "Standing by for the next task."
                     bridge_mode = "model_chat"
                     handoff_status = "fallback"
                     source_of_truth = "test_stub"
@@ -291,9 +303,17 @@ foreach ($Case in $Cases) {
             $CasePassed = $false
             $Issues.Add("Direct status response did not look like a status summary.")
         }
-        if ($Route.route_type -eq "direct_help" -and $Direct.response_text -notmatch '(?i)i can check status|help') {
+        if ($Route.route_type -eq "direct_help" -and $Direct.response_text -notmatch '(?i)Status, reports, research, planning, execution') {
             $CasePassed = $false
             $Issues.Add("Direct help response did not look like help text.")
+        }
+        if ($Route.route_type -eq "personality_status" -and $Direct.response_text -notmatch '(?i)COOPER Personality|Humor: 65|Honesty: 99|Discretion: 90|Directness: 90|Verbosity: 35|Confidence: 85') {
+            $CasePassed = $false
+            $Issues.Add("Personality query response did not include the expected profile values.")
+        }
+        if ($Route.route_type -eq "personality_update" -and $Direct.response_text -notmatch '(?i)Update noted|Persistent profile edits are not applied automatically|Requested adjustment') {
+            $CasePassed = $false
+            $Issues.Add("Personality update response did not acknowledge the requested adjustment.")
         }
         if ($Route.route_type -eq "ambiguous" -and $Direct.response_text -notmatch '(?i)one action|clarify') {
             $CasePassed = $false
@@ -329,7 +349,7 @@ foreach ($Case in $Cases) {
                 $CasePassed = $false
                 $Issues.Add("Fallback response did not include model_status.")
             }
-            elseif ($Direct.model_status -eq "pass" -and $Direct.response_text -match [regex]::Escape("I can help with status, briefing, blocked work, recent changes, tasks, workers, reports, memory, Fabric, NotebookLM, environment analysis, goal planning, research, review, and execution.")) {
+            elseif ($Direct.model_status -eq "pass" -and $Direct.response_text -match [regex]::Escape("Status, reports, research, planning, execution. Pick a target.")) {
                 $CasePassed = $false
                 $Issues.Add("Fallback response returned legacy static help even though the model path succeeded.")
             }
@@ -340,6 +360,10 @@ foreach ($Case in $Cases) {
             if ($Direct.PSObject.Properties.Name -contains "next_action" -and [string]$Direct.next_action -match '(?i)provider metadata|raw response') {
                 $CasePassed = $false
                 $Issues.Add("Fallback response exposed the provider metadata trailer in next_action.")
+            }
+            if ($Case.name -eq "normal greeting" -and $Direct.response_text -match '(?i)How can I assist you today|I''m happy to help|Continue the conversation|Current Explosions: 0') {
+                $CasePassed = $false
+                $Issues.Add("Normal greeting used a cheerful or noisy legacy phrase.")
             }
         }
         if ($Case.PSObject.Properties.Name -contains "expected_token" -and -not [string]::IsNullOrWhiteSpace([string]$Case.expected_token)) {

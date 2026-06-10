@@ -129,7 +129,7 @@ function Invoke-COOPERDefaultModelChat {
 
     $ModelScript = Join-Path $PSScriptRoot "Invoke-PDAModel.ps1"
     $DefaultModel = Get-COOPERDefaultModelName -Root $Root
-    $FallbackHelp = "I can help with status, briefing, blocked work, recent changes, tasks, workers, reports, memory, Fabric, NotebookLM, environment analysis, goal planning, research, review, and execution. Ask a direct question or use /help."
+    $FallbackHelp = "Status, reports, research, planning, execution. Pick a target."
     $Result = [ordered]@{
         status = "fail"
         default_model = $DefaultModel
@@ -188,7 +188,7 @@ function Invoke-COOPERDefaultModelChat {
         if ($Result.model_status -eq "pass" -and -not [string]::IsNullOrWhiteSpace($ModelResponseText)) {
             $Result.status = "pass"
             $Result.response_text = $ModelResponseText
-            $Result.next_action = if (-not [string]::IsNullOrWhiteSpace($ModelNextAction)) { $ModelNextAction } else { "Continue the conversation or use /help for the command list." }
+            $Result.next_action = if (-not [string]::IsNullOrWhiteSpace($ModelNextAction) -and $ModelNextAction -notmatch '(?i)continue the conversation') { $ModelNextAction } else { "Standing by for the next task." }
             $Result.bridge_mode = "model_chat"
             $Result.handoff_status = "fallback"
             $Result.model_error_message = ""
@@ -259,6 +259,23 @@ function Test-PDAConversationalRuntimeSelfAwareness {
     }
 
     return $false
+}
+
+function Test-PDAConversationalPersonalityQuery {
+    param([Parameter(Mandatory = $true)][string]$NormalizedText)
+
+    return [bool](
+        $NormalizedText -match '(?i)\b(humor level|humour level|honesty level|discretion level|directness level|formality level|verbosity level|confidence level|risk tolerance|personality settings|your settings|your personality|how humorous are you|how direct are you|how formal are you|how verbose are you|how confident are you|how discreet are you|what are your settings)\b'
+    )
+}
+
+function Test-PDAConversationalPersonalityUpdate {
+    param([Parameter(Mandatory = $true)][string]$NormalizedText)
+
+    return [bool](
+        $NormalizedText -match '(?i)\b(set|update|adjust|change)\b.*\b(humor|humour|honesty|discretion|directness|formality|verbosity|confidence|risk tolerance)\b' -or
+        $NormalizedText -match '(?i)\b(make yourself|be more|be less|sound more|sound less)\b.*\b(dry|terse|concise|direct|formal|honest|discreet|confident|sarcastic)\b'
+    )
 }
 
 function Test-PDAConversationalTaskLookup {
@@ -426,6 +443,24 @@ function Resolve-PDAConversationalRoute {
         $Route.response_mode = "direct_answer"
         $Route.recommended_command = ""
         $Route.reason = "Runtime identity or backend awareness request."
+        $Route.confidence = 1
+        return [pscustomobject]$Route
+    }
+
+    if (Test-PDAConversationalPersonalityQuery -NormalizedText $Normalized) {
+        $Route.route_type = "personality_status"
+        $Route.response_mode = "direct_answer"
+        $Route.recommended_command = ""
+        $Route.reason = "Direct personality profile request."
+        $Route.confidence = 1
+        return [pscustomobject]$Route
+    }
+
+    if (Test-PDAConversationalPersonalityUpdate -NormalizedText $Normalized) {
+        $Route.route_type = "personality_update"
+        $Route.response_mode = "direct_answer"
+        $Route.recommended_command = ""
+        $Route.reason = "Direct personality adjustment request."
         $Route.confidence = 1
         return [pscustomobject]$Route
     }
@@ -691,8 +726,8 @@ function Get-PDAConversationalNaturalResponse {
             $BaseResponse.latest_result_response_text = $BaseResponse.response_text
         }
         "direct_help" {
-            $BaseResponse.response_text = "I can check status, give you a briefing, summarize tasks, list workers, show reports, summarize memory, review memory candidates, plan goals, run Fabric patterns, create NotebookLM packages, and route governed requests. Ask a plain-language question or use /help."
-            $BaseResponse.next_action = "Ask for a briefing, a status question, a goal plan, or use /help for the full command list."
+            $BaseResponse.response_text = "Status, reports, research, planning, execution. Pick a target."
+            $BaseResponse.next_action = "Use /help only if you want the full command list."
         }
         "runtime_self_awareness" {
             $RuntimeStatus = if (Get-Command -Name Get-COOPERRuntimeStatus -ErrorAction SilentlyContinue) {
@@ -730,6 +765,57 @@ function Get-PDAConversationalNaturalResponse {
                 $BaseResponse.response_text = "COOPER runtime metadata is unavailable."
                 $BaseResponse.next_action = "Ask /status or retry once the runtime metadata helper is available."
             }
+        }
+        "personality_status" {
+            $RuntimeStatus = if (Get-Command -Name Get-COOPERRuntimeStatus -ErrorAction SilentlyContinue) {
+                try {
+                    Get-COOPERRuntimeStatus -Root $Root
+                }
+                catch {
+                    $null
+                }
+            }
+            else {
+                $null
+            }
+
+            $Personality = if ($RuntimeStatus -and $RuntimeStatus.PSObject.Properties.Name -contains "personality") { $RuntimeStatus.personality } else { $null }
+            $Humor = if ($Personality -and $Personality.PSObject.Properties.Name -contains "humor_level") { [int]$Personality.humor_level } else { 65 }
+            $Honesty = if ($Personality -and $Personality.PSObject.Properties.Name -contains "honesty_level") { [int]$Personality.honesty_level } else { 99 }
+            $Discretion = if ($Personality -and $Personality.PSObject.Properties.Name -contains "discretion_level") { [int]$Personality.discretion_level } else { 90 }
+            $Directness = if ($Personality -and $Personality.PSObject.Properties.Name -contains "directness_level") { [int]$Personality.directness_level } else { 90 }
+            $Verbosity = if ($Personality -and $Personality.PSObject.Properties.Name -contains "verbosity_level") { [int]$Personality.verbosity_level } else { 35 }
+            $Confidence = if ($Personality -and $Personality.PSObject.Properties.Name -contains "confidence_level") { [int]$Personality.confidence_level } else { 85 }
+            $Formality = if ($Personality -and $Personality.PSObject.Properties.Name -contains "formality_level") { [int]$Personality.formality_level } else { 35 }
+            $RiskTolerance = if ($Personality -and $Personality.PSObject.Properties.Name -contains "risk_tolerance") { [int]$Personality.risk_tolerance } else { 20 }
+
+            $BaseResponse.response_text = @(
+                "COOPER Personality"
+                ("Humor: {0}" -f $Humor)
+                ("Honesty: {0}" -f $Honesty)
+                ("Discretion: {0}" -f $Discretion)
+                ("Directness: {0}" -f $Directness)
+                ("Verbosity: {0}" -f $Verbosity)
+                ("Confidence: {0}" -f $Confidence)
+                ("Formality: {0}" -f $Formality)
+                ("Risk tolerance: {0}" -f $RiskTolerance)
+                "Tone: dry, concise, mission-focused."
+            ) -join "`r`n"
+            $BaseResponse.next_action = "Ask /status or another runtime question."
+            $BaseResponse.latest_result_response_text = $BaseResponse.response_text
+            $BaseResponse.runtime_status = $RuntimeStatus
+        }
+        "personality_update" {
+            $RequestedTone = if ($Text -match '(?i)\b(dry|terse|concise|direct|formal|honest|discreet|confident|sarcastic)\b') { [string]$Matches[0] } else { "requested" }
+            $BaseResponse.response_text = @(
+                "COOPER Personality"
+                "Update noted."
+                "Persistent profile edits are not applied automatically."
+                "Tone stays dry, concise, and operational."
+                ("Requested adjustment: {0}" -f $RequestedTone)
+            ) -join "`r`n"
+            $BaseResponse.next_action = "If you want a persistent change, edit Scripts/COOPER_Personality.json."
+            $BaseResponse.latest_result_response_text = $BaseResponse.response_text
         }
         "task_lookup" {
             $TaskResult = Invoke-PDAConversationalJsonScript -Path $TaskResultScript -Arguments @(
@@ -1038,13 +1124,13 @@ function Get-PDAConversationalNaturalResponse {
                 }
             }
             else {
-                $BaseResponse.response_text = "I can help with status, briefing, blocked work, recent changes, tasks, workers, reports, memory, Fabric, NotebookLM, environment analysis, goal planning, research, review, and execution. Ask a direct question or use /help."
-                $BaseResponse.next_action = "Ask for a briefing, a status question, an environment inventory, a goal plan, or use /help for the full command list."
+                $BaseResponse.response_text = "Status, reports, research, planning, execution. Pick a target."
+                $BaseResponse.next_action = "Ask for a status check, a report, or use /help for the command list."
             }
         }
         default {
-            $BaseResponse.response_text = "I can help with status, briefing, blocked work, recent changes, tasks, workers, reports, memory, Fabric, NotebookLM, environment analysis, goal planning, research, review, and execution. Ask a direct question or use /help."
-            $BaseResponse.next_action = "Ask for a briefing, a status question, an environment inventory, a goal plan, or use /help for the full command list."
+            $BaseResponse.response_text = "Status, reports, research, planning, execution. Pick a target."
+            $BaseResponse.next_action = "Ask for a status check, a report, or use /help for the command list."
         }
     }
 

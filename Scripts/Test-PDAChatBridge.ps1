@@ -53,8 +53,8 @@ $DefaultModelChatFallback = {
         model_status = "pass"
         model_error_message = ""
         routing_reason = "chat bridge test stub"
-        response_text = "Acknowledged. Standing by."
-        next_action = "Continue the conversation."
+        response_text = "Morning. Standing by."
+        next_action = "Standing by for the next task."
         bridge_mode = "model_chat"
         handoff_status = "fallback"
         source_of_truth = "test_stub"
@@ -219,7 +219,7 @@ $Cases = @(
         message = "What can you do?"
         confirm = $false
         expected_handoff = "direct_help"
-        expected_response_contains = "I can check status"
+        expected_response_contains = "Status, reports, research, planning, execution"
         expected_dispatch_ready = $false
         expected_dispatch = $false
         expected_command = "/help"
@@ -334,6 +334,28 @@ $Cases = @(
         expected_dispatch = $false
         expected_command = ""
         marker = "chat-self-identity-$([guid]::NewGuid().ToString())"
+    }
+    [pscustomobject]@{
+        name = "personality settings query"
+        message = "What are your personality settings?"
+        confirm = $false
+        expected_handoff = "personality_status"
+        expected_response_contains = "COOPER Personality"
+        expected_dispatch_ready = $false
+        expected_dispatch = $false
+        expected_command = ""
+        marker = "chat-personality-query-$([guid]::NewGuid().ToString())"
+    }
+    [pscustomobject]@{
+        name = "humor setting update"
+        message = "Set humor to 50."
+        confirm = $false
+        expected_handoff = "personality_update"
+        expected_response_contains = "Update noted."
+        expected_dispatch_ready = $false
+        expected_dispatch = $false
+        expected_command = ""
+        marker = "chat-personality-update-$([guid]::NewGuid().ToString())"
     }
     [pscustomobject]@{
         name = "roadmap request"
@@ -522,7 +544,7 @@ if ($SkipDispatch) {
 }
 
 if ($DashboardMode) {
-    $Cases = @($Cases | Where-Object { [string]$_.name -in @("known message", "ambiguous message", "unknown message", "research request", "status report", "morning briefing", "how are things going", "system status", "health report", "model identity", "provider identity", "backend identity", "self identity") })
+    $Cases = @($Cases | Where-Object { [string]$_.name -in @("known message", "ambiguous message", "unknown message", "research request", "status report", "morning briefing", "how are things going", "system status", "health report", "model identity", "provider identity", "backend identity", "self identity", "personality settings query", "humor setting update") })
 }
 
 if (-not $SkipDispatch -and -not $DashboardMode) {
@@ -892,7 +914,7 @@ foreach ($Case in $Cases) {
             $CasePassed = $false
             $Issues.Add("Fallback response did not expose model_status.")
         }
-        elseif ($Result.model_status -eq "pass" -and $Result.response_text -match [regex]::Escape("I can help with status, briefing, blocked work, recent changes, tasks, workers, reports, memory, Fabric, NotebookLM, environment analysis, goal planning, research, review, and execution.")) {
+        elseif ($Result.model_status -eq "pass" -and $Result.response_text -match [regex]::Escape("Status, reports, research, planning, execution. Pick a target.")) {
             $CasePassed = $false
             $Issues.Add("Fallback response returned legacy static help despite a successful model route.")
         }

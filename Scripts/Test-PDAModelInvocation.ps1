@@ -406,11 +406,11 @@ $Cases = @(
         sensitivity = "standard"
         prompt = "Return a brief plain acknowledgement."
         expected_model = "local-llama"
-        expected_token = "Acknowledged. Standing by."
+        expected_token = "Standing by."
         selected_model_override = "local-llama"
         use_capture_server = $true
         endpoint = $null
-        expected_prompt_pattern = '(?is)You are COOPER.*Tone: concise, dry, operational, mildly humorous.*Personality controls: humor 25/100, directness 90/100, formality 55/100, risk tolerance 20/100.*Do not mention provider metadata trailers'
+        expected_prompt_pattern = '(?is)You are COOPER.*Role: operations officer, analyst, and workflow orchestrator.*Tone: concise, dry, competent, calm, mission-focused, mildly skeptical, and occasionally sarcastic.*Answer first, explain second.*Personality controls: humor 65/100, honesty 99/100, discretion 90/100, directness 90/100, verbosity 35/100, confidence 85/100, formality 35/100, risk tolerance 20/100.*Do not mention provider metadata trailers'
     }
     [pscustomobject]@{
         name = "missing backend diagnostic"
@@ -444,7 +444,7 @@ foreach ($Case in $Cases) {
             continue
         }
 
-        $CaptureServer = Start-PDACaptureServer -ResponseBody '{"choices":[{"index":0,"message":{"role":"assistant","content":"Acknowledged. Standing by."},"finish_reason":"stop"}],"usage":{"prompt_tokens":1,"completion_tokens":4,"total_tokens":5}}'
+        $CaptureServer = Start-PDACaptureServer -ResponseBody '{"choices":[{"index":0,"message":{"role":"assistant","content":"Morning. Standing by."},"finish_reason":"stop"}],"usage":{"prompt_tokens":1,"completion_tokens":4,"total_tokens":5}}'
         $Case.endpoint = $CaptureServer.endpoint
     }
 }
@@ -474,11 +474,19 @@ foreach ($Case in $Cases) {
                 $SystemContent = [string]$SystemMessage[0].content
                 foreach ($Pattern in @(
                     'You are COOPER',
-                    'concise, dry, operational, mildly humorous',
-                    'humor 25/100',
+                    'Role: operations officer, analyst, and workflow orchestrator',
+                    'Tone: concise, dry, competent, calm, mission-focused, mildly skeptical, and occasionally sarcastic',
+                    'Answer first, explain second',
+                    'humor 65/100',
+                    'honesty 99/100',
+                    'discretion 90/100',
                     'directness 90/100',
-                    'formality 55/100',
+                    'verbosity 35/100',
+                    'confidence 85/100',
+                    'formality 35/100',
                     'risk tolerance 20/100',
+                    'Do not use cheerful customer-service language',
+                    'Do not overuse jokes, catchphrases, or explosion references',
                     'Do not mention provider metadata trailers'
                 )) {
                     if ($SystemContent -notmatch [regex]::Escape($Pattern)) {
