@@ -4,6 +4,11 @@ model_list:
       model: ollama/llama3.2
       # Docker containers must reach the host Ollama daemon via host.docker.internal.
       api_base: http://host.docker.internal:11434
+  - model_name: cooper-personality
+    litellm_params:
+      model: ollama/cooper-personality
+      # Keep the local personality model visible through the same Ollama gateway.
+      api_base: http://host.docker.internal:11434
   - model_name: openai
     litellm_params:
       model: openai/gpt-4o-mini
