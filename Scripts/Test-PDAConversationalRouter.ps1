@@ -67,6 +67,12 @@ $Cases = @(
         expected_command = "/fabric report"
     }
     [pscustomobject]@{
+        name = "cooper profile slash"
+        input = "/cooper profile cyber"
+        expected_route = "cooper_personality_command"
+        expected_command = "/cooper"
+    }
+    [pscustomobject]@{
         name = "natural status"
         input = "How is the PDA doing?"
         expected_route = "direct_status"
@@ -319,9 +325,13 @@ foreach ($Case in $Cases) {
             $CasePassed = $false
             $Issues.Add("Direct help response did not look like help text.")
         }
-        if ($Route.route_type -eq "personality_status" -and $Direct.response_text -notmatch '(?i)COOPER Personality|Humor: 65|Honesty: 99|Discretion: 90|Directness: 90|Verbosity: 35|Confidence: 85') {
+        if ($Route.route_type -eq "personality_status" -and $Direct.response_text -notmatch '(?i)COOPER Personality|Profile: operations|Humor: 35|Sarcasm: 15|Professionalism: 90|Brevity: 80|Initiative: 85|Risk awareness: 95') {
             $CasePassed = $false
             $Issues.Add("Personality query response did not include the expected profile values.")
+        }
+        if ($Route.route_type -eq "cooper_personality_command" -and $Direct.response_text -notmatch '(?i)COOPER Personality|Profile: cyber|Humor:|Risk awareness:') {
+            $CasePassed = $false
+            $Issues.Add("COOPER personality command response did not summarize the new personality values.")
         }
         if ($Route.route_type -eq "personality_update" -and $Direct.response_text -notmatch '(?i)COOPER Personality|Proposed update|Confirm\?') {
             $CasePassed = $false

@@ -5,6 +5,8 @@ function Get-COOPERIdentity {
         [string]$Root = (Split-Path -Parent $PSScriptRoot)
     )
 
+    . (Join-Path $PSScriptRoot "COOPER_PersonalityEngine.ps1")
+
     function Get-COOPERDefaultModelName {
         param(
             [Parameter(Mandatory = $false)]
@@ -146,36 +148,7 @@ function Get-COOPERIdentity {
     $MemoryArchitecturePath = Join-Path $Root "Documentation\COOPER-Memory-Architecture.md"
 
     function New-COOPERPersonalityProfile {
-        return [pscustomobject]@{
-            humor_level = 65
-            honesty_level = 99
-            directness_level = 90
-            formality_level = 35
-            risk_tolerance = 20
-            discretion_level = 90
-            verbosity_level = 35
-            confidence_level = 85
-            tars_inspired_not_copyrighted_imitation = $true
-            truthfulness = 99
-            humor_frequency = 65
-            humor_style = @("dry", "deadpan", "operational", "skeptical")
-            directness = 90
-            formality = 35
-            autonomy = 25
-            skepticism = 90
-            mission_focus = 100
-            diplomacy = 55
-            humor = 65
-            sarcasm = 45
-            honesty = 99
-            brevity = 35
-            verbosity = 35
-            initiative = 70
-            caution = 90
-            persistence = 85
-            confidence = 85
-            discretion = 90
-        }
+        return (ConvertTo-COOPERLegacyPersonality -Personality (New-COOPERPersonalityDefaults))
     }
 
     function Get-COOPERRuntimeLayerStatus {
@@ -199,7 +172,7 @@ function Get-COOPERIdentity {
             [string]$MemoryArchitecturePath
         )
 
-        $PersonalityLoaded = Test-Path -LiteralPath $ProfilePath -PathType Leaf
+        $PersonalityLoaded = (Test-Path -LiteralPath $ProfilePath -PathType Leaf) -or (Test-Path -LiteralPath (Join-Path $Root "Models\cooper-personality\personality.json") -PathType Leaf)
         $MemoryAvailable = (Test-Path -LiteralPath $MemoryArchitecturePath -PathType Leaf) -or (Test-Path -LiteralPath (Join-Path (Split-Path -Parent $MemoryArchitecturePath) "PDA-Memory-Promotion-Workflow.md") -PathType Leaf)
         $GovernanceAvailable = (Test-Path -LiteralPath $ApprovalWorkflowPath -PathType Leaf) -and (Test-Path -LiteralPath (Join-Path (Split-Path -Parent $ApprovalWorkflowPath) "New-PDAApprovalRequest.ps1") -PathType Leaf)
         $CapabilityRegistryAvailable = Test-Path -LiteralPath $CapabilityRegistryPath -PathType Leaf
@@ -277,7 +250,13 @@ function Get-COOPERIdentity {
                 return (New-COOPERDefaultProfile -ProfilePath $ProfilePath)
             }
 
-            $Profile.personality = Normalize-COOPERPersonalityProfile -Personality $Profile.personality
+            $CurrentPersonality = Get-COOPERPersonality -Root $Root
+            if ($CurrentPersonality -and $CurrentPersonality.legacy_personality) {
+                $Profile.personality = $CurrentPersonality.legacy_personality
+            }
+            else {
+                $Profile.personality = Normalize-COOPERPersonalityProfile -Personality $Profile.personality
+            }
 
         $Profile | Add-Member -NotePropertyName status -NotePropertyValue "pass" -Force
         $Profile | Add-Member -NotePropertyName profile_path -NotePropertyValue $ProfilePath -Force
@@ -314,9 +293,6 @@ function Get-COOPERIdentity {
         }
         if (-not ($Profile.PSObject.Properties.Name -contains "personality")) {
             $Profile | Add-Member -NotePropertyName personality -NotePropertyValue (New-COOPERPersonalityProfile) -Force
-        }
-        else {
-            $Profile.personality = Normalize-COOPERPersonalityProfile -Personality $Profile.personality
         }
         if (-not ($Profile.PSObject.Properties.Name -contains "governance")) {
             $Profile | Add-Member -NotePropertyName governance -NotePropertyValue ([pscustomobject]@{

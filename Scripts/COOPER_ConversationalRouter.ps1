@@ -38,6 +38,7 @@ if (Test-Path -LiteralPath $EnvironmentHelperScript -PathType Leaf) {
 if (Test-Path -LiteralPath $ExecutorRegistryScript -PathType Leaf) {
     . $ExecutorRegistryScript
 }
+. (Join-Path $PSScriptRoot "COOPER_PersonalityEngine.ps1")
 
 function Normalize-PDAConversationalText {
     param([Parameter(Mandatory = $true)][string]$Value)
@@ -522,6 +523,17 @@ function Resolve-PDAConversationalRoute {
     }
 
     if (Test-PDAConversationalSlashCommand -NormalizedText $Normalized) {
+        if ($Normalized.StartsWith("/cooper")) {
+            $Route.route_type = "cooper_personality_command"
+            $Route.response_mode = "direct_answer"
+            $Route.recommended_command = "/cooper"
+            $Route.reason = "Direct COOPER personality command."
+            $Route.confidence = 1
+            $Route.command = "/cooper"
+            $Route.cooper_command = $Text
+            return [pscustomobject]$Route
+        }
+
         $InterpreterResult = Get-PDAConversationalInterpreterResult -Text $Text
         if ($InterpreterResult -and [string]$InterpreterResult.status -eq "mapped") {
             $Route.route_type = "slash_command"
@@ -904,43 +916,30 @@ function Get-PDAConversationalNaturalResponse {
             }
         }
         "personality_status" {
-            $RuntimeStatus = if (Get-Command -Name Get-COOPERRuntimeStatus -ErrorAction SilentlyContinue) {
-                try {
-                    Get-COOPERRuntimeStatus -Root $Root
-                }
-                catch {
-                    $null
-                }
-            }
-            else {
-                $null
-            }
-
-            $Personality = if ($RuntimeStatus -and $RuntimeStatus.PSObject.Properties.Name -contains "personality") { $RuntimeStatus.personality } else { $null }
-            $Humor = if ($Personality -and $Personality.PSObject.Properties.Name -contains "humor_level") { [int]$Personality.humor_level } else { 65 }
-            $Honesty = if ($Personality -and $Personality.PSObject.Properties.Name -contains "honesty_level") { [int]$Personality.honesty_level } else { 99 }
-            $Discretion = if ($Personality -and $Personality.PSObject.Properties.Name -contains "discretion_level") { [int]$Personality.discretion_level } else { 90 }
-            $Directness = if ($Personality -and $Personality.PSObject.Properties.Name -contains "directness_level") { [int]$Personality.directness_level } else { 90 }
-            $Verbosity = if ($Personality -and $Personality.PSObject.Properties.Name -contains "verbosity_level") { [int]$Personality.verbosity_level } else { 35 }
-            $Confidence = if ($Personality -and $Personality.PSObject.Properties.Name -contains "confidence_level") { [int]$Personality.confidence_level } else { 85 }
-            $Formality = if ($Personality -and $Personality.PSObject.Properties.Name -contains "formality_level") { [int]$Personality.formality_level } else { 35 }
-            $RiskTolerance = if ($Personality -and $Personality.PSObject.Properties.Name -contains "risk_tolerance") { [int]$Personality.risk_tolerance } else { 20 }
-
+            $Personality = Get-COOPERPersonality -Root $Root
             $BaseResponse.response_text = @(
                 "COOPER Personality"
-                ("Humor: {0}" -f $Humor)
-                ("Honesty: {0}" -f $Honesty)
-                ("Discretion: {0}" -f $Discretion)
-                ("Directness: {0}" -f $Directness)
-                ("Verbosity: {0}" -f $Verbosity)
-                ("Confidence: {0}" -f $Confidence)
-                ("Formality: {0}" -f $Formality)
-                ("Risk tolerance: {0}" -f $RiskTolerance)
-                "Tone: dry, concise, mission-focused."
+                ("Profile: {0}" -f $Personality.personality.profile)
+                ("Humor: {0}" -f $Personality.personality.humor)
+                ("Sarcasm: {0}" -f $Personality.personality.sarcasm)
+                ("Professionalism: {0}" -f $Personality.personality.professionalism)
+                ("Brevity: {0}" -f $Personality.personality.brevity)
+                ("Initiative: {0}" -f $Personality.personality.initiative)
+                ("Risk awareness: {0}" -f $Personality.personality.risk_awareness)
             ) -join "`r`n"
             $BaseResponse.next_action = "Ask /status or another runtime question."
             $BaseResponse.latest_result_response_text = $BaseResponse.response_text
-            $BaseResponse.runtime_status = $RuntimeStatus
+            $BaseResponse.runtime_status = $Personality
+        }
+        "cooper_personality_command" {
+            $PersonalityCommand = Invoke-COOPERPersonalityCommand -Text $Text -Root $Root
+            $BaseResponse.response_text = [string]$PersonalityCommand.response_text
+            $BaseResponse.next_action = "Use /cooper personality, /cooper profile <name>, or /cooper <setting> <0-100>."
+            $BaseResponse.latest_result_response_text = $BaseResponse.response_text
+            $BaseResponse.personality_command = $PersonalityCommand
+            if ($PersonalityCommand.PSObject.Properties.Name -contains "personality") {
+                $BaseResponse.personality = $PersonalityCommand.personality
+            }
         }
         "personality_update" {
             $Proposal = Get-COOPERPersonalityChangeProposal -Text $Text -Root $Root

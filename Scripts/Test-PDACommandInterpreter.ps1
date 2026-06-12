@@ -201,6 +201,33 @@ $TestCases = @(
         source_check     = $true
     }
     [pscustomobject]@{
+        name             = "cooper personality query"
+        input            = "/cooper personality"
+        expected_status  = "mapped"
+        expected_intent  = "cooper_personality"
+        expected_task    = "cooper_personality"
+        expected_command = "/cooper personality"
+        source_check     = $false
+    }
+    [pscustomobject]@{
+        name             = "cooper profile"
+        input            = "/cooper profile cyber"
+        expected_status  = "mapped"
+        expected_intent  = "cooper_profile"
+        expected_task    = "cooper_profile"
+        expected_command = "/cooper profile"
+        source_check     = $false
+    }
+    [pscustomobject]@{
+        name             = "cooper setting"
+        input            = "/cooper humor 50"
+        expected_status  = "mapped"
+        expected_intent  = "cooper_setting"
+        expected_task    = "cooper_setting"
+        expected_command = "/cooper humor"
+        source_check     = $false
+    }
+    [pscustomobject]@{
         name             = "ambiguous request"
         input            = "review and analyze this project"
         expected_status  = "ambiguous"

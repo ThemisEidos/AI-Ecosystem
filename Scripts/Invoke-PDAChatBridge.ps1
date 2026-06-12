@@ -35,6 +35,7 @@ $EnvironmentHelperScript = Join-Path $PSScriptRoot "PDA_Environment.ps1"
 $ApprovalWorkflowScript = Join-Path $PSScriptRoot "PDA_ApprovalWorkflow.ps1"
 $COOPERIdentityScript = Join-Path $PSScriptRoot "Get-COOPERIdentity.ps1"
 $COOPERRuntimeStatusScript = Join-Path $PSScriptRoot "Get-COOPERRuntimeStatus.ps1"
+. (Join-Path $PSScriptRoot "COOPER_PersonalityEngine.ps1")
 . (Join-Path $PSScriptRoot "PDA_OutputParsing.ps1")
 if (Test-Path -Path $ConversationalRouterScript -PathType Leaf) {
     . $ConversationalRouterScript
@@ -271,14 +272,14 @@ function Get-PDACommanderRuntimeContext {
     if (-not $RuntimeLayers) {
         $RuntimeLayers = [pscustomobject]@{
             cooper_layers_loaded = $false
-            personality_loaded = (Test-Path -LiteralPath (Join-Path $Root "Scripts\COOPER_Personality.json") -PathType Leaf)
+            personality_loaded = (Test-Path -LiteralPath (Join-Path $Root "Models\cooper-personality\personality.json") -PathType Leaf) -or (Test-Path -LiteralPath (Join-Path $Root "Scripts\COOPER_Personality.json") -PathType Leaf)
             memory_available = (Test-Path -LiteralPath (Join-Path $Root "Documentation\COOPER-Memory-Architecture.md") -PathType Leaf) -or (Test-Path -LiteralPath (Join-Path $Root "Documentation\PDA-Memory-Promotion-Workflow.md") -PathType Leaf)
             governance_available = (Test-Path -LiteralPath (Join-Path $Root "Scripts\PDA_ApprovalWorkflow.ps1") -PathType Leaf)
             capability_registry_available = (Test-Path -LiteralPath (Join-Path $Root "Scripts\PDA_CapabilityRegistry.json") -PathType Leaf)
             agent_registry_available = (Test-Path -LiteralPath (Join-Path $Root "Scripts\PDA_AgentProfileRegistry.json") -PathType Leaf)
             provider_routing_available = (Test-Path -LiteralPath (Join-Path $Root "Scripts\PDA_ProviderRoutingPolicy.json") -PathType Leaf)
             source_paths = [pscustomobject]@{
-                personality = Join-Path $Root "Scripts\COOPER_Personality.json"
+                personality = Join-Path $Root "Models\cooper-personality\personality.json"
                 memory = Join-Path $Root "Documentation\COOPER-Memory-Architecture.md"
                 governance = Join-Path $Root "Scripts\PDA_ApprovalWorkflow.ps1"
                 capability_registry = Join-Path $Root "Scripts\PDA_CapabilityRegistry.json"
@@ -1218,6 +1219,56 @@ if (Get-Command -Name Resolve-PDAConversationalRoute -ErrorAction SilentlyContin
                 Write-Host ("Response text        : {0}" -f $DirectResult.response_text)
                 Write-Host ("Recommended command  : {0}" -f $(if ($DirectResult.recommended_command) { $DirectResult.recommended_command } else { "(none)" }))
                 Write-Host ("Intent               : {0}" -f $(if ($DirectResult.intent) { $DirectResult.intent } else { "(none)" }))
+                Write-Host ("Confidence           : {0}" -f $DirectResult.confidence)
+                Write-Host ("Dispatch ready       : {0}" -f $DirectResult.dispatch_ready)
+                Write-Host ("Dispatch status      : {0}" -f $DirectResult.dispatch_status)
+                Write-Host ("Next action          : {0}" -f $DirectResult.next_action)
+                return
+            }
+            "cooper_personality_command" {
+                $PersonalityCommand = Invoke-COOPERPersonalityCommand -Text $Message -Root $Root
+                Invoke-PDAConversationStateUpdate -ConversationId $ConversationId -SessionId $SessionId -UserId $UserId -ConversationTitle $ConversationTitle -Message $Message -TaskId "" -TaskStatus "" -TaskFilePath "" -ApprovalFilePath "" -ResultPath "" -ResultSummary "" -BridgeStatus "ready" -DispatchStatus "not_dispatched" -NextAction "Use /cooper personality, /cooper profile <name>, or /cooper <setting> <0-100>." -ResponseText ([string]$PersonalityCommand.response_text) -RecommendedCommand "" -Intent "cooper_personality_command" -Confidence 1 -RequiresConfirmation:$false | Out-Null
+                $DirectResult = [pscustomobject]@{
+                    original_message         = $Message
+                    response_text            = [string]$PersonalityCommand.response_text
+                    recommended_command      = ""
+                    intent                   = "cooper_personality_command"
+                    route_type               = [string]$ConversationRoute.route_type
+                    confidence               = 1
+                    requires_confirmation    = $false
+                    dispatch_ready           = $false
+                    dispatch_status          = "not_dispatched"
+                    next_action              = "Use /cooper personality, /cooper profile <name>, or /cooper <setting> <0-100>."
+                    bridge_status            = "ready"
+                    handoff_status           = "cooper_personality_command"
+                    source_of_truth          = "Scripts/COOPER_PersonalityEngine.ps1"
+                    confirmation_mode        = [bool]$ConfirmDispatch
+                    dispatch_path            = ""
+                    dispatch_category        = ""
+                    conversation_id          = $(if ($ConversationId) { $ConversationId } else { "" })
+                    session_id               = $SessionId
+                    conversation_state_status = if ($ConversationState) { [string]$ConversationState.status } else { "empty" }
+                    latest_task_id           = ""
+                    latest_task_status       = ""
+                    latest_result_path       = ""
+                    latest_result_response_text = [string]$PersonalityCommand.response_text
+                    result_artifact_path     = ""
+                    result_artifact          = $null
+                    decision                 = $script:PDACommanderDecision
+                    bridge_mode              = "cooper_personality_command"
+                    personality_command      = $PersonalityCommand
+                }
+                $DirectResult = Add-PDACommanderRuntimeContextFields -Result $DirectResult
+
+                if ($AsJson) {
+                    $DirectResult | ConvertTo-Json -Depth 20
+                    return
+                }
+
+                Write-Host "[OK] PDA chat bridge result:"
+                Write-Host ("Response text        : {0}" -f $DirectResult.response_text)
+                Write-Host ("Recommended command  : (none)")
+                Write-Host ("Intent               : {0}" -f $DirectResult.intent)
                 Write-Host ("Confidence           : {0}" -f $DirectResult.confidence)
                 Write-Host ("Dispatch ready       : {0}" -f $DirectResult.dispatch_ready)
                 Write-Host ("Dispatch status      : {0}" -f $DirectResult.dispatch_status)

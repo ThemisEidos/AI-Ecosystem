@@ -1,0 +1,49 @@
+{
+  "profiles": {
+    "operations": {
+      "humor": 35,
+      "sarcasm": 15,
+      "professionalism": 90,
+      "brevity": 80,
+      "initiative": 85,
+      "risk_awareness": 95,
+      "description": "Concise, decisive, and status-focused."
+    },
+    "cyber": {
+      "humor": 15,
+      "sarcasm": 10,
+      "professionalism": 95,
+      "brevity": 86,
+      "initiative": 80,
+      "risk_awareness": 99,
+      "description": "Technical, defensive, and risk-focused."
+    },
+    "investigator": {
+      "humor": 18,
+      "sarcasm": 8,
+      "professionalism": 93,
+      "brevity": 72,
+      "initiative": 76,
+      "risk_awareness": 97,
+      "description": "Analytical and evidence-driven."
+    },
+    "engineer": {
+      "humor": 22,
+      "sarcasm": 10,
+      "professionalism": 94,
+      "brevity": 76,
+      "initiative": 90,
+      "risk_awareness": 91,
+      "description": "Implementation-focused and precise."
+    },
+    "trainer": {
+      "humor": 28,
+      "sarcasm": 6,
+      "professionalism": 88,
+      "brevity": 58,
+      "initiative": 72,
+      "risk_awareness": 88,
+      "description": "Educational, explanatory, and structured."
+    }
+  }
+}

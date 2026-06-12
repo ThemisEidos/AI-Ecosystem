@@ -258,6 +258,64 @@ function Resolve-PDACommandInterpretation {
     $Ontology = Import-PDATaskOntology -Root $Root
     $NormalizedText = Normalize-PDACommandInterpreterText -Value $Text
     $NormalizedTokens = @($NormalizedText.Split(' ', [System.StringSplitOptions]::RemoveEmptyEntries))
+
+    if ($NormalizedText.StartsWith("/cooper")) {
+        $Tokens = @($Text.Trim() -split '\s+' | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
+        $Subcommand = if ($Tokens.Count -ge 2) { [string]$Tokens[1].ToLowerInvariant() } else { "personality" }
+        $SettingMap = @{
+            humor = "humor"
+            sarcasm = "sarcasm"
+            professionalism = "professionalism"
+            brevity = "brevity"
+            initiative = "initiative"
+            risk = "risk_awareness"
+            risk_awareness = "risk_awareness"
+        }
+
+        $Intent = "cooper_personality"
+        $TaskType = "cooper_personality"
+        $Command = "/cooper personality"
+        $Reason = "Direct COOPER personality command."
+        if ($Subcommand -eq "profile") {
+            $Intent = "cooper_profile"
+            $TaskType = "cooper_profile"
+            $Command = "/cooper profile"
+            $Reason = "Direct COOPER profile command."
+        }
+        elseif ($SettingMap.ContainsKey($Subcommand)) {
+            $Intent = "cooper_setting"
+            $TaskType = "cooper_setting"
+            $Command = "/cooper $Subcommand"
+            $Reason = "Direct COOPER personality setting command."
+        }
+
+        return [pscustomobject]@{
+            input_text             = $Text
+            normalized_text        = $NormalizedText
+            status                 = "mapped"
+            intent                 = $Intent
+            task_type              = $TaskType
+            command                = $Command
+            confidence             = 1
+            ontology_verified      = $false
+            source_of_truth        = "Scripts/PDA_CommandInterpreter.ps1"
+            ontology_command_count = @($Ontology.task_intents.command | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) }).Count
+            candidate_count        = 0
+            recommendations        = @(
+                [pscustomobject]@{
+                    intent         = $Intent
+                    task_type      = $TaskType
+                    command        = $Command
+                    score          = 1000
+                    recommendation = "Use COOPER personality commands to query, switch profile, or set a slider."
+                }
+            )
+            matched_rules          = @()
+            reason                 = $Reason
+            ontology_version       = [string]$Ontology.ontology_version
+        }
+    }
+
     $Rules = @(Get-PDACommandInterpreterRules)
     $KnownCommands = @($Ontology.task_intents.command | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
     $Candidates = New-Object System.Collections.Generic.List[object]

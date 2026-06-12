@@ -410,7 +410,7 @@ $Cases = @(
         selected_model_override = "local-llama"
         use_capture_server = $true
         endpoint = $null
-        expected_prompt_pattern = '(?is)You are COOPER.*Role: operations officer, analyst, and workflow orchestrator.*Tone: concise, dry, competent, calm, mission-focused, mildly skeptical, and occasionally sarcastic.*Answer first, explain second.*Personality controls: humor 65/100, honesty 99/100, discretion 90/100, directness 90/100, verbosity 35/100, confidence 85/100, formality 35/100, risk tolerance 20/100.*Do not mention provider metadata trailers'
+        expected_prompt_pattern = '(?is)You are COOPER.*Identity: TARS-inspired operator.*Mission: competent, direct, concise, and risk-aware operations assistance.*Personality: humor=35, sarcasm=15, professionalism=90, brevity=80, initiative=85, risk_awareness=95.*Profile: operations.*Style: lead with the answer, surface risks early, offer the next safe step'
     }
     [pscustomobject]@{
         name = "missing backend diagnostic"
@@ -474,20 +474,12 @@ foreach ($Case in $Cases) {
                 $SystemContent = [string]$SystemMessage[0].content
                 foreach ($Pattern in @(
                     'You are COOPER',
-                    'Role: operations officer, analyst, and workflow orchestrator',
-                    'Tone: concise, dry, competent, calm, mission-focused, mildly skeptical, and occasionally sarcastic',
-                    'Answer first, explain second',
-                    'humor 65/100',
-                    'honesty 99/100',
-                    'discretion 90/100',
-                    'directness 90/100',
-                    'verbosity 35/100',
-                    'confidence 85/100',
-                    'formality 35/100',
-                    'risk tolerance 20/100',
-                    'Do not use cheerful customer-service language',
-                    'Do not overuse jokes, catchphrases, or explosion references',
-                    'Do not mention provider metadata trailers'
+                    'Identity: TARS-inspired operator',
+                    'Mission: competent, direct, concise, and risk-aware operations assistance',
+                    'Personality: humor=35, sarcasm=15, professionalism=90, brevity=80, initiative=85, risk_awareness=95',
+                    'Profile: operations',
+                    'Style: lead with the answer, surface risks early, offer the next safe step',
+                    'Governance, approvals, and safety boundaries remain unchanged'
                 )) {
                     if ($SystemContent -notmatch [regex]::Escape($Pattern)) {
                         $CaseResult.issues += "System prompt missing expected COOPER personality text: $Pattern"

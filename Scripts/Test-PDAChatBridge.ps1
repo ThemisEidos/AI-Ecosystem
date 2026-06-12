@@ -148,6 +148,17 @@ $Failed = 0
 
 $Cases = @(
     [pscustomobject]@{
+        name = "cooper profile command"
+        message = "/cooper profile cyber"
+        confirm = $false
+        expected_handoff = "cooper_personality_command"
+        expected_response_contains = "COOPER Personality"
+        expected_dispatch_ready = $false
+        expected_dispatch = $false
+        expected_command = ""
+        marker = "chat-cooper-profile-$([guid]::NewGuid().ToString())"
+    }
+    [pscustomobject]@{
         name = "known message"
         message = "review my latest findings for the launch"
         confirm = $false
