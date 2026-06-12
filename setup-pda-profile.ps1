@@ -1,4 +1,4 @@
-$ProjectRoot = "C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem"
+$ProjectRoot = $PSScriptRoot
 $RuntimeRoot = Join-Path $ProjectRoot "PDA-Runtime"
 $ProfilePath = $PROFILE
 $ProfileDir = Split-Path -Parent $ProfilePath
@@ -48,7 +48,7 @@ function aiec-start {
 }
 
 function pda-go {
-    if ($args.Count -eq 0) {
+    if (`$args.Count -eq 0) {
         pwsh -NoProfile -ExecutionPolicy Bypass -File "$ProjectRoot\Scripts\Start-PDABuildRunner.ps1" -ExecuteCodexTask
     }
     else {
@@ -90,6 +90,9 @@ $ProfileContent = Get-Content -Path $ProfilePath -Raw -ErrorAction SilentlyConti
 if (-not $ProfileContent) {
     $ProfileContent = ""
 }
+
+# Remove any legacy alias that still points to the old repo path.
+$ProfileContent = [regex]::Replace($ProfileContent, '(?m)^\s*Set-Alias\s+pda-go\s+.*(?:\r?\n)?', '')
 
 $Pattern = "(?s)$([regex]::Escape($ProfileStart)).*?$([regex]::Escape($ProfileEnd))"
 if ($ProfileContent -match $Pattern) {

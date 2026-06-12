@@ -1,4 +1,4 @@
-$Root = "C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem"
+$Root = Split-Path $PSScriptRoot -Parent
 
 $CanonicalResults = Join-Path $Root "PDA-Tasks\results"
 

@@ -1,8 +1,8 @@
 param(
-    [string]$StagingRoot = "C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\PDA-Tasks\staging\n8n-reporter"
+    [string]$StagingRoot = (Join-Path (Split-Path $PSScriptRoot -Parent) "PDA-Tasks\staging\n8n-reporter")
 )
 
-$Root = "C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem"
+$Root = Split-Path $PSScriptRoot -Parent
 $Dispatcher = Join-Path $Root "Scripts\dispatch-pda-command.ps1"
 $OntologyScript = Join-Path $Root "Scripts\PDA_TaskOntology.ps1"
 $ProcessedRoot = Join-Path $Root "PDA-Tasks\staging\processed"

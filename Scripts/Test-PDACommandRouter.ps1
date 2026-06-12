@@ -1,3 +1,5 @@
+$Root = Split-Path $PSScriptRoot -Parent
+
 Write-Host "=== PDA COMMAND ROUTER TEST ==="
 
 $Commands = @(
@@ -13,5 +15,5 @@ $Commands = @(
 foreach ($Item in $Commands) {
     Write-Host ""
     Write-Host "Testing $($Item.Command)..."
-    pwsh "C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\Scripts\Send-PDACommand.ps1" -Command $Item.Command -Message $Item.Message
+    pwsh (Join-Path $Root "Scripts\Send-PDACommand.ps1") -Command $Item.Command -Message $Item.Message
 }

@@ -6,7 +6,7 @@ param(
     [string]$RegistryPath = ""
 )
 
-$Root = "C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem"
+$Root = Split-Path $PSScriptRoot -Parent
 $AdapterScript = Join-Path $Root "Scripts\Invoke-PDAModel.ps1"
 $FabricScript = Join-Path $Root "Scripts\Invoke-PDAFabricPattern.ps1"
 . (Join-Path $Root "Scripts\PDA_OutputParsing.ps1")

@@ -19,7 +19,7 @@ if ($BaselineReport.status -ne "pass") {
 @"
 param()
 
-`$Root = "C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem"
+`$Root = (Split-Path -Parent `$PSScriptRoot)
 `$Task = @{
     task_id = [guid]::NewGuid().ToString()
     command = "/planner"

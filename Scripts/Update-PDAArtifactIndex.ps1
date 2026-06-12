@@ -1,6 +1,7 @@
-$OutputRoot = "C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\PDA-Outputs"
+$ProjectRoot = Split-Path $PSScriptRoot -Parent
+$OutputRoot = Join-Path $ProjectRoot "PDA-Outputs"
 
-$IndexPath = "C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\PDA-Obsidian-Vault\07_Automations\PDA Command System\Artifact Index.md"
+$IndexPath = Join-Path $ProjectRoot "PDA-Obsidian-Vault\07_Automations\PDA Command System\Artifact Index.md"
 
 $Artifacts = Get-ChildItem $OutputRoot -Recurse -Filter *.md | Sort-Object LastWriteTime -Descending
 

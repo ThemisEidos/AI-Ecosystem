@@ -3,7 +3,7 @@ param(
     [string]$TaskPath
 )
 
-$Root = "C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem"
+$Root = Split-Path $PSScriptRoot -Parent
 $AdapterScript = Join-Path $Root "Scripts\Invoke-PDAModel.ps1"
 . (Join-Path $Root "Scripts\PDA_OutputParsing.ps1")
 

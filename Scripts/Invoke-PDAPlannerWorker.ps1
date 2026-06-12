@@ -3,7 +3,7 @@ param(
     [string]$TaskPath
 )
 
-$Root = "C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem"
+$Root = Split-Path $PSScriptRoot -Parent
 
 function Register-PDAWorkerArtifact {
     param(

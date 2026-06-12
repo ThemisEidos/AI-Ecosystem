@@ -87,7 +87,7 @@ Use a **Pipe Function**.
 2. Ensure `Scripts/Invoke-PDAWebhookBridge.ps1` is reachable from the n8n runtime path.
 3. Import and activate `n8n Workflow/PDA-ChatBridge-HTTP.json` in n8n.
 4. Run `Scripts/Start-PDAWebhookServer.ps1` on the host machine before testing the HTTP workflow.
-5. In Open WebUI, create a Pipe Function from [Open WebUI/PDA_ChatBridge_Pipe.py](C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\Open WebUI\PDA_ChatBridge_Pipe.py).
+5. In Open WebUI, create a Pipe Function from [Open WebUI/PDA_ChatBridge_Pipe.py](../Open%20WebUI/PDA_ChatBridge_Pipe.py).
 6. Set the Pipe Function's `N8N_WEBHOOK_URL` valve to `http://host.docker.internal:5678/webhook/pda-chat-bridge-http` if Open WebUI runs in Docker, or `http://localhost:5678/webhook/pda-chat-bridge-http` if it runs on the host.
 7. Enable the Pipe Function and select `COOPER` as the active model in the chat sidebar.
 8. Confirm that the Open WebUI model points to the COOPER Pipe, not to queue files, workers, or a provider alias.
@@ -210,7 +210,7 @@ Pattern setup:
 
 ## Clipboard Import
 
-- Use [`n8n Workflow/PDA-ChatBridge-HTTP-Clipboard.json`](C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\n8n%20Workflow\PDA-ChatBridge-HTTP-Clipboard.json) when pasting directly into the n8n canvas.
+- Use [`n8n Workflow/PDA-ChatBridge-HTTP-Clipboard.json`](../n8n%20Workflow/PDA-ChatBridge-HTTP-Clipboard.json) when pasting directly into the n8n canvas.
 - If the n8n import dialog creates no nodes, paste the clipboard JSON into the canvas instead of using file import.
 - The clipboard workflow is intentionally minimal: nodes plus connections only.
 - The HTTP bridge server must be running on `http://localhost:8788/pda-chat-bridge` before testing the pasted workflow, and the n8n HTTP Request node should target `http://host.docker.internal:8788/pda-chat-bridge`.
@@ -219,7 +219,7 @@ Pattern setup:
 
 1. In Open WebUI, open `Admin Panel -> Functions`.
 2. Click `Create` and choose a new Function ID such as `pda_chat_bridge`.
-3. Paste the contents of [Open WebUI/PDA_ChatBridge_Pipe.py](C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\Open WebUI\PDA_ChatBridge_Pipe.py).
+3. Paste the contents of [Open WebUI/PDA_ChatBridge_Pipe.py](../Open%20WebUI/PDA_ChatBridge_Pipe.py).
 4. Save the function.
 5. Open the function settings and set `N8N_WEBHOOK_URL`.
 6. Enable the function.

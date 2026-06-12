@@ -9,7 +9,7 @@ if (-not (Test-Path $TaskFile)) {
     throw "Task file not found."
 }
 
-$Root = "C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem"
+$Root = Split-Path $PSScriptRoot -Parent
 $Runner = Join-Path $Root "Scripts\Invoke-PDAWorker.ps1"
 
 . (Join-Path $Root "Scripts\PDA_TaskOntology.ps1")

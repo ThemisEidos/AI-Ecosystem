@@ -1,8 +1,8 @@
 # PDA Queue Watcher
 
-$QueueScript = "C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\Scripts\process-pda-queue.ps1"
+$QueueScript = Join-Path $PSScriptRoot "process-pda-queue.ps1"
 
-$PendingPath = "C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\PDA-Tasks\pending"
+$PendingPath = Join-Path (Split-Path $PSScriptRoot -Parent) "PDA-Tasks\pending"
 
 Write-Host ""
 Write-Host "=== PDA QUEUE WATCHER ACTIVE ==="

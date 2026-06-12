@@ -13,13 +13,75 @@ $Root = Split-Path -Parent $PSScriptRoot
 $ConfigPath = Join-Path $Root "litellm\litellm_config.yaml"
 $ComposePath = Join-Path $Root "PDA-Runtime\docker-compose.yml"
 $Endpoint = "http://localhost:4000/v1/models"
+$EnvFileCandidates = @(
+    (Join-Path $Root "litellm\.env.local"),
+    (Join-Path $Root ".env.local")
+)
+
+function Test-PDAPlaceholderValue {
+    param([Parameter(Mandatory = $true)][string]$Value)
+
+    $Text = [string]$Value
+    return [bool]($Text -match '^(?i:(your[_-].+|placeholder|replace-me|set-me|changeme|your-litellm-master-key))$')
+}
+
+function Read-PDAEnvFile {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $Entries = [ordered]@{}
+    if (-not (Test-Path -Path $Path -PathType Leaf)) {
+        return $Entries
+    }
+
+    foreach ($Line in Get-Content -Path $Path -ErrorAction Stop) {
+        $Trimmed = [string]$Line
+        if ([string]::IsNullOrWhiteSpace($Trimmed)) {
+            continue
+        }
+        if ($Trimmed.TrimStart().StartsWith("#")) {
+            continue
+        }
+        if ($Trimmed -notmatch '^\s*([^=\s]+)\s*=\s*(.*)\s*$') {
+            continue
+        }
+
+        $Entries[$Matches[1]] = $Matches[2]
+    }
+
+    return $Entries
+}
+
+function Get-PDAConfiguredValue {
+    param([Parameter(Mandatory = $true)][string]$Name)
+
+    $Value = [Environment]::GetEnvironmentVariable($Name)
+    if (-not [string]::IsNullOrWhiteSpace([string]$Value) -and -not (Test-PDAPlaceholderValue -Value ([string]$Value))) {
+        return [string]$Value
+    }
+
+    foreach ($Candidate in $EnvFileCandidates) {
+        if (-not (Test-Path -Path $Candidate -PathType Leaf)) {
+            continue
+        }
+
+        $EnvEntries = Read-PDAEnvFile -Path $Candidate
+        if ($EnvEntries.Contains($Name)) {
+            $CandidateValue = [string]$EnvEntries[$Name]
+            if (-not [string]::IsNullOrWhiteSpace($CandidateValue) -and -not (Test-PDAPlaceholderValue -Value $CandidateValue)) {
+                return $CandidateValue
+            }
+        }
+    }
+
+    return ""
+}
 
 function Get-PDARequiredEnvironmentVariable {
     param([Parameter(Mandatory = $true)][string]$Name)
 
-    $Value = [Environment]::GetEnvironmentVariable($Name)
+    $Value = Get-PDAConfiguredValue -Name $Name
     if ([string]::IsNullOrWhiteSpace([string]$Value)) {
-        throw "LITELLM_MASTER_KEY is not set. Configure it in the approved runtime secret source."
+        throw "LITELLM_MASTER_KEY is not set. Set it in litellm/.env.local or export it in the current PowerShell session."
     }
 
     return [string]$Value
@@ -151,7 +213,10 @@ foreach ($Provider in $ExpectedProviders) {
     }
 
     if ($Provider.requires_api_key) {
-        $HostEnvPresent = -not [string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($Provider.env_name))
+        $HostEnvPresent = -not [string]::IsNullOrWhiteSpace((Get-PDAConfiguredValue -Name $Provider.env_name))
+        if (-not $HostEnvPresent) {
+            $ProviderIssues.Add("Set $($Provider.env_name) in litellm/.env.local or the current PowerShell session.")
+        }
     }
 
     $ConfigChecks += [pscustomobject]@{

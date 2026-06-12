@@ -2,7 +2,7 @@ Write-Host "=== PDA WEBHOOK DIAGNOSTIC ==="
 
 Write-Host ""
 Write-Host "1. Sender URL:"
-$Sender = "C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\Scripts\Send-PDACommand.ps1"
+$Sender = Join-Path (Split-Path $PSScriptRoot -Parent) "Scripts\Send-PDACommand.ps1"
 Select-String -Path $Sender -Pattern "WebhookUrl" -Context 0,1
 
 Write-Host ""

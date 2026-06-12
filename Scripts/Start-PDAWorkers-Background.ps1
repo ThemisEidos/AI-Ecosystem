@@ -1,8 +1,8 @@
 $Scripts = @(
-    "C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\Scripts\watch-pda-queue.ps1",
-    "C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\Scripts\Start-GeminiWorker.ps1",
-    "C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\Scripts\Start-ResearchWorker.ps1",
-    "C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\Scripts\Start-PlannerWorker.ps1"
+    (Join-Path $PSScriptRoot "watch-pda-queue.ps1"),
+    (Join-Path $PSScriptRoot "Start-GeminiWorker.ps1"),
+    (Join-Path $PSScriptRoot "Start-ResearchWorker.ps1"),
+    (Join-Path $PSScriptRoot "Start-PlannerWorker.ps1")
 )
 
 foreach ($Script in $Scripts) {

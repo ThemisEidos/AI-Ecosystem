@@ -11,104 +11,72 @@
   ],
   "approved_entrypoints": [
     {
-      "path": "Scripts\\Submit-PDATask.ps1",
-      "governance_class": "ontology_gated",
-      "scan_mode": "direct_path",
-      "writer_signals": [
-        "PendingPath"
-      ],
-      "required_tokens": [
-        "Resolve-PDATaskDispatchContext",
-        "Invoke-PDAApprovalGate"
-      ],
-      "notes": "Manual canonical queue submitter."
-    },
-    {
-      "path": "Scripts\\New-PDATask.ps1",
-      "governance_class": "ontology_gated",
-      "scan_mode": "direct_path",
-      "writer_signals": [
-        "PendingPath",
-        "TaskFile"
-      ],
-      "required_tokens": [
-        "Resolve-PDATaskDispatchContext",
-        "Invoke-PDAApprovalGate"
-      ],
-      "notes": "Canonical task creation helper."
-    },
-    {
-      "path": "Scripts\\Submit-PDAFabricTask.ps1",
-      "governance_class": "ontology_gated",
-      "scan_mode": "direct_path",
-      "writer_signals": [
-        "PendingDir"
-      ],
-      "required_tokens": [
-        "Resolve-PDATaskDispatchContext",
-        "Invoke-PDAApprovalGate"
-      ],
-      "notes": "Fabric task submitter."
-    },
-    {
-      "path": "Scripts\\Install-PDAFabricHelper.ps1",
+      "path": "Scripts\\AIEcosystem.Commands.ps1",
       "governance_class": "maintenance_writer",
       "scan_mode": "direct_path",
       "writer_signals": [
-        "Install directory",
-        "FabricPatternsRoot"
+        "LogDir"
       ],
       "required_tokens": [
-        "Get-PDAFabricExecutablePath",
-        "Copy-Item",
-        "Set-Content"
+        "New-Item",
+        "PDA Webhook Server"
       ],
-      "notes": "Fabric CLI installer and local pattern sync helper."
+      "notes": "AI ecosystem command surface and diagnostics."
     },
     {
-      "path": "Scripts\\New-PDAWorkflowTask.ps1",
-      "governance_class": "ontology_gated",
+      "path": "Scripts\\Approve-PDATask.ps1",
+      "governance_class": "approval_writer",
       "scan_mode": "direct_path",
       "writer_signals": [
-        "PendingPath"
-      ],
-      "required_tokens": [
-        "Resolve-PDATaskDispatchContext",
-        "Invoke-PDAApprovalGate"
-      ],
-      "notes": "Workflow builder task submitter."
-    },
-    {
-      "path": "Scripts\\Process-PDACommandStagedTasks.ps1",
-      "governance_class": "ontology_gated",
-      "scan_mode": "direct_path",
-      "writer_signals": [
-        "PendingRoot",
-        "ProcessedRoot",
-        "FailedRoot",
-        "PendingFile"
-      ],
-      "required_tokens": [
-        "Test-PDATaskOntologyContract",
-        "Resolve-PDATaskDispatchContext",
-        "Invoke-PDAApprovalGate"
-      ],
-      "notes": "Canonical n8n command intake."
-    },
-    {
-      "path": "Scripts\\Process-PDAReporterStagedTasks.ps1",
-      "governance_class": "ontology_gated",
-      "scan_mode": "direct_path",
-      "writer_signals": [
-        "ProcessedRoot",
-        "FailedRoot",
-        "ProcessedPath",
-        "FailedPath"
+        "PendingApprovalDir",
+        "ApprovedDir",
+        "PendingQueueDir"
       ],
       "required_tokens": [
         "Resolve-PDATaskDispatchContext"
       ],
-      "notes": "Reporter intake uses the shared resolver before dispatch."
+      "notes": "Approval promotion must preserve ontology-backed worker assignment."
+    },
+    {
+      "path": "Scripts\\Backup-PDARepo.ps1",
+      "governance_class": "maintenance_writer",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "ManifestDir"
+      ],
+      "required_tokens": [
+        "ManifestPath",
+        "Set-Content"
+      ],
+      "notes": "Repository backup manifest writer."
+    },
+    {
+      "path": "Scripts\\Backup-PDAState.ps1",
+      "governance_class": "maintenance_writer",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "BackupDir",
+        "BackupRoot",
+        "Items"
+      ],
+      "required_tokens": [
+        "PDA-Backups",
+        "Copy-Item"
+      ],
+      "notes": "Local PDA backup helper."
+    },
+    {
+      "path": "Scripts\\Backup-PDAVolumes.ps1",
+      "governance_class": "maintenance_writer",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "ManifestDir"
+      ],
+      "required_tokens": [
+        "ManifestPath",
+        "Set-Content"
+      ],
+      "notes": "Volume backup manifest writer."
     },
     {
       "path": "Scripts\\dispatch-pda-command.ps1",
@@ -124,34 +92,150 @@
       "notes": "Legacy dispatcher remains ontology-backed."
     },
     {
-      "path": "Scripts\\process-pda-queue.ps1",
-      "governance_class": "ontology_gated",
+      "path": "Scripts\\Export-PDACodexExecutionPrompt.ps1",
+      "governance_class": "worker_output",
       "scan_mode": "direct_path",
       "writer_signals": [
-        "PendingPath",
-        "RunningPath",
-        "CompletedPath",
-        "FailedPath"
+        "Prompt"
       ],
       "required_tokens": [
-        "Resolve-PDATaskDispatchContext"
+        "Prompt.json_path",
+        "Prompt.markdown_path"
       ],
-      "notes": "Canonical queue processor."
+      "notes": "Codex execution prompt export writer."
     },
     {
-      "path": "Scripts\\Start-PDAQueueWorker.ps1",
-      "governance_class": "ontology_gated",
+      "path": "Scripts\\Export-PDAWorkflowBundle.ps1",
+      "governance_class": "maintenance_writer",
       "scan_mode": "direct_path",
       "writer_signals": [
-        "Queued",
-        "Running",
-        "Results",
-        "RunningPath"
+        "BundleDir"
       ],
       "required_tokens": [
-        "Resolve-PDATaskDispatchContext"
+        "bundle-manifest.json",
+        "Copy-Item"
       ],
-      "notes": "Long-running queue worker."
+      "notes": "Workflow bundle export writer."
+    },
+    {
+      "path": "Scripts\\Get-PDAArtifactIndex.ps1",
+      "governance_class": "maintenance_writer",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "Path"
+      ],
+      "required_tokens": [
+        "PDA_ArtifactIndex.json",
+        "Set-Content"
+      ],
+      "notes": "Artifact index export helper."
+    },
+    {
+      "path": "Scripts\\Get-PDAMemoryIndex.ps1",
+      "governance_class": "maintenance_writer",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "Path"
+      ],
+      "required_tokens": [
+        "PDA_MemoryIndex.json",
+        "Set-Content"
+      ],
+      "notes": "Memory index export helper."
+    },
+    {
+      "path": "Scripts\\Get-PDAMemoryRepairReport.ps1",
+      "governance_class": "worker_output",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "ReportPath",
+        "DashboardDir",
+        "Lines"
+      ],
+      "required_tokens": [
+        "PDA_MemoryTaxonomy.ps1",
+        "Memory Repair Report.md"
+      ],
+      "notes": "Memory repair report generator."
+    },
+    {
+      "path": "Scripts\\Get-PDAPlanResults.ps1",
+      "governance_class": "worker_output",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "PlanInstancePath"
+      ],
+      "required_tokens": [
+        "results_path",
+        "PlanInstancePath"
+      ],
+      "notes": "Plan result export helper."
+    },
+    {
+      "path": "Scripts\\Get-PDAQueueTelemetry.ps1",
+      "governance_class": "worker_output",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "TelemetryDir"
+      ],
+      "required_tokens": [
+        "OutPath",
+        "Set-Content"
+      ],
+      "notes": "Queue telemetry export helper."
+    },
+    {
+      "path": "Scripts\\Get-PDARoutingSummary.ps1",
+      "governance_class": "worker_output",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "ExportPath"
+      ],
+      "required_tokens": [
+        "ExportDirectory",
+        "Set-Content"
+      ],
+      "notes": "Routing summary export helper."
+    },
+    {
+      "path": "Scripts\\Import-PDACommandRouter.ps1",
+      "governance_class": "maintenance_writer",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "WorkflowDir"
+      ],
+      "required_tokens": [
+        "n8n import:workflow",
+        "publish:workflow"
+      ],
+      "notes": "n8n command router import and publish helper."
+    },
+    {
+      "path": "Scripts\\Install-PDAEcosystem.ps1",
+      "governance_class": "maintenance_writer",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "DestinationPath"
+      ],
+      "required_tokens": [
+        "Copy-Item",
+        "DestinationPath"
+      ],
+      "notes": "Ecosystem installer and file copier."
+    },
+    {
+      "path": "Scripts\\Install-PDAFabricHelper.ps1",
+      "governance_class": "maintenance_writer",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "Install directory",
+        "FabricPatternsRoot"
+      ],
+      "required_tokens": [
+        "Get-PDAFabricExecutablePath",
+        "Copy-Item"
+      ],
+      "notes": "Fabric CLI installer and local pattern sync helper."
     },
     {
       "path": "Scripts\\Invoke-PDAApprovalGate.ps1",
@@ -169,131 +253,56 @@
       "notes": "Approval gate validates ontology-backed worker eligibility before policy decisions."
     },
     {
-      "path": "Scripts\\Approve-PDATask.ps1",
-      "governance_class": "approval_writer",
-      "scan_mode": "direct_path",
-      "writer_signals": [
-        "PendingApprovalDir",
-        "ApprovedDir",
-        "PendingQueueDir"
-      ],
-      "required_tokens": [
-        "Resolve-PDATaskDispatchContext"
-      ],
-      "notes": "Approval promotion must preserve ontology-backed worker assignment."
-    },
-    {
-      "path": "Scripts\\Retry-PDADeadLetterTask.ps1",
-      "governance_class": "requeue_writer",
-      "scan_mode": "direct_path",
-      "writer_signals": [
-        "DeadDir",
-        "PendingDir"
-      ],
-      "required_tokens": [
-        "Resolve-PDATaskDispatchContext"
-      ],
-      "notes": "Dead-letter retry must re-enter the queue through ontology resolution."
-    },
-    {
-      "path": "Scripts\\Reject-PDATask.ps1",
-      "governance_class": "maintenance_writer",
-      "scan_mode": "direct_path",
-      "writer_signals": [
-        "RejectedDir",
-        "ApprovalRoot"
-      ],
-      "required_tokens": [],
-      "notes": "Approval rejection moves tasks within the approvals lane."
-    },
-    {
-      "path": "Scripts\\Move-PDAFailedToDeadLetter.ps1",
-      "governance_class": "maintenance_writer",
-      "scan_mode": "direct_path",
-      "writer_signals": [
-        "DeadDir"
-      ],
-      "required_tokens": [],
-      "notes": "Dead-letter maintenance move."
-    },
-    {
-      "path": "Scripts\\Invoke-PDAFabricWorker.ps1",
+      "path": "Scripts\\Invoke-PDABuildOrchestrator.ps1",
       "governance_class": "worker_output",
       "scan_mode": "direct_path",
       "writer_signals": [
-        "ResultsDir",
-        "GeneratedDir",
-        "GeneratedRoot"
-      ],
-      "required_tokens": [],
-      "notes": "Fabric worker output writer."
-    },
-    {
-      "path": "Scripts\\Invoke-PDAFabricHealthCheck.ps1",
-      "governance_class": "maintenance_writer",
-      "scan_mode": "direct_path",
-      "writer_signals": [
-        "executable_path",
-        "pattern_list_status"
+        "SummaryPath"
       ],
       "required_tokens": [
-        "Get-PDAFabricExecutablePath",
+        "NightlyDir",
         "Set-Content"
       ],
-      "notes": "Fabric CLI health check."
+      "notes": "Nightly build orchestrator output writer."
     },
     {
-      "path": "Scripts\\Test-PDAFabricInstall.ps1",
-      "governance_class": "test_writer",
-      "scan_mode": "direct_path",
-      "writer_signals": [
-        "Health",
-        "Result"
-      ],
-      "required_tokens": [
-        "Invoke-PDAFabricHealthCheck.ps1"
-      ],
-      "notes": "Fabric install verification test."
-    },
-    {
-      "path": "Scripts\\Test-PDAFabricHealthCheck.ps1",
-      "governance_class": "test_writer",
-      "scan_mode": "direct_path",
-      "writer_signals": [
-        "Health",
-        "MissingPatterns"
-      ],
-      "required_tokens": [
-        "Invoke-PDAFabricHealthCheck.ps1"
-      ],
-      "notes": "Fabric health validation test."
-    },
-    {
-      "path": "Scripts\\Test-PDAFabricAliasCommands.ps1",
-      "governance_class": "test_writer",
-      "scan_mode": "direct_path",
-      "writer_signals": [
-        "TempRoot",
-        "TaskPath",
-        "ResultPath"
-      ],
-      "required_tokens": [
-        "Invoke-PDAFabricWorker.ps1",
-        "Set-Content"
-      ],
-      "notes": "Fabric alias execution validation test."
-    },
-    {
-      "path": "Scripts\\Invoke-PDAReporterWorker.ps1",
+      "path": "Scripts\\Invoke-PDABuildRunner.ps1",
       "governance_class": "worker_output",
       "scan_mode": "direct_path",
       "writer_signals": [
-        "StageRunningRoot",
-        "StageResultsRoot",
-        "StageFailedRoot"
+        "ReportPath"
       ],
-      "required_tokens": [],
-      "notes": "Reporter pipeline output writer."
+      "required_tokens": [
+        "ReportsRoot",
+        "Set-Content"
+      ],
+      "notes": "Build runner report writer."
+    },
+    {
+      "path": "Scripts\\Invoke-PDAChatBridge.ps1",
+      "governance_class": "worker_output",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "LogPath"
+      ],
+      "required_tokens": [
+        "Add-Content",
+        "update-start"
+      ],
+      "notes": "Chat bridge log writer."
+    },
+    {
+      "path": "Scripts\\Invoke-PDACodexExecution.ps1",
+      "governance_class": "worker_output",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "OutputDirectory"
+      ],
+      "required_tokens": [
+        "ExecutionLogRoot",
+        "SummaryMarkdownPath"
+      ],
+      "notes": "Codex execution artifact writer."
     },
     {
       "path": "Scripts\\Invoke-PDADraftWorker.ps1",
@@ -313,6 +322,104 @@
       "notes": "Draft worker output writer."
     },
     {
+      "path": "Scripts\\Invoke-PDAExecuteWorker.ps1",
+      "governance_class": "worker_output",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "ResultsFolder",
+        "OutputFolder",
+        "MarkdownPath",
+        "ResultPath"
+      ],
+      "required_tokens": [
+        "Invoke-PDAModel.ps1",
+        "Register-PDAArtifact.ps1"
+      ],
+      "notes": "Execute worker output writer."
+    },
+    {
+      "path": "Scripts\\Invoke-PDAFabric.ps1",
+      "governance_class": "worker_output",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "OutputPath"
+      ],
+      "required_tokens": [
+        "FabricExe",
+        "Set-Content"
+      ],
+      "notes": "Fabric pattern output writer."
+    },
+    {
+      "path": "Scripts\\Invoke-PDAFabricWorker.ps1",
+      "governance_class": "worker_output",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "ResultsDir",
+        "GeneratedDir",
+        "GeneratedRoot"
+      ],
+      "required_tokens": [],
+      "notes": "Fabric worker output writer."
+    },
+    {
+      "path": "Scripts\\Invoke-PDAFindingsWorker.ps1",
+      "governance_class": "worker_output",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "ResultsFolder",
+        "MarkdownOutputFolder",
+        "MarkdownPath",
+        "ResultPath"
+      ],
+      "required_tokens": [
+        "Invoke-PDAModel.ps1",
+        "Register-PDAArtifact.ps1"
+      ],
+      "notes": "Findings worker output writer."
+    },
+    {
+      "path": "Scripts\\Invoke-PDAModel.ps1",
+      "governance_class": "worker_output",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "LogPath"
+      ],
+      "required_tokens": [
+        "RoutingLogRoot",
+        "Set-Content"
+      ],
+      "notes": "Model routing log writer."
+    },
+    {
+      "path": "Scripts\\Invoke-PDANotebookLMCommand.ps1",
+      "governance_class": "worker_output",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "ResultsRoot",
+        "ReportPath",
+        "ResultPath"
+      ],
+      "required_tokens": [
+        "New-PDANotebookLMPackage.ps1",
+        "Set-Content"
+      ],
+      "notes": "NotebookLM package command writer."
+    },
+    {
+      "path": "Scripts\\Invoke-PDAPlan.ps1",
+      "governance_class": "ontology_gated",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "TaskPath"
+      ],
+      "required_tokens": [
+        "Set-Content",
+        "task_id"
+      ],
+      "notes": "Plan task writer."
+    },
+    {
       "path": "Scripts\\Invoke-PDAPlannerWorker.ps1",
       "governance_class": "worker_output",
       "scan_mode": "direct_path",
@@ -325,6 +432,31 @@
         "Register-PDAArtifact.ps1"
       ],
       "notes": "Planner worker output writer."
+    },
+    {
+      "path": "Scripts\\Invoke-PDAQueueBacklogAudit.ps1",
+      "governance_class": "worker_output",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "ReportPath"
+      ],
+      "required_tokens": [
+        "ReportRoot",
+        "Set-Content"
+      ],
+      "notes": "Queue backlog audit report writer."
+    },
+    {
+      "path": "Scripts\\Invoke-PDAReporterWorker.ps1",
+      "governance_class": "worker_output",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "StageRunningRoot",
+        "StageResultsRoot",
+        "StageFailedRoot"
+      ],
+      "required_tokens": [],
+      "notes": "Reporter pipeline output writer."
     },
     {
       "path": "Scripts\\Invoke-PDAResearchWorker.ps1",
@@ -361,67 +493,17 @@
       "notes": "Review worker output writer."
     },
     {
-      "path": "Scripts\\Invoke-PDANotebookLMCommand.ps1",
-      "governance_class": "worker_output",
+      "path": "Scripts\\Invoke-PDATaskDispatchPreparation.ps1",
+      "governance_class": "ontology_gated",
       "scan_mode": "direct_path",
       "writer_signals": [
-        "ResultsRoot",
-        "ReportPath",
-        "ResultPath"
+        "PackagePath"
       ],
       "required_tokens": [
-        "New-PDANotebookLMPackage.ps1",
+        "DispatchRoot",
         "Set-Content"
       ],
-      "notes": "NotebookLM package command writer."
-    },
-    {
-      "path": "Scripts\\New-PDANotebookLMPackage.ps1",
-      "governance_class": "worker_output",
-      "scan_mode": "direct_path",
-      "writer_signals": [
-        "OutputRoot",
-        "ManifestPath",
-        "SummaryPath",
-        "QuestionsPath"
-      ],
-      "required_tokens": [
-        "Copy-Item",
-        "Set-Content"
-      ],
-      "notes": "NotebookLM package generator."
-    },
-    {
-      "path": "Scripts\\New-PDAMemoryCandidate.ps1",
-      "governance_class": "worker_output",
-      "scan_mode": "direct_path",
-      "writer_signals": [
-        "CandidateRoot",
-        "CandidatePath",
-        "Set-Content"
-      ],
-      "required_tokens": [
-        "PDA-Memory\\candidates",
-        "PDA_ArtifactIndex.json",
-        "PDA-Backups\\notebooklm"
-      ],
-      "notes": "Memory candidate discovery and writer."
-    },
-    {
-      "path": "Scripts\\Invoke-PDAFindingsWorker.ps1",
-      "governance_class": "worker_output",
-      "scan_mode": "direct_path",
-      "writer_signals": [
-        "ResultsFolder",
-        "MarkdownOutputFolder",
-        "MarkdownPath",
-        "ResultPath"
-      ],
-      "required_tokens": [
-        "Invoke-PDAModel.ps1",
-        "Register-PDAArtifact.ps1"
-      ],
-      "notes": "Findings worker output writer."
+      "notes": "Task dispatch preparation writer."
     },
     {
       "path": "Scripts\\Invoke-PDATimelineWorker.ps1",
@@ -440,36 +522,279 @@
       "notes": "Timeline worker output writer."
     },
     {
-      "path": "Scripts\\Invoke-PDAExecuteWorker.ps1",
+      "path": "Scripts\\Monitor-PDABuildRunner.ps1",
       "governance_class": "worker_output",
       "scan_mode": "direct_path",
       "writer_signals": [
-        "ResultsFolder",
-        "OutputFolder",
-        "MarkdownPath",
-        "ResultPath"
+        "MarkdownPath"
       ],
       "required_tokens": [
-        "Invoke-PDAModel.ps1",
-        "Register-PDAArtifact.ps1"
+        "RunLogRoot",
+        "Set-Content"
       ],
-      "notes": "Execute worker output writer."
+      "notes": "Build runner monitor report writer."
     },
     {
-      "path": "Scripts\\Repair-PDALegacyMemoryRecord.ps1",
+      "path": "Scripts\\Move-PDAFailedToDeadLetter.ps1",
       "governance_class": "maintenance_writer",
       "scan_mode": "direct_path",
       "writer_signals": [
-        "MemoryIndexPath",
-        "ArtifactIndexPath",
-        "BackupDir",
-        "BackupIndexPath"
+        "DeadDir"
+      ],
+      "required_tokens": [],
+      "notes": "Dead-letter maintenance move."
+    },
+    {
+      "path": "Scripts\\New-PDAAgentRun.ps1",
+      "governance_class": "worker_output",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "RunPath"
       ],
       "required_tokens": [
-        "PDA_LegacyMemoryRepairAllowlist.json",
-        "PDA_MemoryTaxonomy.ps1"
+        "RunRoot",
+        "Set-Content"
       ],
-      "notes": "Legacy memory repair maintenance writer."
+      "notes": "Agent run record writer."
+    },
+    {
+      "path": "Scripts\\New-PDAExecutionRequest.ps1",
+      "governance_class": "ontology_gated",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "RequestPath"
+      ],
+      "required_tokens": [
+        "RequestRoot",
+        "Set-Content"
+      ],
+      "notes": "Execution request writer."
+    },
+    {
+      "path": "Scripts\\New-PDAHttpBridgeWorkflow.ps1",
+      "governance_class": "maintenance_writer",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "WorkflowPath"
+      ],
+      "required_tokens": [
+        "WorkflowDir",
+        "Set-Content"
+      ],
+      "notes": "HTTP bridge workflow generator."
+    },
+    {
+      "path": "Scripts\\New-PDAMemoryCandidate.ps1",
+      "governance_class": "worker_output",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "CandidateRoot",
+        "CandidatePath",
+        "Set-Content"
+      ],
+      "required_tokens": [
+        "PDA-Memory\\candidates",
+        "PDA_ArtifactIndex.json",
+        "PDA-Backups\\notebooklm"
+      ],
+      "notes": "Memory candidate discovery and writer."
+    },
+    {
+      "path": "Scripts\\New-PDAN8nClipboardWorkflow.ps1",
+      "governance_class": "maintenance_writer",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "ClipboardPath"
+      ],
+      "required_tokens": [
+        "WorkflowDir",
+        "Set-Content"
+      ],
+      "notes": "n8n clipboard workflow generator."
+    },
+    {
+      "path": "Scripts\\New-PDANotebookLMPackage.ps1",
+      "governance_class": "worker_output",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "OutputRoot",
+        "ManifestPath",
+        "SummaryPath",
+        "QuestionsPath"
+      ],
+      "required_tokens": [
+        "Copy-Item",
+        "Set-Content"
+      ],
+      "notes": "NotebookLM package generator."
+    },
+    {
+      "path": "Scripts\\New-PDATask.ps1",
+      "governance_class": "ontology_gated",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "PendingPath",
+        "TaskFile"
+      ],
+      "required_tokens": [
+        "Resolve-PDATaskDispatchContext",
+        "Invoke-PDAApprovalGate"
+      ],
+      "notes": "Canonical task creation helper."
+    },
+    {
+      "path": "Scripts\\New-PDAWorkflowTask.ps1",
+      "governance_class": "ontology_gated",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "PendingPath"
+      ],
+      "required_tokens": [
+        "Resolve-PDATaskDispatchContext",
+        "Invoke-PDAApprovalGate"
+      ],
+      "notes": "Workflow builder task submitter."
+    },
+    {
+      "path": "Scripts\\PDA_AgentLoop.ps1",
+      "governance_class": "worker_output",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "IndexPath"
+      ],
+      "required_tokens": [
+        "RunRoot",
+        "Set-Content"
+      ],
+      "notes": "Agent loop state writer."
+    },
+    {
+      "path": "Scripts\\PDA_ApprovalWorkflow.ps1",
+      "governance_class": "approval_writer",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "StorePath"
+      ],
+      "required_tokens": [
+        "WorkflowRoot",
+        "Set-Content"
+      ],
+      "notes": "Approval workflow store writer."
+    },
+    {
+      "path": "Scripts\\PDA_GoalPlanning.ps1",
+      "governance_class": "maintenance_writer",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "StorePath"
+      ],
+      "required_tokens": [
+        "StoreDirectory",
+        "Set-Content"
+      ],
+      "notes": "Goal planning store writer."
+    },
+    {
+      "path": "Scripts\\PDA_Lifecycle.ps1",
+      "governance_class": "maintenance_writer",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "BackupPath",
+        "IndexPath",
+        "BackupFile"
+      ],
+      "required_tokens": [
+        "PDA_LifecyclePolicy.json",
+        "PDA_ArtifactIndex.json",
+        "PDA_MemoryIndex.json"
+      ],
+      "notes": "Lifecycle policy and record transition helpers."
+    },
+    {
+      "path": "Scripts\\PDA_NightlyAutomation.ps1",
+      "governance_class": "worker_output",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "PacketRoot"
+      ],
+      "required_tokens": [
+        "OutputRoot",
+        "Set-Content"
+      ],
+      "notes": "Nightly automation packet writer."
+    },
+    {
+      "path": "Scripts\\PDA_PlanOrchestration.ps1",
+      "governance_class": "maintenance_writer",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "TargetPath"
+      ],
+      "required_tokens": [
+        "Set-Content",
+        "Remove-Item"
+      ],
+      "notes": "Plan orchestration writer."
+    },
+    {
+      "path": "Scripts\\process-pda-queue.ps1",
+      "governance_class": "ontology_gated",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "PendingPath",
+        "RunningPath",
+        "CompletedPath",
+        "FailedPath"
+      ],
+      "required_tokens": [
+        "Resolve-PDATaskDispatchContext"
+      ],
+      "notes": "Canonical queue processor."
+    },
+    {
+      "path": "Scripts\\Process-PDACommandStagedTasks.ps1",
+      "governance_class": "ontology_gated",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "PendingRoot",
+        "ProcessedRoot",
+        "FailedRoot",
+        "PendingFile"
+      ],
+      "required_tokens": [
+        "Test-PDATaskOntologyContract",
+        "Resolve-PDATaskDispatchContext",
+        "Invoke-PDAApprovalGate"
+      ],
+      "notes": "Canonical n8n command intake."
+    },
+    {
+      "path": "Scripts\\Process-PDAReporterStagedTasks.ps1",
+      "governance_class": "ontology_gated",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "ProcessedRoot",
+        "FailedRoot",
+        "ProcessedPath",
+        "FailedPath"
+      ],
+      "required_tokens": [
+        "Resolve-PDATaskDispatchContext"
+      ],
+      "notes": "Reporter intake uses the shared resolver before dispatch."
+    },
+    {
+      "path": "Scripts\\Promote-PDAArtifactToMemory.ps1",
+      "governance_class": "maintenance_writer",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "Path"
+      ],
+      "required_tokens": [
+        "Register-PDAMemory.ps1",
+        "ArtifactIndexPath"
+      ],
+      "notes": "Artifact promotion helper."
     },
     {
       "path": "Scripts\\Register-PDAArtifact.ps1",
@@ -502,193 +827,293 @@
       "notes": "Canonical memory registry writer."
     },
     {
-      "path": "Scripts\\Backup-PDAState.ps1",
+      "path": "Scripts\\Reject-PDATask.ps1",
       "governance_class": "maintenance_writer",
       "scan_mode": "direct_path",
       "writer_signals": [
+        "RejectedDir",
+        "ApprovalRoot"
+      ],
+      "required_tokens": [],
+      "notes": "Approval rejection moves tasks within the approvals lane."
+    },
+    {
+      "path": "Scripts\\Repair-PDALegacyMemoryRecord.ps1",
+      "governance_class": "maintenance_writer",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "MemoryIndexPath",
+        "ArtifactIndexPath",
         "BackupDir",
-        "BackupRoot",
-        "Items"
+        "BackupIndexPath"
       ],
       "required_tokens": [
-        "PDA-Backups",
+        "PDA_LegacyMemoryRepairAllowlist.json",
+        "PDA_MemoryTaxonomy.ps1"
+      ],
+      "notes": "Legacy memory repair maintenance writer."
+    },
+    {
+      "path": "Scripts\\Retry-PDADeadLetterTask.ps1",
+      "governance_class": "requeue_writer",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "DeadDir",
+        "PendingDir"
+      ],
+      "required_tokens": [
+        "Resolve-PDATaskDispatchContext"
+      ],
+      "notes": "Dead-letter retry must re-enter the queue through ontology resolution."
+    },
+    {
+      "path": "Scripts\\Save-PDAPlannerOutput.ps1",
+      "governance_class": "worker_output",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "File"
+      ],
+      "required_tokens": [
+        "OutputDir",
+        "Set-Content"
+      ],
+      "notes": "Planner output saver."
+    },
+    {
+      "path": "Scripts\\Set-PDATaskExecutor.ps1",
+      "governance_class": "ontology_gated",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "TaskPath"
+      ],
+      "required_tokens": [
+        "Set-Content",
+        "task_id"
+      ],
+      "notes": "Task executor assignment writer."
+    },
+    {
+      "path": "Scripts\\Start-GeminiWorker.ps1",
+      "governance_class": "worker_output",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "OutputFile"
+      ],
+      "required_tokens": [
+        "MemoryFile",
+        "Set-Content"
+      ],
+      "notes": "Gemini worker output writer."
+    },
+    {
+      "path": "Scripts\\Start-PDAMultiAgentIntakeWatcher.ps1",
+      "governance_class": "worker_output",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "StateFile"
+      ],
+      "required_tokens": [
+        "PidFile",
+        "Set-Content"
+      ],
+      "notes": "Multi-agent intake watcher state writer."
+    },
+    {
+      "path": "Scripts\\Start-PDAQueueWorker.ps1",
+      "governance_class": "ontology_gated",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "Queued",
+        "Running",
+        "Results",
+        "RunningPath"
+      ],
+      "required_tokens": [
+        "Resolve-PDATaskDispatchContext"
+      ],
+      "notes": "Long-running queue worker."
+    },
+    {
+      "path": "Scripts\\Start-PDAReporterIntakeWatcher.ps1",
+      "governance_class": "worker_output",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "StateFile"
+      ],
+      "required_tokens": [
+        "PidFile",
+        "Set-Content"
+      ],
+      "notes": "Reporter intake watcher state writer."
+    },
+    {
+      "path": "Scripts\\Start-PDAWebhookServer.ps1",
+      "governance_class": "worker_output",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "LogPath"
+      ],
+      "required_tokens": [
+        "LogDir",
+        "Add-Content"
+      ],
+      "notes": "Webhook server log writer."
+    },
+    {
+      "path": "Scripts\\Start-PDAWorker.ps1",
+      "governance_class": "worker_output",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "StatePath"
+      ],
+      "required_tokens": [
+        "PidPath",
+        "Set-Content"
+      ],
+      "notes": "PDA worker control-state writer."
+    },
+    {
+      "path": "Scripts\\Start-PlannerWorker.ps1",
+      "governance_class": "worker_output",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "OutputFile"
+      ],
+      "required_tokens": [
+        "MemoryFile",
+        "Set-Content"
+      ],
+      "notes": "Planner worker output writer."
+    },
+    {
+      "path": "Scripts\\Start-ResearchWorker.ps1",
+      "governance_class": "worker_output",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "OutputFile"
+      ],
+      "required_tokens": [
+        "MemoryFile",
+        "Set-Content"
+      ],
+      "notes": "Research worker output writer."
+    },
+    {
+      "path": "Scripts\\Stop-PDAWorker.ps1",
+      "governance_class": "maintenance_writer",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "StateFile"
+      ],
+      "required_tokens": [
+        "PidFile",
+        "Set-Content"
+      ],
+      "notes": "PDA worker stop-state writer."
+    },
+    {
+      "path": "Scripts\\Submit-PDAFabricTask.ps1",
+      "governance_class": "ontology_gated",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "PendingDir"
+      ],
+      "required_tokens": [
+        "Resolve-PDATaskDispatchContext",
+        "Invoke-PDAApprovalGate"
+      ],
+      "notes": "Fabric task submitter."
+    },
+    {
+      "path": "Scripts\\Submit-PDATask.ps1",
+      "governance_class": "ontology_gated",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "PendingPath"
+      ],
+      "required_tokens": [
+        "Resolve-PDATaskDispatchContext",
+        "Invoke-PDAApprovalGate"
+      ],
+      "notes": "Manual canonical queue submitter."
+    },
+    {
+      "path": "Scripts\\Test-COOPERPersonalityPersistence.ps1",
+      "governance_class": "test_writer",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "TempProfilePath"
+      ],
+      "required_tokens": [
+        "StateBackupPath",
         "Copy-Item"
       ],
-      "notes": "Local PDA backup helper."
+      "notes": "COOPER personality persistence test harness."
     },
     {
-      "path": "Scripts\\Test-PDALegacyMemoryRepair.ps1",
+      "path": "Scripts\\Test-PDAApprovalPolicy.ps1",
       "governance_class": "test_writer",
       "scan_mode": "direct_path",
       "writer_signals": [
-        "ArtifactIndexPath",
-        "SandboxMemoryIndexPath",
-        "PrimaryRepairSource",
-        "OverrideRepairSource"
+        "TempDir"
       ],
       "required_tokens": [
-        "Repair-PDALegacyMemoryRecord.ps1",
-        "PDA_LegacyMemoryRepairAllowlist.json"
-      ],
-      "notes": "Legacy memory repair validation harness."
-    },
-    {
-      "path": "Scripts\\Test-PDARetrieval.ps1",
-      "governance_class": "test_writer",
-      "scan_mode": "direct_path",
-      "writer_signals": [
-        "ArtifactIndexPath",
-        "MemoryIndexPath",
-        "SeedArtifactPath",
-        "SeedMemoryPath",
-        "SeedLineagePath"
-      ],
-      "required_tokens": [
-        "PDA_Retrieval.ps1",
-        "Get-PDAArtifacts",
-        "Get-PDAMemory"
-      ],
-      "notes": "Retrieval validation harness."
-    },
-    {
-      "path": "Scripts\\Test-PDAMemoryTaxonomy.ps1",
-      "governance_class": "test_writer",
-      "scan_mode": "direct_path",
-      "writer_signals": [
-        "ReportPath",
-        "ReportDir"
-      ],
-      "required_tokens": [
-        "Test-PDAMemoryTaxonomyIndex",
-        "PDA_MemoryTaxonomy.ps1",
+        "TaskPath",
         "Set-Content"
       ],
-      "notes": "Memory taxonomy validation harness."
+      "notes": "Approval policy test harness."
     },
     {
-      "path": "Scripts\\Update-PDAMemoryRecord.ps1",
-      "governance_class": "maintenance_writer",
+      "path": "Scripts\\Test-PDABuildOrchestrator.ps1",
+      "governance_class": "test_writer",
       "scan_mode": "direct_path",
       "writer_signals": [
-        "MemoryIndexPath",
-        "ArtifactIndexPath",
-        "UpdatedIndex",
-        "MemoryRecords"
+        "PrepareRepoRoot"
       ],
       "required_tokens": [
-        "PDA_MemoryTaxonomy.ps1",
-        "Assert-PDAMemoryRecordTaxonomyWritable"
+        "ExcludePath",
+        "Copy-Item"
       ],
-      "notes": "Memory record maintenance writer."
+      "notes": "Build orchestrator test harness."
     },
     {
-      "path": "Scripts\\PDA_Lifecycle.ps1",
-      "governance_class": "maintenance_writer",
+      "path": "Scripts\\Test-PDABuildRunnerMonitor.ps1",
+      "governance_class": "test_writer",
       "scan_mode": "direct_path",
       "writer_signals": [
-        "BackupPath",
-        "IndexPath",
-        "BackupFile"
+        "ExecutionRoot"
       ],
       "required_tokens": [
-        "PDA_LifecyclePolicy.json",
-        "PDA_ArtifactIndex.json",
-        "PDA_MemoryIndex.json"
-      ],
-      "notes": "Lifecycle policy and record transition helpers."
-    },
-    {
-      "path": "Scripts\\Update-PDAArtifactIndex.ps1",
-      "governance_class": "maintenance_writer",
-      "scan_mode": "direct_path",
-      "writer_signals": [
-        "OutputRoot",
-        "IndexPath",
-        "Lines"
-      ],
-      "required_tokens": [
-        "PDA-Outputs",
-        "Artifact Index.md"
-      ],
-      "notes": "Artifact index update helper."
-    },
-    {
-      "path": "Scripts\\Update-PDAArtifactDashboard.ps1",
-      "governance_class": "worker_output",
-      "scan_mode": "direct_path",
-      "writer_signals": [
-        "DashboardPath",
-        "IndexPath",
-        "DashboardDir"
-      ],
-      "required_tokens": [
-        "Artifact Index.md",
-        "PDA_ArtifactIndex.json",
+        "SummaryRoot",
         "Set-Content"
       ],
-      "notes": "Artifact dashboard generator."
+      "notes": "Build runner monitor test harness."
     },
     {
-      "path": "Scripts\\Update-PDAMemoryDashboard.ps1",
-      "governance_class": "worker_output",
+      "path": "Scripts\\Test-PDABuildRunnerScheduler.ps1",
+      "governance_class": "test_writer",
       "scan_mode": "direct_path",
       "writer_signals": [
-        "DashboardPath",
-        "IndexPath",
-        "DashboardDir"
+        "DestinationRoot"
       ],
       "required_tokens": [
-        "Memory Index.md",
-        "PDA_MemoryIndex.json",
-        "PDA_LegacyMemoryRepairAllowlist.json"
+        "DestinationRoot",
+        "Set-Content"
       ],
-      "notes": "Memory dashboard generator."
+      "notes": "Build runner scheduler test harness."
     },
     {
-      "path": "Scripts\\Update-PDADashboard.ps1",
-      "governance_class": "worker_output",
+      "path": "Scripts\\Test-PDABuildRunnerUnattended.ps1",
+      "governance_class": "test_writer",
       "scan_mode": "direct_path",
       "writer_signals": [
-        "DashboardPath",
-        "ResolvedOutputDirectory",
-        "Lines"
+        "DestinationRoot"
       ],
       "required_tokens": [
-        "Get-PDADashboardStatus.ps1",
-        "PDA Dashboard v2"
+        "DestinationRoot",
+        "Set-Content"
       ],
-      "notes": "Operational dashboard generator."
-    },
-    {
-      "path": "Scripts\\Update-PDAOperatorConsole.ps1",
-      "governance_class": "worker_output",
-      "scan_mode": "direct_path",
-      "writer_signals": [
-        "DashboardPath",
-        "TelemetryPath",
-        "RegistryPath"
-      ],
-      "required_tokens": [
-        "PDA Operator Console",
-        "PDA_ApprovedEntrypoints.json",
-        "PDA_TaskOntology.json"
-      ],
-      "notes": "Operator console generator."
-    },
-    {
-      "path": "Scripts\\Get-PDAMemoryRepairReport.ps1",
-      "governance_class": "worker_output",
-      "scan_mode": "direct_path",
-      "writer_signals": [
-        "ReportPath",
-        "DashboardDir",
-        "Lines"
-      ],
-      "required_tokens": [
-        "PDA_MemoryTaxonomy.ps1",
-        "Memory Repair Report.md"
-      ],
-      "notes": "Memory repair report generator."
+      "notes": "Build runner unattended test harness."
     },
     {
       "path": "Scripts\\Test-PDACategoryRouting.ps1",
@@ -703,6 +1128,32 @@
         "Process-PDACommandStagedTasks.ps1"
       ],
       "notes": "Routing test harness exercises staged intake."
+    },
+    {
+      "path": "Scripts\\Test-PDACodexExecution.ps1",
+      "governance_class": "test_writer",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "DestinationRoot"
+      ],
+      "required_tokens": [
+        "DestinationRoot",
+        "Set-Content"
+      ],
+      "notes": "Codex execution test harness."
+    },
+    {
+      "path": "Scripts\\Test-PDACodexExecutionPrompt.ps1",
+      "governance_class": "test_writer",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "DestinationRoot"
+      ],
+      "required_tokens": [
+        "DestinationRoot",
+        "Add-Content"
+      ],
+      "notes": "Codex execution prompt test harness."
     },
     {
       "path": "Scripts\\Test-PDADraftWorker.ps1",
@@ -723,6 +1174,63 @@
       "notes": "Draft worker validation harness."
     },
     {
+      "path": "Scripts\\Test-PDAEnvironmentAwareness.ps1",
+      "governance_class": "test_writer",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "TempRoot"
+      ],
+      "required_tokens": [
+        "duplicate.txt",
+        "Set-Content"
+      ],
+      "notes": "Environment awareness test harness."
+    },
+    {
+      "path": "Scripts\\Test-PDAFabricAliasCommands.ps1",
+      "governance_class": "test_writer",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "TempRoot",
+        "TaskPath",
+        "ResultPath"
+      ],
+      "required_tokens": [
+        "Invoke-PDAFabricWorker.ps1",
+        "Set-Content"
+      ],
+      "notes": "Fabric alias execution validation test."
+    },
+    {
+      "path": "Scripts\\Test-PDAFabricPipeline.ps1",
+      "governance_class": "test_writer",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "TempTaskDir"
+      ],
+      "required_tokens": [
+        "TaskPath",
+        "Set-Content"
+      ],
+      "notes": "Fabric pipeline test harness."
+    },
+    {
+      "path": "Scripts\\Test-PDALegacyMemoryRepair.ps1",
+      "governance_class": "test_writer",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "ArtifactIndexPath",
+        "SandboxMemoryIndexPath",
+        "PrimaryRepairSource",
+        "OverrideRepairSource"
+      ],
+      "required_tokens": [
+        "Repair-PDALegacyMemoryRecord.ps1",
+        "PDA_LegacyMemoryRepairAllowlist.json"
+      ],
+      "notes": "Legacy memory repair validation harness."
+    },
+    {
       "path": "Scripts\\Test-PDALifecycle.ps1",
       "governance_class": "test_writer",
       "scan_mode": "direct_path",
@@ -738,6 +1246,21 @@
         "PDA_Retrieval.ps1"
       ],
       "notes": "Lifecycle validation harness."
+    },
+    {
+      "path": "Scripts\\Test-PDAMemoryTaxonomy.ps1",
+      "governance_class": "test_writer",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "ReportPath",
+        "ReportDir"
+      ],
+      "required_tokens": [
+        "Test-PDAMemoryTaxonomyIndex",
+        "PDA_MemoryTaxonomy.ps1",
+        "Set-Content"
+      ],
+      "notes": "Memory taxonomy validation harness."
     },
     {
       "path": "Scripts\\Test-PDAMemoryWriterEnforcement.ps1",
@@ -771,18 +1294,91 @@
       "notes": "Model fallback validation harness."
     },
     {
-      "path": "Scripts\\Test-PDARoutingSummary.ps1",
+      "path": "Scripts\\Test-PDAModelInvocation.ps1",
       "governance_class": "test_writer",
       "scan_mode": "direct_path",
       "writer_signals": [
-        "EmptyPath",
-        "SyntheticPath",
-        "RealLogPath"
+        "TempRoot"
       ],
       "required_tokens": [
-        "Get-PDARoutingSummary.ps1"
+        "CapturePath",
+        "Set-Content"
       ],
-      "notes": "Routing summary validation harness."
+      "notes": "Model invocation test harness."
+    },
+    {
+      "path": "Scripts\\Test-PDANightlyAutomation.ps1",
+      "governance_class": "test_writer",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "DestinationRoot"
+      ],
+      "required_tokens": [
+        "DestinationRoot",
+        "Set-Content"
+      ],
+      "notes": "Nightly automation test harness."
+    },
+    {
+      "path": "Scripts\\Test-PDANotebookLMCommand.ps1",
+      "governance_class": "test_writer",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "Path"
+      ],
+      "required_tokens": [
+        "Invoke-PDAChatBridge.ps1",
+        "Get-PDATaskResult.ps1"
+      ],
+      "notes": "NotebookLM command validation harness."
+    },
+    {
+      "path": "Scripts\\Test-PDAOntologyDispatch.ps1",
+      "governance_class": "test_writer",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "TaskPath",
+        "PDA-Tasks\\pending",
+        "PDA-Tasks\\approvals\\pending",
+        "PDA-Tasks\\staging\\failed",
+        "PDA-Tasks\\staging\\generated"
+      ],
+      "required_tokens": [
+        "PDA_TaskOntology.ps1",
+        "Process-PDACommandStagedTasks.ps1"
+      ],
+      "notes": "Ontology dispatch test harness."
+    },
+    {
+      "path": "Scripts\\Test-PDAPlanOrchestration.ps1",
+      "governance_class": "test_writer",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "PreparedResultPath"
+      ],
+      "required_tokens": [
+        "FailurePlanPath",
+        "Set-Content"
+      ],
+      "notes": "Plan orchestration test harness."
+    },
+    {
+      "path": "Scripts\\Test-PDAPreDispatchBypass.ps1",
+      "governance_class": "test_writer",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "ApprovalPath",
+        "PendingQueueDir",
+        "PDA-Tasks\\pending",
+        "PDA-Tasks\\approvals\\pending"
+      ],
+      "required_tokens": [
+        "Submit-PDATask.ps1",
+        "New-PDAWorkflowTask.ps1",
+        "Approve-PDATask.ps1",
+        "Submit-PDAFabricTask.ps1"
+      ],
+      "notes": "Bypass test harness."
     },
     {
       "path": "Scripts\\Test-PDAReporterWorker.ps1",
@@ -818,6 +1414,24 @@
       "notes": "Research worker validation harness."
     },
     {
+      "path": "Scripts\\Test-PDARetrieval.ps1",
+      "governance_class": "test_writer",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "ArtifactIndexPath",
+        "MemoryIndexPath",
+        "SeedArtifactPath",
+        "SeedMemoryPath",
+        "SeedLineagePath"
+      ],
+      "required_tokens": [
+        "PDA_Retrieval.ps1",
+        "Get-PDAArtifacts",
+        "Get-PDAMemory"
+      ],
+      "notes": "Retrieval validation harness."
+    },
+    {
       "path": "Scripts\\Test-PDAReviewWorker.ps1",
       "governance_class": "test_writer",
       "scan_mode": "direct_path",
@@ -835,19 +1449,31 @@
       "notes": "Review worker validation harness."
     },
     {
-      "path": "Scripts\\Test-PDANotebookLMCommand.ps1",
+      "path": "Scripts\\Test-PDARoutingSummary.ps1",
       "governance_class": "test_writer",
       "scan_mode": "direct_path",
       "writer_signals": [
-        "ConversationId",
-        "SessionId",
-        "ChatBridgeScript"
+        "EmptyPath",
+        "SyntheticPath",
+        "RealLogPath"
       ],
       "required_tokens": [
-        "Invoke-PDAChatBridge.ps1",
-        "Get-PDATaskResult.ps1"
+        "Get-PDARoutingSummary.ps1"
       ],
-      "notes": "NotebookLM command validation harness."
+      "notes": "Routing summary validation harness."
+    },
+    {
+      "path": "Scripts\\Test-PDATaskExecutor.ps1",
+      "governance_class": "test_writer",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "TempRoot"
+      ],
+      "required_tokens": [
+        "TaskPath",
+        "Set-Content"
+      ],
+      "notes": "Task executor test harness."
     },
     {
       "path": "Scripts\\Test-PDATaskResult.ps1",
@@ -865,39 +1491,150 @@
       "notes": "Task result lookup validation harness."
     },
     {
-      "path": "Scripts\\Test-PDAOntologyDispatch.ps1",
-      "governance_class": "test_writer",
+      "path": "Scripts\\Update-COOPERPersonality.ps1",
+      "governance_class": "maintenance_writer",
       "scan_mode": "direct_path",
       "writer_signals": [
-        "TaskPath",
-        "PDA-Tasks\\pending",
-        "PDA-Tasks\\approvals\\pending",
-        "PDA-Tasks\\staging\\failed",
-        "PDA-Tasks\\staging\\generated"
+        "TemporaryPath"
       ],
       "required_tokens": [
-        "PDA_TaskOntology.ps1",
-        "Process-PDACommandStagedTasks.ps1"
+        "AuditPath",
+        "Move-Item"
       ],
-      "notes": "Ontology dispatch test harness."
+      "notes": "COOPER personality updater."
     },
     {
-      "path": "Scripts\\Test-PDAPreDispatchBypass.ps1",
-      "governance_class": "test_writer",
+      "path": "Scripts\\Update-PDAAgentRun.ps1",
+      "governance_class": "worker_output",
       "scan_mode": "direct_path",
       "writer_signals": [
-        "ApprovalPath",
-        "PendingQueueDir",
-        "PDA-Tasks\\pending",
-        "PDA-Tasks\\approvals\\pending"
+        "RunPath"
       ],
       "required_tokens": [
-        "Submit-PDATask.ps1",
-        "New-PDAWorkflowTask.ps1",
-        "Approve-PDATask.ps1",
-        "Submit-PDAFabricTask.ps1"
+        "MarkdownPath",
+        "Set-Content"
       ],
-      "notes": "Bypass test harness."
+      "notes": "Agent run update writer."
+    },
+    {
+      "path": "Scripts\\Update-PDAArtifactDashboard.ps1",
+      "governance_class": "worker_output",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "DashboardPath",
+        "IndexPath",
+        "DashboardDir"
+      ],
+      "required_tokens": [
+        "Artifact Index.md",
+        "PDA_ArtifactIndex.json",
+        "Set-Content"
+      ],
+      "notes": "Artifact dashboard generator."
+    },
+    {
+      "path": "Scripts\\Update-PDAArtifactIndex.ps1",
+      "governance_class": "maintenance_writer",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "OutputRoot",
+        "IndexPath",
+        "Lines"
+      ],
+      "required_tokens": [
+        "PDA-Outputs",
+        "Artifact Index.md"
+      ],
+      "notes": "Artifact index update helper."
+    },
+    {
+      "path": "Scripts\\Update-PDAConversationState.ps1",
+      "governance_class": "maintenance_writer",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "TempPath"
+      ],
+      "required_tokens": [
+        "StatePath",
+        "Move-Item"
+      ],
+      "notes": "Conversation state updater."
+    },
+    {
+      "path": "Scripts\\Update-PDADashboard.ps1",
+      "governance_class": "worker_output",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "DashboardPath",
+        "ResolvedOutputDirectory",
+        "Lines"
+      ],
+      "required_tokens": [
+        "Get-PDADashboardStatus.ps1",
+        "PDA Dashboard v2"
+      ],
+      "notes": "Operational dashboard generator."
+    },
+    {
+      "path": "Scripts\\Update-PDAMemoryDashboard.ps1",
+      "governance_class": "worker_output",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "DashboardPath",
+        "IndexPath",
+        "DashboardDir"
+      ],
+      "required_tokens": [
+        "Memory Index.md",
+        "PDA_MemoryIndex.json",
+        "PDA_LegacyMemoryRepairAllowlist.json"
+      ],
+      "notes": "Memory dashboard generator."
+    },
+    {
+      "path": "Scripts\\Update-PDAMemoryRecord.ps1",
+      "governance_class": "maintenance_writer",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "MemoryIndexPath",
+        "ArtifactIndexPath",
+        "UpdatedIndex",
+        "MemoryRecords"
+      ],
+      "required_tokens": [
+        "PDA_MemoryTaxonomy.ps1",
+        "Assert-PDAMemoryRecordTaxonomyWritable"
+      ],
+      "notes": "Memory record maintenance writer."
+    },
+    {
+      "path": "Scripts\\Update-PDAOperatorConsole.ps1",
+      "governance_class": "worker_output",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "DashboardPath",
+        "TelemetryPath",
+        "RegistryPath"
+      ],
+      "required_tokens": [
+        "PDA Operator Console",
+        "PDA_ApprovedEntrypoints.json",
+        "PDA_TaskOntology.json"
+      ],
+      "notes": "Operator console generator."
+    },
+    {
+      "path": "Scripts\\Write-PDAWorkerHeartbeat.ps1",
+      "governance_class": "worker_output",
+      "scan_mode": "direct_path",
+      "writer_signals": [
+        "HeartbeatPath"
+      ],
+      "required_tokens": [
+        "HeartbeatDir",
+        "Set-Content"
+      ],
+      "notes": "Worker heartbeat writer."
     }
   ]
 }

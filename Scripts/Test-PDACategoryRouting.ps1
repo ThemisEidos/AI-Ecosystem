@@ -2,7 +2,7 @@ param(
     [switch]$SkipLiveSubmit
 )
 
-$Root = "C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem"
+$Root = Split-Path $PSScriptRoot -Parent
 $QueueStagingRoot = Join-Path $Root "PDA-Tasks\staging\n8n-router"
 $Processor = Join-Path $Root "Scripts\Process-PDACommandStagedTasks.ps1"
 

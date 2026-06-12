@@ -1,4 +1,4 @@
-$Root = "C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem"
+$Root = Split-Path $PSScriptRoot -Parent
 
 $Folders = @("pending","running","completed","failed","results")
 

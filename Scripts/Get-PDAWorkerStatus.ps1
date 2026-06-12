@@ -1,4 +1,4 @@
-$Root = "C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem"
+$Root = Split-Path $PSScriptRoot -Parent
 $WorkerRoot = Join-Path $Root "PDA-Logs\workers"
 $ControlLogFile = Join-Path $WorkerRoot "pda-worker-control.log"
 $LogFile = Join-Path $WorkerRoot "pda-worker.log"

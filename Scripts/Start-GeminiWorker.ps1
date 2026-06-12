@@ -1,15 +1,16 @@
-$WorkerRoot = "C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\PDA-Workers\gemini-cli"
+$ProjectRoot = Split-Path $PSScriptRoot -Parent
+$WorkerRoot = Join-Path $ProjectRoot "PDA-Workers\gemini-cli"
 
 $Inbox     = Join-Path $WorkerRoot "inbox"
 $Working   = Join-Path $WorkerRoot "working"
 $Completed = Join-Path $WorkerRoot "completed"
 $Failed    = Join-Path $WorkerRoot "failed"
 
-$OutputRoot = "C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\PDA-Outputs\gemini-cli"
+$OutputRoot = Join-Path $ProjectRoot "PDA-Outputs\gemini-cli"
 
-$ThrottleFile = "C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\PDA-Workers\gemini-throttle.json"
+$ThrottleFile = Join-Path $ProjectRoot "PDA-Workers\gemini-throttle.json"
 
-$FallbackRegistry = "C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\PDA-Workers\fallback-routing.json"
+$FallbackRegistry = Join-Path $ProjectRoot "PDA-Workers\fallback-routing.json"
 
 
 
@@ -76,7 +77,7 @@ $Result
             # Persistent Memory
             # -----------------------------
 
-            $MemoryFile = "C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\PDA-Memory\gemini-cli\memory.md"
+            $MemoryFile = Join-Path $ProjectRoot "PDA-Memory\gemini-cli\memory.md"
 
             @"
 

@@ -2,7 +2,7 @@ param(
     [int]$PollIntervalSeconds = 3
 )
 
-$Root = "C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem"
+$Root = Split-Path $PSScriptRoot -Parent
 $WorkerRoot = Join-Path $Root "PDA-Logs\workers"
 $LogFile = Join-Path $WorkerRoot "pda-multiagent-intake.log"
 $PidFile = Join-Path $WorkerRoot "pda-multiagent-intake.pid"

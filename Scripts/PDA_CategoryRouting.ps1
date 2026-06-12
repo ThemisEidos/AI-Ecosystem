@@ -1,6 +1,6 @@
 function Get-PDAWorkerRegistry {
     param(
-        [string]$Root = "C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem"
+        [string]$Root = (Split-Path $PSScriptRoot -Parent)
     )
 
     $RegistryPath = Join-Path $Root "Scripts\PDA_WorkerRegistry.json"

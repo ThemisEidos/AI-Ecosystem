@@ -1,4 +1,4 @@
-$Root = "C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem\PDA-Workers\research-worker"
+$Root = Join-Path (Split-Path $PSScriptRoot -Parent) "PDA-Workers\research-worker"
 
 $Inbox     = Join-Path $Root "inbox"
 $Working   = Join-Path $Root "working"

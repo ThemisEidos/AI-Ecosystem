@@ -1,6 +1,6 @@
 $ErrorActionPreference = "Stop"
 
-$Root = "C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem"
+$Root = Split-Path $PSScriptRoot -Parent
 $QueueRoot = Join-Path $Root "PDA-Tasks"
 $PendingPath   = Join-Path $QueueRoot "pending"
 $RunningPath   = Join-Path $QueueRoot "running"

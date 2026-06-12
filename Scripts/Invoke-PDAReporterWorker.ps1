@@ -3,7 +3,7 @@ param(
     [string]$TaskPath
 )
 
-$Root = "C:\Users\earth\Proton Drive\Wjwilbourn\My files\Proton Drive\AI Ecosystem"
+$Root = Split-Path $PSScriptRoot -Parent
 $QueueRoot = Join-Path $Root "PDA-Tasks"
 $ResultsRoot = Join-Path $QueueRoot "results"
 $ReporterRoot = Join-Path $Root "Obsidian Vault\02_Projects\AI Tool Ecosystem\Agent Findings\Reports"
