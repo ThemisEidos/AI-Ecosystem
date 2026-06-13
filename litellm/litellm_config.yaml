@@ -1,8 +1,18 @@
 model_list:
+  - model_name: "qwen2.5:7b"
+    litellm_params:
+      model: ollama/qwen2.5:7b
+      # Docker containers must reach the host Ollama daemon via host.docker.internal.
+      api_base: http://host.docker.internal:11434
+  - model_name: mistral
+    litellm_params:
+      model: ollama/mistral
+      # Optional secondary local fallback for conversational continuity.
+      api_base: http://host.docker.internal:11434
   - model_name: local-llama
     litellm_params:
       model: ollama/llama3.2
-      # Docker containers must reach the host Ollama daemon via host.docker.internal.
+      # Emergency / lightweight fallback for conversational continuity.
       api_base: http://host.docker.internal:11434
   - model_name: cooper-personality
     litellm_params:
@@ -32,5 +42,8 @@ model_list:
 
 router_settings:
   fallbacks:
+    - "qwen2.5:7b":
+        - mistral
+        - local-llama
     - gemini:
         - gemini-pro

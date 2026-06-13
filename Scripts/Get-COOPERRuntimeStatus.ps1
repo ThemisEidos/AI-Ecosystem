@@ -13,6 +13,24 @@ function Get-COOPERRuntimeProviderProfile {
     param([Parameter(Mandatory = $true)][string]$ModelName)
 
     switch ([string]$ModelName) {
+        "qwen2.5:7b" {
+            return [pscustomobject]@{
+                provider = "Ollama"
+                gateway = "LiteLLM"
+                interface = "Open WebUI"
+                backend = "ollama/qwen2.5:7b"
+                provider_family = "local"
+            }
+        }
+        "mistral" {
+            return [pscustomobject]@{
+                provider = "Ollama"
+                gateway = "LiteLLM"
+                interface = "Open WebUI"
+                backend = "ollama/mistral"
+                provider_family = "local"
+            }
+        }
         "local-llama" {
             return [pscustomobject]@{
                 provider = "Ollama"
@@ -110,7 +128,7 @@ function Get-COOPERRuntimeStatus {
         [string]$env:COOPER_DEFAULT_MODEL
     }
     else {
-        "local-llama"
+        "qwen2.5:7b"
     }
 
     $Profile = Get-COOPERRuntimeProviderProfile -ModelName $CurrentModel
