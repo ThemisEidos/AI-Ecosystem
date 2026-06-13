@@ -26,9 +26,15 @@ foreach ($Path in @($GetScript, $SetScript, $InterpreterScript, $EngineScript)) 
 $TempRoot = Join-Path $Root "tmp\cooper-personality-v2"
 $TempProfilePath = Join-Path $TempRoot "personality.json"
 $TempProfilesPath = Join-Path $TempRoot "profiles.json"
+$ModelProfilePath = Join-Path $Root "Models\cooper-personality\personality.json"
+$LegacyMirrorPath = Join-Path $Root "Scripts\COOPER_Personality.json"
+$LegacyMirrorBackupPath = Join-Path $TempRoot "COOPER_Personality.json.backup"
 New-Item -ItemType Directory -Force -Path $TempRoot | Out-Null
 Copy-Item -LiteralPath (Join-Path $Root "Models\cooper-personality\personality.json") -Destination $TempProfilePath -Force
 Copy-Item -LiteralPath (Join-Path $Root "Models\cooper-personality\profiles.json") -Destination $TempProfilesPath -Force
+if (Test-Path -LiteralPath $LegacyMirrorPath -PathType Leaf) {
+    Copy-Item -LiteralPath $LegacyMirrorPath -Destination $LegacyMirrorBackupPath -Force
+}
 
 $PreviousProfilePath = [Environment]::GetEnvironmentVariable("COOPER_PERSONALITY_PATH", "Process")
 $PreviousProfilesPath = [Environment]::GetEnvironmentVariable("COOPER_PERSONALITY_PROFILES_PATH", "Process")
@@ -61,6 +67,9 @@ try {
     if ($Initial.personality.humor -ne 35 -or $Initial.personality.sarcasm -ne 15 -or $Initial.personality.profile -ne "operations") {
         $Issues.Add("Initial v2 personality values did not match the expected baseline.")
     }
+    if ([string]$Initial.source_of_truth -ne "Models/cooper-personality/personality.json") {
+        $Issues.Add("COOPER personality source of truth should be the model store.")
+    }
     if ([string]$Initial.prompt -notmatch 'You are COOPER' -or [string]$Initial.prompt -notmatch 'Mission') {
         $Issues.Add("Prompt generation did not include the COOPER identity and mission framing.")
     }
@@ -68,6 +77,25 @@ try {
         name = "config load"
         passed = ($Initial.personality.humor -eq 35 -and $Initial.personality.profile -eq "operations")
         details = "Loaded v2 personality baseline."
+    }
+
+    $IdentityScript = Join-Path $PSScriptRoot "Get-COOPERIdentity.ps1"
+    $IdentityRaw = & pwsh -NoProfile -Command (". '{0}'; Get-COOPERIdentity -Root '{1}' | ConvertTo-Json -Depth 8" -f ($IdentityScript -replace "'", "''"), ($Root -replace "'", "''")) 2>&1
+    $IdentityText = [string]($IdentityRaw -join "`n").Trim()
+    $Identity = if ([string]::IsNullOrWhiteSpace($IdentityText)) { $null } else { $IdentityText | ConvertFrom-Json }
+    if ($Identity.status -eq "error") {
+        $Issues.Add("Direct COOPER identity invocation still fails.")
+    }
+    if ($Identity.profile_path -ne $ModelProfilePath) {
+        $Issues.Add("Direct COOPER identity invocation did not resolve the model personality path.")
+    }
+    if ($Identity.personality.profile -ne "operations") {
+        $Issues.Add("Direct COOPER identity invocation did not report the operations baseline.")
+    }
+    $Results += [pscustomobject]@{
+        name = "identity invocation"
+        passed = ($Identity.status -ne "error" -and $Identity.personality.profile -eq "operations")
+        details = "Direct identity helper invocation succeeded."
     }
 
     $ProfileSwitch = Invoke-JsonScript -Path $SetScript -Arguments @("-Profile", "cyber", "-AsJson")
@@ -139,6 +167,9 @@ try {
 finally {
     [Environment]::SetEnvironmentVariable("COOPER_PERSONALITY_PATH", $PreviousProfilePath, "Process")
     [Environment]::SetEnvironmentVariable("COOPER_PERSONALITY_PROFILES_PATH", $PreviousProfilesPath, "Process")
+    if (Test-Path -LiteralPath $LegacyMirrorBackupPath -PathType Leaf) {
+        Copy-Item -LiteralPath $LegacyMirrorBackupPath -Destination $LegacyMirrorPath -Force
+    }
     Remove-Item -LiteralPath $TempRoot -Recurse -Force -ErrorAction SilentlyContinue
 }
 

@@ -934,6 +934,11 @@ foreach ($Case in $Cases) {
         $Issues.Add("COOPER runtime context did not include the COOPER identity summary.")
     }
 
+    if ($Result.cooper_context -and $Result.cooper_context.runtime_layers -and $Result.cooper_context.runtime_layers.source_paths -and $Result.cooper_context.runtime_layers.source_paths.personality -notmatch 'Models[\\/]+cooper-personality[\\/]+personality\.json$') {
+        $CasePassed = $false
+        $Issues.Add("COOPER runtime context should report the model personality store as the source of truth.")
+    }
+
     if ($Case.PSObject.Properties.Name -contains "expected_default_model") {
         if (-not ($Result.PSObject.Properties.Name -contains "selected_model")) {
             $CasePassed = $false
