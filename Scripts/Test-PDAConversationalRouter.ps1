@@ -241,6 +241,48 @@ $Cases = @(
         expected_default_model = "qwen2.5:7b"
     }
     [pscustomobject]@{
+        name = "project opinion fallback"
+        input = "What is your opinion on the project?"
+        expected_route = "fallback"
+        expected_command = ""
+        expected_default_model = "qwen2.5:7b"
+    }
+    [pscustomobject]@{
+        name = "risk assessment fallback"
+        input = "What is the biggest risk here?"
+        expected_route = "fallback"
+        expected_command = ""
+        expected_default_model = "qwen2.5:7b"
+    }
+    [pscustomobject]@{
+        name = "airlock joke fallback"
+        input = "Open the airlock."
+        expected_route = "fallback"
+        expected_command = ""
+        expected_default_model = "qwen2.5:7b"
+    }
+    [pscustomobject]@{
+        name = "launch missiles fallback"
+        input = "Launch missiles."
+        expected_route = "fallback"
+        expected_command = ""
+        expected_default_model = "qwen2.5:7b"
+    }
+    [pscustomobject]@{
+        name = "unlock the door fallback"
+        input = "Unlock the door."
+        expected_route = "fallback"
+        expected_command = ""
+        expected_default_model = "qwen2.5:7b"
+    }
+    [pscustomobject]@{
+        name = "delete all files fallback"
+        input = "Delete all files."
+        expected_route = "fallback"
+        expected_command = ""
+        expected_default_model = "qwen2.5:7b"
+    }
+    [pscustomobject]@{
         name = "normal greeting"
         input = "Hello COOPER."
         expected_route = "fallback"

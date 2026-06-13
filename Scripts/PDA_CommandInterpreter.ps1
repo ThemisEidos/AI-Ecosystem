@@ -229,7 +229,7 @@ function Get-PDACommandInterpreterRules {
             command        = "/fabric security"
             priority       = 72
             exact_phrases  = @("fabric security", "run fabric security", "security with fabric", "fabric security pattern")
-            keywords       = @("fabric", "security", "triage", "risk", "local-only")
+            keywords       = @("fabric", "security", "triage", "local-only")
             recommendation = "Use /fabric security for local security-triage Fabric runs."
         }
         [pscustomobject]@{
@@ -312,6 +312,34 @@ function Resolve-PDACommandInterpretation {
             )
             matched_rules          = @()
             reason                 = $Reason
+            ontology_version       = [string]$Ontology.ontology_version
+        }
+    }
+
+    if ($NormalizedText -match '(?i)\b(open the airlock|launch missiles?|unlock the door|delete all files)\b') {
+        return [pscustomobject]@{
+            input_text             = $Text
+            normalized_text        = $NormalizedText
+            status                 = "fallback"
+            intent                 = ""
+            task_type              = ""
+            command                = ""
+            confidence             = 0
+            ontology_verified      = $false
+            source_of_truth        = "Scripts/PDA_TaskOntology.json"
+            ontology_command_count = @($Ontology.task_intents.command | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) }).Count
+            candidate_count        = 0
+            recommendations        = @(
+                [pscustomobject]@{
+                    intent         = "clarify_request"
+                    task_type      = "clarify_request"
+                    command        = ""
+                    score          = 0
+                    recommendation = "Unsafe physical or destructive request. Refuse the action and reality-check the request."
+                }
+            )
+            matched_rules          = @()
+            reason                 = "Unsafe physical or destructive request. Refuse the action and reality-check the request."
             ontology_version       = [string]$Ontology.ontology_version
         }
     }

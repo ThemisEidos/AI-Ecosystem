@@ -348,6 +348,108 @@ function Get-COOPERPersonalitySettingDefinition {
     return $null
 }
 
+function Get-COOPERPersonalitySettingCurrentValue {
+    param(
+        [Parameter(Mandatory = $false)]
+        [object]$Personality,
+
+        [Parameter(Mandatory = $false)]
+        [object]$LegacyPersonality,
+
+        [Parameter(Mandatory = $true)]
+        [psobject]$Definition
+    )
+
+    function Get-FirstPropertyValue {
+        param(
+            [Parameter(Mandatory = $false)]
+            [object]$Source,
+
+            [Parameter(Mandatory = $true)]
+            [string[]]$Names
+        )
+
+        if (-not $Source -or -not $Source.PSObject) {
+            return $null
+        }
+
+        foreach ($Name in $Names) {
+            if ($Source.PSObject.Properties.Name -contains $Name) {
+                $Value = $Source.$Name
+                if ($null -ne $Value -and -not [string]::IsNullOrWhiteSpace([string]$Value)) {
+                    return [int]$Value
+                }
+            }
+        }
+
+        return $null
+    }
+
+    switch ([string]$Definition.key) {
+        "humor" {
+            $Value = Get-FirstPropertyValue -Source $Personality -Names @("humor", "humor_level")
+            if ($null -ne $Value) { return $Value }
+            return (Get-FirstPropertyValue -Source $LegacyPersonality -Names @("humor", "humor_level"))
+        }
+        "honesty" {
+            $Value = Get-FirstPropertyValue -Source $Personality -Names @("professionalism", "honesty", "honesty_level", "directness", "directness_level", "formality", "formality_level")
+            if ($null -ne $Value) { return $Value }
+            return (Get-FirstPropertyValue -Source $LegacyPersonality -Names @("professionalism", "honesty", "honesty_level", "directness", "directness_level", "formality", "formality_level"))
+        }
+        "discretion" {
+            $Value = Get-FirstPropertyValue -Source $Personality -Names @("risk_awareness", "risk_tolerance", "discretion", "discretion_level")
+            if ($null -ne $Value) { return $Value }
+            return (Get-FirstPropertyValue -Source $LegacyPersonality -Names @("risk_awareness", "risk_tolerance", "discretion", "discretion_level"))
+        }
+        "directness" {
+            $Value = Get-FirstPropertyValue -Source $Personality -Names @("professionalism", "directness", "directness_level")
+            if ($null -ne $Value) { return $Value }
+            return (Get-FirstPropertyValue -Source $LegacyPersonality -Names @("professionalism", "directness", "directness_level"))
+        }
+        "verbosity" {
+            $Verbosity = Get-FirstPropertyValue -Source $Personality -Names @("verbosity", "verbosity_level")
+            if ($null -ne $Verbosity) {
+                return $Verbosity
+            }
+
+            $Verbosity = Get-FirstPropertyValue -Source $LegacyPersonality -Names @("verbosity", "verbosity_level")
+            if ($null -ne $Verbosity) {
+                return $Verbosity
+            }
+
+            $Brevity = Get-FirstPropertyValue -Source $Personality -Names @("brevity")
+            if ($null -ne $Brevity) {
+                return (100 - [int]$Brevity)
+            }
+            $Brevity = Get-FirstPropertyValue -Source $LegacyPersonality -Names @("brevity")
+            if ($null -ne $Brevity) {
+                return (100 - [int]$Brevity)
+            }
+            return $null
+        }
+        "confidence" {
+            $Value = Get-FirstPropertyValue -Source $Personality -Names @("initiative", "confidence", "confidence_level", "autonomy", "persistence")
+            if ($null -ne $Value) { return $Value }
+            return (Get-FirstPropertyValue -Source $LegacyPersonality -Names @("initiative", "confidence", "confidence_level", "autonomy", "persistence"))
+        }
+        "formality" {
+            $Value = Get-FirstPropertyValue -Source $Personality -Names @("professionalism", "formality", "formality_level")
+            if ($null -ne $Value) { return $Value }
+            return (Get-FirstPropertyValue -Source $LegacyPersonality -Names @("professionalism", "formality", "formality_level"))
+        }
+        "risk_tolerance" {
+            $Value = Get-FirstPropertyValue -Source $Personality -Names @("risk_awareness", "risk_tolerance", "discretion", "discretion_level")
+            if ($null -ne $Value) { return $Value }
+            return (Get-FirstPropertyValue -Source $LegacyPersonality -Names @("risk_awareness", "risk_tolerance", "discretion", "discretion_level"))
+        }
+        default {
+            $Value = Get-FirstPropertyValue -Source $Personality -Names @([string]$Definition.property, [string]$Definition.key)
+            if ($null -ne $Value) { return $Value }
+            return (Get-FirstPropertyValue -Source $LegacyPersonality -Names @([string]$Definition.property, [string]$Definition.key))
+        }
+    }
+}
+
 function Get-COOPERPersonalityChangeProposal {
     param(
         [Parameter(Mandatory = $true)]
@@ -369,17 +471,43 @@ function Get-COOPERPersonalityChangeProposal {
     }
 
     $Identity = $null
-    if (Get-Command -Name Get-COOPERIdentity -ErrorAction SilentlyContinue) {
+    $PersonalityResult = $null
+    $CurrentPersonality = $null
+    $LegacyPersonality = $null
+    if (Get-Command -Name Get-COOPERPersonality -ErrorAction SilentlyContinue) {
         try {
-            $Identity = Get-COOPERIdentity -Root $Root
+            $PersonalityResult = Get-COOPERPersonality -Root $Root
+            if ($PersonalityResult -and $PersonalityResult.PSObject.Properties.Name -contains "personality") {
+                $CurrentPersonality = $PersonalityResult.personality
+            }
+            if ($PersonalityResult -and $PersonalityResult.PSObject.Properties.Name -contains "legacy_personality") {
+                $LegacyPersonality = $PersonalityResult.legacy_personality
+            }
         }
         catch {
-            $Identity = $null
+            $CurrentPersonality = $null
         }
     }
 
-    $Personality = if ($Identity -and $Identity.PSObject.Properties.Name -contains "personality") { $Identity.personality } else { $null }
-    $CurrentValue = if ($Personality -and $Personality.PSObject.Properties.Name -contains $Definition.property) { [int]$Personality.($Definition.property) } else { 0 }
+    if (-not $CurrentPersonality -and (Get-Command -Name Get-COOPERIdentity -ErrorAction SilentlyContinue)) {
+        try {
+            $Identity = Get-COOPERIdentity -Root $Root
+            if ($Identity -and $Identity.PSObject.Properties.Name -contains "personality") {
+                $CurrentPersonality = $Identity.personality
+            }
+            if ($Identity -and $Identity.PSObject.Properties.Name -contains "legacy_personality") {
+                $LegacyPersonality = $Identity.legacy_personality
+            }
+        }
+        catch {
+            $CurrentPersonality = $null
+        }
+    }
+
+    $CurrentValue = Get-COOPERPersonalitySettingCurrentValue -Personality $CurrentPersonality -LegacyPersonality $LegacyPersonality -Definition $Definition
+    if ($null -eq $CurrentValue) {
+        $CurrentValue = 0
+    }
 
     $ExplicitValue = $null
     foreach ($Pattern in @(

@@ -875,6 +875,13 @@ if (-not $ApprovalRecord -and $HasPendingAction -and (Get-Command -Name New-PDAA
     catch {}
 }
 
+$PersonalityConfirmationPriority = $HasPendingPersonalityChange -and ($IsConfirmationMessage -or $ConfirmDispatch)
+if ($PersonalityConfirmationPriority) {
+    $PendingAction = $null
+    $HasPendingAction = $false
+    $ApprovalRecord = $null
+}
+
 $ApprovalActionStatus = if (Test-PDAApprovalActionMessage -Text $Message) { Get-PDAApprovalActionStatus -Text $Message } else { "" }
 if (-not [string]::IsNullOrWhiteSpace($ApprovalActionStatus) -and ($HasPendingAction -or $ApprovalRecord)) {
     if ($ApprovalActionStatus -eq "approved") {
@@ -1017,11 +1024,6 @@ if ($HasPendingPersonalityChange -and (-not $HasPendingAction) -and ($IsConfirma
     $UpdateArgs = @(
         "-Setting", [string]$PendingPersonalityChange.setting_key,
         "-Value", [string]$PendingPersonalityChange.proposed_value,
-        "-ConversationId", $(if ($ConversationId) { $ConversationId } else { "" }),
-        "-SessionId", $(if ($SessionId) { $SessionId } else { "" }),
-        "-UserId", $(if ($UserId) { $UserId } else { "" }),
-        "-ConversationTitle", $(if ($ConversationTitle) { $ConversationTitle } else { "" }),
-        "-Message", $(if ($Message) { $Message } else { "" }),
         "-AsJson",
         "-NoThrow"
     )
@@ -1710,11 +1712,6 @@ if ($HasPendingPersonalityChange -and (-not $HasPendingAction) -and ($IsConfirma
     $UpdateArgs = @(
         "-Setting", [string]$PendingPersonalityChange.setting_key,
         "-Value", [string]$PendingPersonalityChange.proposed_value,
-        "-ConversationId", $(if ($ConversationId) { $ConversationId } else { "" }),
-        "-SessionId", $(if ($SessionId) { $SessionId } else { "" }),
-        "-UserId", $(if ($UserId) { $UserId } else { "" }),
-        "-ConversationTitle", $(if ($ConversationTitle) { $ConversationTitle } else { "" }),
-        "-Message", $(if ($Message) { $Message } else { "" }),
         "-AsJson",
         "-NoThrow"
     )

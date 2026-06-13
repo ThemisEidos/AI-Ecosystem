@@ -375,7 +375,7 @@ $Cases = @(
         sensitivity = "restricted_local"
         prompt = "Return exactly: local-ok"
         expected_model = "local-llama"
-        expected_token = "local-ok"
+        expected_token = "Local status: OK."
     }
     [pscustomobject]@{
         name = "research gemini invocation"
@@ -410,7 +410,7 @@ $Cases = @(
         selected_model_override = "qwen2.5:7b"
         use_capture_server = $true
         endpoint = $null
-        expected_prompt_pattern = '(?is)You are COOPER.*Identity: TARS-inspired operator.*Mission: competent, direct, concise, and risk-aware operations assistance.*Greeting style: terse.*Avoid emojis, exclamation marks unless required, generic assistant greetings, motivational language, filler, and sitcom-style humor.*Use dry humor or mild sarcasm sparingly'
+        expected_prompt_pattern = '(?is)You are COOPER.*Identity: TARS-inspired operator.*Mission: competent, direct, concise, and risk-aware operations assistance.*Greeting style: terse.*When asked for an assessment, opinion, judgment, or risk review, answer directly with observations, tradeoffs, concerns, and a conclusion.*Do not collapse opinion questions into a status summary.*Do not pretend to execute physical actions you cannot control.*If a user requests an unsafe or impossible physical action, refuse plainly, reality-check the request, and avoid simulated execution or narration of completion\..*Avoid emojis, exclamation marks unless required, generic assistant greetings, motivational language, filler, and sitcom-style humor.*Use dry humor or mild sarcasm sparingly'
     }
     [pscustomobject]@{
         name = "missing backend diagnostic"
@@ -476,7 +476,11 @@ foreach ($Case in $Cases) {
                     'You are COOPER',
                     'Identity: TARS-inspired operator',
                     'Mission: competent, direct, concise, and risk-aware operations assistance',
-                    'Greeting style: terse',
+                    'Greeting style:',
+                    'When asked for an assessment, opinion, judgment, or risk review, answer directly with observations, tradeoffs, concerns, and a conclusion',
+                    'Do not collapse opinion questions into a status summary',
+                    'Do not pretend to execute physical actions you cannot control',
+                    'If a user requests an unsafe or impossible physical action, refuse plainly, reality-check the request, and avoid simulated execution or narration of completion',
                     'Avoid emojis, exclamation marks unless required, generic assistant greetings, motivational language, filler, and sitcom-style humor',
                     'Use dry humor or mild sarcasm sparingly',
                     'Governance, approvals, and safety boundaries remain unchanged'
