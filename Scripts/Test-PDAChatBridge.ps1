@@ -170,6 +170,18 @@ $Cases = @(
         marker = "chat-known-$([guid]::NewGuid().ToString())"
     }
     [pscustomobject]@{
+        name = "project discussion"
+        message = "Good evening COOPER. What do you think about this project so far?"
+        confirm = $false
+        expected_handoff = "fallback"
+        expected_response_contains = ""
+        expected_dispatch_ready = $false
+        expected_dispatch = $false
+        expected_command = ""
+        expected_default_model = "qwen2.5:7b"
+        marker = "chat-project-discussion-$([guid]::NewGuid().ToString())"
+    }
+    [pscustomobject]@{
         name = "ambiguous message"
         message = "review and analyze this project"
         confirm = $false
@@ -954,6 +966,11 @@ foreach ($Case in $Cases) {
     if (-not $Case.expected_command -and -not [string]::IsNullOrWhiteSpace([string]$Result.recommended_command)) {
         $CasePassed = $false
         $Issues.Add("Non-mapped input should not recommend an executable command.")
+    }
+
+    if ($Case.name -eq "project discussion" -and $Result.response_text -match '(?i)\bRecommended command\b|Confirm to dispatch|Reply with confirmation') {
+        $CasePassed = $false
+        $Issues.Add("Conversational project discussion should not produce command-routing language.")
     }
 
     if ($Case.expected_handoff -eq "goal_planning") {

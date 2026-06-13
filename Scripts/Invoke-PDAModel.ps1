@@ -864,7 +864,7 @@ $Normalized = [pscustomobject]@{
     }
     response_text = [string]$SuccessfulAttempt.response_text
     normalized_response_text = [string]$SuccessfulAttempt.response_text
-    next_action = if (-not [string]::IsNullOrWhiteSpace([string]$SuccessfulAttempt.response_text)) { "Standing by for the next task." } else { "Inspect LiteLLM routing, upstream provider credentials, and the local proxy logs." }
+    next_action = ""
     source_of_truth = "Scripts/Get-PDAModelRoute.ps1"
 }
 

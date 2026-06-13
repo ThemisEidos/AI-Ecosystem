@@ -234,6 +234,13 @@ $Cases = @(
         expected_default_model = "qwen2.5:7b"
     }
     [pscustomobject]@{
+        name = "project discussion fallback"
+        input = "Good evening COOPER. What do you think about this project so far?"
+        expected_route = "fallback"
+        expected_command = ""
+        expected_default_model = "qwen2.5:7b"
+    }
+    [pscustomobject]@{
         name = "normal greeting"
         input = "Hello COOPER."
         expected_route = "fallback"

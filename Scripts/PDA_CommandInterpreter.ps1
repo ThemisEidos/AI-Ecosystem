@@ -55,7 +55,7 @@ function Get-PDACommandInterpreterRules {
             command        = "/planner"
             priority       = 90
             exact_phrases  = @("analyze this project", "analyze the project", "plan this project", "project analysis", "workflow planning")
-            keywords       = @("analyze", "analysis", "plan", "planning", "project", "workflow", "strategy")
+            keywords       = @("analyze", "analysis", "plan", "planning")
             recommendation = "Use /planner for project analysis, planning, and workflow design requests."
         }
         [pscustomobject]@{

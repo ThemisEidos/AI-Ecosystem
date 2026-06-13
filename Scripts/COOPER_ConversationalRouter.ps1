@@ -218,7 +218,7 @@ function Invoke-COOPERDefaultModelChat {
             if ($Result.model_status -eq "pass" -and -not [string]::IsNullOrWhiteSpace($ModelResponseText)) {
                 $Result.status = "pass"
                 $Result.response_text = $ModelResponseText
-                $Result.next_action = if (-not [string]::IsNullOrWhiteSpace($ModelNextAction) -and $ModelNextAction -notmatch '(?i)continue the conversation') { $ModelNextAction } else { "Standing by for the next task." }
+                $Result.next_action = if (-not [string]::IsNullOrWhiteSpace($ModelNextAction) -and $ModelNextAction -notmatch '(?i)continue the conversation') { $ModelNextAction } else { "" }
                 $Result.bridge_mode = "model_chat"
                 $Result.handoff_status = "fallback"
                 $Result.model_error_message = ""

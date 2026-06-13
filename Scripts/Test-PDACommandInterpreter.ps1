@@ -66,6 +66,15 @@ $TestCases = @(
         source_check     = $true
     }
     [pscustomobject]@{
+        name             = "project discussion"
+        input            = "What do you think about this project so far?"
+        expected_status  = "unknown"
+        expected_intent  = ""
+        expected_task    = ""
+        expected_command = ""
+        source_check     = $false
+    }
+    [pscustomobject]@{
         name             = "operator status"
         input            = "/status"
         expected_status  = "mapped"
