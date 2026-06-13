@@ -48,8 +48,8 @@ $DefaultModelChatFallback = {
         model_status = "pass"
         model_error_message = ""
         routing_reason = "router test stub"
-        response_text = "Morning. Standing by."
-        next_action = "Standing by for the next task."
+        response_text = "Operational."
+        next_action = "Awaiting the next task."
         bridge_mode = "model_chat"
         handoff_status = "fallback"
         source_of_truth = "test_stub"
@@ -246,8 +246,8 @@ $Cases = @(
         expected_route = "fallback"
         expected_command = ""
         expected_default_model = "qwen2.5:7b"
-        expected_token = "Standing by."
-        stub_model_response = "Morning. Standing by."
+        expected_token = "Operational."
+        stub_model_response = "Operational."
     }
 )
 
@@ -298,7 +298,7 @@ foreach ($Case in $Cases) {
                 [string]$Case.stub_model_response
             }
             else {
-                "Morning. Standing by."
+                "Operational."
             }
             $StubScript = {
                 param(
@@ -314,7 +314,7 @@ foreach ($Case in $Cases) {
                     model_error_message = ""
                     routing_reason = "router test stub"
                     response_text = $StubResponse
-                    next_action = "Standing by for the next task."
+                    next_action = "Awaiting the next task."
                     bridge_mode = "model_chat"
                     handoff_status = "fallback"
                     source_of_truth = "test_stub"

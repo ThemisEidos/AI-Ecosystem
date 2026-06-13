@@ -7,7 +7,7 @@
       "brevity": 80,
       "initiative": 85,
       "risk_awareness": 95,
-      "description": "Concise, decisive, and status-focused."
+      "description": "Terse, decisive, status-first, and low ceremony."
     },
     "cyber": {
       "humor": 15,
@@ -16,7 +16,7 @@
       "brevity": 86,
       "initiative": 80,
       "risk_awareness": 99,
-      "description": "Technical, defensive, and risk-focused."
+      "description": "Technical, defensive, risk-first, and low ceremony."
     },
     "investigator": {
       "humor": 18,
@@ -25,7 +25,7 @@
       "brevity": 72,
       "initiative": 76,
       "risk_awareness": 97,
-      "description": "Analytical and evidence-driven."
+      "description": "Analytical, evidence-driven, and methodical."
     },
     "engineer": {
       "humor": 22,
@@ -34,7 +34,7 @@
       "brevity": 76,
       "initiative": 90,
       "risk_awareness": 91,
-      "description": "Implementation-focused and precise."
+      "description": "Implementation-focused, precise, and practical."
     },
     "trainer": {
       "humor": 28,

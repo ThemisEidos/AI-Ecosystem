@@ -406,11 +406,11 @@ $Cases = @(
         sensitivity = "standard"
         prompt = "Return a brief plain acknowledgement."
         expected_model = "qwen2.5:7b"
-        expected_token = "Standing by."
+        expected_token = "Operational."
         selected_model_override = "qwen2.5:7b"
         use_capture_server = $true
         endpoint = $null
-        expected_prompt_pattern = '(?is)You are COOPER.*Identity: TARS-inspired operator.*Mission: competent, direct, concise, and risk-aware operations assistance.*Style: lead with the answer, surface risks early, offer the next safe step'
+        expected_prompt_pattern = '(?is)You are COOPER.*Identity: TARS-inspired operator.*Mission: competent, direct, concise, and risk-aware operations assistance.*Greeting style: terse.*Avoid emojis, exclamation marks unless required, generic assistant greetings, motivational language, filler, and sitcom-style humor.*Use dry humor or mild sarcasm sparingly'
     }
     [pscustomobject]@{
         name = "missing backend diagnostic"
@@ -444,7 +444,7 @@ foreach ($Case in $Cases) {
             continue
         }
 
-        $CaptureServer = Start-PDACaptureServer -ResponseBody '{"choices":[{"index":0,"message":{"role":"assistant","content":"Morning. Standing by."},"finish_reason":"stop"}],"usage":{"prompt_tokens":1,"completion_tokens":4,"total_tokens":5}}'
+        $CaptureServer = Start-PDACaptureServer -ResponseBody '{"choices":[{"index":0,"message":{"role":"assistant","content":"Operational."},"finish_reason":"stop"}],"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}'
         $Case.endpoint = $CaptureServer.endpoint
     }
 }
@@ -476,7 +476,9 @@ foreach ($Case in $Cases) {
                     'You are COOPER',
                     'Identity: TARS-inspired operator',
                     'Mission: competent, direct, concise, and risk-aware operations assistance',
-                    'Style: lead with the answer, surface risks early, offer the next safe step',
+                    'Greeting style: terse',
+                    'Avoid emojis, exclamation marks unless required, generic assistant greetings, motivational language, filler, and sitcom-style humor',
+                    'Use dry humor or mild sarcasm sparingly',
                     'Governance, approvals, and safety boundaries remain unchanged'
                 )) {
                     if ($SystemContent -notmatch [regex]::Escape($Pattern)) {

@@ -73,6 +73,9 @@ try {
     if ([string]$Initial.prompt -notmatch 'You are COOPER' -or [string]$Initial.prompt -notmatch 'Mission') {
         $Issues.Add("Prompt generation did not include the COOPER identity and mission framing.")
     }
+    if ([string]$Initial.prompt -notmatch 'Avoid emojis' -or [string]$Initial.prompt -notmatch 'Greeting style: terse' -or [string]$Initial.prompt -notmatch 'generic assistant greetings') {
+        $Issues.Add("Prompt generation did not include the operator-tone restrictions.")
+    }
     $Results += [pscustomobject]@{
         name = "config load"
         passed = ($Initial.personality.humor -eq 35 -and $Initial.personality.profile -eq "operations")
@@ -112,7 +115,7 @@ try {
     }
 
     $PromptAfterProfile = Invoke-JsonScript -Path $GetScript -Arguments @("-AsJson")
-    if ([string]$PromptAfterProfile.prompt -notmatch 'cyber' -or [string]$PromptAfterProfile.prompt -notmatch 'risk') {
+    if ([string]$PromptAfterProfile.prompt -notmatch 'cyber' -or [string]$PromptAfterProfile.prompt -notmatch 'risk' -or [string]$PromptAfterProfile.prompt -notmatch 'Greeting style: concise') {
         $Issues.Add("Prompt generation did not reflect the active profile.")
     }
     $Results += [pscustomobject]@{

@@ -156,10 +156,10 @@ function Get-COOPERPersonalityProfileDefinitions {
     }
 
     return [pscustomobject]@{
-        operations = [pscustomobject]@{ humor = 35; sarcasm = 15; professionalism = 90; brevity = 80; initiative = 85; risk_awareness = 95; description = "Concise, decisive, status-focused." }
-        cyber = [pscustomobject]@{ humor = 15; sarcasm = 20; professionalism = 95; brevity = 88; initiative = 82; risk_awareness = 99; description = "Technical, defensive, risk-focused." }
-        investigator = [pscustomobject]@{ humor = 20; sarcasm = 10; professionalism = 92; brevity = 78; initiative = 75; risk_awareness = 97; description = "Analytical and evidence-driven." }
-        engineer = [pscustomobject]@{ humor = 22; sarcasm = 12; professionalism = 94; brevity = 74; initiative = 88; risk_awareness = 90; description = "Implementation-focused and precise." }
+        operations = [pscustomobject]@{ humor = 35; sarcasm = 15; professionalism = 90; brevity = 80; initiative = 85; risk_awareness = 95; description = "Terse, decisive, status-first, and low ceremony." }
+        cyber = [pscustomobject]@{ humor = 15; sarcasm = 20; professionalism = 95; brevity = 88; initiative = 82; risk_awareness = 99; description = "Technical, defensive, risk-first, and low ceremony." }
+        investigator = [pscustomobject]@{ humor = 20; sarcasm = 10; professionalism = 92; brevity = 78; initiative = 75; risk_awareness = 97; description = "Analytical, evidence-driven, and methodical." }
+        engineer = [pscustomobject]@{ humor = 22; sarcasm = 12; professionalism = 94; brevity = 74; initiative = 88; risk_awareness = 90; description = "Implementation-focused, precise, and practical." }
         trainer = [pscustomobject]@{ humor = 30; sarcasm = 8; professionalism = 88; brevity = 58; initiative = 72; risk_awareness = 88; description = "Educational, explanatory, and structured." }
     }
 }
@@ -426,6 +426,7 @@ function Get-COOPERPersonalityPrompt {
     $ProfileName = if ($Personality.PSObject.Properties.Name -contains "profile") { [string]$Personality.profile } else { "operations" }
     $ProfileDefinition = Get-COOPERProfileDefinition -Profile $ProfileName -Root $Root
     $ProfileSummary = if ($ProfileDefinition -and $ProfileDefinition.PSObject.Properties.Name -contains "description") { [string]$ProfileDefinition.description } else { "Mission-focused operator profile." }
+    $GreetingStyle = if ([string]$ProfileName -eq "operations") { "Greeting style: terse. Use a short operational acknowledgement when the user greets you; do not default to a help prompt." } else { "Greeting style: concise. Use a short operational acknowledgement when the user greets you; do not default to a help prompt." }
 
     return @(
         "You are COOPER."
@@ -434,7 +435,10 @@ function Get-COOPERPersonalityPrompt {
         "Keep answers compact unless detail is required to reduce risk or unblock execution."
         ("Personality: humor={0}, sarcasm={1}, professionalism={2}, brevity={3}, initiative={4}, risk_awareness={5}." -f $Personality.humor, $Personality.sarcasm, $Personality.professionalism, $Personality.brevity, $Personality.initiative, $Personality.risk_awareness)
         ("Profile: {0}. {1}" -f $ProfileName, $ProfileSummary)
-        "Style: lead with the answer, surface risks early, offer the next safe step, and use dry humor or mild sarcasm sparingly."
+        "Style: lead with the answer, surface risks early, and offer the next safe step."
+        $GreetingStyle
+        "Avoid emojis, exclamation marks unless required, generic assistant greetings, motivational language, filler, and sitcom-style humor."
+        "Use dry humor or mild sarcasm sparingly."
         "Do not become chatty, sentimental, or theatrical."
         "Governance, approvals, and safety boundaries remain unchanged."
     ) -join "`n"
