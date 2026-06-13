@@ -236,21 +236,49 @@ $Cases = @(
     [pscustomobject]@{
         name = "project discussion fallback"
         input = "Good evening COOPER. What do you think about this project so far?"
-        expected_route = "fallback"
+        expected_route = "judgment_advice"
         expected_command = ""
         expected_default_model = "qwen2.5:7b"
     }
     [pscustomobject]@{
         name = "project opinion fallback"
         input = "What is your opinion on the project?"
-        expected_route = "fallback"
+        expected_route = "judgment_advice"
         expected_command = ""
         expected_default_model = "qwen2.5:7b"
     }
     [pscustomobject]@{
         name = "risk assessment fallback"
         input = "What is the biggest risk here?"
-        expected_route = "fallback"
+        expected_route = "judgment_advice"
+        expected_command = ""
+        expected_default_model = "qwen2.5:7b"
+    }
+    [pscustomobject]@{
+        name = "linux migration recommendation"
+        input = "Should I move my AI Ecosystem from Windows to Linux?"
+        expected_route = "judgment_advice"
+        expected_command = ""
+        expected_default_model = "qwen2.5:7b"
+    }
+    [pscustomobject]@{
+        name = "docker comparison"
+        input = "Docker vs native install"
+        expected_route = "judgment_advice"
+        expected_command = ""
+        expected_default_model = "qwen2.5:7b"
+    }
+    [pscustomobject]@{
+        name = "repo access risk"
+        input = "Should I give Codex repo access?"
+        expected_route = "judgment_advice"
+        expected_command = ""
+        expected_default_model = "qwen2.5:7b"
+    }
+    [pscustomobject]@{
+        name = "agent replacement challenge"
+        input = "Should I replace workers with agents?"
+        expected_route = "judgment_advice"
         expected_command = ""
         expected_default_model = "qwen2.5:7b"
     }
@@ -328,7 +356,7 @@ foreach ($Case in $Cases) {
         $Issues.Add("Expected no recommended command but got '$($Route.recommended_command)'.")
     }
 
-    if ($Route.route_type -in @("direct_status", "direct_help", "task_lookup", "dispatch_guidance", "goal_planning", "ambiguous", "fallback")) {
+    if ($Route.route_type -in @("direct_status", "direct_help", "task_lookup", "dispatch_guidance", "goal_planning", "judgment_advice", "ambiguous", "fallback")) {
         $OriginalDefaultModelChat = $null
         $StubbedModelInvocation = $false
         if (-not $UseLiveModel -or ($Case.PSObject.Properties.Name -contains "stub_model_response" -and -not [string]::IsNullOrWhiteSpace([string]$Case.stub_model_response))) {
@@ -419,6 +447,10 @@ foreach ($Case in $Cases) {
         if ($Route.route_type -eq "goal_planning" -and $Direct.response_text -notmatch '(?i)goal assessment|execution plan|approval path') {
             $CasePassed = $false
             $Issues.Add("Goal planning response did not look like a structured plan.")
+        }
+        if ($Route.route_type -eq "judgment_advice" -and $Direct.response_text -match '(?i)\bRecommended command\b|Confirm to dispatch|Reply with confirmation|Standing by for tasking') {
+            $CasePassed = $false
+            $Issues.Add("Judgment advice should not produce workflow-routing language.")
         }
         if ($Route.route_type -eq "fallback") {
             if (-not ($Direct.PSObject.Properties.Name -contains "selected_model")) {

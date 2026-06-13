@@ -73,7 +73,7 @@ try {
     if ([string]$Initial.prompt -notmatch 'You are COOPER' -or [string]$Initial.prompt -notmatch 'Mission') {
         $Issues.Add("Prompt generation did not include the COOPER identity and mission framing.")
     }
-    if ([string]$Initial.prompt -notmatch 'Avoid emojis' -or [string]$Initial.prompt -notmatch 'Greeting style: terse' -or [string]$Initial.prompt -notmatch 'generic assistant greetings' -or [string]$Initial.prompt -notmatch 'assessment, opinion, judgment' -or [string]$Initial.prompt -notmatch 'Do not pretend to execute physical actions' -or [string]$Initial.prompt -notmatch 'unsafe or impossible physical action') {
+    if ([string]$Initial.prompt -notmatch 'Avoid emojis' -or [string]$Initial.prompt -notmatch 'Greeting style: terse' -or [string]$Initial.prompt -notmatch 'generic assistant greetings' -or [string]$Initial.prompt -notmatch 'assessment, opinion, judgment' -or [string]$Initial.prompt -notmatch 'Decision framework: Situation, Assessment, Risks, Recommendation, Confidence' -or [string]$Initial.prompt -notmatch 'Avoid neutral filler such as it depends' -or [string]$Initial.prompt -notmatch 'Do not pretend to execute physical actions' -or [string]$Initial.prompt -notmatch 'unsafe or impossible physical action') {
         $Issues.Add("Prompt generation did not include the operator-tone restrictions.")
     }
     $Results += [pscustomobject]@{
@@ -115,7 +115,7 @@ try {
     }
 
     $PromptAfterProfile = Invoke-JsonScript -Path $GetScript -Arguments @("-AsJson")
-    if ([string]$PromptAfterProfile.prompt -notmatch 'cyber' -or [string]$PromptAfterProfile.prompt -notmatch 'risk' -or [string]$PromptAfterProfile.prompt -notmatch 'Greeting style: concise' -or [string]$PromptAfterProfile.prompt -notmatch 'assessment, opinion, judgment' -or [string]$PromptAfterProfile.prompt -notmatch 'Do not pretend to execute physical actions') {
+    if ([string]$PromptAfterProfile.prompt -notmatch 'cyber' -or [string]$PromptAfterProfile.prompt -notmatch 'risk' -or [string]$PromptAfterProfile.prompt -notmatch 'Greeting style: concise' -or [string]$PromptAfterProfile.prompt -notmatch 'assessment, opinion, judgment' -or [string]$PromptAfterProfile.prompt -notmatch 'Decision framework: Situation, Assessment, Risks, Recommendation, Confidence' -or [string]$PromptAfterProfile.prompt -notmatch 'Do not pretend to execute physical actions') {
         $Issues.Add("Prompt generation did not reflect the active profile.")
     }
     $Results += [pscustomobject]@{

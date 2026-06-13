@@ -178,37 +178,92 @@ $Cases = @(
         name = "project discussion"
         message = "Good evening COOPER. What do you think about this project so far?"
         confirm = $false
-        expected_handoff = "fallback"
+        expected_handoff = "judgment_advice"
         expected_response_contains = ""
         expected_dispatch_ready = $false
         expected_dispatch = $false
         expected_command = ""
         expected_default_model = "qwen2.5:7b"
+        judgment_request = $true
         marker = "chat-project-discussion-$([guid]::NewGuid().ToString())"
     }
     [pscustomobject]@{
         name = "project opinion"
         message = "What is your opinion on the project?"
         confirm = $false
-        expected_handoff = "fallback"
+        expected_handoff = "judgment_advice"
         expected_response_contains = ""
         expected_dispatch_ready = $false
         expected_dispatch = $false
         expected_command = ""
         expected_default_model = "qwen2.5:7b"
+        judgment_request = $true
         marker = "chat-project-opinion-$([guid]::NewGuid().ToString())"
     }
     [pscustomobject]@{
         name = "risk assessment"
         message = "What is the biggest risk here?"
         confirm = $false
-        expected_handoff = "fallback"
+        expected_handoff = "judgment_advice"
         expected_response_contains = ""
         expected_dispatch_ready = $false
         expected_dispatch = $false
         expected_command = ""
         expected_default_model = "qwen2.5:7b"
+        judgment_request = $true
         marker = "chat-risk-assessment-$([guid]::NewGuid().ToString())"
+    }
+    [pscustomobject]@{
+        name = "linux migration recommendation"
+        message = "Should I move my AI Ecosystem from Windows to Linux?"
+        confirm = $false
+        expected_handoff = "judgment_advice"
+        expected_response_contains = ""
+        expected_dispatch_ready = $false
+        expected_dispatch = $false
+        expected_command = ""
+        expected_default_model = "qwen2.5:7b"
+        judgment_request = $true
+        marker = "chat-linux-migration-$([guid]::NewGuid().ToString())"
+    }
+    [pscustomobject]@{
+        name = "docker comparison"
+        message = "Docker vs native install"
+        confirm = $false
+        expected_handoff = "judgment_advice"
+        expected_response_contains = ""
+        expected_dispatch_ready = $false
+        expected_dispatch = $false
+        expected_command = ""
+        expected_default_model = "qwen2.5:7b"
+        judgment_request = $true
+        marker = "chat-docker-vs-native-$([guid]::NewGuid().ToString())"
+    }
+    [pscustomobject]@{
+        name = "repo access risk"
+        message = "Should I give Codex repo access?"
+        confirm = $false
+        expected_handoff = "judgment_advice"
+        expected_response_contains = ""
+        expected_dispatch_ready = $false
+        expected_dispatch = $false
+        expected_command = ""
+        expected_default_model = "qwen2.5:7b"
+        judgment_request = $true
+        marker = "chat-repo-access-$([guid]::NewGuid().ToString())"
+    }
+    [pscustomobject]@{
+        name = "agent replacement challenge"
+        message = "Should I replace workers with agents?"
+        confirm = $false
+        expected_handoff = "judgment_advice"
+        expected_response_contains = ""
+        expected_dispatch_ready = $false
+        expected_dispatch = $false
+        expected_command = ""
+        expected_default_model = "qwen2.5:7b"
+        judgment_request = $true
+        marker = "chat-agent-replacement-$([guid]::NewGuid().ToString())"
     }
     [pscustomobject]@{
         name = "airlock joke"
@@ -659,7 +714,7 @@ if ($SkipDispatch) {
 }
 
 if ($DashboardMode) {
-    $Cases = @($Cases | Where-Object { [string]$_.name -in @("known message", "ambiguous message", "unknown message", "research request", "status report", "morning briefing", "how are things going", "system status", "health report", "model identity", "provider identity", "backend identity", "self identity", "personality settings query", "humor setting update", "personality cancel") })
+    $Cases = @($Cases | Where-Object { [string]$_.name -in @("known message", "ambiguous message", "unknown message", "research request", "status report", "morning briefing", "how are things going", "system status", "health report", "model identity", "provider identity", "backend identity", "self identity", "personality settings query", "humor setting update", "personality cancel", "project discussion", "project opinion", "risk assessment", "linux migration recommendation", "docker comparison", "repo access risk", "agent replacement challenge") })
 }
 
 if (-not $SkipDispatch -and -not $DashboardMode) {
@@ -1067,6 +1122,25 @@ foreach ($Case in $Cases) {
         elseif ($Result.model_status -ne "pass" -and [string]::IsNullOrWhiteSpace([string]$Result.model_error_message)) {
             $CasePassed = $false
             $Issues.Add("Fallback model failure did not report a useful error.")
+        }
+    }
+
+    if ($Case.PSObject.Properties.Name -contains "judgment_request" -and [bool]$Case.judgment_request) {
+        if ($Result.response_text -notmatch '(?i)\brecommend(?:ation|ed|s)?\b|\bi would\b|\bi suggest\b|\bshould\b') {
+            $CasePassed = $false
+            $Issues.Add("Judgment response did not surface a recommendation.")
+        }
+        if ($Result.response_text -notmatch '(?i)\brisk|risks|concern|concerns\b') {
+            $CasePassed = $false
+            $Issues.Add("Judgment response did not identify risks or concerns.")
+        }
+        if ($Result.response_text -notmatch '(?i)\bconfidence\b|\bhigh confidence\b|\bmedium confidence\b|\blow confidence\b') {
+            $CasePassed = $false
+            $Issues.Add("Judgment response did not express confidence.")
+        }
+        if ($Result.response_text -match '(?i)\bit depends\b|\bboth approaches have benefits\b|\bno one-size-fits-all\b|\butimately it comes down to\b|\bHow can I assist you today\b|\bStanding by for tasking\b|\bRecommended command\b') {
+            $CasePassed = $false
+            $Issues.Add("Judgment response used a generic assistant or routing phrase.")
         }
     }
 

@@ -620,6 +620,14 @@ function Test-PDAConversationalGoalPlanning {
     )
 }
 
+function Test-PDAConversationalJudgmentAdvice {
+    param([Parameter(Mandatory = $true)][string]$NormalizedText)
+
+    return [bool](
+        $NormalizedText -match '(?i)\b(should i|should we|would it be better|what should i do|what do you recommend|what is your recommendation|what is your opinion|what do you think|should i use|should we use|should i move|should we move|is it worth|is it better|compare|comparison|tradeoff|trade-off|pros and cons|what are the risks|biggest risk|concern|concerns|assumption|assumptions|challenge the assumption|\bvs\b|\bversus\b)\b'
+    )
+}
+
 function Test-PDAConversationalAmbiguous {
     param([Parameter(Mandatory = $true)][string]$NormalizedText)
 
@@ -830,6 +838,18 @@ function Resolve-PDAConversationalRoute {
         else {
             $Route.briefing_focus = "dispatch"
         }
+        return [pscustomobject]$Route
+    }
+
+    if (Test-PDAConversationalJudgmentAdvice -NormalizedText $Normalized) {
+        $Route.route_type = "judgment_advice"
+        $Route.response_mode = "direct_answer"
+        $Route.recommended_command = ""
+        $Route.reason = "Natural-language recommendation or comparative judgment request."
+        $Route.confidence = 0.95
+        $Route.intent = "judgment_advice"
+        $Route.task_type = "judgment_advice"
+        $Route.briefing_focus = "judgment"
         return [pscustomobject]$Route
     }
 
@@ -1418,6 +1438,26 @@ function Get-PDAConversationalNaturalResponse {
             else {
                 $BaseResponse.response_text = "I can turn natural-language goals into a structured plan, but the goal planner is unavailable right now."
                 $BaseResponse.next_action = "Try /planner or ask for /help if you want the command list."
+            }
+        }
+        "judgment_advice" {
+            $ModelResult = Invoke-COOPERDefaultModelChat -Text $Text -Root $Root
+            if ($ModelResult) {
+                $BaseResponse.bridge_mode = [string]$ModelResult.bridge_mode
+                $BaseResponse.response_text = [string]$ModelResult.response_text
+                $BaseResponse.next_action = [string]$ModelResult.next_action
+                $BaseResponse.selected_model = [string]$ModelResult.selected_model
+                $BaseResponse.model_status = [string]$ModelResult.model_status
+                $BaseResponse.model_error_message = [string]$ModelResult.model_error_message
+                $BaseResponse.model_routing_reason = [string]$ModelResult.routing_reason
+                $BaseResponse.model_result = $ModelResult.model_result
+                if ([string]::IsNullOrWhiteSpace([string]$BaseResponse.model_routing_reason) -and $ModelResult.model_routing) {
+                    $BaseResponse.model_routing_reason = if ($ModelResult.model_routing.PSObject.Properties.Name -contains "routing_reason") { [string]$ModelResult.model_routing.routing_reason } else { "" }
+                }
+            }
+            else {
+                $BaseResponse.response_text = "I can assess the options, but the model path is unavailable right now."
+                $BaseResponse.next_action = "Restore a local model or ask /help for the command list."
             }
         }
         "ambiguous" {
