@@ -183,6 +183,115 @@ function Get-COOPERProfileDefinition {
     return $null
 }
 
+function Get-COOPERConversationExamplesPath {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $false)]
+        [string]$Root = (Split-Path -Parent $PSScriptRoot)
+    )
+
+    $Override = [string]$env:COOPER_CONVERSATION_EXAMPLES_PATH
+    if (-not [string]::IsNullOrWhiteSpace($Override)) {
+        return $Override.Trim()
+    }
+
+    return (Join-Path $Root "Models\cooper-personality\conversation_examples.json")
+}
+
+function Get-COOPERConversationExamples {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $false)]
+        [string]$Root = (Split-Path -Parent $PSScriptRoot)
+    )
+
+    $Path = Get-COOPERConversationExamplesPath -Root $Root
+    $Result = [ordered]@{
+        status = "pass"
+        path = $Path
+        missing = $false
+        error = ""
+        version = ""
+        purpose = ""
+        examples = @()
+        categories = @()
+    }
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        $Result.status = "missing"
+        $Result.missing = $true
+        return [pscustomobject]$Result
+    }
+
+    try {
+        $Raw = Get-Content -LiteralPath $Path -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+    }
+    catch {
+        $Result.status = "error"
+        $Result.error = $_.Exception.Message
+        return [pscustomobject]$Result
+    }
+
+    $Examples = @()
+    if ($Raw -and $Raw.PSObject.Properties.Name -contains "examples") {
+        $Examples = @($Raw.examples)
+    }
+
+    if ($Examples.Count -eq 0) {
+        $Result.status = "error"
+        $Result.error = "Conversation examples file did not contain any examples."
+        return [pscustomobject]$Result
+    }
+
+    $Result.version = if ($Raw.PSObject.Properties.Name -contains "version") { [string]$Raw.version } else { "" }
+    $Result.purpose = if ($Raw.PSObject.Properties.Name -contains "purpose") { [string]$Raw.purpose } else { "" }
+    $Result.examples = @($Examples)
+    $Result.categories = @(
+        $Examples |
+            Where-Object { $_ -and $_.PSObject.Properties.Name -contains "category" -and -not [string]::IsNullOrWhiteSpace([string]$_.category) } |
+            ForEach-Object { [string]$_.category } |
+            Sort-Object -Unique
+    )
+    return [pscustomobject]$Result
+}
+
+function Get-COOPERConversationExamplesPromptBlock {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $false)]
+        [object]$ExamplesPayload,
+
+        [Parameter(Mandatory = $false)]
+        [int]$MaximumExamples = 10
+    )
+
+    if (-not $ExamplesPayload -or [string]$ExamplesPayload.status -ne "pass") {
+        return ""
+    }
+
+    $Examples = @($ExamplesPayload.examples | Where-Object {
+        $_ -and
+        $_.PSObject.Properties.Name -contains "user" -and -not [string]::IsNullOrWhiteSpace([string]$_.user) -and
+        $_.PSObject.Properties.Name -contains "cooper" -and -not [string]::IsNullOrWhiteSpace([string]$_.cooper)
+    } | Select-Object -First $MaximumExamples)
+
+    if ($Examples.Count -eq 0) {
+        return ""
+    }
+
+    $Lines = New-Object System.Collections.Generic.List[string]
+    $Lines.Add("Few-shot conversation examples:")
+    foreach ($Example in $Examples) {
+        $Category = if ($Example.PSObject.Properties.Name -contains "category" -and -not [string]::IsNullOrWhiteSpace([string]$Example.category)) { [string]$Example.category } else { "example" }
+        $Lines.Add(("Category: {0}" -f $Category))
+        $Lines.Add(("User: {0}" -f [string]$Example.user))
+        $Lines.Add(("COOPER: {0}" -f [string]$Example.cooper))
+        $Lines.Add("")
+    }
+
+    return ($Lines.ToArray() -join "`n").Trim()
+}
+
 function Merge-COOPERPersonality {
     [CmdletBinding()]
     param(
@@ -336,6 +445,7 @@ function Get-COOPERPersonality {
     $Legacy = ConvertTo-COOPERLegacyPersonality -Personality $Normalized
     $Prompt = Get-COOPERPersonalityPrompt -Personality $Normalized -Root $Root
     $Definitions = Get-COOPERPersonalityProfileDefinitions -Root $Root
+    $ConversationExamples = Get-COOPERConversationExamples -Root $Root
     $ProfileKey = [string]$Normalized.profile
     if (-not [string]::IsNullOrWhiteSpace($ProfileKey)) {
         $ProfileKey = $ProfileKey.ToLowerInvariant()
@@ -350,6 +460,10 @@ function Get-COOPERPersonality {
         personality = $Normalized
         legacy_personality = $Legacy
         profile_definition = if ($Definitions -and $Definitions.PSObject.Properties.Name -contains $ProfileKey) { $Definitions.$ProfileKey } else { $null }
+        conversation_examples_path = [string]$ConversationExamples.path
+        conversation_examples_status = [string]$ConversationExamples.status
+        conversation_examples_count = @($ConversationExamples.examples).Count
+        conversation_examples_categories = @($ConversationExamples.categories)
         prompt = $Prompt
         source_of_truth = "Models/cooper-personality/personality.json"
     }
@@ -427,8 +541,10 @@ function Get-COOPERPersonalityPrompt {
     $ProfileDefinition = Get-COOPERProfileDefinition -Profile $ProfileName -Root $Root
     $ProfileSummary = if ($ProfileDefinition -and $ProfileDefinition.PSObject.Properties.Name -contains "description") { [string]$ProfileDefinition.description } else { "Mission-focused operator profile." }
     $GreetingStyle = if ([string]$ProfileName -eq "operations") { "Greeting style: terse. Use a short operational acknowledgement when the user greets you; do not default to a help prompt." } else { "Greeting style: concise. Use a short operational acknowledgement when the user greets you; do not default to a help prompt." }
+    $ConversationExamples = Get-COOPERConversationExamples -Root $Root
+    $ConversationExamplesBlock = Get-COOPERConversationExamplesPromptBlock -ExamplesPayload $ConversationExamples -MaximumExamples 10
 
-    return @(
+    $Prompt = @(
         "You are COOPER."
         "Identity: TARS-inspired operator, not a roleplay persona."
         "Mission: competent, direct, concise, and risk-aware operations assistance."
@@ -453,7 +569,15 @@ function Get-COOPERPersonalityPrompt {
         "Use dry humor or mild sarcasm sparingly."
         "Do not become chatty, sentimental, or theatrical."
         "Governance, approvals, and safety boundaries remain unchanged."
-    ) -join "`n"
+    )
+
+    if (-not [string]::IsNullOrWhiteSpace($ConversationExamplesBlock)) {
+        $Prompt += ""
+        $Prompt += "Conversation examples are reference material, not overrides."
+        $Prompt += $ConversationExamplesBlock
+    }
+
+    return ($Prompt -join "`n")
 }
 
 function Invoke-COOPERPersonalityCommand {

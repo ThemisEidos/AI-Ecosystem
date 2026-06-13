@@ -76,6 +76,14 @@ try {
     if ([string]$Initial.prompt -notmatch 'Avoid emojis' -or [string]$Initial.prompt -notmatch 'Greeting style: terse' -or [string]$Initial.prompt -notmatch 'generic assistant greetings' -or [string]$Initial.prompt -notmatch 'assessment, opinion, judgment' -or [string]$Initial.prompt -notmatch 'Decision framework: Situation, Assessment, Risks, Recommendation, Confidence' -or [string]$Initial.prompt -notmatch 'Avoid neutral filler such as it depends' -or [string]$Initial.prompt -notmatch 'Do not pretend to execute physical actions' -or [string]$Initial.prompt -notmatch 'unsafe or impossible physical action') {
         $Issues.Add("Prompt generation did not include the operator-tone restrictions.")
     }
+    if ([string]$Initial.conversation_examples_status -ne "pass" -or [int]$Initial.conversation_examples_count -lt 10 -or $Initial.conversation_examples_categories.Count -lt 10 -or [string]$Initial.prompt -notmatch 'Few-shot conversation examples') {
+        $Issues.Add("Conversation examples were not loaded into the personality prompt.")
+    }
+    foreach ($ExpectedCategory in @("greetings", "status_reports", "project_assessment", "humor", "disagreement", "risk_discussions", "tradeoff_analysis", "unsafe_physical_action_refusal", "operator_dashboard", "memory_session_handoff")) {
+        if ($Initial.conversation_examples_categories -notcontains $ExpectedCategory) {
+            $Issues.Add("Conversation examples are missing required category '$ExpectedCategory'.")
+        }
+    }
     $Results += [pscustomobject]@{
         name = "config load"
         passed = ($Initial.personality.humor -eq 35 -and $Initial.personality.profile -eq "operations")
@@ -118,10 +126,46 @@ try {
     if ([string]$PromptAfterProfile.prompt -notmatch 'cyber' -or [string]$PromptAfterProfile.prompt -notmatch 'risk' -or [string]$PromptAfterProfile.prompt -notmatch 'Greeting style: concise' -or [string]$PromptAfterProfile.prompt -notmatch 'assessment, opinion, judgment' -or [string]$PromptAfterProfile.prompt -notmatch 'Decision framework: Situation, Assessment, Risks, Recommendation, Confidence' -or [string]$PromptAfterProfile.prompt -notmatch 'Do not pretend to execute physical actions') {
         $Issues.Add("Prompt generation did not reflect the active profile.")
     }
+    if ($PromptAfterProfile.conversation_examples_status -ne "pass" -or [int]$PromptAfterProfile.conversation_examples_count -lt 10) {
+        $Issues.Add("Conversation examples were not reported after profile switching.")
+    }
     $Results += [pscustomobject]@{
         name = "prompt generation"
         passed = ([string]$PromptAfterProfile.prompt -match 'cyber')
         details = "Prompt updated after profile switch."
+    }
+
+    $MissingExamplesPath = Join-Path $TempRoot "missing-conversation-examples.json"
+    $PreviousExamplesPath = [Environment]::GetEnvironmentVariable("COOPER_CONVERSATION_EXAMPLES_PATH", "Process")
+    try {
+        [Environment]::SetEnvironmentVariable("COOPER_CONVERSATION_EXAMPLES_PATH", $MissingExamplesPath, "Process")
+        $MissingExamples = Invoke-JsonScript -Path $GetScript -Arguments @("-AsJson")
+        if ([string]$MissingExamples.conversation_examples_status -ne "missing") {
+            $Issues.Add("Missing conversation examples file did not report a missing status.")
+        }
+        if ([string]$MissingExamples.prompt -notmatch 'You are COOPER' -or [string]$MissingExamples.prompt -match 'Few-shot conversation examples') {
+            $Issues.Add("Missing conversation examples should not break the core prompt.")
+        }
+    }
+    finally {
+        [Environment]::SetEnvironmentVariable("COOPER_CONVERSATION_EXAMPLES_PATH", $PreviousExamplesPath, "Process")
+    }
+
+    $InvalidExamplesPath = Join-Path $TempRoot "invalid-conversation-examples.json"
+    Set-Content -LiteralPath $InvalidExamplesPath -Value '{ not valid json' -Encoding UTF8
+    $PreviousExamplesPath = [Environment]::GetEnvironmentVariable("COOPER_CONVERSATION_EXAMPLES_PATH", "Process")
+    try {
+        [Environment]::SetEnvironmentVariable("COOPER_CONVERSATION_EXAMPLES_PATH", $InvalidExamplesPath, "Process")
+        $InvalidExamples = Invoke-JsonScript -Path $GetScript -Arguments @("-AsJson")
+        if ([string]$InvalidExamples.conversation_examples_status -ne "error") {
+            $Issues.Add("Invalid conversation examples JSON did not report an error status.")
+        }
+        if ([string]$InvalidExamples.prompt -notmatch 'You are COOPER') {
+            $Issues.Add("Invalid conversation examples JSON should not break personality prompt generation.")
+        }
+    }
+    finally {
+        [Environment]::SetEnvironmentVariable("COOPER_CONVERSATION_EXAMPLES_PATH", $PreviousExamplesPath, "Process")
     }
 
     $CommandProfile = Invoke-JsonScript -Path $InterpreterScript -Arguments @("-Text", "/cooper profile engineer", "-AsJson")

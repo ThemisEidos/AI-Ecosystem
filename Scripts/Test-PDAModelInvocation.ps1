@@ -364,7 +364,7 @@ $Cases = @(
         sensitivity = "standard"
         prompt = "Return plain acknowledgement."
         expected_model = "qwen2.5:7b"
-        expected_token = "Acknowledged."
+        expected_token = "COOPER Status"
         selected_model_override = "qwen2.5:7b"
         clear_master_key = $true
     }
@@ -375,7 +375,7 @@ $Cases = @(
         sensitivity = "restricted_local"
         prompt = "Return exactly: local-ok"
         expected_model = "local-llama"
-        expected_token = "Local status: OK."
+        expected_token = "local-ok"
     }
     [pscustomobject]@{
         name = "research gemini invocation"
@@ -488,6 +488,9 @@ foreach ($Case in $Cases) {
                     'If a user requests an unsafe or impossible physical action, refuse plainly, reality-check the request, and avoid simulated execution or narration of completion',
                     'Avoid emojis, exclamation marks unless required, generic assistant greetings, motivational language, filler, and sitcom-style humor',
                     'Use dry humor or mild sarcasm sparingly',
+                    'Few-shot conversation examples',
+                    'Category: greetings',
+                    'Category: unsafe_physical_action_refusal',
                     'Governance, approvals, and safety boundaries remain unchanged'
                 )) {
                     if ($SystemContent -notmatch [regex]::Escape($Pattern)) {
