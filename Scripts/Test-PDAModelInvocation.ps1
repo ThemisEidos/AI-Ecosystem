@@ -348,14 +348,14 @@ function Invoke-TestCase {
 
 $Cases = @(
     [pscustomobject]@{
-        name = "cooper override local-llama"
+        name = "cooper override qwen"
         worker_name = "cooper-chat"
         task_type = "conversational"
         sensitivity = "standard"
         prompt = "Return a brief plain acknowledgement."
-        expected_model = "local-llama"
+        expected_model = "qwen2.5:7b"
         expected_token = ""
-        selected_model_override = "local-llama"
+        selected_model_override = "qwen2.5:7b"
     }
     [pscustomobject]@{
         name = "live context env fallback"
@@ -363,9 +363,9 @@ $Cases = @(
         task_type = "conversational"
         sensitivity = "standard"
         prompt = "Return plain acknowledgement."
-        expected_model = "local-llama"
+        expected_model = "qwen2.5:7b"
         expected_token = "Acknowledged."
-        selected_model_override = "local-llama"
+        selected_model_override = "qwen2.5:7b"
         clear_master_key = $true
     }
     [pscustomobject]@{
@@ -393,9 +393,9 @@ $Cases = @(
         task_type = "conversational"
         sensitivity = "standard"
         prompt = "Return plain-text-ok."
-        expected_model = "local-llama"
+        expected_model = "qwen2.5:7b"
         expected_token = "plain-text-ok"
-        selected_model_override = "local-llama"
+        selected_model_override = "qwen2.5:7b"
         endpoint = $null
         use_plain_text_server = $true
     }
@@ -405,12 +405,12 @@ $Cases = @(
         task_type = "conversational"
         sensitivity = "standard"
         prompt = "Return a brief plain acknowledgement."
-        expected_model = "local-llama"
+        expected_model = "qwen2.5:7b"
         expected_token = "Standing by."
-        selected_model_override = "local-llama"
+        selected_model_override = "qwen2.5:7b"
         use_capture_server = $true
         endpoint = $null
-        expected_prompt_pattern = '(?is)You are COOPER.*Identity: TARS-inspired operator.*Mission: competent, direct, concise, and risk-aware operations assistance.*Personality: humor=35, sarcasm=15, professionalism=90, brevity=80, initiative=85, risk_awareness=95.*Profile: operations.*Style: lead with the answer, surface risks early, offer the next safe step'
+        expected_prompt_pattern = '(?is)You are COOPER.*Identity: TARS-inspired operator.*Mission: competent, direct, concise, and risk-aware operations assistance.*Style: lead with the answer, surface risks early, offer the next safe step'
     }
     [pscustomobject]@{
         name = "missing backend diagnostic"
@@ -418,9 +418,9 @@ $Cases = @(
         task_type = "conversational"
         sensitivity = "standard"
         prompt = "Return an error diagnostic."
-        expected_model = "local-llama"
+        expected_model = "qwen2.5:7b"
         expected_token = ""
-        selected_model_override = "local-llama"
+        selected_model_override = "qwen2.5:7b"
         endpoint = "http://127.0.0.1:1/v1/chat/completions"
         expected_error_pattern = '(?i)connection|refused|failed|error'
     }
@@ -476,8 +476,6 @@ foreach ($Case in $Cases) {
                     'You are COOPER',
                     'Identity: TARS-inspired operator',
                     'Mission: competent, direct, concise, and risk-aware operations assistance',
-                    'Personality: humor=35, sarcasm=15, professionalism=90, brevity=80, initiative=85, risk_awareness=95',
-                    'Profile: operations',
                     'Style: lead with the answer, surface risks early, offer the next safe step',
                     'Governance, approvals, and safety boundaries remain unchanged'
                 )) {

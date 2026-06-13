@@ -25,6 +25,16 @@ if (-not (Test-Path -LiteralPath $RouterScript -PathType Leaf)) {
 
 . $RouterScript
 
+$DefaultModelCandidates = if (Get-Command -Name Get-COOPERDefaultModelCandidates -ErrorAction SilentlyContinue) {
+    @((Get-COOPERDefaultModelCandidates -Root $Root))
+}
+else {
+    @("qwen2.5:7b", "mistral", "local-llama")
+}
+if ($DefaultModelCandidates.Count -lt 3 -or $DefaultModelCandidates[0] -ne "qwen2.5:7b" -or $DefaultModelCandidates[1] -ne "mistral" -or $DefaultModelCandidates[2] -ne "local-llama") {
+    throw "Default COOPER model fallback chain is not qwen2.5:7b -> mistral -> local-llama."
+}
+
 $DefaultModelChatFallback = {
     param(
         [Parameter(Mandatory = $true)][string]$Text,
@@ -33,8 +43,8 @@ $DefaultModelChatFallback = {
 
     return [pscustomobject]@{
         status = "pass"
-        default_model = "local-llama"
-        selected_model = "local-llama"
+        default_model = "qwen2.5:7b"
+        selected_model = "qwen2.5:7b"
         model_status = "pass"
         model_error_message = ""
         routing_reason = "router test stub"
@@ -221,14 +231,14 @@ $Cases = @(
         input = "Tell me something useful about local-first routing."
         expected_route = "fallback"
         expected_command = ""
-        expected_default_model = "local-llama"
+        expected_default_model = "qwen2.5:7b"
     }
     [pscustomobject]@{
         name = "normal greeting"
         input = "Hello COOPER."
         expected_route = "fallback"
         expected_command = ""
-        expected_default_model = "local-llama"
+        expected_default_model = "qwen2.5:7b"
         expected_token = "Standing by."
         stub_model_response = "Morning. Standing by."
     }
@@ -291,8 +301,8 @@ foreach ($Case in $Cases) {
 
                 return [pscustomobject]@{
                     status = "pass"
-                    default_model = "local-llama"
-                    selected_model = "local-llama"
+                    default_model = "qwen2.5:7b"
+                    selected_model = "qwen2.5:7b"
                     model_status = "pass"
                     model_error_message = ""
                     routing_reason = "router test stub"
@@ -317,7 +327,7 @@ foreach ($Case in $Cases) {
             $CasePassed = $false
             $Issues.Add("Direct response text was empty.")
         }
-        if ($Route.route_type -eq "direct_status" -and $Direct.response_text -notmatch '(?i)COOPER Status|Current Model: local-llama|Provider: Ollama') {
+        if ($Route.route_type -eq "direct_status" -and $Direct.response_text -notmatch '(?i)COOPER Status|Current Model: qwen2\.5:7b|Provider: Ollama') {
             $CasePassed = $false
             $Issues.Add("Direct status response did not look like a status summary.")
         }
@@ -436,7 +446,7 @@ foreach ($Case in $Cases) {
             $CasePassed = $false
             $Issues.Add("Runtime self-awareness response text was empty.")
         }
-        if ($Direct.response_text -notmatch '(?i)Current Model: local-llama|Assistant Identity: COOPER|Provider: Ollama|Gateway: LiteLLM|Backend: ollama/llama3\.2') {
+        if ($Direct.response_text -notmatch '(?i)Current Model: qwen2\.5:7b|Assistant Identity: COOPER|Provider: Ollama|Gateway: LiteLLM|Backend: ollama/qwen2\.5:7b|Backend: ollama/llama3\.2') {
             $CasePassed = $false
             $Issues.Add("Runtime self-awareness response did not include the expected metadata.")
         }

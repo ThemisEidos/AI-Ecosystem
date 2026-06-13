@@ -107,7 +107,34 @@ function Get-COOPERDefaultModelName {
         catch {}
     }
 
-    return "local-llama"
+    return "qwen2.5:7b"
+}
+
+function Get-COOPERDefaultModelCandidates {
+    param(
+        [Parameter(Mandatory = $false)]
+        [string]$Root = (Split-Path -Parent $PSScriptRoot)
+    )
+
+    $Candidates = @(
+        (Get-COOPERDefaultModelName -Root $Root)
+        "mistral"
+        "local-llama"
+    )
+
+    $UniqueCandidates = New-Object System.Collections.Generic.List[string]
+    foreach ($Candidate in $Candidates) {
+        if ([string]::IsNullOrWhiteSpace([string]$Candidate)) {
+            continue
+        }
+
+        $Normalized = [string]$Candidate
+        if ($UniqueCandidates -notcontains $Normalized) {
+            $UniqueCandidates.Add($Normalized)
+        }
+    }
+
+    return @($UniqueCandidates)
 }
 
 function Test-COOPERLightweightStatusMode {
@@ -129,7 +156,8 @@ function Invoke-COOPERDefaultModelChat {
     )
 
     $ModelScript = Join-Path $PSScriptRoot "Invoke-PDAModel.ps1"
-    $DefaultModel = Get-COOPERDefaultModelName -Root $Root
+    $DefaultModelCandidates = Get-COOPERDefaultModelCandidates -Root $Root
+    $DefaultModel = if ($DefaultModelCandidates.Count -gt 0) { [string]$DefaultModelCandidates[0] } else { "qwen2.5:7b" }
     $FallbackHelp = "Status, reports, research, planning, execution. Pick a target."
     $Result = [ordered]@{
         status = "fail"
@@ -154,61 +182,68 @@ function Invoke-COOPERDefaultModelChat {
     }
 
     try {
-        $Raw = & pwsh -NoProfile -File $ModelScript -WorkerName "cooper-chat" -TaskType "conversational" -Category "category_1" -Sensitivity "standard" -Prompt $Text -SelectedModelOverride $DefaultModel -AsJson -NoThrow 2>&1
-        $JsonText = [string]($Raw -join "`n").Trim()
-        if ([string]::IsNullOrWhiteSpace($JsonText)) {
-            $Result.model_error_message = "COOPER default model '$DefaultModel' returned empty output."
-            $Result.response_text = "COOPER default model '$DefaultModel' is unavailable. $($Result.model_error_message) $FallbackHelp"
-            return [pscustomobject]$Result
-        }
-
-        $ModelResult = ConvertFrom-PDAMixedJson -Text $JsonText -SourceName "COOPER default model"
-        if (-not $ModelResult) {
-            $Result.model_error_message = "COOPER default model '$DefaultModel' returned unparseable output."
-            $Result.raw_output = $JsonText
-            $Result.response_text = "COOPER default model '$DefaultModel' is unavailable. $($Result.model_error_message) $FallbackHelp"
-            return [pscustomobject]$Result
-        }
-
-        $Result.model_result = $ModelResult
-        if ($ModelResult.PSObject.Properties.Name -contains "routing") {
-            $Result.model_routing = $ModelResult.routing
-            if ($ModelResult.routing -and $ModelResult.routing.PSObject.Properties.Name -contains "selected_model" -and -not [string]::IsNullOrWhiteSpace([string]$ModelResult.routing.selected_model)) {
-                $Result.selected_model = [string]$ModelResult.routing.selected_model
+        $AttemptErrors = New-Object System.Collections.Generic.List[string]
+        foreach ($Candidate in $DefaultModelCandidates) {
+            $Result.selected_model = [string]$Candidate
+            $Raw = & pwsh -NoProfile -File $ModelScript -WorkerName "cooper-chat" -TaskType "conversational" -Category "category_1" -Sensitivity "standard" -Prompt $Text -SelectedModelOverride ([string]$Candidate) -AsJson -NoThrow 2>&1
+            $JsonText = [string]($Raw -join "`n").Trim()
+            if ([string]::IsNullOrWhiteSpace($JsonText)) {
+                $AttemptErrors.Add("COOPER default model '$Candidate' returned empty output.")
+                continue
             }
-            if ($ModelResult.routing -and $ModelResult.routing.PSObject.Properties.Name -contains "routing_reason" -and -not [string]::IsNullOrWhiteSpace([string]$ModelResult.routing.routing_reason)) {
-                $Result.routing_reason = [string]$ModelResult.routing.routing_reason
+
+            $ModelResult = ConvertFrom-PDAMixedJson -Text $JsonText -SourceName "COOPER default model"
+            if (-not $ModelResult) {
+                $Result.raw_output = $JsonText
+                $AttemptErrors.Add("COOPER default model '$Candidate' returned unparseable output.")
+                continue
+            }
+
+            $Result.model_result = $ModelResult
+            if ($ModelResult.PSObject.Properties.Name -contains "routing") {
+                $Result.model_routing = $ModelResult.routing
+                if ($ModelResult.routing -and $ModelResult.routing.PSObject.Properties.Name -contains "selected_model" -and -not [string]::IsNullOrWhiteSpace([string]$ModelResult.routing.selected_model)) {
+                    $Result.selected_model = [string]$ModelResult.routing.selected_model
+                }
+                if ($ModelResult.routing -and $ModelResult.routing.PSObject.Properties.Name -contains "routing_reason" -and -not [string]::IsNullOrWhiteSpace([string]$ModelResult.routing.routing_reason)) {
+                    $Result.routing_reason = [string]$ModelResult.routing.routing_reason
+                }
+            }
+
+            $Result.model_status = if ($ModelResult.PSObject.Properties.Name -contains "status") { [string]$ModelResult.status } else { "unknown" }
+            $ModelResponseText = if ($ModelResult.PSObject.Properties.Name -contains "response_text") { [string]$ModelResult.response_text } else { "" }
+            $ModelNextAction = if ($ModelResult.PSObject.Properties.Name -contains "next_action") { [string]$ModelResult.next_action } else { "" }
+            $Result.model_error_message = if ($ModelResult.PSObject.Properties.Name -contains "error_message") { [string]$ModelResult.error_message } else { "" }
+
+            if ($Result.model_status -eq "pass" -and -not [string]::IsNullOrWhiteSpace($ModelResponseText)) {
+                $Result.status = "pass"
+                $Result.response_text = $ModelResponseText
+                $Result.next_action = if (-not [string]::IsNullOrWhiteSpace($ModelNextAction) -and $ModelNextAction -notmatch '(?i)continue the conversation') { $ModelNextAction } else { "Standing by for the next task." }
+                $Result.bridge_mode = "model_chat"
+                $Result.handoff_status = "fallback"
+                $Result.model_error_message = ""
+                return [pscustomobject]$Result
+            }
+
+            if (-not [string]::IsNullOrWhiteSpace($Result.model_error_message)) {
+                $AttemptErrors.Add($Result.model_error_message)
+            }
+            else {
+                $AttemptErrors.Add("COOPER default model '$Candidate' did not return a usable response.")
             }
         }
 
-        $Result.model_status = if ($ModelResult.PSObject.Properties.Name -contains "status") { [string]$ModelResult.status } else { "unknown" }
-        $ModelResponseText = if ($ModelResult.PSObject.Properties.Name -contains "response_text") { [string]$ModelResult.response_text } else { "" }
-        $ModelNextAction = if ($ModelResult.PSObject.Properties.Name -contains "next_action") { [string]$ModelResult.next_action } else { "" }
-        $Result.model_error_message = if ($ModelResult.PSObject.Properties.Name -contains "error_message") { [string]$ModelResult.error_message } else { "" }
-
-        if ($Result.model_status -eq "pass" -and -not [string]::IsNullOrWhiteSpace($ModelResponseText)) {
-            $Result.status = "pass"
-            $Result.response_text = $ModelResponseText
-            $Result.next_action = if (-not [string]::IsNullOrWhiteSpace($ModelNextAction) -and $ModelNextAction -notmatch '(?i)continue the conversation') { $ModelNextAction } else { "Standing by for the next task." }
-            $Result.bridge_mode = "model_chat"
-            $Result.handoff_status = "fallback"
-            $Result.model_error_message = ""
-            return [pscustomobject]$Result
-        }
-
-        if ([string]::IsNullOrWhiteSpace($Result.model_error_message)) {
-            $Result.model_error_message = "COOPER default model '$DefaultModel' did not return a usable response."
-        }
-        $Result.response_text = "COOPER default model '$DefaultModel' is unavailable. $($Result.model_error_message) $FallbackHelp"
-        $Result.next_action = "Restore the local model or ask /help for the command list."
+        $Result.model_error_message = if ($AttemptErrors.Count -gt 0) { [string]($AttemptErrors -join " ") } else { "COOPER default model '$DefaultModel' did not return a usable response." }
+        $Result.response_text = "COOPER default models are unavailable. $($Result.model_error_message) $FallbackHelp"
+        $Result.next_action = "Restore a local model or ask /help for the command list."
         $Result.bridge_mode = "model_fallback"
         $Result.handoff_status = "fallback"
         return [pscustomobject]$Result
     }
     catch {
         $Result.model_error_message = $_.Exception.Message
-        $Result.response_text = "COOPER default model '$DefaultModel' is unavailable. $($Result.model_error_message) $FallbackHelp"
-        $Result.next_action = "Restore the local model or ask /help for the command list."
+        $Result.response_text = "COOPER default models are unavailable. $($Result.model_error_message) $FallbackHelp"
+        $Result.next_action = "Restore a local model or ask /help for the command list."
         return [pscustomobject]$Result
     }
 }
@@ -844,7 +879,7 @@ function Get-PDAConversationalNaturalResponse {
                 }
             }
             else {
-                $CurrentModel = if ($RuntimeStatus -and $RuntimeStatus.PSObject.Properties.Name -contains "current_model" -and -not [string]::IsNullOrWhiteSpace([string]$RuntimeStatus.current_model)) { [string]$RuntimeStatus.current_model } else { "local-llama" }
+                $CurrentModel = if ($RuntimeStatus -and $RuntimeStatus.PSObject.Properties.Name -contains "current_model" -and -not [string]::IsNullOrWhiteSpace([string]$RuntimeStatus.current_model)) { [string]$RuntimeStatus.current_model } else { "qwen2.5:7b" }
                 $StatusLines.Add("COOPER Status")
                 $StatusLines.Add(("Current Model: {0}" -f $CurrentModel))
                 $StatusLines.Add(("Provider: {0}" -f "Ollama"))

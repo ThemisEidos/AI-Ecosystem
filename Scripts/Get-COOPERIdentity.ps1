@@ -10,7 +10,7 @@ function Get-COOPERIdentity {
     function Get-COOPERDefaultModelName {
         param(
             [Parameter(Mandatory = $false)]
-            [string]$Fallback = "local-llama"
+            [string]$Fallback = "qwen2.5:7b"
         )
 
         $Configured = [string]$env:COOPER_DEFAULT_MODEL
