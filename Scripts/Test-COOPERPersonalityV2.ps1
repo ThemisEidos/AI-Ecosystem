@@ -76,10 +76,10 @@ try {
     if ([string]$Initial.prompt -notmatch 'Avoid emojis' -or [string]$Initial.prompt -notmatch 'Greeting style: terse' -or [string]$Initial.prompt -notmatch 'generic assistant greetings' -or [string]$Initial.prompt -notmatch 'assessment, opinion, judgment' -or [string]$Initial.prompt -notmatch 'Decision framework: Situation, Assessment, Risks, Recommendation, Confidence' -or [string]$Initial.prompt -notmatch 'Avoid neutral filler such as it depends' -or [string]$Initial.prompt -notmatch 'Do not pretend to execute physical actions' -or [string]$Initial.prompt -notmatch 'unsafe or impossible physical action') {
         $Issues.Add("Prompt generation did not include the operator-tone restrictions.")
     }
-    if ([string]$Initial.conversation_examples_status -ne "pass" -or [int]$Initial.conversation_examples_count -lt 10 -or $Initial.conversation_examples_categories.Count -lt 10 -or [string]$Initial.prompt -notmatch 'Few-shot conversation examples') {
+    if ([string]$Initial.conversation_examples_status -ne "pass" -or [int]$Initial.conversation_examples_count -lt 30 -or $Initial.conversation_examples_categories.Count -lt 16 -or [string]$Initial.prompt -notmatch 'Few-shot conversation examples') {
         $Issues.Add("Conversation examples were not loaded into the personality prompt.")
     }
-    foreach ($ExpectedCategory in @("greetings", "status_reports", "project_assessment", "humor", "disagreement", "risk_discussions", "tradeoff_analysis", "unsafe_physical_action_refusal", "operator_dashboard", "memory_session_handoff")) {
+    foreach ($ExpectedCategory in @("greetings", "status_reports", "project_assessment", "humor", "disagreement", "risk_discussions", "tradeoff_analysis", "unsafe_physical_action_refusal", "operator_dashboard", "memory_session_handoff", "architecture_critique", "tool_selection", "resource_constraints", "strategic_thinking", "bad_idea_detection", "operational_judgment")) {
         if ($Initial.conversation_examples_categories -notcontains $ExpectedCategory) {
             $Issues.Add("Conversation examples are missing required category '$ExpectedCategory'.")
         }
@@ -126,7 +126,7 @@ try {
     if ([string]$PromptAfterProfile.prompt -notmatch 'cyber' -or [string]$PromptAfterProfile.prompt -notmatch 'risk' -or [string]$PromptAfterProfile.prompt -notmatch 'Greeting style: concise' -or [string]$PromptAfterProfile.prompt -notmatch 'assessment, opinion, judgment' -or [string]$PromptAfterProfile.prompt -notmatch 'Decision framework: Situation, Assessment, Risks, Recommendation, Confidence' -or [string]$PromptAfterProfile.prompt -notmatch 'Do not pretend to execute physical actions') {
         $Issues.Add("Prompt generation did not reflect the active profile.")
     }
-    if ($PromptAfterProfile.conversation_examples_status -ne "pass" -or [int]$PromptAfterProfile.conversation_examples_count -lt 10) {
+    if ($PromptAfterProfile.conversation_examples_status -ne "pass" -or [int]$PromptAfterProfile.conversation_examples_count -lt 30) {
         $Issues.Add("Conversation examples were not reported after profile switching.")
     }
     $Results += [pscustomobject]@{

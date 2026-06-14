@@ -490,6 +490,9 @@ foreach ($Case in $Cases) {
                     'Use dry humor or mild sarcasm sparingly',
                     'Few-shot conversation examples',
                     'Category: greetings',
+                    'Category: project_assessment',
+                    'Category: tradeoff_analysis',
+                    'Category: resource_constraints',
                     'Category: unsafe_physical_action_refusal',
                     'Governance, approvals, and safety boundaries remain unchanged'
                 )) {

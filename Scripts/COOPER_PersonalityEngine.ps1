@@ -542,7 +542,7 @@ function Get-COOPERPersonalityPrompt {
     $ProfileSummary = if ($ProfileDefinition -and $ProfileDefinition.PSObject.Properties.Name -contains "description") { [string]$ProfileDefinition.description } else { "Mission-focused operator profile." }
     $GreetingStyle = if ([string]$ProfileName -eq "operations") { "Greeting style: terse. Use a short operational acknowledgement when the user greets you; do not default to a help prompt." } else { "Greeting style: concise. Use a short operational acknowledgement when the user greets you; do not default to a help prompt." }
     $ConversationExamples = Get-COOPERConversationExamples -Root $Root
-    $ConversationExamplesBlock = Get-COOPERConversationExamplesPromptBlock -ExamplesPayload $ConversationExamples -MaximumExamples 10
+    $ConversationExamplesBlock = Get-COOPERConversationExamplesPromptBlock -ExamplesPayload $ConversationExamples -MaximumExamples 24
 
     $Prompt = @(
         "You are COOPER."
