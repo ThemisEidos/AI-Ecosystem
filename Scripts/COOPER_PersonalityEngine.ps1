@@ -156,11 +156,11 @@ function Get-COOPERPersonalityProfileDefinitions {
     }
 
     return [pscustomobject]@{
-        operations = [pscustomobject]@{ humor = 35; sarcasm = 15; professionalism = 90; brevity = 80; initiative = 85; risk_awareness = 95; description = "Terse, decisive, status-first, and low ceremony." }
-        cyber = [pscustomobject]@{ humor = 15; sarcasm = 20; professionalism = 95; brevity = 88; initiative = 82; risk_awareness = 99; description = "Technical, defensive, risk-first, and low ceremony." }
-        investigator = [pscustomobject]@{ humor = 20; sarcasm = 10; professionalism = 92; brevity = 78; initiative = 75; risk_awareness = 97; description = "Analytical, evidence-driven, and methodical." }
-        engineer = [pscustomobject]@{ humor = 22; sarcasm = 12; professionalism = 94; brevity = 74; initiative = 88; risk_awareness = 90; description = "Implementation-focused, precise, and practical." }
-        trainer = [pscustomobject]@{ humor = 30; sarcasm = 8; professionalism = 88; brevity = 58; initiative = 72; risk_awareness = 88; description = "Educational, explanatory, and structured." }
+        operations = [pscustomobject]@{ humor = 35; sarcasm = 15; professionalism = 90; brevity = 80; initiative = 85; risk_awareness = 95; description = "Terse, concise, and low ceremony slider preset." }
+        cyber = [pscustomobject]@{ humor = 15; sarcasm = 20; professionalism = 95; brevity = 88; initiative = 82; risk_awareness = 99; description = "Technical, defensive, and risk-focused slider preset." }
+        investigator = [pscustomobject]@{ humor = 20; sarcasm = 10; professionalism = 92; brevity = 78; initiative = 75; risk_awareness = 97; description = "Analytical and evidence-driven slider preset." }
+        engineer = [pscustomobject]@{ humor = 22; sarcasm = 12; professionalism = 94; brevity = 74; initiative = 88; risk_awareness = 90; description = "Implementation-focused and practical slider preset." }
+        trainer = [pscustomobject]@{ humor = 30; sarcasm = 8; professionalism = 88; brevity = 58; initiative = 72; risk_awareness = 88; description = "Educational and explanatory slider preset." }
     }
 }
 
@@ -262,18 +262,99 @@ function Get-COOPERConversationExamplesPromptBlock {
         [object]$ExamplesPayload,
 
         [Parameter(Mandatory = $false)]
-        [int]$MaximumExamples = 10
+        [int]$MaximumExamples = 10,
+
+        [Parameter(Mandatory = $false)]
+        [int]$ExamplesPerCategory = 2,
+
+        [Parameter(Mandatory = $false)]
+        [string[]]$PreferredCategories
     )
 
     if (-not $ExamplesPayload -or [string]$ExamplesPayload.status -ne "pass") {
         return ""
     }
 
-    $Examples = @($ExamplesPayload.examples | Where-Object {
-        $_ -and
-        $_.PSObject.Properties.Name -contains "user" -and -not [string]::IsNullOrWhiteSpace([string]$_.user) -and
-        $_.PSObject.Properties.Name -contains "cooper" -and -not [string]::IsNullOrWhiteSpace([string]$_.cooper)
-    } | Select-Object -First $MaximumExamples)
+    $AllExamples = @()
+    $RawExamples = @($ExamplesPayload.examples)
+    for ($Index = 0; $Index -lt $RawExamples.Count; $Index++) {
+        $Example = $RawExamples[$Index]
+        if ($Example -and
+            $Example.PSObject.Properties.Name -contains "user" -and -not [string]::IsNullOrWhiteSpace([string]$Example.user) -and
+            $Example.PSObject.Properties.Name -contains "cooper" -and -not [string]::IsNullOrWhiteSpace([string]$Example.cooper)) {
+            $AllExamples += [pscustomobject]@{
+                index = $Index
+                example = $Example
+            }
+        }
+    }
+
+    if (-not $PreferredCategories -or $PreferredCategories.Count -eq 0) {
+        $PreferredCategories = @(
+            "project_assessment"
+            "tradeoff_analysis"
+            "risk_discussions"
+            "assumption_challenge"
+            "architecture_critique"
+            "tool_selection"
+            "resource_constraints"
+            "strategic_thinking"
+            "bad_idea_detection"
+            "operational_judgment"
+            "greetings"
+            "status_reports"
+            "memory_session_handoff"
+            "status_dashboard"
+            "unsafe_physical_action_refusal"
+            "humor"
+        )
+    }
+
+    $SelectedExamples = @()
+    $SelectedIndices = @()
+
+    foreach ($Category in @($PreferredCategories | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })) {
+        $CategoryCount = 0
+        foreach ($Entry in $AllExamples) {
+            if ($SelectedExamples.Count -ge $MaximumExamples) {
+                break
+            }
+
+            if ($CategoryCount -ge $ExamplesPerCategory) {
+                break
+            }
+
+            $EntryCategory = if ($Entry.example.PSObject.Properties.Name -contains "category") { [string]$Entry.example.category } else { "" }
+            if ($EntryCategory -ne $Category) {
+                continue
+            }
+
+            if (-not ($SelectedIndices -contains [int]$Entry.index)) {
+                $SelectedIndices += [int]$Entry.index
+                $SelectedExamples += $Entry.example
+                $CategoryCount++
+            }
+        }
+
+        if ($SelectedExamples.Count -ge $MaximumExamples) {
+            break
+        }
+    }
+
+    if ($SelectedExamples.Count -lt $MaximumExamples) {
+        foreach ($Entry in $AllExamples) {
+            if ($SelectedExamples.Count -ge $MaximumExamples) {
+                break
+            }
+
+            if (-not ($SelectedIndices -contains [int]$Entry.index)) {
+                $SelectedIndices += [int]$Entry.index
+                $SelectedExamples += $Entry.example
+            }
+        }
+    }
+
+    $Examples = @($SelectedExamples)
 
     if ($Examples.Count -eq 0) {
         return ""
@@ -537,22 +618,36 @@ function Get-COOPERPersonalityPrompt {
         $Personality = (Get-COOPERPersonality -Root $Root).personality
     }
 
-    $ProfileName = if ($Personality.PSObject.Properties.Name -contains "profile") { [string]$Personality.profile } else { "operations" }
-    $ProfileDefinition = Get-COOPERProfileDefinition -Profile $ProfileName -Root $Root
-    $ProfileSummary = if ($ProfileDefinition -and $ProfileDefinition.PSObject.Properties.Name -contains "description") { [string]$ProfileDefinition.description } else { "Mission-focused operator profile." }
-    $GreetingStyle = if ([string]$ProfileName -eq "operations") { "Greeting style: terse. Use a short operational acknowledgement when the user greets you; do not default to a help prompt." } else { "Greeting style: concise. Use a short operational acknowledgement when the user greets you; do not default to a help prompt." }
     $ConversationExamples = Get-COOPERConversationExamples -Root $Root
-    $ConversationExamplesBlock = Get-COOPERConversationExamplesPromptBlock -ExamplesPayload $ConversationExamples -MaximumExamples 24
+    $ConversationExamplesBlock = Get-COOPERConversationExamplesPromptBlock -ExamplesPayload $ConversationExamples -MaximumExamples 28 -PreferredCategories @(
+        "project_assessment"
+        "tradeoff_analysis"
+        "risk_discussions"
+        "assumption_challenge"
+        "architecture_critique"
+        "tool_selection"
+        "resource_constraints"
+        "strategic_thinking"
+        "bad_idea_detection"
+        "operational_judgment"
+        "unsafe_physical_action_refusal"
+        "greetings"
+        "status_reports"
+        "memory_session_handoff"
+        "status_dashboard"
+        "humor"
+    ) -ExamplesPerCategory 2
 
     $Prompt = @(
         "You are COOPER."
-        "Identity: TARS-inspired operator, not a roleplay persona."
-        "Mission: competent, direct, concise, and risk-aware operations assistance."
+        "Identity: TARS-inspired, not a roleplay persona."
+        "Mission: calm, direct, honest, brief, skeptical, and competent assistance."
+        "Canonical voice: one stable voice across all slider presets."
         "Keep answers compact unless detail is required to reduce risk or unblock execution."
         ("Personality: humor={0}, sarcasm={1}, professionalism={2}, brevity={3}, initiative={4}, risk_awareness={5}." -f $Personality.humor, $Personality.sarcasm, $Personality.professionalism, $Personality.brevity, $Personality.initiative, $Personality.risk_awareness)
-        ("Profile: {0}. {1}" -f $ProfileName, $ProfileSummary)
+        "Profile: slider preset only; it does not change the canonical voice."
         "Style: lead with the answer, surface risks early, and offer the next safe step."
-        $GreetingStyle
+        "Greeting style: terse. Use a short operational acknowledgement when the user greets you; do not default to a help prompt."
         "When asked for an assessment, opinion, judgment, or risk review, answer directly with observations, tradeoffs, concerns, and a conclusion."
         "Do not collapse opinion questions into a status summary."
         "Decision framework: Situation, Assessment, Risks, Recommendation, Confidence."

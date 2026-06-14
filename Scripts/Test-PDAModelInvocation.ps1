@@ -364,7 +364,7 @@ $Cases = @(
         sensitivity = "standard"
         prompt = "Return plain acknowledgement."
         expected_model = "qwen2.5:7b"
-        expected_token = "COOPER Status"
+        expected_token = "operational"
         selected_model_override = "qwen2.5:7b"
         clear_master_key = $true
     }
@@ -410,7 +410,7 @@ $Cases = @(
         selected_model_override = "qwen2.5:7b"
         use_capture_server = $true
         endpoint = $null
-        expected_prompt_pattern = '(?is)You are COOPER.*Identity: TARS-inspired operator.*Mission: competent, direct, concise, and risk-aware operations assistance.*Greeting style: terse.*When asked for an assessment, opinion, judgment, or risk review, answer directly with observations, tradeoffs, concerns, and a conclusion.*Do not collapse opinion questions into a status summary.*Decision framework: Situation, Assessment, Risks, Recommendation, Confidence\..*For comparisons, use Recommendation, Benefits, Costs, Risks, Alternative\..*Lead with a recommendation when asked what to do\..*Challenge weak assumptions when the evidence supports it\..*Avoid neutral filler such as it depends, both approaches have benefits, no one-size-fits-all, or ultimately it comes down to preferences\..*Do not pretend to execute physical actions you cannot control.*If a user requests an unsafe or impossible physical action, refuse plainly, reality-check the request, and avoid simulated execution or narration of completion\..*Avoid emojis, exclamation marks unless required, generic assistant greetings, motivational language, filler, and sitcom-style humor.*Use dry humor or mild sarcasm sparingly'
+        expected_prompt_pattern = '(?is)You are COOPER.*Identity: TARS-inspired, not a roleplay persona\..*Mission: calm, direct, honest, brief, skeptical, and competent assistance\..*Canonical voice: one stable voice across all slider presets\..*Profile: slider preset only; it does not change the canonical voice\..*Greeting style: terse.*When asked for an assessment, opinion, judgment, or risk review, answer directly with observations, tradeoffs, concerns, and a conclusion.*Do not collapse opinion questions into a status summary.*Decision framework: Situation, Assessment, Risks, Recommendation, Confidence\..*For comparisons, use Recommendation, Benefits, Costs, Risks, Alternative\..*Lead with a recommendation when asked what to do\..*Challenge weak assumptions when the evidence supports it\..*Avoid neutral filler such as it depends, both approaches have benefits, no one-size-fits-all, or ultimately it comes down to preferences\..*Do not pretend to execute physical actions you cannot control.*If a user requests an unsafe or impossible physical action, refuse plainly, reality-check the request, and avoid simulated execution or narration of completion\..*Avoid emojis, exclamation marks unless required, generic assistant greetings, motivational language, filler, and sitcom-style humor.*Use dry humor or mild sarcasm sparingly'
     }
     [pscustomobject]@{
         name = "missing backend diagnostic"
@@ -491,9 +491,12 @@ foreach ($Case in $Cases) {
                     'Few-shot conversation examples',
                     'Category: greetings',
                     'Category: project_assessment',
+                    'Category: assumption_challenge',
                     'Category: tradeoff_analysis',
+                    'Category: strategic_thinking',
                     'Category: resource_constraints',
                     'Category: unsafe_physical_action_refusal',
+                    'Category: status_dashboard',
                     'Governance, approvals, and safety boundaries remain unchanged'
                 )) {
                     if ($SystemContent -notmatch [regex]::Escape($Pattern)) {
