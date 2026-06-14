@@ -152,7 +152,10 @@ function Invoke-COOPERDefaultModelChat {
         [string]$Text,
 
         [Parameter(Mandatory = $false)]
-        [string]$Root = (Split-Path -Parent $PSScriptRoot)
+        [string]$Root = (Split-Path -Parent $PSScriptRoot),
+
+        [Parameter(Mandatory = $false)]
+        [string]$ResponseStyle = ""
     )
 
     $ModelScript = Join-Path $PSScriptRoot "Invoke-PDAModel.ps1"
@@ -183,9 +186,16 @@ function Invoke-COOPERDefaultModelChat {
 
     try {
         $AttemptErrors = New-Object System.Collections.Generic.List[string]
+        $PromptText = [string]$Text
+        if ([string]::IsNullOrWhiteSpace($PromptText)) {
+            $PromptText = ""
+        }
+        if (-not [string]::IsNullOrWhiteSpace($ResponseStyle)) {
+            $PromptText = "{0}`n`n{1}" -f $ResponseStyle.Trim(), $PromptText
+        }
         foreach ($Candidate in $DefaultModelCandidates) {
             $Result.selected_model = [string]$Candidate
-            $Raw = & pwsh -NoProfile -File $ModelScript -WorkerName "cooper-chat" -TaskType "conversational" -Category "category_1" -Sensitivity "standard" -Prompt $Text -SelectedModelOverride ([string]$Candidate) -AsJson -NoThrow 2>&1
+            $Raw = & pwsh -NoProfile -File $ModelScript -WorkerName "cooper-chat" -TaskType "conversational" -Category "category_1" -Sensitivity "standard" -Prompt $PromptText -SelectedModelOverride ([string]$Candidate) -AsJson -NoThrow 2>&1
             $JsonText = [string]($Raw -join "`n").Trim()
             if ([string]::IsNullOrWhiteSpace($JsonText)) {
                 $AttemptErrors.Add("COOPER default model '$Candidate' returned empty output.")
@@ -628,6 +638,15 @@ function Test-PDAConversationalJudgmentAdvice {
     )
 }
 
+function Test-PDAConversationalStructuredOutputRequest {
+    param([Parameter(Mandatory = $true)][string]$NormalizedText)
+
+    return [bool](
+        $NormalizedText -match '(?i)\b(give me|create|draft|write|build|show me|provide|format as|turn this into|compile|make me)\b.*\b(report|assessment report|analysis report|risk register|assessment matrix|dashboard|status output|status report|structured analysis|structured report)\b' -or
+        $NormalizedText -match '(?i)\b(project assessment report|assessment report|analysis report|risk register|assessment matrix|status output|status dashboard|status report)\b'
+    )
+}
+
 function Test-PDAConversationalAmbiguous {
     param([Parameter(Mandatory = $true)][string]$NormalizedText)
 
@@ -842,6 +861,17 @@ function Resolve-PDAConversationalRoute {
     }
 
     if (Test-PDAConversationalJudgmentAdvice -NormalizedText $Normalized) {
+        if (Test-PDAConversationalStructuredOutputRequest -NormalizedText $Normalized) {
+            $Route.route_type = "goal_planning"
+            $Route.response_mode = "direct_answer"
+            $Route.recommended_command = ""
+            $Route.reason = "Explicit structured output request."
+            $Route.confidence = 0.96
+            $Route.intent = "goal_planning"
+            $Route.task_type = "goal_planning"
+            return [pscustomobject]$Route
+        }
+
         $Route.route_type = "judgment_advice"
         $Route.response_mode = "direct_answer"
         $Route.recommended_command = ""
@@ -864,6 +894,18 @@ function Resolve-PDAConversationalRoute {
         else {
             $Route.briefing_focus = "inventory"
         }
+        return [pscustomobject]$Route
+    }
+
+    if (Test-PDAConversationalStructuredOutputRequest -NormalizedText $Normalized) {
+        $Route.route_type = "goal_planning"
+        $Route.response_mode = "direct_answer"
+        $Route.recommended_command = ""
+        $Route.reason = "Explicit structured output request."
+        $Route.confidence = 0.96
+        $Route.intent = "goal_planning"
+        $Route.task_type = "goal_planning"
+        $Route.briefing_focus = "structured_report"
         return [pscustomobject]$Route
     }
 
@@ -1441,7 +1483,7 @@ function Get-PDAConversationalNaturalResponse {
             }
         }
         "judgment_advice" {
-            $ModelResult = Invoke-COOPERDefaultModelChat -Text $Text -Root $Root
+            $ModelResult = Invoke-COOPERDefaultModelChat -Text $Text -Root $Root -ResponseStyle "Answer in 1 to 4 sentences. Use short paragraphs. Do not add next steps unless the user asks."
             if ($ModelResult) {
                 $BaseResponse.bridge_mode = [string]$ModelResult.bridge_mode
                 $BaseResponse.response_text = [string]$ModelResult.response_text
@@ -1465,7 +1507,7 @@ function Get-PDAConversationalNaturalResponse {
             $BaseResponse.next_action = "Reply with one clear action such as review, report, status, research, execute, or goal planning."
         }
         "fallback" {
-            $ModelResult = Invoke-COOPERDefaultModelChat -Text $Text -Root $Root
+            $ModelResult = Invoke-COOPERDefaultModelChat -Text $Text -Root $Root -ResponseStyle "Answer in 1 to 4 sentences. Use short paragraphs. Do not add next steps unless the user asks."
             if ($ModelResult) {
                 $BaseResponse.bridge_mode = [string]$ModelResult.bridge_mode
                 $BaseResponse.response_text = [string]$ModelResult.response_text

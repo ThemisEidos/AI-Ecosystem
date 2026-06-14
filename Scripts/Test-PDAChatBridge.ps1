@@ -48,7 +48,8 @@ if (-not (Test-Path -Path $BridgeScript -PathType Leaf)) {
 $DefaultModelChatFallback = {
     param(
         [Parameter(Mandatory = $true)][string]$Text,
-        [Parameter(Mandatory = $false)][string]$Root
+        [Parameter(Mandatory = $false)][string]$Root,
+        [Parameter(Mandatory = $false)][string]$ResponseStyle
     )
 
     return [pscustomobject]@{
@@ -186,6 +187,17 @@ $Cases = @(
         expected_default_model = "qwen2.5:7b"
         judgment_request = $true
         marker = "chat-project-discussion-$([guid]::NewGuid().ToString())"
+    }
+    [pscustomobject]@{
+        name = "project assessment report"
+        message = "Give me a project assessment report."
+        confirm = $false
+        expected_handoff = "goal_planning"
+        expected_response_contains = "Goal Assessment"
+        expected_dispatch_ready = $false
+        expected_dispatch = $false
+        expected_command = ""
+        marker = "chat-project-assessment-report-$([guid]::NewGuid().ToString())"
     }
     [pscustomobject]@{
         name = "project opinion"
@@ -714,7 +726,7 @@ if ($SkipDispatch) {
 }
 
 if ($DashboardMode) {
-    $Cases = @($Cases | Where-Object { [string]$_.name -in @("known message", "ambiguous message", "unknown message", "research request", "status report", "morning briefing", "how are things going", "system status", "health report", "model identity", "provider identity", "backend identity", "self identity", "personality settings query", "humor setting update", "personality cancel", "project discussion", "project opinion", "risk assessment", "linux migration recommendation", "docker comparison", "repo access risk", "agent replacement challenge") })
+    $Cases = @($Cases | Where-Object { [string]$_.name -in @("known message", "ambiguous message", "unknown message", "research request", "status report", "morning briefing", "how are things going", "system status", "health report", "model identity", "provider identity", "backend identity", "self identity", "personality settings query", "humor setting update", "personality cancel", "project discussion", "project assessment report", "project opinion", "risk assessment", "linux migration recommendation", "docker comparison", "repo access risk", "agent replacement challenge") })
 }
 
 if (-not $SkipDispatch -and -not $DashboardMode) {
@@ -1126,21 +1138,32 @@ foreach ($Case in $Cases) {
     }
 
     if ($Case.PSObject.Properties.Name -contains "judgment_request" -and [bool]$Case.judgment_request) {
-        if ($Result.response_text -notmatch '(?i)\brecommend(?:ation|ed|s)?\b|\bi would\b|\bi suggest\b|\bshould\b') {
+        $SentenceCount = @(
+            [regex]::Split([string]$Result.response_text, '(?<=[\.\!\?])\s+')
+            | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) }
+        ).Count
+        if ($SentenceCount -gt 4) {
             $CasePassed = $false
-            $Issues.Add("Judgment response did not surface a recommendation.")
+            $Issues.Add("Judgment response should stay within 4 sentences.")
         }
-        if ($Result.response_text -notmatch '(?i)\brisk|risks|concern|concerns\b') {
+        if ($Result.response_text -notmatch '(?i)\b(think|consider|concern|risk|because|but|however|problem|tradeoff|complexity|uncertain|safe|stability|security)\b') {
             $CasePassed = $false
-            $Issues.Add("Judgment response did not identify risks or concerns.")
+            $Issues.Add("Judgment response did not read like a grounded opinion.")
         }
-        if ($Result.response_text -notmatch '(?i)\bconfidence\b|\bhigh confidence\b|\bmedium confidence\b|\blow confidence\b') {
-            $CasePassed = $false
-            $Issues.Add("Judgment response did not express confidence.")
-        }
-        if ($Result.response_text -match '(?i)\bit depends\b|\bboth approaches have benefits\b|\bno one-size-fits-all\b|\butimately it comes down to\b|\bHow can I assist you today\b|\bStanding by for tasking\b|\bRecommended command\b') {
+        if ($Result.response_text -match '(?i)^(?:\s*(Recommendation|Assessment|Risks|Benefits|Costs|Alternative|Confidence)\s*:)' -or $Result.response_text -match '(?i)\bIt depends\b|\bboth approaches have benefits\b|\bno one-size-fits-all\b|\butimately it comes down to\b|\bHow can I assist you today\b|\bStanding by for tasking\b|\bRecommended command\b') {
             $CasePassed = $false
             $Issues.Add("Judgment response used a generic assistant or routing phrase.")
+        }
+    }
+
+    if ($Case.name -eq "project assessment report") {
+        if ($Result.response_text -notmatch '(?i)Goal Assessment|Execution Plan|Approval Path') {
+            $CasePassed = $false
+            $Issues.Add("Explicit structured report request did not return structured output.")
+        }
+        if ($Result.response_text -match '(?i)How can I assist you today|Standing by for tasking|it depends') {
+            $CasePassed = $false
+            $Issues.Add("Structured report response used generic assistant filler.")
         }
     }
 

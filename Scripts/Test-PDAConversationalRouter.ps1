@@ -38,7 +38,8 @@ if ($DefaultModelCandidates.Count -lt 3 -or $DefaultModelCandidates[0] -ne "qwen
 $DefaultModelChatFallback = {
     param(
         [Parameter(Mandatory = $true)][string]$Text,
-        [Parameter(Mandatory = $false)][string]$Root
+        [Parameter(Mandatory = $false)][string]$Root,
+        [Parameter(Mandatory = $false)][string]$ResponseStyle
     )
 
     return [pscustomobject]@{
@@ -241,6 +242,12 @@ $Cases = @(
         expected_default_model = "qwen2.5:7b"
     }
     [pscustomobject]@{
+        name = "project assessment report"
+        input = "Give me a project assessment report."
+        expected_route = "goal_planning"
+        expected_command = ""
+    }
+    [pscustomobject]@{
         name = "project opinion fallback"
         input = "What is your opinion on the project?"
         expected_route = "judgment_advice"
@@ -373,7 +380,8 @@ foreach ($Case in $Cases) {
             $StubScript = {
                 param(
                     [Parameter(Mandatory = $true)][string]$Text,
-                    [Parameter(Mandatory = $false)][string]$Root
+                    [Parameter(Mandatory = $false)][string]$Root,
+                    [Parameter(Mandatory = $false)][string]$ResponseStyle
                 )
 
                 return [pscustomobject]@{
@@ -448,9 +456,27 @@ foreach ($Case in $Cases) {
             $CasePassed = $false
             $Issues.Add("Goal planning response did not look like a structured plan.")
         }
-        if ($Route.route_type -eq "judgment_advice" -and $Direct.response_text -match '(?i)\bRecommended command\b|Confirm to dispatch|Reply with confirmation|Standing by for tasking') {
+        if ($Route.route_type -eq "goal_planning" -and $Case.name -eq "project assessment report" -and $Direct.response_text -notmatch '(?i)goal assessment|execution plan|approval path') {
+            $CasePassed = $false
+            $Issues.Add("Explicit structured report request did not return structured output.")
+        }
+        if ($Route.route_type -eq "judgment_advice" -and $Direct.response_text -match '(?i)\bRecommended command\b|Confirm to dispatch|Reply with confirmation|Standing by for tasking|^\s*(Recommendation|Assessment|Risks|Benefits|Costs|Alternative|Confidence)\s*:') {
             $CasePassed = $false
             $Issues.Add("Judgment advice should not produce workflow-routing language.")
+        }
+        if ($Route.route_type -eq "judgment_advice") {
+            $SentenceCount = @(
+                [regex]::Split([string]$Direct.response_text, '(?<=[\.\!\?])\s+')
+                | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) }
+            ).Count
+            if ($SentenceCount -gt 4) {
+                $CasePassed = $false
+                $Issues.Add("Judgment advice should stay within 4 sentences.")
+            }
+            if ($Direct.response_text -match '(?i)\b(next move|next step|next steps|I recommend|Recommendation:|Assessment:|Risks:|Benefits:|Costs:|Alternative:)\b') {
+                $CasePassed = $false
+                $Issues.Add("Judgment advice should not auto-inject recommendations or next steps.")
+            }
         }
         if ($Route.route_type -eq "fallback") {
             if (-not ($Direct.PSObject.Properties.Name -contains "selected_model")) {
@@ -495,7 +521,8 @@ foreach ($Case in $Cases) {
         $StubScript = {
             param(
                 [Parameter(Mandatory = $true)][string]$Text,
-                [Parameter(Mandatory = $false)][string]$Root
+                [Parameter(Mandatory = $false)][string]$Root,
+                [Parameter(Mandatory = $false)][string]$ResponseStyle
             )
 
             $script:COOPERModelInvocationCount++
