@@ -22,15 +22,12 @@ $DashboardStatusScript = Join-Path $PSScriptRoot "Get-PDADashboardStatus.ps1"
 $TaskResultScript = Join-Path $PSScriptRoot "Get-PDATaskResult.ps1"
 $MemoryCandidateSummaryScript = Join-Path $PSScriptRoot "Get-PDAMemoryCandidateSummary.ps1"
 $DispatchStatusScript = Join-Path $PSScriptRoot "Get-PDADispatchStatus.ps1"
-$RuntimeStatusScript = Join-Path $PSScriptRoot "Get-COOPERRuntimeStatus.ps1"
+$StatusBridgeScript = Join-Path $PSScriptRoot "Invoke-COOPERStatusCommand.ps1"
 $EnvironmentHelperScript = Join-Path $PSScriptRoot "PDA_Environment.ps1"
 $ExecutorRegistryScript = Join-Path $PSScriptRoot "PDA_ExecutorRegistry.ps1"
 $ParserPath = Join-Path $PSScriptRoot "PDA_OutputParsing.ps1"
 if (Test-Path -LiteralPath $ParserPath -PathType Leaf) {
     . $ParserPath
-}
-if (Test-Path -LiteralPath $RuntimeStatusScript -PathType Leaf) {
-    . $RuntimeStatusScript
 }
 if (Test-Path -LiteralPath $EnvironmentHelperScript -PathType Leaf) {
     . $EnvironmentHelperScript
@@ -713,6 +710,17 @@ function Resolve-PDAConversationalRoute {
     }
 
     if (Test-PDAConversationalSlashCommand -NormalizedText $Normalized) {
+        if ($Normalized -match '^/cooper\s+status(\s|$)') {
+            $Route.route_type = "cooper_status_command"
+            $Route.response_mode = "governed_command"
+            $Route.recommended_command = "/cooper status"
+            $Route.reason = "Governed COOPER status command."
+            $Route.confidence = 1
+            $Route.command = "/cooper status"
+            $Route.cooper_command = $Text
+            return [pscustomobject]$Route
+        }
+
         if ($Normalized.StartsWith("/cooper")) {
             $Route.route_type = "cooper_personality_command"
             $Route.response_mode = "direct_answer"
@@ -1003,6 +1011,9 @@ function Get-PDAConversationalNaturalResponse {
         [string]$Text,
 
         [Parameter(Mandatory = $false)]
+        [string]$WorkshopMode,
+
+        [Parameter(Mandatory = $false)]
         [string]$Root = (Split-Path -Parent $PSScriptRoot)
     )
 
@@ -1047,97 +1058,86 @@ function Get-PDAConversationalNaturalResponse {
 
     switch ([string]$Route.route_type) {
         "direct_status" {
-            $RuntimeStatus = if (Get-Command -Name Get-COOPERRuntimeStatus -ErrorAction SilentlyContinue) {
+            $ResolvedWorkshopMode = [string]$WorkshopMode
+            if ([string]::IsNullOrWhiteSpace($ResolvedWorkshopMode) -and -not [string]::IsNullOrWhiteSpace([string]$env:COOPER_WORKSHOP_MODE)) {
+                $ResolvedWorkshopMode = [string]$env:COOPER_WORKSHOP_MODE
+            }
+
+            if (Test-Path -LiteralPath $StatusBridgeScript -PathType Leaf) {
                 try {
-                    Get-COOPERRuntimeStatus -Root $Root
+                    $StatusResult = & $StatusBridgeScript -WorkshopMode $ResolvedWorkshopMode
                 }
                 catch {
-                    $null
-                }
-            }
-            else {
-                $null
-            }
-            $LightweightStatusMode = Test-COOPERLightweightStatusMode
-            $Health = "unknown"
-            $StatusLines = New-Object System.Collections.Generic.List[string]
-            if ($RuntimeStatus -and $RuntimeStatus.PSObject.Properties.Name -contains "summary_lines") {
-                foreach ($Line in @($RuntimeStatus.summary_lines)) {
-                    if (-not [string]::IsNullOrWhiteSpace([string]$Line)) {
-                        $StatusLines.Add([string]$Line)
+                    $StatusResult = [pscustomobject]@{
+                        success = $false
+                        reason = $_.Exception.Message
+                        response_text = ""
                     }
                 }
             }
             else {
-                $CurrentModel = if ($RuntimeStatus -and $RuntimeStatus.PSObject.Properties.Name -contains "current_model" -and -not [string]::IsNullOrWhiteSpace([string]$RuntimeStatus.current_model)) { [string]$RuntimeStatus.current_model } else { "qwen2.5:7b" }
-                $StatusLines.Add("COOPER Status")
-                $StatusLines.Add(("Current Model: {0}" -f $CurrentModel))
-                $StatusLines.Add(("Provider: {0}" -f "Ollama"))
-                $StatusLines.Add(("Gateway: {0}" -f "LiteLLM"))
-                $StatusLines.Add(("Docker: {0}" -f $(if ($Health -eq "pass") { "Healthy" } else { "Degraded" })))
-                $StatusLines.Add(("Open WebUI: {0}" -f $(if ($Health -eq "pass") { "Healthy" } else { "Degraded" })))
-                $StatusLines.Add(("n8n: {0}" -f $(if ($Health -eq "pass") { "Healthy" } else { "Degraded" })))
-                $StatusLines.Add(("LiteLLM: {0}" -f $(if ($Health -eq "pass") { "Healthy" } else { "Degraded" })))
-                $StatusLines.Add("Current Explosions: 0")
-            }
-            if ($LightweightStatusMode) {
-                if (-not ($StatusLines -match '^Docker:')) {
-                    $StatusLines.Add("Docker: Healthy")
-                }
-                if (-not ($StatusLines -match '^Open WebUI:')) {
-                    $StatusLines.Add("Open WebUI: Healthy")
-                }
-                if (-not ($StatusLines -match '^n8n:')) {
-                    $StatusLines.Add("n8n: Healthy")
-                }
-                if (-not ($StatusLines -match '^LiteLLM:')) {
-                    $StatusLines.Add("LiteLLM: Healthy")
+                $StatusResult = [pscustomobject]@{
+                    success = $false
+                    reason = "COOPER status bridge is unavailable."
+                    response_text = ""
                 }
             }
-            $StatusLines.Add("Standing by for tasking.")
-            $BaseResponse.response_text = $StatusLines -join "`r`n"
-            $BaseResponse.next_action = "Ask for /status to see the full operator console or ask about workers, tasks, reports, identity, or memory."
-            $BaseResponse.latest_result_response_text = $BaseResponse.response_text
+
+            $BaseResponse.runtime_status = $StatusResult
+            if ($StatusResult -and [bool]$StatusResult.success -eq $true) {
+                $BaseResponse.response_text = if ($StatusResult.PSObject.Properties.Name -contains "response_text" -and -not [string]::IsNullOrWhiteSpace([string]$StatusResult.response_text)) { [string]$StatusResult.response_text } else { [string]$StatusResult.reason }
+                $BaseResponse.next_action = "Ask about tasks, reports, identity, or memory."
+                $BaseResponse.latest_result_response_text = $BaseResponse.response_text
+            }
+            else {
+                $BaseResponse.response_text = if ($StatusResult -and $StatusResult.PSObject.Properties.Name -contains "reason" -and -not [string]::IsNullOrWhiteSpace([string]$StatusResult.reason)) { [string]$StatusResult.reason } else { "COOPER status is unavailable because workshop mode was not selected." }
+                $BaseResponse.next_action = "Select COOPER or COOPER Private, then retry /cooper status."
+                $BaseResponse.latest_result_response_text = $BaseResponse.response_text
+            }
         }
         "direct_help" {
             $BaseResponse.response_text = "Status, reports, research, planning, execution. Pick a target."
             $BaseResponse.next_action = "Use /help only if you want the full command list."
         }
         "runtime_self_awareness" {
-            $RuntimeStatus = if (Get-Command -Name Get-COOPERRuntimeStatus -ErrorAction SilentlyContinue) {
+            $ResolvedWorkshopMode = [string]$WorkshopMode
+            if ([string]::IsNullOrWhiteSpace($ResolvedWorkshopMode) -and -not [string]::IsNullOrWhiteSpace([string]$env:COOPER_WORKSHOP_MODE)) {
+                $ResolvedWorkshopMode = [string]$env:COOPER_WORKSHOP_MODE
+            }
+
+            if (Test-Path -LiteralPath $StatusBridgeScript -PathType Leaf) {
                 try {
-                    Get-COOPERRuntimeStatus -Root $Root
+                    $StatusResult = & $StatusBridgeScript -WorkshopMode $ResolvedWorkshopMode
                 }
                 catch {
-                    $null
+                    $StatusResult = [pscustomobject]@{
+                        success = $false
+                        reason = $_.Exception.Message
+                        response_text = ""
+                    }
                 }
             }
             else {
-                $null
+                $StatusResult = [pscustomobject]@{
+                    success = $false
+                    reason = "COOPER status bridge is unavailable."
+                    response_text = ""
+                }
             }
 
-            if ($RuntimeStatus) {
-                $BaseResponse.response_text = @(
-                    "COOPER Status"
-                    ("Current Model: {0}" -f $RuntimeStatus.current_model)
-                    ("Provider: {0}" -f $RuntimeStatus.provider)
-                    ("Gateway: {0}" -f $RuntimeStatus.gateway)
-                    ("Backend: {0}" -f $RuntimeStatus.backend)
-                    ("Interface: {0}" -f $RuntimeStatus.interface)
-                    ("Assistant Identity: {0}" -f $RuntimeStatus.assistant_identity)
-                    ("Current Explosions: {0}" -f $RuntimeStatus.current_explosions)
-                ) -join "`r`n"
-                $BaseResponse.runtime_status = $RuntimeStatus
-                $BaseResponse.selected_model = [string]$RuntimeStatus.current_model
+            if ($StatusResult -and [bool]$StatusResult.success -eq $true) {
+                $BaseResponse.response_text = [string]$StatusResult.response_text
+                $BaseResponse.runtime_status = $StatusResult
+                $BaseResponse.selected_model = [string]$StatusResult.workshop_identity.default_model
                 $BaseResponse.model_status = "bypassed"
                 $BaseResponse.model_error_message = ""
-                $BaseResponse.model_routing_reason = "Runtime self-awareness requests are answered from metadata."
-                $BaseResponse.next_action = "Ask about status, tasks, reports, or /help."
+                $BaseResponse.model_routing_reason = "Runtime self-awareness requests are answered from governed status output."
+                $BaseResponse.next_action = "Ask about tasks, reports, identity, or /help."
                 $BaseResponse.latest_result_response_text = $BaseResponse.response_text
             }
             else {
-                $BaseResponse.response_text = "COOPER runtime metadata is unavailable."
-                $BaseResponse.next_action = "Ask /status or retry once the runtime metadata helper is available."
+                $BaseResponse.response_text = if ($StatusResult -and $StatusResult.PSObject.Properties.Name -contains "reason" -and -not [string]::IsNullOrWhiteSpace([string]$StatusResult.reason)) { [string]$StatusResult.reason } else { "COOPER status is unavailable because workshop mode was not selected." }
+                $BaseResponse.next_action = "Select COOPER or COOPER Private, then retry /cooper status."
             }
         }
         "personality_status" {

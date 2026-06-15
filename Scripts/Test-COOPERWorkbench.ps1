@@ -176,11 +176,42 @@ foreach ($Case in $Cases) {
     }
 
     if ($Case.name -eq "approved harmless status action succeeds") {
-        if ($Result.output.PSObject.Properties.Name -notcontains "workspace_root") {
-            $Issues.Add("Status action output must include workspace_root.")
+        foreach ($Field in @(
+            "workspace_root",
+            "registry_exists",
+            "workshop_mode",
+            "workshop_name",
+            "default_model",
+            "cloud_allowed",
+            "active_registry",
+            "status_workflow",
+            "security_sources",
+            "status_lines"
+        )) {
+            if ($Result.output.PSObject.Properties.Name -notcontains $Field) {
+                $Issues.Add("Status action output must include $Field.")
+            }
         }
-        if ($Result.output.PSObject.Properties.Name -notcontains "registry_exists") {
-            $Issues.Add("Status action output must include registry_exists.")
+
+        if ([string]$Result.output.workshop_mode -ne "Open Workshop") {
+            $Issues.Add("Status action output workshop_mode should be Open Workshop.")
+        }
+        if ([string]$Result.output.workshop_name -ne "COOPER") {
+            $Issues.Add("Status action output workshop_name should be COOPER.")
+        }
+        if ([string]$Result.output.default_model -ne "Claude Sonnet") {
+            $Issues.Add("Status action output default_model should be Claude Sonnet.")
+        }
+        if ([string]$Result.output.active_registry -notmatch 'general_tool_registry\.yaml$') {
+            $Issues.Add("Status action output active_registry should point to the general registry.")
+        }
+        foreach ($Field in @("firewall_status", "ids_status", "backup_status")) {
+            if ($Result.output.security_sources.PSObject.Properties.Name -notcontains $Field) {
+                $Issues.Add("Status action output security_sources must include $Field.")
+            }
+            elseif ([string]$Result.output.security_sources.$Field -ne "Not Configured") {
+                $Issues.Add("Status action output $Field should be Not Configured.")
+            }
         }
     }
 

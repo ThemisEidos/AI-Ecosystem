@@ -34,7 +34,6 @@ $DecisionEngineScript = Join-Path $PSScriptRoot "PDA_DecisionEngine.ps1"
 $EnvironmentHelperScript = Join-Path $PSScriptRoot "PDA_Environment.ps1"
 $ApprovalWorkflowScript = Join-Path $PSScriptRoot "PDA_ApprovalWorkflow.ps1"
 $COOPERIdentityScript = Join-Path $PSScriptRoot "Get-COOPERIdentity.ps1"
-$COOPERRuntimeStatusScript = Join-Path $PSScriptRoot "Get-COOPERRuntimeStatus.ps1"
 . (Join-Path $PSScriptRoot "COOPER_PersonalityEngine.ps1")
 . (Join-Path $PSScriptRoot "PDA_OutputParsing.ps1")
 if (Test-Path -Path $ConversationalRouterScript -PathType Leaf) {
@@ -51,9 +50,6 @@ if (Test-Path -Path $ApprovalWorkflowScript -PathType Leaf) {
 }
 if (Test-Path -Path $COOPERIdentityScript -PathType Leaf) {
     . $COOPERIdentityScript
-}
-if (Test-Path -Path $COOPERRuntimeStatusScript -PathType Leaf) {
-    . $COOPERRuntimeStatusScript
 }
 
 if (-not (Test-Path -Path $HandoffScript -PathType Leaf)) {
@@ -251,6 +247,198 @@ function Get-PDAPendingConfirmationTimeoutMinutes {
     return $DefaultMinutes
 }
 
+function Get-PDACommanderModelProfile {
+    param([Parameter(Mandatory = $true)][string]$ModelName)
+
+    switch ([string]$ModelName) {
+        "Claude Sonnet" {
+            return [pscustomobject]@{
+                provider = "Anthropic"
+                gateway = "LiteLLM"
+                interface = "Open WebUI"
+                backend = "anthropic/claude-sonnet-4-5-20250929"
+            }
+        }
+        "local Qwen via Ollama" {
+            return [pscustomobject]@{
+                provider = "Ollama"
+                gateway = "LiteLLM"
+                interface = "Open WebUI"
+                backend = "ollama/qwen2.5:7b"
+            }
+        }
+        "qwen2.5:7b" {
+            return [pscustomobject]@{
+                provider = "Ollama"
+                gateway = "LiteLLM"
+                interface = "Open WebUI"
+                backend = "ollama/qwen2.5:7b"
+            }
+        }
+        "local-llama" {
+            return [pscustomobject]@{
+                provider = "Ollama"
+                gateway = "LiteLLM"
+                interface = "Open WebUI"
+                backend = "ollama/llama3.2"
+            }
+        }
+        "openai" {
+            return [pscustomobject]@{
+                provider = "OpenAI"
+                gateway = "LiteLLM"
+                interface = "Open WebUI"
+                backend = "openai/gpt-4o-mini"
+            }
+        }
+        "claude" {
+            return [pscustomobject]@{
+                provider = "Anthropic"
+                gateway = "LiteLLM"
+                interface = "Open WebUI"
+                backend = "anthropic/claude-sonnet-4-5-20250929"
+            }
+        }
+        default {
+            return [pscustomobject]@{
+                provider = "Local"
+                gateway = "LiteLLM"
+                interface = "Open WebUI"
+                backend = $ModelName
+            }
+        }
+    }
+}
+
+function Get-PDACommanderGovernedStatusContext {
+    param([Parameter(Mandatory = $true)][string]$Root)
+
+    $ResolvedWorkshopMode = [string]$env:COOPER_WORKSHOP_MODE
+    if ([string]::IsNullOrWhiteSpace($ResolvedWorkshopMode)) {
+        $ResolvedWorkshopMode = "Open Workshop"
+    }
+
+    $StatusResult = $null
+    if (Test-Path -LiteralPath $StatusBridgeScript -PathType Leaf) {
+        try {
+            $StatusResult = & $StatusBridgeScript -WorkshopMode $ResolvedWorkshopMode
+        }
+        catch {
+            $StatusResult = [pscustomobject]@{
+                success = $false
+                reason = $_.Exception.Message
+                response_text = ""
+            }
+        }
+    }
+
+    if ($StatusResult -and [bool]$StatusResult.success -eq $true -and $StatusResult.PSObject.Properties.Name -contains "workshop_identity") {
+        $WorkshopIdentity = $StatusResult.workshop_identity
+        $WorkshopOutput = if ($StatusResult.PSObject.Properties.Name -contains "workbench_result" -and $StatusResult.workbench_result -and $StatusResult.workbench_result.PSObject.Properties.Name -contains "output") {
+            $StatusResult.workbench_result.output
+        }
+        else {
+            $null
+        }
+        $ModelProfile = Get-PDACommanderModelProfile -ModelName ([string]$WorkshopIdentity.default_model)
+
+        return [pscustomobject]@{
+            status = "pass"
+            source_of_truth = "Scripts/Invoke-COOPERStatusCommand.ps1"
+            workshop_identity = $WorkshopIdentity
+            status_result = $StatusResult
+            runtime_status = [pscustomobject]@{
+                status = "pass"
+                assistant_identity = [string]$WorkshopIdentity.display_name
+                official_name = if ($WorkshopIdentity.PSObject.Properties.Name -contains "official_name") { [string]$WorkshopIdentity.official_name } else { "Command Operations Orchestrator for Planning, Execution, and Reporting" }
+                tagline = if ($WorkshopIdentity.PSObject.Properties.Name -contains "tagline") { [string]$WorkshopIdentity.tagline } else { "Chief Officer of Preventing Everything from Randomly Exploding" }
+                identity_note = if ($WorkshopIdentity.PSObject.Properties.Name -contains "identity_note") { [string]$WorkshopIdentity.identity_note } else { "TARS-inspired, not copyrighted imitation" }
+                workshop_mode = [string]$WorkshopIdentity.workshop_label
+                workshop_name = [string]$WorkshopIdentity.display_name
+                default_model = [string]$WorkshopIdentity.default_model
+                current_model = [string]$WorkshopIdentity.default_model
+                provider = [string]$ModelProfile.provider
+                gateway = [string]$ModelProfile.gateway
+                interface = [string]$ModelProfile.interface
+                backend = [string]$ModelProfile.backend
+                cloud_allowed = [bool]$WorkshopIdentity.cloud_allowed
+                active_registry = [string]$WorkshopIdentity.registry
+                status_workflow = if ($WorkshopOutput -and $WorkshopOutput.PSObject.Properties.Name -contains "status_workflow") { [string]$WorkshopOutput.status_workflow } else { "Available" }
+                status_source = if ($WorkshopOutput -and $WorkshopOutput.PSObject.Properties.Name -contains "status_source") { [string]$WorkshopOutput.status_source } else { "Config/cooper_workshop_identities.yaml" }
+                security_sources = if ($WorkshopOutput -and $WorkshopOutput.PSObject.Properties.Name -contains "security_sources") { $WorkshopOutput.security_sources } else {
+                    [pscustomobject]@{
+                        firewall_status = "Not Configured"
+                        ids_status = "Not Configured"
+                        backup_status = "Not Configured"
+                    }
+                }
+                summary_lines = if ($WorkshopOutput -and $WorkshopOutput.PSObject.Properties.Name -contains "status_lines") { @($WorkshopOutput.status_lines) } else { @() }
+                current_explosions = 0
+            }
+        }
+    }
+
+    $FallbackIdentity = if (Get-Command -Name Get-COOPERIdentity -ErrorAction SilentlyContinue) {
+        try {
+            Get-COOPERIdentity -Root $Root
+        }
+        catch {
+            $null
+        }
+    }
+    else {
+        $null
+    }
+
+    $FallbackModel = if ($FallbackIdentity -and $FallbackIdentity.PSObject.Properties.Name -contains "default_model" -and -not [string]::IsNullOrWhiteSpace([string]$FallbackIdentity.default_model)) {
+        [string]$FallbackIdentity.default_model
+    }
+    else {
+        "Legacy Non-Authoritative"
+    }
+    $FallbackProfile = Get-PDACommanderModelProfile -ModelName $FallbackModel
+
+    return [pscustomobject]@{
+        status = "warning"
+        source_of_truth = "Deprecated legacy status helper quarantine"
+        workshop_identity = $FallbackIdentity
+        status_result = $StatusResult
+        runtime_status = [pscustomobject]@{
+            status = "warning"
+            assistant_identity = if ($FallbackIdentity -and $FallbackIdentity.PSObject.Properties.Name -contains "display_name") { [string]$FallbackIdentity.display_name } else { "COOPER" }
+            workshop_mode = if ($FallbackIdentity -and $FallbackIdentity.PSObject.Properties.Name -contains "workshop_label") { [string]$FallbackIdentity.workshop_label } else { "Open Workshop" }
+            workshop_name = if ($FallbackIdentity -and $FallbackIdentity.PSObject.Properties.Name -contains "display_name") { [string]$FallbackIdentity.display_name } else { "COOPER" }
+            default_model = $FallbackModel
+            current_model = $FallbackModel
+            provider = [string]$FallbackProfile.provider
+            gateway = [string]$FallbackProfile.gateway
+            interface = [string]$FallbackProfile.interface
+            backend = [string]$FallbackProfile.backend
+            cloud_allowed = if ($FallbackIdentity -and $FallbackIdentity.PSObject.Properties.Name -contains "cloud_allowed") { [bool]$FallbackIdentity.cloud_allowed } else { $true }
+            active_registry = if ($FallbackIdentity -and $FallbackIdentity.PSObject.Properties.Name -contains "registry") { [string]$FallbackIdentity.registry } else { "Legacy Non-Authoritative" }
+            status_workflow = "Legacy Non-Authoritative"
+            status_source = "Legacy Non-Authoritative"
+            security_sources = [pscustomobject]@{
+                firewall_status = "Not Configured"
+                ids_status = "Not Configured"
+                backup_status = "Not Configured"
+            }
+            summary_lines = @(
+                "Active Workshop: Legacy Non-Authoritative"
+                "Workshop Mode: Legacy Non-Authoritative"
+                "Default Model: Legacy Non-Authoritative"
+                "Registry: Legacy Non-Authoritative"
+                "Cloud Allowed: Legacy Non-Authoritative"
+                "Status Workflow: Legacy Non-Authoritative"
+                "Firewall Status: Not Configured"
+                "IDS Status: Not Configured"
+                "Backup Status: Not Configured"
+            )
+            current_explosions = 0
+        }
+    }
+}
+
 function Get-PDACommanderRuntimeContext {
     param([Parameter(Mandatory = $true)][string]$Root)
 
@@ -297,17 +485,8 @@ function Get-PDACommanderRuntimeContext {
         operational_modes = if ($Identity -and $Identity.PSObject.Properties.Name -contains "operational_modes") { @($Identity.operational_modes) } else { @("Analyst Mode", "Operator Mode", "TARS Mode", "Overlord Mode", "Emergency Mode") }
     }
 
-    $RuntimeStatus = if (Get-Command -Name Get-COOPERRuntimeStatus -ErrorAction SilentlyContinue) {
-        try {
-            Get-COOPERRuntimeStatus -Root $Root
-        }
-        catch {
-            $null
-        }
-    }
-    else {
-        $null
-    }
+    $GovernedStatusContext = Get-PDACommanderGovernedStatusContext -Root $Root
+    $RuntimeStatus = if ($GovernedStatusContext -and $GovernedStatusContext.PSObject.Properties.Name -contains "runtime_status") { $GovernedStatusContext.runtime_status } else { $null }
 
     return [pscustomobject]@{
         cooper_layers_loaded = [bool]$RuntimeLayers.cooper_layers_loaded
@@ -320,6 +499,7 @@ function Get-PDACommanderRuntimeContext {
         identity = $IdentitySummary
         runtime_layers = $RuntimeLayers
         runtime_status = $RuntimeStatus
+        status_source = if ($RuntimeStatus -and $RuntimeStatus.PSObject.Properties.Name -contains "status_source") { [string]$RuntimeStatus.status_source } else { "Legacy Non-Authoritative" }
         cooper_interface = "COOPER"
         source_of_truth = "Scripts/Get-COOPERIdentity.ps1"
     }
@@ -346,10 +526,12 @@ function Add-PDACommanderRuntimeContextFields {
         agent_registry_available = [bool]$RuntimeContext.agent_registry_available
         cooper_context = $RuntimeContext
         runtime_status = if ($RuntimeContext.PSObject.Properties.Name -contains "runtime_status") { $RuntimeContext.runtime_status } else { $null }
+        status_source = if ($RuntimeContext.PSObject.Properties.Name -contains "status_source") { [string]$RuntimeContext.status_source } else { "" }
         current_model = if ($RuntimeContext.runtime_status -and $RuntimeContext.runtime_status.PSObject.Properties.Name -contains "current_model") { [string]$RuntimeContext.runtime_status.current_model } else { "" }
         provider = if ($RuntimeContext.runtime_status -and $RuntimeContext.runtime_status.PSObject.Properties.Name -contains "provider") { [string]$RuntimeContext.runtime_status.provider } else { "" }
         gateway = if ($RuntimeContext.runtime_status -and $RuntimeContext.runtime_status.PSObject.Properties.Name -contains "gateway") { [string]$RuntimeContext.runtime_status.gateway } else { "" }
         interface = if ($RuntimeContext.runtime_status -and $RuntimeContext.runtime_status.PSObject.Properties.Name -contains "interface") { [string]$RuntimeContext.runtime_status.interface } else { "" }
+        backend = if ($RuntimeContext.runtime_status -and $RuntimeContext.runtime_status.PSObject.Properties.Name -contains "backend") { [string]$RuntimeContext.runtime_status.backend } else { "" }
     }
 
     foreach ($Entry in $Fields.GetEnumerator()) {
@@ -875,7 +1057,7 @@ if (-not $ApprovalRecord -and $HasPendingAction -and (Get-Command -Name New-PDAA
     catch {}
 }
 
-$PersonalityConfirmationPriority = $HasPendingPersonalityChange -and ($IsConfirmationMessage -or $ConfirmDispatch)
+$PersonalityConfirmationPriority = $HasPendingPersonalityChange -and $IsConfirmationMessage
 if ($PersonalityConfirmationPriority) {
     $PendingAction = $null
     $HasPendingAction = $false
@@ -977,7 +1159,7 @@ if (-not [string]::IsNullOrWhiteSpace($ApprovalActionStatus) -and ($HasPendingAc
     }
 }
 
-if ($HasPendingPersonalityChange -and (-not $HasPendingAction) -and ($IsConfirmationMessage -or $ConfirmDispatch)) {
+if ($HasPendingPersonalityChange -and (-not $HasPendingAction) -and $IsConfirmationMessage) {
     $PersonalityUpdateScript = Join-Path $PSScriptRoot "Update-COOPERPersonality.ps1"
     if (-not (Test-Path -Path $PersonalityUpdateScript -PathType Leaf)) {
         $Result = [pscustomobject]@{
@@ -1381,6 +1563,7 @@ if (Get-Command -Name Resolve-PDAConversationalRoute -ErrorAction SilentlyContin
             "task_lookup" {
                 $DirectResult = Get-PDAConversationalNaturalResponse -Route $ConversationRoute -ConversationId $ConversationId -SessionId $SessionId -UserId $UserId -ConversationTitle $ConversationTitle -Text $Message -Root $Root
                 $DirectResult = Set-PDABridgeDecisionMetadata -Result $DirectResult -RouteType ([string]$ConversationRoute.route_type) -Decision $script:PDACommanderDecision
+                $DirectResult = Add-PDACommanderRuntimeContextFields -Result $DirectResult
                 Invoke-PDAConversationStateUpdate -ConversationId $ConversationId -SessionId $SessionId -UserId $UserId -ConversationTitle $ConversationTitle -Message $Message -TaskId ([string]$DirectResult.latest_task_id) -TaskStatus ([string]$DirectResult.latest_task_status) -TaskFilePath "" -ApprovalFilePath "" -ResultPath ([string]$DirectResult.latest_result_path) -ResultSummary "" -BridgeStatus ([string]$DirectResult.bridge_status) -DispatchStatus ([string]$DirectResult.dispatch_status) -NextAction ([string]$DirectResult.next_action) -ResponseText ([string]$DirectResult.response_text) -RecommendedCommand ([string]$DirectResult.recommended_command) -Intent ([string]$DirectResult.intent) -Confidence ([double]$DirectResult.confidence) -RequiresConfirmation:$false | Out-Null
 
                 if ($AsJson) {
@@ -1401,6 +1584,7 @@ if (Get-Command -Name Resolve-PDAConversationalRoute -ErrorAction SilentlyContin
             "memory_candidates" {
                 $DirectResult = Get-PDAConversationalNaturalResponse -Route $ConversationRoute -ConversationId $ConversationId -SessionId $SessionId -UserId $UserId -ConversationTitle $ConversationTitle -Text $Message -Root $Root
                 $DirectResult = Set-PDABridgeDecisionMetadata -Result $DirectResult -RouteType ([string]$ConversationRoute.route_type) -Decision $script:PDACommanderDecision
+                $DirectResult = Add-PDACommanderRuntimeContextFields -Result $DirectResult
                 Invoke-PDAConversationStateUpdate -ConversationId $ConversationId -SessionId $SessionId -UserId $UserId -ConversationTitle $ConversationTitle -Message $Message -TaskId ([string]$DirectResult.latest_task_id) -TaskStatus ([string]$DirectResult.latest_task_status) -TaskFilePath "" -ApprovalFilePath "" -ResultPath ([string]$DirectResult.latest_result_path) -ResultSummary "" -BridgeStatus ([string]$DirectResult.bridge_status) -DispatchStatus ([string]$DirectResult.dispatch_status) -NextAction ([string]$DirectResult.next_action) -ResponseText ([string]$DirectResult.response_text) -RecommendedCommand ([string]$DirectResult.recommended_command) -Intent ([string]$DirectResult.intent) -Confidence ([double]$DirectResult.confidence) -RequiresConfirmation:$false | Out-Null
 
                 if ($AsJson) {
@@ -1421,6 +1605,7 @@ if (Get-Command -Name Resolve-PDAConversationalRoute -ErrorAction SilentlyContin
             "commander_briefing" {
                 $DirectResult = Get-PDAConversationalNaturalResponse -Route $ConversationRoute -ConversationId $ConversationId -SessionId $SessionId -UserId $UserId -ConversationTitle $ConversationTitle -Text $Message -Root $Root
                 $DirectResult = Set-PDABridgeDecisionMetadata -Result $DirectResult -RouteType ([string]$ConversationRoute.route_type) -Decision $script:PDACommanderDecision
+                $DirectResult = Add-PDACommanderRuntimeContextFields -Result $DirectResult
                 Invoke-PDAConversationStateUpdate -ConversationId $ConversationId -SessionId $SessionId -UserId $UserId -ConversationTitle $ConversationTitle -Message $Message -TaskId ([string]$DirectResult.latest_task_id) -TaskStatus ([string]$DirectResult.latest_task_status) -TaskFilePath "" -ApprovalFilePath "" -ResultPath ([string]$DirectResult.latest_result_path) -ResultSummary "" -BridgeStatus ([string]$DirectResult.bridge_status) -DispatchStatus ([string]$DirectResult.dispatch_status) -NextAction ([string]$DirectResult.next_action) -ResponseText ([string]$DirectResult.response_text) -RecommendedCommand ([string]$DirectResult.recommended_command) -Intent ([string]$DirectResult.intent) -Confidence ([double]$DirectResult.confidence) -RequiresConfirmation:$false | Out-Null
 
                 if ($AsJson) {
@@ -1441,6 +1626,7 @@ if (Get-Command -Name Resolve-PDAConversationalRoute -ErrorAction SilentlyContin
             "dispatch_guidance" {
                 $DirectResult = Get-PDAConversationalNaturalResponse -Route $ConversationRoute -ConversationId $ConversationId -SessionId $SessionId -UserId $UserId -ConversationTitle $ConversationTitle -Text $Message -Root $Root
                 $DirectResult = Set-PDABridgeDecisionMetadata -Result $DirectResult -RouteType ([string]$ConversationRoute.route_type) -Decision $script:PDACommanderDecision
+                $DirectResult = Add-PDACommanderRuntimeContextFields -Result $DirectResult
                 Invoke-PDAConversationStateUpdate -ConversationId $ConversationId -SessionId $SessionId -UserId $UserId -ConversationTitle $ConversationTitle -Message $Message -TaskId "" -TaskStatus "" -TaskFilePath "" -ApprovalFilePath "" -ResultPath "" -ResultSummary "" -BridgeStatus ([string]$DirectResult.bridge_status) -DispatchStatus ([string]$DirectResult.dispatch_status) -NextAction ([string]$DirectResult.next_action) -ResponseText ([string]$DirectResult.response_text) -RecommendedCommand ([string]$DirectResult.recommended_command) -Intent ([string]$DirectResult.intent) -Confidence ([double]$DirectResult.confidence) -RequiresConfirmation:$false | Out-Null
 
                 if ($AsJson) {
@@ -1687,7 +1873,7 @@ if (Get-Command -Name Resolve-PDAConversationalRoute -ErrorAction SilentlyContin
     }
 }
 
-if ($HasPendingPersonalityChange -and (-not $HasPendingAction) -and ($IsConfirmationMessage -or $ConfirmDispatch)) {
+if ($HasPendingPersonalityChange -and (-not $HasPendingAction) -and $IsConfirmationMessage) {
     $PersonalityUpdateScript = Join-Path $PSScriptRoot "Update-COOPERPersonality.ps1"
     if (-not (Test-Path -Path $PersonalityUpdateScript -PathType Leaf)) {
         $Result = [pscustomobject]@{

@@ -379,7 +379,7 @@ $Cases = @(
         message = "How is the PDA doing?"
         confirm = $false
         expected_handoff = "direct_status"
-        expected_response_contains = "dashboard is showing degraded health"
+        expected_response_contains = "Active Workshop: COOPER"
         expected_dispatch_ready = $false
         expected_dispatch = $false
         expected_command = "/status"
@@ -401,7 +401,7 @@ $Cases = @(
         message = "Summarize the ecosystem status."
         confirm = $false
         expected_handoff = "direct_status"
-        expected_response_contains = "Current Model: qwen2.5:7b"
+        expected_response_contains = "Default Model: Claude Sonnet"
         expected_dispatch_ready = $false
         expected_dispatch = $false
         expected_command = "/status"
@@ -412,7 +412,7 @@ $Cases = @(
         message = "Good morning COOPER. Status report."
         confirm = $false
         expected_handoff = "direct_status"
-        expected_response_contains = "COOPER Status"
+        expected_response_contains = "Active Workshop: COOPER"
         expected_dispatch_ready = $false
         expected_dispatch = $false
         expected_command = "/status"
@@ -423,7 +423,7 @@ $Cases = @(
         message = "Morning briefing please."
         confirm = $false
         expected_handoff = "direct_status"
-        expected_response_contains = "COOPER Status"
+        expected_response_contains = "Active Workshop: COOPER"
         expected_dispatch_ready = $false
         expected_dispatch = $false
         expected_command = "/status"
@@ -434,7 +434,7 @@ $Cases = @(
         message = "How are things going?"
         confirm = $false
         expected_handoff = "direct_status"
-        expected_response_contains = "COOPER Status"
+        expected_response_contains = "Active Workshop: COOPER"
         expected_dispatch_ready = $false
         expected_dispatch = $false
         expected_command = "/status"
@@ -445,7 +445,7 @@ $Cases = @(
         message = "System status."
         confirm = $false
         expected_handoff = "direct_status"
-        expected_response_contains = "COOPER Status"
+        expected_response_contains = "Active Workshop: COOPER"
         expected_dispatch_ready = $false
         expected_dispatch = $false
         expected_command = "/status"
@@ -456,7 +456,7 @@ $Cases = @(
         message = "Health report."
         confirm = $false
         expected_handoff = "direct_status"
-        expected_response_contains = "COOPER Status"
+        expected_response_contains = "Active Workshop: COOPER"
         expected_dispatch_ready = $false
         expected_dispatch = $false
         expected_command = "/status"
@@ -467,7 +467,7 @@ $Cases = @(
         message = "What model are you running?"
         confirm = $false
         expected_handoff = "runtime_self_awareness"
-        expected_response_contains = "Current Model: qwen2.5:7b"
+        expected_response_contains = "Default Model: Claude Sonnet"
         expected_dispatch_ready = $false
         expected_dispatch = $false
         expected_command = ""
@@ -478,7 +478,7 @@ $Cases = @(
         message = "Who is your provider?"
         confirm = $false
         expected_handoff = "runtime_self_awareness"
-        expected_response_contains = "Provider: Ollama"
+        expected_response_contains = "Active Workshop: COOPER"
         expected_dispatch_ready = $false
         expected_dispatch = $false
         expected_command = ""
@@ -489,7 +489,7 @@ $Cases = @(
         message = "What backend are you using?"
         confirm = $false
         expected_handoff = "runtime_self_awareness"
-        expected_response_contains = "Backend: ollama/qwen2.5:7b"
+        expected_response_contains = "Active Workshop: COOPER"
         expected_dispatch_ready = $false
         expected_dispatch = $false
         expected_command = ""
@@ -500,7 +500,7 @@ $Cases = @(
         message = "Who are you?"
         confirm = $false
         expected_handoff = "runtime_self_awareness"
-        expected_response_contains = "Assistant Identity: COOPER"
+        expected_response_contains = "Default Model: Claude Sonnet"
         expected_dispatch_ready = $false
         expected_dispatch = $false
         expected_command = ""
@@ -643,7 +643,7 @@ $Cases = @(
         message = "/status"
         confirm = $false
         expected_handoff = "mapped"
-        expected_response_contains = "Current Model: qwen2.5:7b"
+        expected_response_contains = "Active Workshop: COOPER"
         expected_dispatch_ready = $false
         expected_dispatch = $false
         expected_command = "/status"
@@ -1018,6 +1018,11 @@ foreach ($Case in $Cases) {
         $Issues.Add("Response text did not include expected guidance.")
     }
 
+    if ($Case.expected_handoff -in @("direct_status", "runtime_self_awareness") -and $Result.response_text -match '(?i)Firewall Status:\s*(Green|Yellow|Red|Healthy)|IDS Status:\s*(Green|Yellow|Red|Healthy)|Backup Status:\s*(Green|Yellow|Red|Healthy)') {
+        $CasePassed = $false
+        $Issues.Add("Response text surfaced fictional security health values.")
+    }
+
     if ($Case.PSObject.Properties.Name -contains "unsafe_physical_action" -and [bool]$Case.unsafe_physical_action) {
         $PretendExecutionPatterns = @(
             '(?i)\bopen(?:ing)? sequence initiated\b',
@@ -1108,6 +1113,11 @@ foreach ($Case in $Cases) {
         $Issues.Add("COOPER runtime context did not include the COOPER identity summary.")
     }
 
+    if ($Result.PSObject.Properties.Name -contains "status_source" -and [string]$Result.status_source -match 'Get-COOPERRuntimeStatus\.ps1') {
+        $CasePassed = $false
+        $Issues.Add("Chat bridge status source must not use the legacy runtime helper as authoritative output.")
+    }
+
     if ($Result.cooper_context -and $Result.cooper_context.runtime_layers -and $Result.cooper_context.runtime_layers.source_paths -and $Result.cooper_context.runtime_layers.source_paths.personality -notmatch 'Models[\\/]+cooper-personality[\\/]+personality\.json$') {
         $CasePassed = $false
         $Issues.Add("COOPER runtime context should report the model personality store as the source of truth.")
@@ -1146,7 +1156,7 @@ foreach ($Case in $Cases) {
             $CasePassed = $false
             $Issues.Add("Judgment response should stay within 4 sentences.")
         }
-        if ($Result.response_text -notmatch '(?i)\b(think|consider|concern|risk|because|but|however|problem|tradeoff|complexity|uncertain|safe|stability|security)\b') {
+        if ($Result.response_text -notmatch '(?i)\b(think|consider|concern|risk|because|but|however|problem|tradeoff|complexity|uncertain|safe|stability|security|access controls?|roles?|responsibilities?|integrity)\b') {
             $CasePassed = $false
             $Issues.Add("Judgment response did not read like a grounded opinion.")
         }
@@ -1280,10 +1290,10 @@ try {
     if ($PersonalityRequest.handoff_status -ne "personality_update") {
         $PersonalityConfirmationIssues.Add("Personality update request did not route to personality_update.")
     }
-    if ($PersonalityRequest.personality_current_value -ne 35) {
+    if ($PersonalityRequest.personality_current_value -ne 15) {
         $PersonalityConfirmationIssues.Add("Personality update proposal did not use the active current value.")
     }
-    if ($PersonalityRequest.response_text -notmatch '(?i)Humor: 35 -> 65|Proposed update') {
+    if ($PersonalityRequest.response_text -notmatch '(?i)Humor: 15 -> 65|Proposed update') {
         $PersonalityConfirmationIssues.Add("Personality update proposal did not show the expected value change.")
     }
     if ($PersonalityConfirm.handoff_status -ne "personality_update_applied") {

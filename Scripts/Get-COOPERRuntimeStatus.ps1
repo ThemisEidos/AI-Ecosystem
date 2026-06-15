@@ -98,6 +98,11 @@ function Get-COOPERRuntimeProviderProfile {
 }
 
 function Get-COOPERRuntimeStatus {
+    <#
+    Deprecated legacy helper.
+    Not authoritative for /cooper status.
+    Governed COOPER status must use the identity -> registry -> router -> approval -> workbench chain.
+    #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $false)]

@@ -9,7 +9,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$SupportedToolId = "status_summary"
+$SupportedToolIds = @("status_summary", "status_summary_private")
 $SupportedExecutorType = "informational"
 $WorkshopIdentityScript = Join-Path $PSScriptRoot "Get-COOPERWorkshopIdentity.ps1"
 
@@ -180,7 +180,7 @@ if ([bool]$WorkshopIdentity.cloud_allowed -eq $false -and $ExecutorType -and $Ex
     }
 }
 
-if ($ToolId -ne $SupportedToolId) {
+if ($SupportedToolIds -notcontains $ToolId) {
     return [pscustomobject]@{
         success = $false
         dry_run = [bool]$DryRun
@@ -211,6 +211,16 @@ if ($DryRun) {
             approval_required = [bool]$ApprovalRequired
             requires_user_approval = [bool]$RequiresUserApproval
             cloud_allowed = [bool]$WorkshopIdentity.cloud_allowed
+            workshop_mode = [string]$WorkshopIdentity.workshop_label
+            workshop_name = [string]$WorkshopIdentity.display_name
+            default_model = [string]$WorkshopIdentity.default_model
+            active_registry = [string]$WorkshopIdentity.registry
+            status_workflow = "Available"
+            security_sources = [pscustomobject]@{
+                firewall_status = "Not Configured"
+                ids_status = "Not Configured"
+                backup_status = "Not Configured"
+            }
         }
         reason = "Dry run only. No execution performed."
     }
@@ -222,6 +232,29 @@ $Status = [pscustomobject]@{
     config_exists = (Test-Path -LiteralPath (Join-Path $Root "Config") -PathType Container)
     scripts_exists = (Test-Path -LiteralPath (Join-Path $Root "Scripts") -PathType Container)
     registry_exists = (Test-Path -LiteralPath (Join-Path $Root "Config\general_tool_registry.yaml") -PathType Leaf) -and (Test-Path -LiteralPath (Join-Path $Root "Config\private_tool_registry.yaml") -PathType Leaf)
+    workshop_mode = [string]$WorkshopIdentity.workshop_label
+    workshop_name = [string]$WorkshopIdentity.display_name
+    default_model = [string]$WorkshopIdentity.default_model
+    cloud_allowed = [bool]$WorkshopIdentity.cloud_allowed
+    active_registry = [string]$WorkshopIdentity.registry
+    status_workflow = "Available"
+    status_source = "Config/cooper_workshop_identities.yaml"
+    security_sources = [pscustomobject]@{
+        firewall_status = "Not Configured"
+        ids_status = "Not Configured"
+        backup_status = "Not Configured"
+    }
+    status_lines = @(
+        ("Active Workshop: {0}" -f [string]$WorkshopIdentity.display_name)
+        ("Workshop Mode: {0}" -f [string]$WorkshopIdentity.workshop_label)
+        ("Default Model: {0}" -f [string]$WorkshopIdentity.default_model)
+        ("Registry: {0}" -f [string]$WorkshopIdentity.registry)
+        ("Cloud Allowed: {0}" -f [bool]$WorkshopIdentity.cloud_allowed)
+        ("Status Workflow: Available")
+        ("Firewall Status: Not Configured")
+        ("IDS Status: Not Configured")
+        ("Backup Status: Not Configured")
+    )
     guidance_docs_present = @(
         "00_Project Charter.md",
         "01_AI Ecosystem Architecture.md",

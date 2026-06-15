@@ -29,7 +29,7 @@ $DashboardPath = Join-Path $Root "Obsidian Vault\02_Projects\AI Tool Ecosystem\P
 $ParserPath = Join-Path $PSScriptRoot "PDA_OutputParsing.ps1"
 $EnvironmentHelperScript = Join-Path $PSScriptRoot "PDA_Environment.ps1"
 $COOPERProfileScript = Join-Path $PSScriptRoot "Get-COOPERIdentity.ps1"
-$COOPERRuntimeStatusScript = Join-Path $PSScriptRoot "Get-COOPERRuntimeStatus.ps1"
+$COOPERStatusBridgeScript = Join-Path $PSScriptRoot "Invoke-COOPERStatusCommand.ps1"
 $ApprovalWorkflowScript = Join-Path $PSScriptRoot "PDA_ApprovalWorkflow.ps1"
 $ExecutionRequestScript = Join-Path $PSScriptRoot "Get-PDAExecutionRequest.ps1"
 if (Test-Path -LiteralPath $ParserPath -PathType Leaf) {
@@ -40,9 +40,6 @@ if (Test-Path -LiteralPath $EnvironmentHelperScript -PathType Leaf) {
 }
 if (Test-Path -LiteralPath $COOPERProfileScript -PathType Leaf) {
     . $COOPERProfileScript
-}
-if (Test-Path -LiteralPath $COOPERRuntimeStatusScript -PathType Leaf) {
-    . $COOPERRuntimeStatusScript
 }
 if (Test-Path -LiteralPath $ApprovalWorkflowScript -PathType Leaf) {
     . $ApprovalWorkflowScript
@@ -1155,9 +1152,13 @@ foreach ($Candidate in @(
 }
 
 $COOPERProfile = Get-COOPERIdentity -Root $Root
-$COOPERRuntimeStatus = if (Get-Command -Name Get-COOPERRuntimeStatus -ErrorAction SilentlyContinue) {
+$ResolvedWorkshopMode = [string]$env:COOPER_WORKSHOP_MODE
+if ([string]::IsNullOrWhiteSpace($ResolvedWorkshopMode)) {
+    $ResolvedWorkshopMode = "Open Workshop"
+}
+$COOPERGovernedStatus = if (Test-Path -LiteralPath $COOPERStatusBridgeScript -PathType Leaf) {
     try {
-        Get-COOPERRuntimeStatus -Root $Root
+        & $COOPERStatusBridgeScript -WorkshopMode $ResolvedWorkshopMode
     }
     catch {
         $null
@@ -1165,6 +1166,44 @@ $COOPERRuntimeStatus = if (Get-Command -Name Get-COOPERRuntimeStatus -ErrorActio
 }
 else {
     $null
+}
+$COOPERGovernedStatusOutput = if ($COOPERGovernedStatus -and [bool]$COOPERGovernedStatus.success -eq $true -and $COOPERGovernedStatus.PSObject.Properties.Name -contains "workbench_result" -and $COOPERGovernedStatus.workbench_result -and $COOPERGovernedStatus.workbench_result.PSObject.Properties.Name -contains "output") {
+    $COOPERGovernedStatus.workbench_result.output
+}
+else {
+    $null
+}
+$COOPERGovernedStatusIdentity = if ($COOPERGovernedStatus -and [bool]$COOPERGovernedStatus.success -eq $true -and $COOPERGovernedStatus.PSObject.Properties.Name -contains "workshop_identity") {
+    $COOPERGovernedStatus.workshop_identity
+}
+else {
+    $null
+}
+$COOPERGovernedStatusSummary = if ($COOPERGovernedStatusOutput -and $COOPERGovernedStatusOutput.PSObject.Properties.Name -contains "status_lines") {
+    @($COOPERGovernedStatusOutput.status_lines)
+}
+else {
+    @(
+        "Active Workshop: Legacy Non-Authoritative"
+        "Workshop Mode: Legacy Non-Authoritative"
+        "Default Model: Legacy Non-Authoritative"
+        "Registry: Legacy Non-Authoritative"
+        "Cloud Allowed: Legacy Non-Authoritative"
+        "Status Workflow: Legacy Non-Authoritative"
+        "Firewall Status: Not Configured"
+        "IDS Status: Not Configured"
+        "Backup Status: Not Configured"
+    )
+}
+$COOPERGovernedSecuritySources = if ($COOPERGovernedStatusOutput -and $COOPERGovernedStatusOutput.PSObject.Properties.Name -contains "security_sources" -and $COOPERGovernedStatusOutput.security_sources) {
+    $COOPERGovernedStatusOutput.security_sources
+}
+else {
+    [pscustomobject]@{
+        firewall_status = "Not Configured"
+        ids_status = "Not Configured"
+        backup_status = "Not Configured"
+    }
 }
 $COOPERPersonalityFallback = [pscustomobject]@{
     humor_level = 25
@@ -1219,27 +1258,37 @@ $Report = [pscustomobject]@{
     }
     cooper_status = [pscustomobject]@{
         status = $COOPERStatusLabel
-        display_name = $(if ($COOPERRuntimeStatus -and $COOPERRuntimeStatus.PSObject.Properties.Name -contains "assistant_identity") { [string]$COOPERRuntimeStatus.assistant_identity } elseif ($COOPERProfile -and $COOPERProfile.PSObject.Properties.Name -contains "display_name") { [string]$COOPERProfile.display_name } else { "COOPER" })
+        display_name = $(if ($COOPERGovernedStatusIdentity -and $COOPERGovernedStatusIdentity.PSObject.Properties.Name -contains "display_name") { [string]$COOPERGovernedStatusIdentity.display_name } elseif ($COOPERProfile -and $COOPERProfile.PSObject.Properties.Name -contains "display_name") { [string]$COOPERProfile.display_name } else { "COOPER" })
         official_name = $(if ($COOPERProfile -and $COOPERProfile.PSObject.Properties.Name -contains "official_name") { [string]$COOPERProfile.official_name } else { "Command Operations Orchestrator for Planning, Execution, and Reporting" })
         secondary_expansion = $(if ($COOPERProfile -and $COOPERProfile.PSObject.Properties.Name -contains "secondary_expansion") { [string]$COOPERProfile.secondary_expansion } else { "Collaborative Operational Planning, Execution, and Reasoning" })
-        tagline = $(if ($COOPERRuntimeStatus -and $COOPERRuntimeStatus.PSObject.Properties.Name -contains "tagline") { [string]$COOPERRuntimeStatus.tagline } elseif ($COOPERProfile -and $COOPERProfile.PSObject.Properties.Name -contains "tagline") { [string]$COOPERProfile.tagline } else { "Chief Officer of Preventing Everything from Randomly Exploding" })
-        identity_note = $(if ($COOPERRuntimeStatus -and $COOPERRuntimeStatus.PSObject.Properties.Name -contains "identity_note") { [string]$COOPERRuntimeStatus.identity_note } elseif ($COOPERProfile -and $COOPERProfile.PSObject.Properties.Name -contains "identity_note") { [string]$COOPERProfile.identity_note } else { "TARS-inspired, not copyrighted imitation" })
-        current_model = $(if ($COOPERRuntimeStatus -and $COOPERRuntimeStatus.PSObject.Properties.Name -contains "current_model") { [string]$COOPERRuntimeStatus.current_model } else { "local-llama" })
-        provider = $(if ($COOPERRuntimeStatus -and $COOPERRuntimeStatus.PSObject.Properties.Name -contains "provider") { [string]$COOPERRuntimeStatus.provider } else { "Ollama" })
-        gateway = $(if ($COOPERRuntimeStatus -and $COOPERRuntimeStatus.PSObject.Properties.Name -contains "gateway") { [string]$COOPERRuntimeStatus.gateway } else { "LiteLLM" })
-        interface = $(if ($COOPERRuntimeStatus -and $COOPERRuntimeStatus.PSObject.Properties.Name -contains "interface") { [string]$COOPERRuntimeStatus.interface } else { "Open WebUI" })
-        backend = $(if ($COOPERRuntimeStatus -and $COOPERRuntimeStatus.PSObject.Properties.Name -contains "backend") { [string]$COOPERRuntimeStatus.backend } else { "ollama/llama3.2" })
-        current_explosions = $(if ($COOPERRuntimeStatus -and $COOPERRuntimeStatus.PSObject.Properties.Name -contains "current_explosions") { [int]$COOPERRuntimeStatus.current_explosions } else { 0 })
+        tagline = $(if ($COOPERProfile -and $COOPERProfile.PSObject.Properties.Name -contains "tagline") { [string]$COOPERProfile.tagline } else { "Chief Officer of Preventing Everything from Randomly Exploding" })
+        identity_note = $(if ($COOPERProfile -and $COOPERProfile.PSObject.Properties.Name -contains "identity_note") { [string]$COOPERProfile.identity_note } else { "TARS-inspired, not copyrighted imitation" })
+        workshop_mode = $(if ($COOPERGovernedStatusIdentity -and $COOPERGovernedStatusIdentity.PSObject.Properties.Name -contains "workshop_label") { [string]$COOPERGovernedStatusIdentity.workshop_label } else { "Legacy Non-Authoritative" })
+        workshop_name = $(if ($COOPERGovernedStatusIdentity -and $COOPERGovernedStatusIdentity.PSObject.Properties.Name -contains "display_name") { [string]$COOPERGovernedStatusIdentity.display_name } elseif ($COOPERProfile -and $COOPERProfile.PSObject.Properties.Name -contains "display_name") { [string]$COOPERProfile.display_name } else { "COOPER" })
+        default_model = $(if ($COOPERGovernedStatusIdentity -and $COOPERGovernedStatusIdentity.PSObject.Properties.Name -contains "default_model") { [string]$COOPERGovernedStatusIdentity.default_model } else { "Legacy Non-Authoritative" })
+        cloud_allowed = $(if ($COOPERGovernedStatusIdentity -and $COOPERGovernedStatusIdentity.PSObject.Properties.Name -contains "cloud_allowed") { [bool]$COOPERGovernedStatusIdentity.cloud_allowed } else { $false })
+        active_registry = $(if ($COOPERGovernedStatusIdentity -and $COOPERGovernedStatusIdentity.PSObject.Properties.Name -contains "registry") { [string]$COOPERGovernedStatusIdentity.registry } else { "Legacy Non-Authoritative" })
+        status_workflow = $(if ($COOPERGovernedStatusOutput -and $COOPERGovernedStatusOutput.PSObject.Properties.Name -contains "status_workflow") { [string]$COOPERGovernedStatusOutput.status_workflow } else { "Legacy Non-Authoritative" })
+        current_model = $(if ($COOPERGovernedStatusOutput -and $COOPERGovernedStatusOutput.PSObject.Properties.Name -contains "default_model") { [string]$COOPERGovernedStatusOutput.default_model } elseif ($COOPERGovernedStatusIdentity -and $COOPERGovernedStatusIdentity.PSObject.Properties.Name -contains "default_model") { [string]$COOPERGovernedStatusIdentity.default_model } else { "Legacy Non-Authoritative" })
+        provider = "Legacy Non-Authoritative"
+        gateway = "Legacy Non-Authoritative"
+        interface = "Legacy Non-Authoritative"
+        backend = "Legacy Non-Authoritative"
+        current_explosions = "Legacy Non-Authoritative"
         modes = $(if ($COOPERProfile -and $COOPERProfile.PSObject.Properties.Name -contains "operational_modes") { @($COOPERProfile.operational_modes) } else { @("Analyst Mode", "Operator Mode", "TARS Mode", "Overlord Mode", "Emergency Mode") })
         personality = $(if ($COOPERProfile -and $COOPERProfile.PSObject.Properties.Name -contains "personality") { $COOPERProfile.personality } else { $COOPERPersonalityFallback })
         runtime_layers = $(if ($COOPERProfile -and $COOPERProfile.PSObject.Properties.Name -contains "runtime_layers") { $COOPERProfile.runtime_layers } else { $null })
         systems = $COOPERSystems
         summary_lines = @(
-            "COOPER Status"
-            ("Current Model: {0}" -f $(if ($COOPERRuntimeStatus -and $COOPERRuntimeStatus.PSObject.Properties.Name -contains "current_model") { [string]$COOPERRuntimeStatus.current_model } else { "local-llama" }))
-            ("Provider: {0}" -f $(if ($COOPERRuntimeStatus -and $COOPERRuntimeStatus.PSObject.Properties.Name -contains "provider") { [string]$COOPERRuntimeStatus.provider } else { "Ollama" }))
-            ("Gateway: {0}" -f $(if ($COOPERRuntimeStatus -and $COOPERRuntimeStatus.PSObject.Properties.Name -contains "gateway") { [string]$COOPERRuntimeStatus.gateway } else { "LiteLLM" }))
-            ("Interface: {0}" -f $(if ($COOPERRuntimeStatus -and $COOPERRuntimeStatus.PSObject.Properties.Name -contains "interface") { [string]$COOPERRuntimeStatus.interface } else { "Open WebUI" }))
+            ("Active Workshop: {0}" -f $(if ($COOPERGovernedStatusIdentity -and $COOPERGovernedStatusIdentity.PSObject.Properties.Name -contains "display_name") { [string]$COOPERGovernedStatusIdentity.display_name } elseif ($COOPERProfile -and $COOPERProfile.PSObject.Properties.Name -contains "display_name") { [string]$COOPERProfile.display_name } else { "COOPER" }))
+            ("Workshop Mode: {0}" -f $(if ($COOPERGovernedStatusIdentity -and $COOPERGovernedStatusIdentity.PSObject.Properties.Name -contains "workshop_label") { [string]$COOPERGovernedStatusIdentity.workshop_label } else { "Legacy Non-Authoritative" }))
+            ("Default Model: {0}" -f $(if ($COOPERGovernedStatusOutput -and $COOPERGovernedStatusOutput.PSObject.Properties.Name -contains "default_model") { [string]$COOPERGovernedStatusOutput.default_model } elseif ($COOPERGovernedStatusIdentity -and $COOPERGovernedStatusIdentity.PSObject.Properties.Name -contains "default_model") { [string]$COOPERGovernedStatusIdentity.default_model } else { "Legacy Non-Authoritative" }))
+            ("Registry: {0}" -f $(if ($COOPERGovernedStatusOutput -and $COOPERGovernedStatusOutput.PSObject.Properties.Name -contains "active_registry") { [string]$COOPERGovernedStatusOutput.active_registry } elseif ($COOPERGovernedStatusIdentity -and $COOPERGovernedStatusIdentity.PSObject.Properties.Name -contains "registry") { [string]$COOPERGovernedStatusIdentity.registry } else { "Legacy Non-Authoritative" }))
+            ("Cloud Allowed: {0}" -f $(if ($COOPERGovernedStatusOutput -and $COOPERGovernedStatusOutput.PSObject.Properties.Name -contains "cloud_allowed") { [bool]$COOPERGovernedStatusOutput.cloud_allowed } elseif ($COOPERGovernedStatusIdentity -and $COOPERGovernedStatusIdentity.PSObject.Properties.Name -contains "cloud_allowed") { [bool]$COOPERGovernedStatusIdentity.cloud_allowed } else { $false }))
+            ("Status Workflow: {0}" -f $(if ($COOPERGovernedStatusOutput -and $COOPERGovernedStatusOutput.PSObject.Properties.Name -contains "status_workflow") { [string]$COOPERGovernedStatusOutput.status_workflow } else { "Legacy Non-Authoritative" }))
+            ("Firewall Status: {0}" -f [string]$COOPERGovernedSecuritySources.firewall_status)
+            ("IDS Status: {0}" -f [string]$COOPERGovernedSecuritySources.ids_status)
+            ("Backup Status: {0}" -f [string]$COOPERGovernedSecuritySources.backup_status)
             $(if ($COOPERProfile -and $COOPERProfile.PSObject.Properties.Name -contains "tagline") { [string]$COOPERProfile.tagline } else { "Chief Officer of Preventing Everything from Randomly Exploding" })
             ("Docker health: {0}" -f $COOPERSystems.docker)
             ("Open WebUI health: {0}" -f $COOPERSystems.open_webui)
@@ -1247,7 +1296,11 @@ $Report = [pscustomobject]@{
             ("LiteLLM health: {0}" -f $COOPERSystems.litellm)
             "Current Explosions: 0"
         )
-        runtime_status = $COOPERRuntimeStatus
+        runtime_status = $(if ($COOPERGovernedStatusOutput) { $COOPERGovernedStatusOutput } else { $null })
+        status_source = $(if ($COOPERGovernedStatusOutput -and $COOPERGovernedStatusOutput.PSObject.Properties.Name -contains "status_source") { [string]$COOPERGovernedStatusOutput.status_source } else { "Legacy Non-Authoritative" })
+        governed_status = $COOPERGovernedStatus
+        workshop_identity = $COOPERGovernedStatusIdentity
+        security_sources = $COOPERGovernedSecuritySources
     }
     system_health = [pscustomobject]@{
         status = Get-PDASafeString $StackReport.status

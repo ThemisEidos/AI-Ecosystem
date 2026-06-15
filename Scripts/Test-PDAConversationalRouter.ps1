@@ -412,7 +412,7 @@ foreach ($Case in $Cases) {
             $CasePassed = $false
             $Issues.Add("Direct response text was empty.")
         }
-        if ($Route.route_type -eq "direct_status" -and $Direct.response_text -notmatch '(?i)COOPER Status|Current Model: qwen2\.5:7b|Provider: Ollama') {
+        if ($Route.route_type -eq "direct_status" -and $Direct.response_text -notmatch '(?i)Active Workshop: COOPER|Default Model: Claude Sonnet') {
             $CasePassed = $false
             $Issues.Add("Direct status response did not look like a status summary.")
         }
@@ -554,9 +554,13 @@ foreach ($Case in $Cases) {
             $CasePassed = $false
             $Issues.Add("Runtime self-awareness response text was empty.")
         }
-        if ($Direct.response_text -notmatch '(?i)Current Model: qwen2\.5:7b|Assistant Identity: COOPER|Provider: Ollama|Gateway: LiteLLM|Backend: ollama/qwen2\.5:7b|Backend: ollama/llama3\.2') {
+        if ($Direct.response_text -notmatch '(?i)Active Workshop: COOPER|Default Model: Claude Sonnet|Assistant Identity: COOPER') {
             $CasePassed = $false
             $Issues.Add("Runtime self-awareness response did not include the expected metadata.")
+        }
+        if ($Direct.runtime_status -and $Direct.runtime_status.PSObject.Properties.Name -contains "workbench_result" -and $Direct.runtime_status.workbench_result -and $Direct.runtime_status.workbench_result.PSObject.Properties.Name -contains "output" -and $Direct.runtime_status.workbench_result.output.PSObject.Properties.Name -contains "status_source" -and [string]$Direct.runtime_status.workbench_result.output.status_source -match 'Get-COOPERRuntimeStatus\.ps1') {
+            $CasePassed = $false
+            $Issues.Add("Runtime self-awareness response must not use the legacy runtime helper as authoritative output.")
         }
         if ($script:COOPERModelInvocationCount -ne 0) {
             $CasePassed = $false
