@@ -152,3 +152,12 @@ chat-bridge-export.json
 n8n-workflows-backup.json
 workers.json
 Timeline Builder*.json
+
+# Repository hygiene / runtime state
+Models/cooper-personality/personality.json
+Scripts/COOPER_Personality.json
+Legacy_Docs/
+Obsidian Vault/02_Projects/opt-out/
+codex-automation-*
+Obsidian Vault/02_Projects/AI Tool Ecosystem/PDA Dashboard.md
+Obsidian Vault/02_Projects/AI Tool Ecosystem/System Status.md
