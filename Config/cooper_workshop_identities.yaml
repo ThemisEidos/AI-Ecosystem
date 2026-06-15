@@ -1,0 +1,15 @@
+workshops:
+  - id: cooper_open
+    display_name: COOPER
+    workshop_label: Open Workshop
+    workshop: open
+    default_model: Claude Sonnet
+    registry: Config/general_tool_registry.yaml
+    cloud_allowed: true
+  - id: cooper_private
+    display_name: COOPER Private
+    workshop_label: Private Workshop
+    workshop: private
+    default_model: local Qwen via Ollama
+    registry: Config/private_tool_registry.yaml
+    cloud_allowed: false

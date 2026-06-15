@@ -1,0 +1,140 @@
+registry_name: COOPER Open Workshop Tool Registry
+workshop: Open Workshop
+version: 1
+purpose: Open Workshop tools only.
+generated_at: "2026-06-14"
+tools:
+  - id: status_summary
+    name: Status Summary
+    drawer: Operations
+    workshop: Open Workshop
+    description: Provide a quick operational summary of the current chat or workspace context.
+    permission_level: 0
+    approval_required: false
+    executor_type: informational
+    enabled: true
+    inputs:
+      - chat_context
+    outputs:
+      - short_summary
+    notes: Inform-only. No external action.
+  - id: registry_inspector
+    name: Registry Inspector
+    drawer: Tool Box
+    workshop: Open Workshop
+    description: Read approved registry entries and configuration status for Open Workshop tools.
+    permission_level: 1
+    approval_required: false
+    executor_type: local_read
+    enabled: true
+    inputs:
+      - registry_path
+    outputs:
+      - registry_snapshot
+    notes: Read-only inspection tool.
+  - id: browser_research
+    name: Browser Research
+    drawer: Research
+    workshop: Open Workshop
+    description: Review public web pages and approved local pages for non-sensitive research.
+    permission_level: 3
+    approval_required: true
+    executor_type: browser
+    enabled: true
+    inputs:
+      - urls
+      - search_terms
+    outputs:
+      - evidence_notes
+      - source_links
+    notes: Open Workshop only. Do not use for restricted data.
+  - id: lite_llm_router
+    name: LiteLLM Router
+    drawer: AI Models
+    workshop: Open Workshop
+    description: Route approved prompts to configured cloud or local language models.
+    permission_level: 3
+    approval_required: true
+    executor_type: llm_api
+    enabled: true
+    inputs:
+      - prompt
+      - model_hint
+    outputs:
+      - model_response
+    notes: Open Workshop only. Use only with approved content.
+  - id: obsidian_note_writer
+    name: Obsidian Note Writer
+    drawer: Knowledge Shelf
+    workshop: Open Workshop
+    description: Create or update non-sensitive notes in the Obsidian Knowledge Shelf.
+    permission_level: 2
+    approval_required: true
+    executor_type: note_editor
+    enabled: true
+    inputs:
+      - note_path
+      - markdown_content
+    outputs:
+      - note_path
+    notes: Use for open project knowledge only.
+  - id: powershell_open
+    name: PowerShell Open Runner
+    drawer: Automation
+    workshop: Open Workshop
+    description: Run approved local PowerShell scripts for open-workshop tasks.
+    permission_level: 4
+    approval_required: true
+    executor_type: powershell
+    enabled: true
+    inputs:
+      - script_path
+      - arguments
+    outputs:
+      - script_output
+    notes: Local execution only. No destructive actions in Phase 1.
+  - id: python_open
+    name: Python Open Runner
+    drawer: Automation
+    workshop: Open Workshop
+    description: Run approved local Python scripts for open-workshop analysis and reporting.
+    permission_level: 4
+    approval_required: true
+    executor_type: python
+    enabled: true
+    inputs:
+      - script_path
+      - arguments
+    outputs:
+      - script_output
+    notes: Local execution only. No destructive actions in Phase 1.
+  - id: n8n_general_workflows
+    name: n8n General Workflows
+    drawer: Automation
+    workshop: Open Workshop
+    description: Run approved general-purpose n8n workflows for non-sensitive automation.
+    permission_level: 4
+    approval_required: true
+    executor_type: workflow_engine
+    enabled: true
+    inputs:
+      - workflow_id
+      - payload
+    outputs:
+      - workflow_result
+    notes: Open Workshop only. May integrate with external services when approved.
+  - id: codex_task_launcher
+    name: Codex Task Launcher
+    drawer: Code
+    workshop: Open Workshop
+    description: Prepare the Codex CLI or app context for an approved coding task.
+    permission_level: 4
+    approval_required: true
+    executor_type: cli_launcher
+    enabled: true
+    inputs:
+      - repo_path
+      - task_file
+    outputs:
+      - launch_status
+    notes: Launcher placeholder for WF-002. No direct execution logic in Phase 1.

@@ -1,0 +1,109 @@
+registry_name: COOPER Private Workshop Tool Registry
+workshop: Private Workshop
+version: 1
+purpose: Private Workshop tools only.
+generated_at: "2026-06-14"
+tools:
+  - id: status_summary_private
+    name: Status Summary
+    drawer: Operations
+    workshop: Private Workshop
+    description: Provide a quick summary of the current private workshop context.
+    permission_level: 0
+    approval_required: false
+    executor_type: informational
+    enabled: true
+    inputs:
+      - chat_context
+    outputs:
+      - short_summary
+    notes: Inform-only. No external action.
+  - id: registry_inspector_private
+    name: Registry Inspector
+    drawer: Tool Box
+    workshop: Private Workshop
+    description: Read approved private registry entries and local configuration status.
+    permission_level: 1
+    approval_required: false
+    executor_type: local_read
+    enabled: true
+    inputs:
+      - registry_path
+    outputs:
+      - registry_snapshot
+    notes: Read-only inspection tool.
+  - id: restricted_dmz_writer
+    name: Restricted DMZ Writer
+    drawer: Restricted DMZ Workspace
+    workshop: Private Workshop
+    description: Create or update non-sensitive output files inside the approved Restricted DMZ Workspace.
+    permission_level: 2
+    approval_required: true
+    executor_type: filesystem
+    enabled: true
+    inputs:
+      - file_path
+      - content
+    outputs:
+      - file_path
+    notes: Private Workshop only. Never write to Secure Vault or Obsidian.
+  - id: qwen_local_assistant
+    name: Qwen Local Assistant
+    drawer: Local Models
+    workshop: Private Workshop
+    description: Use the local Qwen model for private analysis and drafting inside the Restricted DMZ Workspace.
+    permission_level: 2
+    approval_required: true
+    executor_type: local_llm
+    enabled: true
+    inputs:
+      - prompt
+      - context
+    outputs:
+      - draft_response
+    notes: Local only. No cloud fallback.
+  - id: powershell_private
+    name: PowerShell Private Runner
+    drawer: Local Automation
+    workshop: Private Workshop
+    description: Run approved local PowerShell scripts for private-workshop tasks.
+    permission_level: 4
+    approval_required: true
+    executor_type: powershell
+    enabled: true
+    inputs:
+      - script_path
+      - arguments
+    outputs:
+      - script_output
+    notes: Local execution only. No cloud calls.
+  - id: python_private
+    name: Python Private Runner
+    drawer: Local Automation
+    workshop: Private Workshop
+    description: Run approved local Python scripts for private-workshop analysis and reporting.
+    permission_level: 4
+    approval_required: true
+    executor_type: python
+    enabled: true
+    inputs:
+      - script_path
+      - arguments
+    outputs:
+      - script_output
+    notes: Local execution only. No cloud calls.
+  - id: restricted_workflow_runner
+    name: Restricted Workflow Runner
+    drawer: Local Automation
+    workshop: Private Workshop
+    description: Run approved local workflows that stay entirely inside the private workshop boundary.
+    permission_level: 4
+    approval_required: true
+    executor_type: workflow_engine
+    enabled: true
+    inputs:
+      - workflow_id
+      - payload
+    outputs:
+      - workflow_result
+    notes: Local only. Forbidden to call cloud services or third-party providers.
