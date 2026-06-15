@@ -6,6 +6,8 @@ This roadmap tracks the staged implementation of the COOPER-centered AI Ecosyste
 
 ## Current Focus
 
+- Current priority remains status governance cleanup and Git alignment.
+- Workspace and Fabric integration is deferred until the current governed-status work is committed and stable.
 - Current Phase: Phase 1 - Tool Registry Foundation
 - Current Objective: Create the first runtime-readable version of the COOPER Tool Box inventory for both workshops.
 - Next Build Artifact:
@@ -154,3 +156,29 @@ This roadmap tracks the staged implementation of the COOPER-centered AI Ecosyste
 - Success Criteria:
   - only after core workflows are stable
   - no premature agent complexity
+
+### Phase 8 - Open WebUI Workspace Knowledge Layer
+
+- Status: Future
+- Goal: add an organized knowledge and reference-asset layer in Open WebUI Workspace.
+- Build Artifacts:
+  - governance collection
+  - project documentation collections
+  - technical reference collections
+- Success Criteria:
+  - Workspace stays knowledge-focused
+  - no registries, approval rules, runtime state, secrets, or private data are stored there
+  - cloud-connected collections stay Category 1 only
+
+### Phase 9 - Fabric Prompt Pattern Layer
+
+- Status: Future
+- Goal: make reusable prompt patterns available as explicit planning inputs.
+- Build Artifacts:
+  - prompt-pattern library
+  - cognitive workflow patterns
+  - pattern naming and selection rules
+- Success Criteria:
+  - Fabric patterns remain reusable and versionable
+  - patterns do not contain secrets or runtime state
+  - COOPER can consult patterns without weakening governance

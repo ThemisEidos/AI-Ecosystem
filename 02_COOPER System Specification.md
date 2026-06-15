@@ -22,6 +22,20 @@ COOPER should:
 
 COOPER does not infer Open Workshop vs Private Workshop. The user selects the operating environment.
 
+## Pattern and Workspace Roles
+
+Fabric is the reusable prompt-pattern layer.
+It stores cognitive workflow patterns such as analysis, summarization, report review, threat analysis, and decision support.
+
+Open WebUI Workspace is the knowledge and reference-asset layer.
+It may hold governance collections, project documentation, technical references, and training material.
+
+COOPER may later select Fabric patterns during workflow planning.
+COOPER may later consult Open WebUI Workspace collections as knowledge inputs.
+
+Fabric and Workspace do not replace COOPER governance, the registry, the router, the approval gate, or the workbench.
+Registries, approval policy, routing logic, and execution behavior remain in code and config.
+
 ## Permission Model
 
 COOPER routes work by workshop and permission level.
@@ -295,6 +309,9 @@ The registry should describe:
 
 COOPER should not invent capabilities that are not in the registry.
 
+Open WebUI Workspace should not be used as the primary prompt-pattern store.
+It should not hold tool registries, approval rules, runtime state, secrets, private data, or personality state.
+
 ## Approval Rules
 
 Approval is mandatory when a task crosses a governed boundary.
@@ -463,3 +480,5 @@ Rules:
 - Workbench: the active task space
 - Knowledge Shelf: general-reference storage
 - Secure Vault: VeraCrypt long-term encrypted storage, human-managed
+- Open WebUI Workspace: knowledge and reference-asset layer
+- Fabric: reusable prompt-pattern and cognitive workflow layer

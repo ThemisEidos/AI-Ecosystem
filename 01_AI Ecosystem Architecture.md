@@ -28,14 +28,32 @@ Core principles:
 - make approved capability visible and reusable
 - require a clear workflow before adding a new tool
 
+## Pattern and Knowledge Layers
+
+The ecosystem uses two distinct supporting layers below COOPER:
+
+- Fabric: reusable prompt-pattern and cognitive workflow layer
+- Open WebUI Workspace: knowledge, RAG, and reference-asset layer
+
+Fabric is the source of truth for reusable prompt patterns such as analysis, summarization, report review, threat analysis, and decision support.
+Open WebUI Workspace is the source of truth for knowledge collections, documents, and reference libraries.
+
+COOPER may later select Fabric patterns during workflow planning, but Fabric does not replace COOPER governance, registry, router, approval, or workbench logic.
+
+Registries, approval policy, routing logic, and execution rules remain in code and config, not in Workspace.
+
 ## Workshop Model
 
 ```text
 User
  ↓
-Workshop selection
+COOPER
  ↓
-COOPER or COOPER Private
+Workflow selection
+ ↓
+Fabric pattern
+ ↓
+Open WebUI Workspace knowledge collection
  ↓
 Tool Registry
  ↓
@@ -45,8 +63,10 @@ Tools / Models / Automations / Scripts
  ↓
 Results
  ↓
-Obsidian or Restricted Storage
+Obsidian, Project Workspace, or Restricted DMZ Workspace
 ```
+
+The flow above is the intended future target flow, not a fully implemented integration path yet.
 
 COOPER should:
 
@@ -93,6 +113,9 @@ Storage is split by workshop and role:
 
 COOPER does not directly manage VeraCrypt or StandardNotes.
 COOPER Private reads and writes only inside the approved Restricted DMZ Workspace.
+
+Open WebUI Workspace is separate from Obsidian.
+It is intended for knowledge collections and reference assets, not for runtime state, secrets, registries, approval rules, or personality state.
 
 ## Workshops
 

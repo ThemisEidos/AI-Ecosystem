@@ -6,6 +6,10 @@ This document defines the recommended Obsidian vault structure for the AI Ecosys
 
 The vault should be a working knowledge base, not a note dump. It should support COOPER, reports, prompts, workflows, and project documentation without mixing in sensitive material that belongs in the Restricted DMZ Workspace or Secure Vault.
 
+Open WebUI Workspace is a separate knowledge and reference layer.
+It may hold governance documents, project documentation, technical references, and training collections.
+It should not be the primary prompt-pattern store.
+
 Storage boundary terms:
 
 - Knowledge Shelf = Obsidian
@@ -44,6 +48,7 @@ PDA-Obsidian-Vault/
 
 The Obsidian vault is the Knowledge Shelf, not the Secure Vault.
 The Secure Vault and StandardNotes are outside the Obsidian automation surface.
+Open WebUI Workspace collections should stay documentation-focused and should not store tool registries, approval rules, runtime state, secrets, private data, or personality state.
 
 ## Recommended Project Layout
 
@@ -60,6 +65,22 @@ The Secure Vault and StandardNotes are outside the Obsidian automation surface.
     ├── 07_Implementation Roadmap.md
     └── 08_Obsidian Vault Structure.md
 ```
+
+## Recommended Workspace Collection
+
+Recommended first Open WebUI Workspace collection:
+
+- AI Ecosystem Governance
+
+Suggested contents:
+
+- `00_Project Charter.md`
+- `01_AI Ecosystem Architecture.md`
+- `02_COOPER System Specification.md`
+- `03_AI Tool Stack & Roles.md`
+- `04_Security & Compartmentalization Policy.md`
+- `06_Automation & Workflow Catalog.md`
+- `07_Implementation Roadmap.md`
 
 ## Sensitive Material
 

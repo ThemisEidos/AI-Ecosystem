@@ -11,6 +11,9 @@ Storage rules:
 - Open Workshop writes to Obsidian or Project Workspace with approval.
 - Private Workshop writes only to the Restricted DMZ Workspace.
 - COOPER Private never writes directly to Secure Vault or StandardNotes.
+- Fabric is the reusable prompt-pattern layer.
+- Open WebUI Workspace is the knowledge and reference-asset layer.
+- Workspace should not hold registries, approval rules, runtime state, secrets, private data, or personality state.
 
 ## WF-001 Research Summary
 
@@ -63,6 +66,17 @@ Storage rules:
   - Treat as Level 4 execution.
   - Requires explicit approval.
   - Deferred until Phase 2 is stable.
+
+### Future Workspace and Fabric Phases
+
+- Open WebUI Workspace Knowledge Layer
+  - Purpose: organize governance documents, reference libraries, and project knowledge collections.
+  - Status: future
+  - Notes: cloud-connected collections remain Category 1 only unless the Workspace is confirmed local-only and Private Workshop safe.
+- Fabric Prompt Pattern Layer
+  - Purpose: store reusable prompt patterns for analysis, summarization, report review, threat analysis, and decision support.
+  - Status: future
+  - Notes: patterns must not contain secrets, runtime state, or registry logic.
 
 ## Workflow Definition of Done
 
@@ -222,3 +236,5 @@ Workflow completion is measured by outcome quality, not by workflow execution al
 - Secure Vault: VeraCrypt long-term encrypted storage, human-managed
 - StandardNotes: human-only secure notes
 - Codex Task Queue: Project Workspace folder for WF-002 task files
+- Open WebUI Workspace: knowledge and reference-asset layer
+- Fabric: reusable prompt-pattern and cognitive workflow layer

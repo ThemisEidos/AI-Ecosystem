@@ -66,6 +66,15 @@ Current baseline capabilities:
 - PowerShell scripts
 - Python scripts
 
+## Fabric and Workspace Roles
+
+- Fabric is the reusable prompt-pattern layer.
+- Fabric stores cognitive workflow patterns such as analysis, summarization, report review, threat analysis, and decision support.
+- Open WebUI Workspace is the knowledge and reference-asset layer.
+- Open WebUI Workspace may hold governance collections, project documentation, technical references, and training or research collections.
+- Open WebUI Workspace should not hold tool registries, approval rules, runtime state, secrets, private data, or personality state.
+- COOPER remains the governed orchestrator that can later select Fabric patterns and consult Workspace collections.
+
 ## Role Table
 
 | Role | Primary Tool | Backup / Secondary |
@@ -232,5 +241,7 @@ If a workflow is not defined, define the workflow before adding more tools.
 - Safety Officer: the policy layer that blocks unsafe use
 - Workbench: the active execution space
 - Knowledge Shelf: general-reference storage
+- Open WebUI Workspace: knowledge and reference-asset layer
+- Fabric: reusable prompt-pattern and cognitive workflow layer
 - Secure Vault: restricted encrypted storage
 - Codex Task Queue: Project Workspace folder for WF-002 task files
