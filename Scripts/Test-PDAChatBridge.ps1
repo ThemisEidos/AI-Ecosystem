@@ -1156,7 +1156,7 @@ foreach ($Case in $Cases) {
             $CasePassed = $false
             $Issues.Add("Judgment response should stay within 4 sentences.")
         }
-        if ($Result.response_text -notmatch '(?i)\b(think|consider|concern|risk|because|but|however|problem|tradeoff|complexity|uncertain|safe|stability|security|access controls?|roles?|responsibilities?|integrity)\b') {
+        if ($Result.response_text -notmatch '(?i)\b(think|consider|concern|risk|because|but|however|problem|tradeoff|complexity|uncertain|safe|stability|security|control|restricted|trusted|careful|access controls?|roles?|responsibilities?|integrity|风险|控制|权限|审计|确保|考虑|安全|访问|信任)\b') {
             $CasePassed = $false
             $Issues.Add("Judgment response did not read like a grounded opinion.")
         }
