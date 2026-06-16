@@ -66,10 +66,10 @@ elseif (-not $UseLiveModel) {
 
 $Cases = @(
     [pscustomobject]@{
-        name = "slash status"
-        input = "/status"
-        expected_route = "slash_command"
-        expected_command = "/status"
+        name = "status request"
+        input = "Show system status."
+        expected_route = "direct_status"
+        expected_command = "Show system status"
     }
     [pscustomobject]@{
         name = "fabric report slash"
@@ -78,58 +78,88 @@ $Cases = @(
         expected_command = "/fabric report"
     }
     [pscustomobject]@{
-        name = "cooper profile slash"
-        input = "/cooper profile cyber"
-        expected_route = "cooper_personality_command"
-        expected_command = "/cooper"
+        name = "natural tool inventory"
+        input = "What tools are available?"
+        expected_route = "tool_inventory"
+        expected_command = "What tools are available?"
+    }
+    [pscustomobject]@{
+        name = "natural workflow catalog"
+        input = "List available workflows."
+        expected_route = "workflow_catalog"
+        expected_command = "List available workflows"
+    }
+    [pscustomobject]@{
+        name = "research summary note"
+        input = "Research official Pop!_OS documentation and prepare it for the Linux & Infrastructure knowledge collection."
+        expected_route = "research_summary"
+        expected_command = "Research Summary"
+    }
+    [pscustomobject]@{
+        name = "wf-005 note creation"
+        input = "Create an Obsidian note for WF-005."
+        expected_route = "note_creation"
+        expected_command = "Create Obsidian note"
+    }
+    [pscustomobject]@{
+        name = "natural workshop change request"
+        input = "Switch to Private Workshop."
+        expected_route = "workshop_change_request"
+        expected_command = "Select workshop in the host/UI."
+    }
+    [pscustomobject]@{
+        name = "legacy cooper slash command"
+        input = "/cooper status"
+        expected_route = "legacy_cooper_slash_command"
+        expected_command = "Show system status"
     }
     [pscustomobject]@{
         name = "natural status"
         input = "How is the PDA doing?"
         expected_route = "direct_status"
-        expected_command = "/status"
+        expected_command = "Show system status"
     }
     [pscustomobject]@{
         name = "natural help"
         input = "What can you do?"
         expected_route = "direct_help"
-        expected_command = "/help"
+        expected_command = "Ask naturally for status, tools, workflows, or workshop mode."
     }
     [pscustomobject]@{
         name = "status summary"
         input = "Summarize the ecosystem status."
         expected_route = "direct_status"
-        expected_command = "/status"
+        expected_command = "Show system status"
     }
     [pscustomobject]@{
         name = "status report"
         input = "Good morning COOPER. Status report."
         expected_route = "direct_status"
-        expected_command = "/status"
+        expected_command = "Show system status"
     }
     [pscustomobject]@{
         name = "morning briefing"
         input = "Morning briefing please."
         expected_route = "direct_status"
-        expected_command = "/status"
+        expected_command = "Show system status"
     }
     [pscustomobject]@{
         name = "how are things going"
         input = "How are things going?"
         expected_route = "direct_status"
-        expected_command = "/status"
+        expected_command = "Show system status"
     }
     [pscustomobject]@{
         name = "system status"
         input = "System status."
         expected_route = "direct_status"
-        expected_command = "/status"
+        expected_command = "Show system status"
     }
     [pscustomobject]@{
         name = "health report"
         input = "Health report."
         expected_route = "direct_status"
-        expected_command = "/status"
+        expected_command = "Show system status"
     }
     [pscustomobject]@{
         name = "model identity"
@@ -207,7 +237,7 @@ $Cases = @(
         name = "memory candidates"
         input = "What memory candidates exist?"
         expected_route = "memory_candidates"
-        expected_command = "/memory"
+        expected_command = "Review memory candidates."
     }
     [pscustomobject]@{
         name = "commander briefing"
@@ -219,7 +249,7 @@ $Cases = @(
         name = "dispatch guidance"
         input = "What should handle this task?"
         expected_route = "dispatch_guidance"
-        expected_command = "/dispatch"
+        expected_command = "Review dispatch guidance."
     }
     [pscustomobject]@{
         name = "blocked guidance"
@@ -363,7 +393,7 @@ foreach ($Case in $Cases) {
         $Issues.Add("Expected no recommended command but got '$($Route.recommended_command)'.")
     }
 
-    if ($Route.route_type -in @("direct_status", "direct_help", "task_lookup", "dispatch_guidance", "goal_planning", "judgment_advice", "ambiguous", "fallback")) {
+    if ($Route.route_type -in @("direct_status", "direct_help", "task_lookup", "dispatch_guidance", "goal_planning", "research_summary", "judgment_advice", "ambiguous", "fallback")) {
         $OriginalDefaultModelChat = $null
         $StubbedModelInvocation = $false
         if (-not $UseLiveModel -or ($Case.PSObject.Properties.Name -contains "stub_model_response" -and -not [string]::IsNullOrWhiteSpace([string]$Case.stub_model_response))) {
@@ -416,9 +446,33 @@ foreach ($Case in $Cases) {
             $CasePassed = $false
             $Issues.Add("Direct status response did not look like a status summary.")
         }
-        if ($Route.route_type -eq "direct_help" -and $Direct.response_text -notmatch '(?i)Status, reports, research, planning, execution') {
+        if ($Route.route_type -eq "direct_help" -and $Direct.response_text -notmatch '(?i)Ask naturally for status, tools, workflows, planning, research, or execution help') {
             $CasePassed = $false
             $Issues.Add("Direct help response did not look like help text.")
+        }
+        if ($Route.route_type -eq "tool_inventory" -and $Direct.response_text -notmatch '(?i)Tool inventory:') {
+            $CasePassed = $false
+            $Issues.Add("Tool inventory response did not summarize available tools.")
+        }
+        if ($Route.route_type -eq "workflow_catalog" -and $Direct.response_text -notmatch '(?i)Workflow catalog:') {
+            $CasePassed = $false
+            $Issues.Add("Workflow catalog response did not summarize available workflows.")
+        }
+        if ($Route.route_type -eq "research_summary" -and $Direct.response_text -notmatch '(?i)Created research summary at|WF-001 research summary could not be completed') {
+            $CasePassed = $false
+            $Issues.Add("Research summary response did not reflect the governed workflow outcome.")
+        }
+        if ($Route.route_type -eq "note_creation" -and $Direct.response_text -notmatch '(?i)Created note at|WF-005 note creation could not be completed') {
+            $CasePassed = $false
+            $Issues.Add("Note creation response did not reflect the governed workflow outcome.")
+        }
+        if ($Route.route_type -eq "workshop_change_request" -and $Direct.response_text -notmatch '(?i)Workshop selection remains a human decision') {
+            $CasePassed = $false
+            $Issues.Add("Workshop change request response did not preserve human control.")
+        }
+        if ($Route.route_type -eq "legacy_cooper_slash_command" -and $Direct.response_text -notmatch '(?i)legacy COOPER slash-command interface is retired') {
+            $CasePassed = $false
+            $Issues.Add("Legacy COOPER slash command response did not mark the interface retired.")
         }
         if ($Route.route_type -eq "personality_status" -and $Direct.response_text -notmatch '(?i)COOPER Personality|Profile: operations|Humor: 35|Sarcasm: 15|Professionalism: 90|Brevity: 80|Initiative: 85|Risk awareness: 95') {
             $CasePassed = $false

@@ -7,39 +7,24 @@ This roadmap tracks the staged implementation of the COOPER-centered AI Ecosyste
 ## Current Focus
 
 - Current priority remains status governance cleanup and Git alignment.
-- Workspace and Fabric integration is deferred until the current governed-status work is committed and stable.
-- Current Phase: Phase 1 - Tool Registry Foundation
-- Current Objective: Create the first runtime-readable version of the COOPER Tool Box inventory for both workshops.
+- Workspace and Fabric integration remain deferred until the current operational milestone is committed and stable.
+- Current Phase: Phase 5 - First Operational Workflows
+- Current Objective: Stabilize the first governed workflow chain and its review path.
 - Next Build Artifact:
-  - `Config/general_tool_registry.yaml`
-  - `Config/private_tool_registry.yaml`
-  - `Scripts/Test-COOPERToolRegistry.ps1`
-- Why This Comes Next: COOPER cannot select tools until it has a validated list of approved tools, drawers, workshops, permission levels, and executor types. The registry must exist before the Quartermaster, Safety Officer, or Workbench can operate.
+  - `Docs/2026-06-16 Operational Workflow Milestone.md`
+- Why This Comes Next: COOPER now has a minimal governed execution path for note creation, source-backed research, and collection import drafting. The remaining work is to document the milestone cleanly and keep the workflow boundary stable.
 - Dependencies:
-  - numbered guidance documents complete
-  - Two Workshop model defined
-  - permission levels defined
-  - storage boundaries defined
-  - workflow catalog defined
+  - governed routing remains registry-driven
+  - approval gate remains required before execution
+  - review gate remains required before state updates
+  - runtime artifacts stay separated from source and docs
 - Definition of Done:
-  - `general_tool_registry.yaml` exists
-  - `private_tool_registry.yaml` exists
-  - each tool entry includes `id`, `name`, `drawer`, `workshop`, `description`, `permission_level`, `approval_required`, `executor_type`, `enabled`, `inputs`, `outputs`, and `notes`
-  - private registry contains only local/private-safe tools
-  - general registry contains only Open Workshop tools
-  - validation script loads both registries
-  - validation script checks required fields
-  - validation script checks invalid workshop/tool combinations
-  - validation script confirms Private Workshop has no Level 3 external-service tools
-  - validation script exits cleanly with pass/fail output
-  - no real tool execution is implemented yet
-- After This, Build Next:
-  - Phase 2 - Quartermaster / Tool Router
-  - `Scripts/Invoke-COOPERTool.ps1`
-  - dry-run tool selection
-  - workshop validation
-  - permission validation
-  - no real execution yet
+  - WF-005 Note Creation remains operational
+  - WF-001 Source-Backed Research Summary remains operational
+  - WF-006 Knowledge Collection Import Draft remains operational
+  - WF-001 -> WF-006 chain remains operational
+  - milestone status is recorded
+  - runtime noise is not treated as source of truth
 
 ## Phase Map
 
@@ -120,17 +105,19 @@ This roadmap tracks the staged implementation of the COOPER-centered AI Ecosyste
 
 ### Phase 5 - First Operational Workflows
 
-- Status: Planned
-- Goal: Implement the first practical workflows.
-- Build Artifacts:
-  - WF-001 COOPER Status Check
-  - WF-002 Codex Task Generator, semi-automated
-  - WF-003 Codex Prompt Helper
+- Status: In Progress
+- Goal: Stabilize the first practical governed workflows.
+- Operational:
+  - WF-005 Note Creation
+  - WF-001 Source-Backed Research Summary
+  - WF-006 Knowledge Collection Import Draft
+  - First workflow chain: WF-001 → WF-006
 - Success Criteria:
   - each workflow has defined input/output
   - permission model enforced
   - storage boundaries enforced
   - COOPER review step included
+  - workflow outputs are recorded without conflating runtime state with source documentation
 
 ### Phase 6 - Private Workshop Hardening
 

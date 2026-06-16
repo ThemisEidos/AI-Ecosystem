@@ -269,27 +269,31 @@ Private Workshop rule:
 
 Private Workshop must never fall back to cloud models.
 
-## Mode Switching Commands
+## Conversational Interface
 
-Preferred command surface:
+COOPER should use normal conversational language rather than slash-command syntax.
+
+Preferred conversational requests:
 
 ```text
-/cooper mode
-/cooper private on
-/cooper private off
-/cooper tools
-/cooper workflows
-/cooper status
+Show system status.
+What tools are available?
+List available workflows.
+What workshop am I in?
+Switch to Private Workshop.
+Switch to Open Workshop.
 ```
 
 Expected behavior:
 
-- `/cooper mode` reports the active workshop and default model
-- `/cooper private on` switches to Private Workshop
-- `/cooper private off` switches to Open Workshop
-- `/cooper tools` lists approved capabilities and drawers
-- `/cooper workflows` lists known workflows
-- `/cooper status` reports health, mode, and pending approvals
+- `Show system status` reports the active workshop, mode, model, registry, and approval-backed status
+- `What tools are available?` returns the approved tool inventory for the selected workshop
+- `List available workflows` returns the documented workflow catalog
+- `What workshop am I in?` reports the active workshop and current mode
+- `Switch to Private Workshop` is treated as a workshop change request and remains a human decision
+- `Switch to Open Workshop` is treated as a workshop change request and remains a human decision
+
+COOPER may continue to support legacy slash commands for unrelated non-COOPER surfaces, but the normal COOPER interface is conversational.
 
 ## Tool Registry Access
 

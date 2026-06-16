@@ -11,62 +11,18 @@ $ErrorActionPreference = "Stop"
 
 $Root = Split-Path -Parent $PSScriptRoot
 $WorkerScript = Join-Path $PSScriptRoot "Invoke-PDAResearchWorker.ps1"
-$FabricScript = Join-Path $PSScriptRoot "Invoke-PDAFabricPattern.ps1"
+$ReviewScript = Join-Path $PSScriptRoot "Resolve-COOPERWorkflowReview.ps1"
+$SkillsScript = Join-Path $PSScriptRoot "Update-COOPERWorkflowSkills.ps1"
 $ResultsRoot = Join-Path $Root "PDA-Tasks\results"
 $TempRoot = Join-Path $Root "tmp\research-worker-validation"
+$TempSkillsState = Join-Path $TempRoot "COOPER_Skills.failed-review.json"
 . (Join-Path $PSScriptRoot "Test-PDAAssertions.ps1")
 
-if (-not (Test-Path -Path $WorkerScript -PathType Leaf)) {
+if (-not (Test-Path -LiteralPath $WorkerScript -PathType Leaf)) {
     throw "Research worker missing: $WorkerScript"
 }
-
-function ConvertTo-PDAHashtable {
-    param([Parameter(Mandatory = $true)]$Value)
-
-    if ($null -eq $Value) {
-        return $null
-    }
-
-    if ($Value -is [hashtable] -or $Value -is [System.Collections.IDictionary]) {
-        $Copy = @{}
-        foreach ($Key in $Value.Keys) {
-            if ($null -eq $Value[$Key]) {
-                $Copy[$Key] = $null
-            }
-            else {
-                $Copy[$Key] = ConvertTo-PDAHashtable -Value $Value[$Key]
-            }
-        }
-        return $Copy
-    }
-
-    if ($Value -is [System.Collections.IEnumerable] -and $Value -isnot [string]) {
-        $List = @()
-        foreach ($Item in $Value) {
-            if ($null -eq $Item) {
-                $List += $null
-            }
-            else {
-                $List += ,(ConvertTo-PDAHashtable -Value $Item)
-            }
-        }
-        return $List
-    }
-
-    if ($Value -is [psobject] -and $Value.PSObject.Properties.Name.Count -gt 0) {
-        $Copy = @{}
-        foreach ($Prop in $Value.PSObject.Properties) {
-            if ($null -eq $Prop.Value) {
-                $Copy[$Prop.Name] = $null
-            }
-            else {
-                $Copy[$Prop.Name] = ConvertTo-PDAHashtable -Value $Prop.Value
-            }
-        }
-        return $Copy
-    }
-
-    return $Value
+if (-not (Test-Path -LiteralPath $ReviewScript -PathType Leaf)) {
+    throw "Workflow review script missing: $ReviewScript"
 }
 
 function Invoke-ResearchWorker {
@@ -87,239 +43,232 @@ function Invoke-ResearchWorker {
     return $JsonText | ConvertFrom-Json -ErrorAction Stop
 }
 
-New-Item -ItemType Directory -Force -Path $TempRoot, $ResultsRoot | Out-Null
+function Invoke-ResearchReview {
+    param(
+        [Parameter(Mandatory = $true)]
+        [object]$WorkflowResult,
+
+        [Parameter(Mandatory = $true)]
+        [string]$RequestText
+    )
+
+    & $ReviewScript `
+        -WorkflowId "WF-001" `
+        -WorkflowResult $WorkflowResult `
+        -RequestText $RequestText `
+        -ExpectedOutputType "research_markdown" `
+        -ExpectedOutputPath ([string]$WorkflowResult.saved_path)
+}
+
+function New-ResearchTaskFile {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$TaskPath,
+
+        [Parameter(Mandatory = $true)]
+        [string]$RequestText
+    )
+
+    $Task = [ordered]@{
+        task_id = [guid]::NewGuid().ToString()
+        command = "/research"
+        classification = "category_3"
+        category = "category_3"
+        approved = $true
+        target = $RequestText
+        source_path = ""
+    }
+
+    $Task | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $TaskPath -Encoding UTF8
+}
+
+if (-not (Test-Path -LiteralPath $TempRoot -PathType Container)) {
+    New-Item -ItemType Directory -Force -Path $TempRoot | Out-Null
+}
+New-Item -ItemType Directory -Force -Path $ResultsRoot | Out-Null
 
 $Issues = New-Object System.Collections.Generic.List[string]
 
-$WorkerSource = Get-Content -Path $WorkerScript -Raw
-$LegacyQueuePattern = '(?i)(?<!PDA-)Tasks\\(queued|running|completed|failed|results)'
-$BypassScan = [pscustomobject]@{
-    legacy_queue_reference = [bool]([regex]::IsMatch($WorkerSource, $LegacyQueuePattern))
-    direct_litellm_request = [bool]([regex]::IsMatch($WorkerSource, 'http://localhost:4000/v1/chat/completions'))
-    adapter_call = [bool]([regex]::IsMatch($WorkerSource, 'Invoke-PDAModel\.ps1'))
-    fabric_renderer_call = [bool]([regex]::IsMatch($WorkerSource, 'Invoke-PDAFabricPattern\.ps1'))
-    direct_fabric_model_call = [bool]([regex]::IsMatch($WorkerSource, '(?i)(fabric\s+--pattern|Invoke-RestMethod|chat/completions)'))
-}
-if ($BypassScan.legacy_queue_reference) {
-    $Issues.Add("Research worker references legacy queue paths.")
-}
-if ($BypassScan.direct_litellm_request) {
-    $Issues.Add("Research worker still calls LiteLLM directly.")
-}
-if (-not $BypassScan.adapter_call) {
-    $Issues.Add("Research worker does not call Invoke-PDAModel.ps1.")
-}
-if (-not $BypassScan.fabric_renderer_call) {
-    $Issues.Add("Research worker does not call the Fabric renderer helper.")
-}
-if ($BypassScan.direct_fabric_model_call) {
-    $Issues.Add("Research worker should not call a Fabric model transport directly.")
-}
+$OfficialRequest = "Research official Pop!_OS documentation and create a structured summary note in the Linux & Infrastructure collection."
+$OfficialTaskPath = Join-Path $TempRoot "wf001-official-task.json"
+New-ResearchTaskFile -TaskPath $OfficialTaskPath -RequestText $OfficialRequest
 
-$TaskId = [guid]::NewGuid().ToString()
-$SourcePath = Join-Path $TempRoot "$TaskId-source.md"
-$TaskPath = Join-Path $TempRoot "$TaskId-task.json"
-$SourceContent = @"
-# Topic
-
-Summarize the current research findings for the PDA system.
-"@
-$SourceContent | Set-Content -Path $SourcePath -Encoding UTF8
-
-$Task = [ordered]@{
-    task_id = $TaskId
-    command = "/research"
-    classification = "category_3"
-    category = "category_3"
-    approved = $true
-    source_path = $SourcePath
-    target = "Summarize the current research findings for the PDA system."
-    project = "AI Ecosystem"
-}
-$Task | ConvertTo-Json -Depth 10 | Set-Content -Path $TaskPath -Encoding UTF8
-
-$SuccessResult = $null
-$FailureResult = $null
-
+$OfficialResult = $null
 try {
-    $SuccessResult = Invoke-ResearchWorker -TaskPath $TaskPath
+    $OfficialResult = Invoke-ResearchWorker -TaskPath $OfficialTaskPath
 }
 catch {
-    $Issues.Add("Research worker execution threw unexpectedly: $($_.Exception.Message)")
+    $Issues.Add("WF-001 worker threw unexpectedly for an official Pop!_OS request: $($_.Exception.Message)")
 }
 
-$SuccessArtifactPath = Join-Path $ResultsRoot "$TaskId-result.json"
-if (-not $SuccessResult) {
-    $Issues.Add("Research worker did not return a result contract.")
+if ($null -eq $OfficialResult) {
+    $Issues.Add("WF-001 worker did not return a result for an official Pop!_OS request.")
 }
 else {
-    if ($SuccessResult.status -notin @("success", "failed")) {
-        $Issues.Add("Unexpected status returned by research worker: '$($SuccessResult.status)'.")
+    if ([string]$OfficialResult.status -ne "success") {
+        $Issues.Add("WF-001 worker did not succeed for an official Pop!_OS request.")
     }
-    if ([string]$SuccessResult.worker -ne "research-worker") {
-        $Issues.Add("Expected worker research-worker.")
+    if ([string]::IsNullOrWhiteSpace([string]$OfficialResult.saved_path)) {
+        $Issues.Add("WF-001 worker did not return a saved markdown path.")
     }
-    if ([string]$SuccessResult.result_path -ne $SuccessArtifactPath) {
-        $Issues.Add("Canonical result path mismatch.")
+    elseif (-not (Test-Path -LiteralPath $OfficialResult.saved_path -PathType Leaf)) {
+        $Issues.Add("WF-001 markdown file was not created.")
     }
-    if (-not (Test-Path -Path $SuccessArtifactPath -PathType Leaf)) {
-        $Issues.Add("Canonical result artifact was not written.")
+
+    $OfficialOutput = if ($OfficialResult.PSObject.Properties.Name -contains "output") { $OfficialResult.output } else { $null }
+    if ($null -eq $OfficialOutput) {
+        $Issues.Add("WF-001 worker did not return an output payload.")
     }
     else {
-        try {
-            $StoredResult = Get-Content -Path $SuccessArtifactPath -Raw | ConvertFrom-Json
-            if ([string]$StoredResult.task_id -ne $TaskId) {
-                $Issues.Add("Stored result task_id mismatch.")
-            }
-            if ([string]$StoredResult.result_path -ne $SuccessArtifactPath) {
-                $Issues.Add("Stored result does not point to the canonical artifact path.")
-            }
+        if ([int]$OfficialOutput.source_count -le 0) {
+            $Issues.Add("WF-001 worker did not collect any sources.")
         }
-        catch {
-            $Issues.Add("Stored result artifact is not valid JSON.")
+        if (-not ($OfficialOutput.sources) -or @($OfficialOutput.sources).Count -le 0) {
+            $Issues.Add("WF-001 worker output is missing collected sources.")
+        }
+        if ([string]::IsNullOrWhiteSpace([string]$OfficialOutput.retrieved_at)) {
+            $Issues.Add("WF-001 worker output is missing retrieved_at.")
         }
     }
 
-    if ($SuccessResult.status -eq "success") {
-        if ([string]::IsNullOrWhiteSpace([string]$SuccessResult.saved_path)) {
-            $Issues.Add("saved_path is empty on success.")
+    if (-not [string]::IsNullOrWhiteSpace([string]$OfficialResult.saved_path) -and (Test-Path -LiteralPath $OfficialResult.saved_path -PathType Leaf)) {
+        $Content = Get-Content -LiteralPath $OfficialResult.saved_path -Raw
+        if ($Content -notmatch '(?i)https?://') {
+            $Issues.Add("WF-001 markdown does not contain source URLs.")
         }
-        elseif (-not (Test-Path -Path $SuccessResult.saved_path -PathType Leaf)) {
-            $Issues.Add("Research markdown output was not created.")
+        if ($Content -notmatch '(?im)^##\s+Retrieved At') {
+            $Issues.Add("WF-001 markdown does not contain a Retrieved At section.")
         }
-
-        $ModelRoute = if ($SuccessResult.output.model_route) { ConvertTo-PDAHashtable -Value $SuccessResult.output.model_route } else { $null }
-        if (-not $ModelRoute) {
-            $Issues.Add("Research result did not include a model_route payload.")
+        if ($Content -match '(?i)cannot perform real-time research|knowledge cutoff|if you provide source material|as an ai|i can''t browse|i cannot browse|unable to access the web') {
+            $Issues.Add("WF-001 markdown contains disclaimer-only language.")
         }
-        else {
-            try {
-                Assert-ValidRouteSource -RouteSource $ModelRoute.route_source -Context standard
-            }
-            catch {
-                $Issues.Add($_.Exception.Message)
-            }
-            if ($ModelRoute.via_litellm -ne $true) {
-                $Issues.Add("Research worker should use LiteLLM.")
-            }
-            if (-not (@("gemini","openrouter") -contains [string]$ModelRoute.selected_model)) {
-                $Issues.Add("Research worker did not select a gemini/openrouter route.")
-            }
-        }
-        
-        $Fabric = if ($SuccessResult.output.fabric) { ConvertTo-PDAHashtable -Value $SuccessResult.output.fabric } else { $null }
-        if (-not $Fabric) {
-            $Issues.Add("Research result did not include a fabric payload.")
-        }
-        else {
-            if ([string]$Fabric.default_pattern -ne "Research/research-synthesis") {
-                $Issues.Add("Research worker default_pattern should resolve from the registry.")
-            }
-            if ([bool]$Fabric.used -ne $true) {
-                $Issues.Add("Research worker should use the Fabric renderer when default_pattern exists.")
-            }
-            if ([string]$Fabric.render_status -ne "success") {
-                $Issues.Add("Research Fabric render status should be success.")
-            }
-        $ModelRequest = if ($SuccessResult.output.model_request) { ConvertTo-PDAHashtable -Value $SuccessResult.output.model_request } else { $null }
-        if (-not $ModelRequest) {
-            $Issues.Add("Research result did not include a model_request payload.")
-        }
-        elseif ([string]::IsNullOrWhiteSpace([string]$ModelRequest.prompt) -or [string]$ModelRequest.prompt -notmatch '# PDA Fabric Research Pattern') {
-            $Issues.Add("Rendered prompt was not passed into the model adapter.")
+        if ($Content -notmatch '(?i)pop!?_?os|system76|linux & infrastructure|summary') {
+            $Issues.Add("WF-001 markdown does not appear to address the request.")
         }
     }
 
-        $Fallback = if ($SuccessResult.output.fallback) { ConvertTo-PDAHashtable -Value $SuccessResult.output.fallback } else { $null }
-        if (-not $Fallback) {
-            $Issues.Add("Research result did not include a fallback payload.")
-        }
-        else {
-            if ([bool]$Fallback.allowed -ne $true) {
-                $Issues.Add("Research worker fallback should be allowed for standard routes.")
-            }
-            if ([bool]$Fallback.used -ne $false) {
-                $Issues.Add("Research worker should not report fallback used on the primary route case.")
-            }
-            if ([int]$Fallback.attempt_count -lt 1) {
-                $Issues.Add("Research worker fallback attempt count is invalid.")
-            }
-        }
+    $Review = $null
+    try {
+        $Review = Invoke-ResearchReview -WorkflowResult $OfficialResult -RequestText $OfficialRequest
+    }
+    catch {
+        $Issues.Add("WF-001 review threw unexpectedly for a valid result: $($_.Exception.Message)")
+    }
 
-        if ([string]::IsNullOrWhiteSpace([string]$SuccessResult.output.content)) {
-            $Issues.Add("Research worker returned empty markdown content.")
-        }
-        if ([string]$SuccessResult.next_worker -ne "review-worker") {
-            $Issues.Add("Research worker should hand off to review-worker.")
-        }
+    if ($null -eq $Review) {
+        $Issues.Add("WF-001 review did not return a result for a valid research output.")
     }
     else {
-        if ([string]::IsNullOrWhiteSpace([string]$SuccessResult.output.error)) {
-            $Issues.Add("Failure path should include an error message.")
+        if ([string]$Review.status -ne "pass") {
+            $Issues.Add("WF-001 review did not pass for a source-backed result.")
+        }
+        if ([bool]$Review.review_passed -ne $true) {
+            $Issues.Add("WF-001 review did not set review_passed to true.")
         }
     }
 }
 
-$FailureTaskId = [guid]::NewGuid().ToString()
-$FailureTaskPath = Join-Path $TempRoot "$FailureTaskId-missing-input-task.json"
-$FailureTask = [ordered]@{
-    task_id = $FailureTaskId
-    command = "/research"
-    classification = "category_3"
-    category = "category_3"
-    approved = $true
-    project = "AI Ecosystem"
-}
-$FailureTask | ConvertTo-Json -Depth 10 | Set-Content -Path $FailureTaskPath -Encoding UTF8
-
+$NoSourceRequest = "Research the history of tea and create a summary note."
+$NoSourceTaskPath = Join-Path $TempRoot "wf001-nosource-task.json"
+New-ResearchTaskFile -TaskPath $NoSourceTaskPath -RequestText $NoSourceRequest
+$NoSourceResult = $null
 try {
-    $FailureResult = Invoke-ResearchWorker -TaskPath $FailureTaskPath
+    $NoSourceResult = Invoke-ResearchWorker -TaskPath $NoSourceTaskPath
 }
 catch {
-    $Issues.Add("Failure case threw unexpectedly: $($_.Exception.Message)")
+    $Issues.Add("WF-001 worker threw unexpectedly for a no-source request: $($_.Exception.Message)")
 }
 
-$FailureArtifactPath = Join-Path $ResultsRoot "$FailureTaskId-result.json"
-if (-not $FailureResult) {
-    $Issues.Add("Failure case did not return a result contract.")
+if ($null -eq $NoSourceResult) {
+    $Issues.Add("WF-001 worker did not return a result for a no-source request.")
 }
 else {
-    if ($FailureResult.status -ne "failed") {
-        $Issues.Add("Failure case should return failed status.")
+    if ([string]$NoSourceResult.status -ne "failed") {
+        $Issues.Add("WF-001 worker should fail when no approved sources are collected.")
     }
-    if ([string]::IsNullOrWhiteSpace([string]$FailureResult.output.error)) {
-        $Issues.Add("Failure case should include an error message.")
+    if ([string]::IsNullOrWhiteSpace([string]$NoSourceResult.reason) -or [string]$NoSourceResult.reason -ne "no_sources_collected") {
+        $Issues.Add("WF-001 worker should report no_sources_collected for unsupported research requests.")
     }
-    if (-not (Test-Path -Path $FailureArtifactPath -PathType Leaf)) {
-        $Issues.Add("Failure case did not write a canonical result artifact.")
+    if (-not [string]::IsNullOrWhiteSpace([string]$NoSourceResult.saved_path)) {
+        $Issues.Add("WF-001 should not create a markdown artifact when no sources are collected.")
+    }
+}
+
+$DisclaimerPath = Join-Path $TempRoot "wf001-disclaimer.md"
+@"
+# WF-001 Research Summary
+
+I cannot perform real-time research on external documentation.
+"@ | Set-Content -LiteralPath $DisclaimerPath -Encoding UTF8
+
+$DisclaimerResult = [pscustomobject]@{
+    status = "success"
+    saved_path = $DisclaimerPath
+    output = [pscustomobject]@{
+        markdown_path = $DisclaimerPath
+        source_count = 1
+        retrieved_at = (Get-Date).ToUniversalTime().ToString("o")
+        sources = @(
+            [pscustomobject]@{
+                title = "Synthetic Source"
+                url = "https://system76.com/support/articles/pop-basics/"
+                retrieved_at = (Get-Date).ToUniversalTime().ToString("o")
+                source_domain = "system76.com"
+                excerpt = "Synthetic excerpt."
+            }
+        )
+    }
+}
+$DisclaimerReview = Invoke-ResearchReview -WorkflowResult $DisclaimerResult -RequestText $OfficialRequest
+if ([string]$DisclaimerReview.status -ne "fail") {
+    $Issues.Add("WF-001 review should fail disclaimer-only output.")
+}
+if (-not (@($DisclaimerReview.issues | Where-Object { [string]$_ -match 'disclaimer' }).Count -gt 0)) {
+    $Issues.Add("WF-001 review should report disclaimer-only language as an issue.")
+}
+
+if (Test-Path -LiteralPath $TempSkillsState -PathType Leaf) {
+    Remove-Item -LiteralPath $TempSkillsState -Force
+}
+
+$FailedPromotion = & $SkillsScript -WorkflowId "WF-001" -ReviewResult $DisclaimerReview -ExampleRequest $OfficialRequest -ExampleOutput "wf-001-research-summary.md" -SkillName "Research Summary" -StatePath $TempSkillsState
+if ([string]$FailedPromotion.status -ne "fail") {
+    $Issues.Add("Failed WF-001 review did not stay in fail status.")
+}
+if ([bool]$FailedPromotion.promoted -ne $false) {
+    $Issues.Add("Failed WF-001 review incorrectly promoted the skill.")
+}
+
+if (-not (Test-Path -LiteralPath $TempSkillsState -PathType Leaf)) {
+    $Issues.Add("Failed-review skills state file was not written.")
+}
+else {
+    $SkillState = Get-Content -LiteralPath $TempSkillsState -Raw | ConvertFrom-Json
+    $WF001Skill = @($SkillState.skills | Where-Object { [string]$_.workflow_id -eq "WF-001" } | Select-Object -First 1)
+    if ($WF001Skill.Count -gt 0 -and [string]$WF001Skill[0].status -eq "operational") {
+        $Issues.Add("Failed WF-001 review promoted the skill to operational.")
     }
 }
 
 $Report = [pscustomobject]@{
     status = if ($Issues.Count -eq 0) { "pass" } else { "fail" }
-    worker_script = $WorkerScript
-    results_root = $ResultsRoot
-    test_case_count = 2
-    passed_count = if ($Issues.Count -eq 0) { 2 } else { 0 }
-    failed_count = if ($Issues.Count -eq 0) { 0 } else { 1 }
-    bypass_scan = $BypassScan
-    success_result = if ($SuccessResult) { $SuccessResult } else { $null }
-    failure_result = if ($FailureResult) { $FailureResult } else { $null }
+    official_result = $OfficialResult
+    no_source_result = $NoSourceResult
+    disclaimer_review = $DisclaimerReview
+    failed_promotion = $FailedPromotion
     issues = @($Issues)
 }
 
-if ($AsJson) {
-    $Report | ConvertTo-Json -Depth 20
-    if (-not $NoThrow -and $Report.status -ne "pass") {
-        throw "Research worker validation failed."
-    }
-    return
-}
-
 Write-Host "[*] PDA research worker validation"
-Write-Host ("Status     : {0}" -f $Report.status)
-Write-Host ("Results    : {0}" -f $ResultsRoot)
+Write-Host ("Status   : {0}" -f $Report.status)
+Write-Host ("WF-001   : source-backed research, no-source failure, and disclaimer rejection")
 
-if (-not $NoThrow -and $Report.status -ne "pass") {
-    throw "Research worker validation failed."
+if ($Report.status -ne "pass") {
+    foreach ($Issue in @($Report.issues)) {
+        Write-Host ("[FAIL] {0}" -f $Issue)
+    }
+    exit 1
 }
+
+Write-Host "[PASS] WF-001 source-backed research workflow validated."
+exit 0

@@ -25,6 +25,7 @@ $DispatchStatusScript = Join-Path $PSScriptRoot "Get-PDADispatchStatus.ps1"
 $StatusBridgeScript = Join-Path $PSScriptRoot "Invoke-COOPERStatusCommand.ps1"
 $EnvironmentHelperScript = Join-Path $PSScriptRoot "PDA_Environment.ps1"
 $ExecutorRegistryScript = Join-Path $PSScriptRoot "PDA_ExecutorRegistry.ps1"
+$WorkflowDefinitionsScript = Join-Path $PSScriptRoot "Get-COOPERWorkflowDefinitions.ps1"
 $ParserPath = Join-Path $PSScriptRoot "PDA_OutputParsing.ps1"
 if (Test-Path -LiteralPath $ParserPath -PathType Leaf) {
     . $ParserPath
@@ -34,6 +35,9 @@ if (Test-Path -LiteralPath $EnvironmentHelperScript -PathType Leaf) {
 }
 if (Test-Path -LiteralPath $ExecutorRegistryScript -PathType Leaf) {
     . $ExecutorRegistryScript
+}
+if (Test-Path -LiteralPath $WorkflowDefinitionsScript -PathType Leaf) {
+    . $WorkflowDefinitionsScript
 }
 . (Join-Path $PSScriptRoot "COOPER_PersonalityEngine.ps1")
 
@@ -45,6 +49,44 @@ function Normalize-PDAConversationalText {
     $Normalized = $Normalized -replace '[^a-z0-9/\s]+', ' '
     $Normalized = $Normalized -replace '\s+', ' '
     return $Normalized.Trim()
+}
+
+function Get-COOPERWorkflowDefinitionById {
+    param([Parameter(Mandatory = $true)][string]$WorkflowId)
+
+    if (-not (Get-Command -Name Get-COOPERWorkflowDefinitions -ErrorAction SilentlyContinue)) {
+        return $null
+    }
+
+    try {
+        return @(Get-COOPERWorkflowDefinitions -Root $Root) | Where-Object { [string]$_.id -eq $WorkflowId } | Select-Object -First 1
+    }
+    catch {
+        return $null
+    }
+}
+
+function Test-PDAWorkflowDefinitionKeywordMatch {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$NormalizedText,
+
+        [Parameter(Mandatory = $true)]
+        [string[]]$Keywords
+    )
+
+    foreach ($Keyword in $Keywords) {
+        $Candidate = [string]$Keyword
+        if ([string]::IsNullOrWhiteSpace($Candidate)) {
+            continue
+        }
+
+        if ($NormalizedText.Contains($Candidate.Trim().ToLowerInvariant())) {
+            return $true
+        }
+    }
+
+    return $false
 }
 
 function Invoke-PDAConversationalJsonScript {
@@ -167,7 +209,7 @@ function Invoke-COOPERDefaultModelChat {
         model_error_message = ""
         routing_reason = ""
         response_text = ""
-        next_action = "Ask /help for the command list."
+        next_action = "Ask for help with the command list."
         bridge_mode = "model_fallback"
         handoff_status = "fallback"
         source_of_truth = "Scripts/Invoke-PDAModel.ps1"
@@ -242,7 +284,7 @@ function Invoke-COOPERDefaultModelChat {
 
         $Result.model_error_message = if ($AttemptErrors.Count -gt 0) { [string]($AttemptErrors -join " ") } else { "COOPER default model '$DefaultModel' did not return a usable response." }
         $Result.response_text = "COOPER default models are unavailable. $($Result.model_error_message) $FallbackHelp"
-        $Result.next_action = "Restore a local model or ask /help for the command list."
+        $Result.next_action = "Restore a local model or ask for help with the command list."
         $Result.bridge_mode = "model_fallback"
         $Result.handoff_status = "fallback"
         return [pscustomobject]$Result
@@ -250,7 +292,7 @@ function Invoke-COOPERDefaultModelChat {
     catch {
         $Result.model_error_message = $_.Exception.Message
         $Result.response_text = "COOPER default models are unavailable. $($Result.model_error_message) $FallbackHelp"
-        $Result.next_action = "Restore a local model or ask /help for the command list."
+        $Result.next_action = "Restore a local model or ask for help with the command list."
         return [pscustomobject]$Result
     }
 }
@@ -273,7 +315,91 @@ function Test-PDAConversationalDirectStatus {
     param([Parameter(Mandatory = $true)][string]$NormalizedText)
 
     return [bool](
-        $NormalizedText -match '(?i)\b(status report|operational status|health report|morning briefing|daily briefing|what''?s the status|what is the status|how are things going|how are you doing|how is the pda doing|how is the ecosystem|summarize the ecosystem status|summarise the ecosystem status|show me the current status|current status|system status|how are things|pda status|how is everything|status)\b'
+        $NormalizedText -match '(?i)\b(status report|operational status|health report|morning briefing|daily briefing|what''?s the status|what is the status|how are things going|how are you doing|how is the pda doing|how is the ecosystem|summarize the ecosystem status|summarise the ecosystem status|show me the current status|current status|system status|how are things|pda status|how is everything|status|what workshop am i in|what mode am i in|which workshop am i in|which mode am i in)\b'
+    )
+}
+
+function Test-PDAConversationalToolInventory {
+    param([Parameter(Mandatory = $true)][string]$NormalizedText)
+
+    return [bool](
+        $NormalizedText -match '(?i)\b(what tools are available|what tools do i have|what tools can cooper use|list available tools|show available tools|tool inventory|toolbox inventory|approved tools|approved tool inventory)\b'
+    )
+}
+
+function Test-PDAConversationalWorkflowCatalog {
+    param([Parameter(Mandatory = $true)][string]$NormalizedText)
+
+    return [bool](
+        $NormalizedText -match '(?i)\b(list available workflows|what workflows are available|what workflows do you have|workflow catalog|workflow list|show workflows|show available workflows|available workflows)\b'
+    )
+}
+
+function Test-PDAConversationalResearchSummary {
+    param([Parameter(Mandatory = $true)][string]$NormalizedText)
+
+    if ($NormalizedText.StartsWith("/")) {
+        return $false
+    }
+
+    if ($NormalizedText -match '(?i)\bstatus\b') {
+        return $false
+    }
+
+    $Definition = Get-COOPERWorkflowDefinitionById -WorkflowId "WF-001"
+    $ResearchKeywords = if ($Definition -and $Definition.PSObject.Properties.Name -contains "intent_keywords") {
+        @($Definition.intent_keywords)
+    }
+    else {
+        @("research", "search", "study", "documentation", "docs", "official")
+    }
+    $SummaryKeywords = @("summary", "summarize", "summarise", "structured summary", "summary note", "research summary", "findings", "brief", "briefing")
+
+    return [bool](
+        (
+            (Test-PDAWorkflowDefinitionKeywordMatch -NormalizedText $NormalizedText -Keywords $ResearchKeywords) -and
+            (Test-PDAWorkflowDefinitionKeywordMatch -NormalizedText $NormalizedText -Keywords $SummaryKeywords)
+        ) -or
+        (
+            $NormalizedText -match '(?i)\b(pop!_?os|pop os|linux & infrastructure|linux and infrastructure)\b' -and
+            $NormalizedText -match '(?i)\b(research|documentation|official|summary|summarize|summarise|summary note|structured summary|findings|brief|briefing)\b'
+        )
+    )
+}
+
+function Test-PDAConversationalNoteCreation {
+    param([Parameter(Mandatory = $true)][string]$NormalizedText)
+
+    $Definition = Get-COOPERWorkflowDefinitionById -WorkflowId "WF-005"
+    $NoteKeywords = if ($Definition -and $Definition.PSObject.Properties.Name -contains "intent_keywords") {
+        @($Definition.intent_keywords)
+    }
+    else {
+        @("create note", "write note", "save note", "obsidian note", "note creation")
+    }
+
+    $ContainsNoteIntent = (
+        (Test-PDAWorkflowDefinitionKeywordMatch -NormalizedText $NormalizedText -Keywords $NoteKeywords) -or
+        ($NormalizedText -match '(?i)\b(create|write|draft|make|capture)\b.*\b(note|markdown note|obsidian note)\b')
+    )
+    $LooksLikeResearch = Test-PDAConversationalResearchSummary -NormalizedText $NormalizedText
+
+    return [bool]($ContainsNoteIntent -and -not $LooksLikeResearch)
+}
+
+function Test-PDAConversationalKnowledgeCollectionImport {
+    param([Parameter(Mandatory = $true)][string]$NormalizedText)
+
+    return [bool](
+        $NormalizedText -match '(?i)\b(prepare for collection|knowledge collection|import draft|prepare for knowledge base|add to collection|collection import)\b'
+    )
+}
+
+function Test-PDAConversationalWorkshopChangeRequest {
+    param([Parameter(Mandatory = $true)][string]$NormalizedText)
+
+    return [bool](
+        $NormalizedText -match '(?i)\b(switch to private workshop|switch to open workshop|change to private workshop|change to open workshop|move to private workshop|move to open workshop)\b'
     )
 }
 
@@ -676,6 +802,124 @@ function Get-PDAConversationalInterpreterResult {
     }
 }
 
+function Get-COOPERToolInventorySummary {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $false)]
+        [string]$Root = (Split-Path -Parent $PSScriptRoot)
+    )
+
+    $InventoryScript = Join-Path $PSScriptRoot "Get-PDAToolInventory.ps1"
+    if (-not (Test-Path -LiteralPath $InventoryScript -PathType Leaf)) {
+        return [pscustomobject]@{
+            status = "warning"
+            response_text = "Tool inventory unavailable."
+            available_count = 0
+            tools = @()
+            source_of_truth = "Scripts/COOPER_ConversationalRouter.ps1"
+        }
+    }
+
+    $Inventory = $null
+    try {
+        $Raw = & $InventoryScript -Root $Root -AsJson -NoThrow 2>&1
+        $JsonText = [string]($Raw -join "`n").Trim()
+        if (-not [string]::IsNullOrWhiteSpace($JsonText)) {
+            $Inventory = $JsonText | ConvertFrom-Json
+        }
+    }
+    catch {
+        $Inventory = $null
+    }
+
+    if (-not $Inventory) {
+        return [pscustomobject]@{
+            status = "warning"
+            response_text = "Tool inventory unavailable."
+            available_count = 0
+            tools = @()
+            source_of_truth = "Scripts/Get-PDAToolInventory.ps1"
+        }
+    }
+
+    $AvailableToolNames = @(
+        @($Inventory.tools) |
+            Where-Object { [bool]$_.available } |
+            ForEach-Object { [string]$_.tool_name }
+    )
+    $ToolListText = if ($AvailableToolNames.Count -gt 0) { $AvailableToolNames -join ", " } else { "no available tools detected" }
+
+    return [pscustomobject]@{
+        status = [string]$Inventory.status
+        response_text = "Tool inventory: $([int]$Inventory.available_count) available. Available tools: $ToolListText."
+        available_count = [int]$Inventory.available_count
+        tools = @($Inventory.tools)
+        source_of_truth = "Scripts/Get-PDAToolInventory.ps1"
+    }
+}
+
+function Get-COOPERWorkflowCatalogSummary {
+    [CmdletBinding()]
+    param()
+
+    $SourceOfTruth = "06_Automation & Workflow Catalog.md"
+    $Workflows = @()
+    if (Get-Command -Name Get-COOPERWorkflowDefinitions -ErrorAction SilentlyContinue) {
+        try {
+            $Definitions = @(Get-COOPERWorkflowDefinitions -Root $Root)
+            $Workflows = @(
+                foreach ($Definition in $Definitions) {
+                    [pscustomobject]@{
+                        workflow_id = [string]$Definition.id
+                        name = [string]$Definition.name
+                        purpose = if ($Definition.PSObject.Properties.Name -contains "executor" -and -not [string]::IsNullOrWhiteSpace([string]$Definition.executor)) {
+                            "Route to $([string]$Definition.executor) with governed approval."
+                        }
+                        else {
+                            "Governed workflow."
+                        }
+                        workshop = if ($Definition.PSObject.Properties.Name -contains "workshop" -and -not [string]::IsNullOrWhiteSpace([string]$Definition.workshop)) {
+                            "$([string]$Definition.workshop) Workshop"
+                        }
+                        else {
+                            "Open Workshop"
+                        }
+                        category = if ($Definition.PSObject.Properties.Name -contains "storage_target" -and [string]$Definition.storage_target -eq "obsidian_drafts") {
+                            "Category 1"
+                        }
+                        else {
+                            "Category 1"
+                        }
+                    }
+                }
+            )
+        }
+        catch {
+            $Workflows = @()
+        }
+    }
+
+    if ($Workflows.Count -eq 0) {
+        $Workflows = @(
+            [pscustomobject]@{ workflow_id = "WF-001"; name = "Research Summary"; purpose = "Collect and summarize research findings."; workshop = "Open Workshop"; category = "Category 1" }
+            [pscustomobject]@{ workflow_id = "WF-005"; name = "Obsidian Note Creation"; purpose = "Create non-sensitive Obsidian notes or drafts."; workshop = "Open Workshop"; category = "Category 1" }
+        )
+    }
+
+    $WorkflowLines = @($Workflows | ForEach-Object { "{0} {1}" -f $_.workflow_id, $_.name })
+    if ($WorkflowLines.Count -eq 0) {
+        $WorkflowLines = @("WF-001 Research Summary", "WF-005 Obsidian Note Creation")
+    }
+
+    return [pscustomobject]@{
+        status = "pass"
+        response_text = (@("Workflow catalog:") + @($WorkflowLines)) -join "`r`n"
+        workflow_count = $Workflows.Count
+        workflows = $Workflows
+        source_of_truth = $SourceOfTruth
+    }
+}
+
 function Resolve-PDAConversationalRoute {
     [CmdletBinding()]
     param(
@@ -709,25 +953,63 @@ function Resolve-PDAConversationalRoute {
         return [pscustomobject]$Route
     }
 
-    if (Test-PDAConversationalSlashCommand -NormalizedText $Normalized) {
-        if ($Normalized -match '^/cooper\s+status(\s|$)') {
-            $Route.route_type = "cooper_status_command"
-            $Route.response_mode = "governed_command"
-            $Route.recommended_command = "/cooper status"
-            $Route.reason = "Governed COOPER status command."
-            $Route.confidence = 1
-            $Route.command = "/cooper status"
-            $Route.cooper_command = $Text
-            return [pscustomobject]$Route
-        }
+    if (Test-PDAConversationalToolInventory -NormalizedText $Normalized) {
+        $Route.route_type = "tool_inventory"
+        $Route.response_mode = "direct_answer"
+        $Route.recommended_command = "What tools are available?"
+        $Route.reason = "Tool inventory request."
+        $Route.confidence = 1
+        return [pscustomobject]$Route
+    }
 
+    if (Test-PDAConversationalWorkflowCatalog -NormalizedText $Normalized) {
+        $Route.route_type = "workflow_catalog"
+        $Route.response_mode = "direct_answer"
+        $Route.recommended_command = "List available workflows"
+        $Route.reason = "Workflow catalog request."
+        $Route.confidence = 1
+        return [pscustomobject]$Route
+    }
+
+    if (Test-PDAConversationalResearchSummary -NormalizedText $Normalized) {
+        $Route.route_type = "research_summary"
+        $Route.response_mode = "governed_command"
+        $Route.recommended_command = "Research Summary"
+        $Route.reason = "WF-001 Research Summary request."
+        $Route.confidence = 1
+        $Route.intent = "research_summary"
+        $Route.task_type = "research_summary"
+        return [pscustomobject]$Route
+    }
+
+    if (Test-PDAConversationalNoteCreation -NormalizedText $Normalized) {
+        $Route.route_type = "note_creation"
+        $Route.response_mode = "governed_command"
+        $Route.recommended_command = "Create Obsidian note"
+        $Route.reason = "WF-005 Obsidian note creation request."
+        $Route.confidence = 1
+        $Route.intent = "note_creation"
+        $Route.task_type = "note_creation"
+        return [pscustomobject]$Route
+    }
+
+    if (Test-PDAConversationalWorkshopChangeRequest -NormalizedText $Normalized) {
+        $Route.route_type = "workshop_change_request"
+        $Route.response_mode = "direct_answer"
+        $Route.recommended_command = "Select workshop in the host/UI."
+        $Route.reason = "Workshop change request."
+        $Route.confidence = 1
+        return [pscustomobject]$Route
+    }
+
+    if (Test-PDAConversationalSlashCommand -NormalizedText $Normalized) {
         if ($Normalized.StartsWith("/cooper")) {
-            $Route.route_type = "cooper_personality_command"
+            $Route.route_type = "legacy_cooper_slash_command"
             $Route.response_mode = "direct_answer"
-            $Route.recommended_command = "/cooper"
-            $Route.reason = "Direct COOPER personality command."
+            $Route.recommended_command = "Show system status"
+            $Route.reason = "Legacy COOPER slash commands are deprecated."
             $Route.confidence = 1
-            $Route.command = "/cooper"
+            $Route.command = ""
             $Route.cooper_command = $Text
             return [pscustomobject]$Route
         }
@@ -761,7 +1043,7 @@ function Resolve-PDAConversationalRoute {
     if (Test-PDAConversationalDirectHelp -NormalizedText $Normalized) {
         $Route.route_type = "direct_help"
         $Route.response_mode = "direct_answer"
-        $Route.recommended_command = "/help"
+        $Route.recommended_command = "Ask naturally for status, tools, workflows, or workshop mode."
         $Route.reason = "Direct help request."
         $Route.confidence = 1
         return [pscustomobject]$Route
@@ -770,7 +1052,7 @@ function Resolve-PDAConversationalRoute {
     if (Test-PDAConversationalDirectStatus -NormalizedText $Normalized) {
         $Route.route_type = "direct_status"
         $Route.response_mode = "direct_answer"
-        $Route.recommended_command = "/status"
+        $Route.recommended_command = "Show system status"
         $Route.reason = "Direct status request."
         $Route.confidence = 1
         return [pscustomobject]$Route
@@ -824,7 +1106,7 @@ function Resolve-PDAConversationalRoute {
     if (Test-PDAConversationalMemoryCandidates -NormalizedText $Normalized) {
         $Route.route_type = "memory_candidates"
         $Route.response_mode = "direct_answer"
-        $Route.recommended_command = "/memory"
+        $Route.recommended_command = "Review memory candidates."
         $Route.reason = "Direct memory candidate request."
         $Route.confidence = 1
         return [pscustomobject]$Route
@@ -853,7 +1135,7 @@ function Resolve-PDAConversationalRoute {
     if (Test-PDAConversationalDispatchGuidance -NormalizedText $Normalized) {
         $Route.route_type = "dispatch_guidance"
         $Route.response_mode = "direct_answer"
-        $Route.recommended_command = "/dispatch"
+        $Route.recommended_command = "Review dispatch guidance."
         $Route.reason = "Direct dispatch guidance request."
         $Route.confidence = 1
         if ($Normalized -match '(?i)\b(executors are available|available executors|what executors)\b') {
@@ -1044,6 +1326,8 @@ function Get-PDAConversationalNaturalResponse {
         latest_result_response_text = ""
         result_artifact_path     = ""
         result_artifact          = $null
+        research_summary_path    = ""
+        collection_import_path    = ""
         bridge_mode              = "conversational_direct"
         default_model            = Get-COOPERDefaultModelName -Root $Root
         selected_model           = ""
@@ -1055,6 +1339,7 @@ function Get-PDAConversationalNaturalResponse {
         execution_plan           = $null
         runtime_status           = $null
     }
+    $NormalizedText = Normalize-PDAConversationalText -Value $Text
 
     switch ([string]$Route.route_type) {
         "direct_status" {
@@ -1086,18 +1371,279 @@ function Get-PDAConversationalNaturalResponse {
             $BaseResponse.runtime_status = $StatusResult
             if ($StatusResult -and [bool]$StatusResult.success -eq $true) {
                 $BaseResponse.response_text = if ($StatusResult.PSObject.Properties.Name -contains "response_text" -and -not [string]::IsNullOrWhiteSpace([string]$StatusResult.response_text)) { [string]$StatusResult.response_text } else { [string]$StatusResult.reason }
-                $BaseResponse.next_action = "Ask about tasks, reports, identity, or memory."
+                $BaseResponse.next_action = "Ask about tools, workflows, identity, or memory."
                 $BaseResponse.latest_result_response_text = $BaseResponse.response_text
             }
             else {
                 $BaseResponse.response_text = if ($StatusResult -and $StatusResult.PSObject.Properties.Name -contains "reason" -and -not [string]::IsNullOrWhiteSpace([string]$StatusResult.reason)) { [string]$StatusResult.reason } else { "COOPER status is unavailable because workshop mode was not selected." }
-                $BaseResponse.next_action = "Select COOPER or COOPER Private, then retry /cooper status."
+                $BaseResponse.next_action = "Select COOPER or COOPER Private, then ask for system status again."
                 $BaseResponse.latest_result_response_text = $BaseResponse.response_text
             }
         }
+        "tool_inventory" {
+            $Inventory = Get-COOPERToolInventorySummary -Root $Root
+            $BaseResponse.response_text = [string]$Inventory.response_text
+            $BaseResponse.next_action = "Ask for a specific tool by name or request a workshop status check."
+            $BaseResponse.latest_result_response_text = $BaseResponse.response_text
+            $BaseResponse.runtime_status = $Inventory
+        }
+        "workflow_catalog" {
+            $Catalog = Get-COOPERWorkflowCatalogSummary
+            $BaseResponse.response_text = [string]$Catalog.response_text
+            $BaseResponse.next_action = "Ask for a specific workflow description or a status check."
+            $BaseResponse.latest_result_response_text = $BaseResponse.response_text
+            $BaseResponse.runtime_status = $Catalog
+        }
+        "research_summary" {
+            $ResearchWorkerScript = Join-Path $PSScriptRoot "Invoke-PDAResearchWorker.ps1"
+            $ResearchReviewScript = Join-Path $PSScriptRoot "Resolve-COOPERWorkflowReview.ps1"
+            $KnowledgeImportScript = Join-Path $PSScriptRoot "Invoke-COOPERKnowledgeImportDraft.ps1"
+            $ProjectMemoryScript = Join-Path $PSScriptRoot "Update-COOPERProjectMemory.ps1"
+            $WorkflowSkillsScript = Join-Path $PSScriptRoot "Update-COOPERWorkflowSkills.ps1"
+            $ImportDraftRequested = Test-PDAConversationalKnowledgeCollectionImport -NormalizedText $NormalizedText
+            if (Test-Path -LiteralPath $ResearchWorkerScript -PathType Leaf) {
+                $TempDir = Join-Path $Root "tmp\pda-research-summary"
+                New-Item -ItemType Directory -Force -Path $TempDir | Out-Null
+                $TaskPath = Join-Path $TempDir ("wf-001-{0}.json" -f ([guid]::NewGuid().ToString("N")))
+                $Task = [pscustomobject]@{
+                    task_id = "WF-001"
+                    command = "/research"
+                    classification = "category_1"
+                    target = $Text
+                    source_path = ""
+                }
+
+                try {
+                    $Task | ConvertTo-Json -Depth 10 | Set-Content -Path $TaskPath -Encoding UTF8
+                    $Raw = & $ResearchWorkerScript -TaskPath $TaskPath 2>&1
+                    $JsonText = [string]($Raw -join "`n").Trim()
+                    if (-not [string]::IsNullOrWhiteSpace($JsonText)) {
+                        $ResearchResult = ConvertFrom-PDAMixedJson -Text $JsonText -SourceName $ResearchWorkerScript
+                    }
+                }
+                catch {
+                    $ResearchResult = [pscustomobject]@{
+                        success = $false
+                        reason = $_.Exception.Message
+                        saved_path = ""
+                        output = $null
+                    }
+                }
+                finally {
+                    Remove-Item -LiteralPath $TaskPath -Force -ErrorAction SilentlyContinue
+                }
+            }
+            else {
+                $ResearchResult = [pscustomobject]@{
+                    success = $false
+                    reason = "WF-001 research worker is unavailable."
+                    saved_path = ""
+                    output = $null
+                }
+            }
+
+            $BaseResponse.runtime_status = $ResearchResult
+            $WorkflowReview = $null
+            $SummaryPath = ""
+            if ($ResearchResult -and $ResearchResult.PSObject.Properties.Name -contains "saved_path" -and -not [string]::IsNullOrWhiteSpace([string]$ResearchResult.saved_path)) {
+                $SummaryPath = [string]$ResearchResult.saved_path
+            }
+            elseif ($ResearchResult -and $ResearchResult.PSObject.Properties.Name -contains "output" -and $ResearchResult.output -and $ResearchResult.output.PSObject.Properties.Name -contains "markdown_path" -and -not [string]::IsNullOrWhiteSpace([string]$ResearchResult.output.markdown_path)) {
+                $SummaryPath = [string]$ResearchResult.output.markdown_path
+            }
+
+            $ResearchSucceeded = $false
+            $ReviewPassed = $false
+            if ($ResearchResult) {
+                if ($ResearchResult.PSObject.Properties.Name -contains "status" -and [string]$ResearchResult.status -eq "success") {
+                    $ResearchSucceeded = $true
+                }
+                elseif ($ResearchResult.PSObject.Properties.Name -contains "success" -and [bool]$ResearchResult.success -eq $true) {
+                    $ResearchSucceeded = $true
+                }
+            }
+
+            if ($ResearchSucceeded -and (Test-Path -LiteralPath $ResearchReviewScript -PathType Leaf)) {
+                try {
+                    $WorkflowReview = & $ResearchReviewScript -WorkflowId "WF-001" -WorkflowResult $ResearchResult -RequestText $Text -ExpectedOutputType "research_markdown" -ExpectedOutputPath $SummaryPath
+                    $ReviewPassed = [bool]$WorkflowReview.review_passed
+                }
+                catch {
+                    $WorkflowReview = [pscustomobject]@{
+                        status = "fail"
+                        review_passed = $false
+                        reason = $_.Exception.Message
+                        issues = @($_.Exception.Message)
+                    }
+                }
+            }
+            elseif ($ResearchSucceeded) {
+                $WorkflowReview = [pscustomobject]@{
+                    status = "fail"
+                    review_passed = $false
+                    reason = "WF-001 workflow review script is unavailable."
+                    issues = @("WF-001 workflow review script is unavailable.")
+                }
+            }
+
+            if ($ReviewPassed -and -not $ImportDraftRequested) {
+                if (Test-Path -LiteralPath $ProjectMemoryScript -PathType Leaf) {
+                    try {
+                        $BaseResponse.project_memory_update = & $ProjectMemoryScript -WorkflowId "WF-001" -ReviewResult $WorkflowReview -RequestText $Text -OutputPath $SummaryPath
+                    }
+                    catch {
+                        $BaseResponse.project_memory_update = [pscustomobject]@{
+                            status = "fail"
+                            workflow_id = "WF-001"
+                            reason = $_.Exception.Message
+                        }
+                    }
+                }
+
+                if (Test-Path -LiteralPath $WorkflowSkillsScript -PathType Leaf) {
+                    try {
+                        $BaseResponse.skill_update = & $WorkflowSkillsScript -WorkflowId "WF-001" -ReviewResult $WorkflowReview -ExampleRequest $Text -ExampleOutput ([System.IO.Path]::GetFileName($SummaryPath)) -SkillName "Research Summary"
+                    }
+                    catch {
+                        $BaseResponse.skill_update = [pscustomobject]@{
+                            status = "fail"
+                            workflow_id = "WF-001"
+                            reason = $_.Exception.Message
+                        }
+                    }
+                }
+            }
+
+            $ImportDraftResult = $null
+            if ($ReviewPassed -and $ImportDraftRequested) {
+                if (Test-Path -LiteralPath $KnowledgeImportScript -PathType Leaf) {
+                    try {
+                        $ImportDraftResult = & $KnowledgeImportScript -RequestText $Text -ResearchResult $ResearchResult -ResearchReview $WorkflowReview -Approved -Root $Root
+                    }
+                    catch {
+                        $ImportDraftResult = [pscustomobject]@{
+                            success = $false
+                            workflow_id = "WF-006"
+                            response_text = $_.Exception.Message
+                            reason = $_.Exception.Message
+                            research_summary_path = $SummaryPath
+                            import_draft_path = ""
+                            workflow_review = $null
+                        }
+                    }
+                }
+                else {
+                    $ImportDraftResult = [pscustomobject]@{
+                        success = $false
+                        workflow_id = "WF-006"
+                        response_text = "WF-006 import draft workflow is unavailable."
+                        reason = "WF-006 import draft workflow is unavailable."
+                        research_summary_path = $SummaryPath
+                        import_draft_path = ""
+                        workflow_review = $null
+                    }
+                }
+
+                $BaseResponse.collection_import_result = $ImportDraftResult
+                if ($ImportDraftResult -and [bool]$ImportDraftResult.success -eq $true) {
+                    $BaseResponse.collection_import_path = [string]$ImportDraftResult.import_draft_path
+                    $BaseResponse.latest_result_path = [string]$ImportDraftResult.import_draft_path
+                    $BaseResponse.result_artifact_path = [string]$ImportDraftResult.import_draft_path
+                }
+            }
+
+            $BaseResponse.workflow_review = $WorkflowReview
+            if ($ReviewPassed -and $ImportDraftRequested -and $ImportDraftResult -and [bool]$ImportDraftResult.success -eq $true -and -not [string]::IsNullOrWhiteSpace([string]$ImportDraftResult.import_draft_path)) {
+                $BaseResponse.response_text = "Created research summary at $SummaryPath and import draft at $([string]$ImportDraftResult.import_draft_path)."
+            }
+            elseif ($ReviewPassed -and -not [string]::IsNullOrWhiteSpace($SummaryPath)) {
+                $BaseResponse.response_text = "Created research summary at $SummaryPath."
+            }
+            elseif ($ImportDraftRequested -and $ImportDraftResult -and [bool]$ImportDraftResult.success -ne $true -and -not [string]::IsNullOrWhiteSpace([string]$ImportDraftResult.reason)) {
+                $BaseResponse.response_text = [string]$ImportDraftResult.reason
+            }
+            elseif ($WorkflowReview -and ($WorkflowReview.PSObject.Properties.Name -contains "issues") -and $WorkflowReview.issues) {
+                $BaseResponse.response_text = [string]($WorkflowReview.issues -join "; ")
+            }
+            elseif ($ResearchResult -and ($ResearchResult.PSObject.Properties.Name -contains "reason") -and -not [string]::IsNullOrWhiteSpace([string]$ResearchResult.reason)) {
+                [string]$ResearchResult.reason
+            }
+            else {
+                "WF-001 research summary could not be completed."
+            }
+            if ($ImportDraftResult) {
+                $BaseResponse.runtime_status = $ImportDraftResult
+            }
+            $BaseResponse.next_action = if ($ReviewPassed -and $ImportDraftRequested) { "Review the import draft or ask for another research topic." } elseif ($ReviewPassed) { "Review the research summary note or ask for another research topic." } else { "Review the research workflow or the source path configuration." }
+            $BaseResponse.latest_result_response_text = $BaseResponse.response_text
+            $BaseResponse.intent = "research_summary"
+            $BaseResponse.confidence = 1
+            $BaseResponse.task_type = "research_summary"
+            if (-not [string]::IsNullOrWhiteSpace($SummaryPath)) {
+                $BaseResponse.research_summary_path = $SummaryPath
+            }
+            if ($ImportDraftResult -and [bool]$ImportDraftResult.success -eq $true -and -not [string]::IsNullOrWhiteSpace([string]$ImportDraftResult.import_draft_path)) {
+                $BaseResponse.collection_import_path = [string]$ImportDraftResult.import_draft_path
+                $BaseResponse.latest_result_path = [string]$ImportDraftResult.import_draft_path
+                $BaseResponse.result_artifact_path = [string]$ImportDraftResult.import_draft_path
+            }
+            elseif (-not [string]::IsNullOrWhiteSpace($SummaryPath)) {
+                $BaseResponse.latest_result_path = $SummaryPath
+                $BaseResponse.result_artifact_path = $SummaryPath
+            }
+            $BaseResponse.research_summary_result = $ResearchResult
+        }
+        "note_creation" {
+            $NoteScript = Join-Path $PSScriptRoot "Invoke-COOPERNoteCreationCommand.ps1"
+            if (Test-Path -LiteralPath $NoteScript -PathType Leaf) {
+                try {
+                    $NoteResult = & $NoteScript -Text $Text -Approved -Root $Root
+                }
+                catch {
+                    $NoteResult = [pscustomobject]@{
+                        success = $false
+                        reason = $_.Exception.Message
+                        response_text = ""
+                        routed_tool = $null
+                        approval_decision = $null
+                        workbench_result = $null
+                    }
+                }
+            }
+            else {
+                $NoteResult = [pscustomobject]@{
+                    success = $false
+                    reason = "COOPER note creation workflow is unavailable."
+                    response_text = ""
+                    routed_tool = $null
+                    approval_decision = $null
+                    workbench_result = $null
+                }
+            }
+
+            $BaseResponse.runtime_status = $NoteResult
+            $BaseResponse.response_text = if ($NoteResult -and [bool]$NoteResult.success -eq $true -and -not [string]::IsNullOrWhiteSpace([string]$NoteResult.response_text)) { [string]$NoteResult.response_text } else { if ($NoteResult -and $NoteResult.PSObject.Properties.Name -contains "reason" -and -not [string]::IsNullOrWhiteSpace([string]$NoteResult.reason)) { [string]$NoteResult.reason } else { "WF-005 note creation could not be completed." } }
+            $BaseResponse.next_action = if ($NoteResult -and [bool]$NoteResult.success -eq $true) { "Ask for another note or request a workflow catalog." } else { "Review approval or note path configuration." }
+            $BaseResponse.latest_result_response_text = $BaseResponse.response_text
+            $BaseResponse.note_creation_result = $NoteResult
+            if ($NoteResult -and $NoteResult.PSObject.Properties.Name -contains "note_path") {
+                $BaseResponse.latest_result_path = [string]$NoteResult.note_path
+                $BaseResponse.result_artifact_path = [string]$NoteResult.note_path
+            }
+        }
+        "workshop_change_request" {
+            $BaseResponse.response_text = "Workshop selection remains a human decision. Select COOPER or COOPER Private in the host or UI, then ask for status again."
+            $BaseResponse.next_action = "Switch the workshop in the host/UI."
+            $BaseResponse.latest_result_response_text = $BaseResponse.response_text
+        }
+        "legacy_cooper_slash_command" {
+            $BaseResponse.response_text = "The legacy COOPER slash-command interface is retired. Use conversational language such as 'Show system status.'"
+            $BaseResponse.next_action = "Ask naturally for status, tools, workflows, or workshop mode."
+            $BaseResponse.latest_result_response_text = $BaseResponse.response_text
+        }
         "direct_help" {
-            $BaseResponse.response_text = "Status, reports, research, planning, execution. Pick a target."
-            $BaseResponse.next_action = "Use /help only if you want the full command list."
+            $BaseResponse.response_text = "Ask naturally for status, tools, workflows, planning, research, or execution help."
+            $BaseResponse.next_action = "Ask for the action you want in normal language."
         }
         "runtime_self_awareness" {
             $ResolvedWorkshopMode = [string]$WorkshopMode
@@ -1132,12 +1678,12 @@ function Get-PDAConversationalNaturalResponse {
                 $BaseResponse.model_status = "bypassed"
                 $BaseResponse.model_error_message = ""
                 $BaseResponse.model_routing_reason = "Runtime self-awareness requests are answered from governed status output."
-                $BaseResponse.next_action = "Ask about tasks, reports, identity, or /help."
+                $BaseResponse.next_action = "Ask about tools, workflows, identity, or memory."
                 $BaseResponse.latest_result_response_text = $BaseResponse.response_text
             }
             else {
                 $BaseResponse.response_text = if ($StatusResult -and $StatusResult.PSObject.Properties.Name -contains "reason" -and -not [string]::IsNullOrWhiteSpace([string]$StatusResult.reason)) { [string]$StatusResult.reason } else { "COOPER status is unavailable because workshop mode was not selected." }
-                $BaseResponse.next_action = "Select COOPER or COOPER Private, then retry /cooper status."
+                $BaseResponse.next_action = "Select COOPER or COOPER Private, then ask for system status again."
             }
         }
         "personality_status" {
@@ -1152,14 +1698,14 @@ function Get-PDAConversationalNaturalResponse {
                 ("Initiative: {0}" -f $Personality.personality.initiative)
                 ("Risk awareness: {0}" -f $Personality.personality.risk_awareness)
             ) -join "`r`n"
-            $BaseResponse.next_action = "Ask /status or another runtime question."
+            $BaseResponse.next_action = "Ask for system status or another runtime question."
             $BaseResponse.latest_result_response_text = $BaseResponse.response_text
             $BaseResponse.runtime_status = $Personality
         }
         "cooper_personality_command" {
             $PersonalityCommand = Invoke-COOPERPersonalityCommand -Text $Text -Root $Root
             $BaseResponse.response_text = [string]$PersonalityCommand.response_text
-            $BaseResponse.next_action = "Use /cooper personality, /cooper profile <name>, or /cooper <setting> <0-100>."
+            $BaseResponse.next_action = "Ask to query or adjust personality using conversational language."
             $BaseResponse.latest_result_response_text = $BaseResponse.response_text
             $BaseResponse.personality_command = $PersonalityCommand
             if ($PersonalityCommand.PSObject.Properties.Name -contains "personality") {
@@ -1217,11 +1763,11 @@ function Get-PDAConversationalNaturalResponse {
                 else {
                     "I don't see a tracked PDA task for this conversation yet."
                 }
-                $BaseResponse.next_action = if ($TaskResult.PSObject.Properties.Name -contains "next_action" -and -not [string]::IsNullOrWhiteSpace([string]$TaskResult.next_action)) { [string]$TaskResult.next_action } else { "Ask me to start a task with /planner or /research, or confirm a queued request." }
+                $BaseResponse.next_action = if ($TaskResult.PSObject.Properties.Name -contains "next_action" -and -not [string]::IsNullOrWhiteSpace([string]$TaskResult.next_action)) { [string]$TaskResult.next_action } else { "Ask me to start a task with planning, research, or reporting, or confirm a queued request." }
             }
             else {
-                $BaseResponse.response_text = "I don't see a tracked PDA task for this conversation yet. If you want, I can help start one with /planner, /research, or /reporter."
-                $BaseResponse.next_action = "Ask me to start a task with /planner or /research, or ask for /status."
+                $BaseResponse.response_text = "I don't see a tracked PDA task for this conversation yet. If you want, I can help start one with planning, research, or reporting."
+                $BaseResponse.next_action = "Ask me to start a task with planning or research, or ask for system status."
             }
         }
         "memory_candidates" {
@@ -1269,8 +1815,8 @@ function Get-PDAConversationalNaturalResponse {
             $RecentMemoryText = if ($RecentMemoryTitles.Count -gt 0) { $RecentMemoryTitles -join "; " } else { "none yet" }
 
             $BaseResponse.response_text = "PDA memory learning is tracking $CandidateCount candidates, with $PendingCount pending approvals and $PromotedCount promoted memories out of $MemoryCount total memories. Recent candidates: $RecentCandidateText. Recent memories: $RecentMemoryText."
-            $BaseResponse.next_action = "Use /memory to review the full index or inspect PDA-Memory/candidates for pending promotions."
-            $BaseResponse.recommended_command = "/memory"
+            $BaseResponse.next_action = "Review the full memory index or inspect PDA-Memory/candidates for pending promotions."
+            $BaseResponse.recommended_command = "Review memory candidates"
             $BaseResponse.latest_result_response_text = $BaseResponse.response_text
         }
         "commander_briefing" {
@@ -1288,7 +1834,7 @@ function Get-PDAConversationalNaturalResponse {
             }
             else {
                 $BaseResponse.response_text = "PDA daily briefing unavailable."
-                $BaseResponse.next_action = "Ask /status if you need the operator console summary."
+                $BaseResponse.next_action = "Ask for system status if you need the operator console summary."
             }
         }
         "dispatch_guidance" {
@@ -1338,7 +1884,7 @@ function Get-PDAConversationalNaturalResponse {
                 $BaseResponse.response_text = @(
                     $ExecutorLine
                     $QueueLine
-                    "Use /dispatch to review the governed dispatch path."
+                    "Review the governed dispatch path."
                 ) -join "`r`n"
             }
             else {
@@ -1353,12 +1899,12 @@ function Get-PDAConversationalNaturalResponse {
                     $RecommendedText
                     $ExecutorLine
                     $QueueLine
-                    "Use /dispatch to view the governed dispatch path or share a specific task for recommendation."
+                    "Review the governed dispatch path or share a specific task for recommendation."
                 ) -join "`r`n"
             }
 
-            $BaseResponse.next_action = "Use /dispatch to view the governed dispatch path or share a specific task for recommendation."
-            $BaseResponse.recommended_command = "/dispatch"
+            $BaseResponse.next_action = "Review the governed dispatch path or share a specific task for recommendation."
+            $BaseResponse.recommended_command = "Review dispatch guidance"
             $BaseResponse.latest_result_response_text = $BaseResponse.response_text
         }
         "environment_awareness" {
@@ -1479,7 +2025,7 @@ function Get-PDAConversationalNaturalResponse {
             }
             else {
                 $BaseResponse.response_text = "I can turn natural-language goals into a structured plan, but the goal planner is unavailable right now."
-                $BaseResponse.next_action = "Try /planner or ask for /help if you want the command list."
+                $BaseResponse.next_action = "Try planning or ask for help if you want the command list."
             }
         }
         "judgment_advice" {
@@ -1499,7 +2045,7 @@ function Get-PDAConversationalNaturalResponse {
             }
             else {
                 $BaseResponse.response_text = "I can assess the options, but the model path is unavailable right now."
-                $BaseResponse.next_action = "Restore a local model or ask /help for the command list."
+                $BaseResponse.next_action = "Restore a local model or ask for help with the command list."
             }
         }
         "ambiguous" {
@@ -1523,12 +2069,12 @@ function Get-PDAConversationalNaturalResponse {
             }
             else {
                 $BaseResponse.response_text = "Status, reports, research, planning, execution. Pick a target."
-                $BaseResponse.next_action = "Ask for a status check, a report, or use /help for the command list."
+                $BaseResponse.next_action = "Ask for a status check, a report, or use help for the command list."
             }
         }
         default {
             $BaseResponse.response_text = "Status, reports, research, planning, execution. Pick a target."
-            $BaseResponse.next_action = "Ask for a status check, a report, or use /help for the command list."
+            $BaseResponse.next_action = "Ask for a status check, a report, or use help for the command list."
         }
     }
 

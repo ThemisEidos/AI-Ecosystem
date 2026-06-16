@@ -1,3 +1,4 @@
+[CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
     [string]$TaskPath,
@@ -6,12 +7,22 @@ param(
     [string]$RegistryPath = ""
 )
 
-$Root = Split-Path $PSScriptRoot -Parent
-$AdapterScript = Join-Path $Root "Scripts\Invoke-PDAModel.ps1"
-$FabricScript = Join-Path $Root "Scripts\Invoke-PDAFabricPattern.ps1"
-. (Join-Path $Root "Scripts\PDA_OutputParsing.ps1")
+$ErrorActionPreference = "Stop"
+
+$Root = Split-Path -Parent $PSScriptRoot
+$ResearchSourcesScript = Join-Path $PSScriptRoot "Get-COOPERResearchSources.ps1"
+$ResearchOutputFolder = Join-Path $Root "Obsidian Vault\02_Projects\AI Tool Ecosystem\Agent Findings\Research"
+$ResultsFolder = Join-Path $Root "PDA-Tasks\results"
+
 if ([string]::IsNullOrWhiteSpace($RegistryPath)) {
     $RegistryPath = Join-Path $Root "Scripts\PDA_WorkerRegistry.json"
+}
+
+if (Test-Path -LiteralPath $ResearchSourcesScript -PathType Leaf) {
+    . $ResearchSourcesScript
+}
+else {
+    throw "Research source helper missing: $ResearchSourcesScript"
 }
 
 function Register-PDAWorkerArtifact {
@@ -40,6 +51,21 @@ function Register-PDAWorkerArtifact {
     }
 }
 
+function Write-PDAWorkerResultArtifact {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$TaskId,
+
+        [Parameter(Mandatory = $true)]
+        [object]$ResultObject
+    )
+
+    New-Item -ItemType Directory -Force -Path $ResultsFolder | Out-Null
+    $ResultPath = Join-Path $ResultsFolder "$TaskId-result.json"
+    $ResultObject | ConvertTo-Json -Depth 20 | Set-Content -Path $ResultPath -Encoding UTF8
+    return $ResultPath
+}
+
 function ConvertTo-PDAHashtable {
     param([Parameter(Mandatory = $true)]$Value)
 
@@ -50,12 +76,7 @@ function ConvertTo-PDAHashtable {
     if ($Value -is [hashtable] -or $Value -is [System.Collections.IDictionary]) {
         $Copy = @{}
         foreach ($Key in $Value.Keys) {
-            if ($null -eq $Value[$Key]) {
-                $Copy[$Key] = $null
-            }
-            else {
-                $Copy[$Key] = ConvertTo-PDAHashtable -Value $Value[$Key]
-            }
+            $Copy[$Key] = ConvertTo-PDAHashtable -Value $Value[$Key]
         }
         return $Copy
     }
@@ -63,12 +84,7 @@ function ConvertTo-PDAHashtable {
     if ($Value -is [System.Collections.IEnumerable] -and $Value -isnot [string]) {
         $List = @()
         foreach ($Item in $Value) {
-            if ($null -eq $Item) {
-                $List += $null
-            }
-            else {
-                $List += ,(ConvertTo-PDAHashtable -Value $Item)
-            }
+            $List += ,(ConvertTo-PDAHashtable -Value $Item)
         }
         return $List
     }
@@ -76,12 +92,7 @@ function ConvertTo-PDAHashtable {
     if ($Value -is [psobject] -and $Value.PSObject.Properties.Name.Count -gt 0) {
         $Copy = @{}
         foreach ($Prop in $Value.PSObject.Properties) {
-            if ($null -eq $Prop.Value) {
-                $Copy[$Prop.Name] = $null
-            }
-            else {
-                $Copy[$Prop.Name] = ConvertTo-PDAHashtable -Value $Prop.Value
-            }
+            $Copy[$Prop.Name] = ConvertTo-PDAHashtable -Value $Prop.Value
         }
         return $Copy
     }
@@ -89,172 +100,109 @@ function ConvertTo-PDAHashtable {
     return $Value
 }
 
-function Get-PDAWorkerDefaultPattern {
-    param([Parameter(Mandatory = $true)][string]$WorkerName)
+function Test-PDAResearchDisclaimerText {
+    param([Parameter(Mandatory = $true)][string]$Text)
 
-    if (-not (Test-Path -Path $RegistryPath -PathType Leaf)) {
-        return ""
-    }
-
-    try {
-        $Registry = Get-Content -Path $RegistryPath -Raw | ConvertFrom-Json
-    }
-    catch {
-        return ""
-    }
-
-    $WorkerEntry = @($Registry.workers | Where-Object { [string]$_.worker_name -eq $WorkerName } | Select-Object -First 1)
-    if ($WorkerEntry.Count -eq 0) {
-        return ""
-    }
-
-    $WorkerEntry = $WorkerEntry[0]
-    if ($WorkerEntry.PSObject.Properties.Name -contains "default_pattern" -and -not [string]::IsNullOrWhiteSpace([string]$WorkerEntry.default_pattern)) {
-        return [string]$WorkerEntry.default_pattern
-    }
-
-    return ""
+    return [bool](
+        $Text -match '(?i)cannot perform real-time research|knowledge cutoff|if you provide source material|as an ai|i can''t browse|i cannot browse|unable to access the web'
+    )
 }
 
-function Invoke-PDAFabricPromptRender {
+function New-PDAResearchMarkdown {
     param(
-        [Parameter(Mandatory = $false)]
-        [string]$PatternName,
+        [Parameter(Mandatory = $true)]
+        [string]$Title,
 
         [Parameter(Mandatory = $true)]
-        [string]$WorkerName,
+        [string]$RequestText,
 
         [Parameter(Mandatory = $true)]
-        [string]$TaskType,
+        [string]$RetrievedAt,
 
         [Parameter(Mandatory = $true)]
-        [string]$Sensitivity,
-
-        [Parameter(Mandatory = $true)]
-        [string]$PromptText,
-
-        [Parameter(Mandatory = $true)]
-        [string]$Category,
-
-        [Parameter(Mandatory = $false)]
-        [string]$SourcePath = ""
+        [object[]]$Sources
     )
 
-    if ([string]::IsNullOrWhiteSpace($PatternName)) {
-        return [pscustomobject]@{
-            used = $false
-            status = "not_configured"
-            pattern_name = ""
-            pattern_path = ""
-            pattern_category = ""
-            rendered_prompt = ""
-            error = ""
+    $CategoryMap = @{}
+    foreach ($Source in $Sources) {
+        $Category = if ($Source.PSObject.Properties.Name -contains "category" -and -not [string]::IsNullOrWhiteSpace([string]$Source.category)) {
+            [string]$Source.category
         }
+        else {
+            "General"
+        }
+
+        if (-not $CategoryMap.ContainsKey($Category)) {
+            $CategoryMap[$Category] = @()
+        }
+
+        $CategoryMap[$Category] += $Source
     }
 
-    if (-not (Test-Path -Path $FabricScript -PathType Leaf)) {
-        return [pscustomobject]@{
-            used = $false
-            status = "missing_renderer"
-            pattern_name = $PatternName
-            pattern_path = ""
-            pattern_category = ""
-            rendered_prompt = ""
-            error = "Fabric renderer not found."
+    $SourceSummary = @($Sources | ForEach-Object {
+        "- [{0}]({1}) - {2}" -f [string]$_.title, [string]$_.url, [string]$_.excerpt
+    })
+
+    $CategorizedFindings = @()
+    foreach ($Category in ($CategoryMap.Keys | Sort-Object)) {
+        $CategorizedFindings += "### $Category"
+        foreach ($Source in @($CategoryMap[$Category])) {
+            $Snippet = if ([string]::IsNullOrWhiteSpace([string]$Source.excerpt)) { [string]$Source.purpose } else { [string]$Source.excerpt }
+            $CategorizedFindings += "- {0}: {1}" -f [string]$Source.title, $Snippet
         }
+        $CategorizedFindings += ""
     }
 
-    $VariablesJson = @{
-        worker_name = $WorkerName
-        task_type = $TaskType
-        sensitivity = $Sensitivity
-        classification = $Category
-        source_path = $SourcePath
-        content_input = $PromptText
-        content = $PromptText
-        default_pattern = $PatternName
-    } | ConvertTo-Json -Depth 8 -Compress
+    $SourceList = @($Sources | ForEach-Object {
+        "- [{0}]({1})" -f [string]$_.title, [string]$_.url
+    })
 
-    try {
-        $RawRender = & pwsh -NoProfile -File $FabricScript -PatternName $PatternName -ContentInput $PromptText -VariablesJson $VariablesJson -AsJson 2>&1
-        $JsonText = [string]($RawRender -join "`n")
-        $Render = ConvertFrom-PDAMixedJson -Text $JsonText -SourceName "Fabric renderer output"
+    $SummaryLines = @()
+    $SummaryLines += "The request was answered using $($Sources.Count) approved official source(s)."
+    $SummaryLines += "Primary topics covered: $((@($Sources | ForEach-Object { [string]$_.category }) | Select-Object -Unique) -join ', ')."
 
-        if ($Render.status -eq "success") {
-            return [pscustomobject]@{
-                used = $true
-                status = [string]$Render.status
-                pattern_name = [string]$Render.pattern_name
-                pattern_path = [string]$Render.pattern_path
-                pattern_category = [string]$Render.pattern_category
-                rendered_prompt = [string]$Render.rendered_prompt
-                error = ""
-            }
-        }
-
-        return [pscustomobject]@{
-            used = $false
-            status = [string]$Render.status
-            pattern_name = [string]$Render.pattern_name
-            pattern_path = [string]$Render.pattern_path
-            pattern_category = [string]$Render.pattern_category
-            rendered_prompt = ""
-            error = [string]$Render.error
-        }
-    }
-    catch {
-        return [pscustomobject]@{
-            used = $false
-            status = "error"
-            pattern_name = $PatternName
-            pattern_path = ""
-            pattern_category = ""
-            rendered_prompt = ""
-            error = $_.Exception.Message
-        }
-    }
+    return @(
+        "# WF-001 Research Summary"
+        ""
+        "## Title"
+        $Title
+        ""
+        "## Request"
+        $RequestText
+        ""
+        "## Retrieved At"
+        $RetrievedAt
+        ""
+        "## Source Summary"
+        @($SourceSummary)
+        ""
+        "## Categorized Findings"
+        @($CategorizedFindings)
+        "## Synthesis"
+        @($SummaryLines)
+        ""
+        "## Sources"
+        @($SourceList)
+        ""
+        "## Limitations"
+        "- Source collection is limited to approved official documentation."
+        "- Findings are limited to the retrieved source set."
+    ) -join "`r`n"
 }
 
-function Write-PDAWorkerResultArtifact {
+function New-PDAResearchFailure {
     param(
         [Parameter(Mandatory = $true)]
         [string]$TaskId,
 
         [Parameter(Mandatory = $true)]
-        [object]$ResultObject
-    )
+        [string]$CommandText,
 
-    $ResultsFolder = Join-Path $Root "PDA-Tasks\results"
-    New-Item -ItemType Directory -Force -Path $ResultsFolder | Out-Null
+        [Parameter(Mandatory = $true)]
+        [string]$CategoryText,
 
-    $ResultPath = Join-Path $ResultsFolder "$TaskId-result.json"
-    $ResultObject | ConvertTo-Json -Depth 20 | Set-Content -Path $ResultPath -Encoding UTF8
-    return $ResultPath
-}
-
-$Task = Get-Content $TaskPath -Raw | ConvertFrom-Json
-
-$TaskId = if ($Task.task_id) { [string]$Task.task_id } else { [guid]::NewGuid().ToString() }
-$CommandText = if ($Task.command) { [string]$Task.command } elseif ($Task.target) { [string]$Task.target } else { "/research" }
-$CategoryText = if ($Task.classification) { [string]$Task.classification } elseif ($Task.category) { [string]$Task.category } else { "category_3" }
-$RoutingCategory = if ([string]$CategoryText -eq "category_2") { "category_2" } else { "category_1" }
-$RoutingSensitivity = if ($RoutingCategory -eq "category_2") { "restricted_local" } else { "standard" }
-$SourcePath = if ($Task.source_path) { [string]$Task.source_path } else { "" }
-$TargetText = if ($Task.target) { [string]$Task.target } else { "" }
-$SourceText = if (-not [string]::IsNullOrWhiteSpace($SourcePath) -and (Test-Path -Path $SourcePath -PathType Leaf)) {
-    Get-Content $SourcePath -Raw
-}
-else {
-    $TargetText
-}
-$ResearchOutputFolder = Join-Path $Root "Obsidian Vault\02_Projects\AI Tool Ecosystem\Agent Findings\Research"
-$ResultPath = Join-Path $Root "PDA-Tasks\results\$TaskId-result.json"
-$DefaultPattern = Get-PDAWorkerDefaultPattern -WorkerName "research-worker"
-
-function New-PDAResearchFailure {
-    param(
-        [string]$Reason,
-        [string]$OutputType = "error"
+        [Parameter(Mandatory = $true)]
+        [string]$Reason
     )
 
     $FailureResult = [ordered]@{
@@ -263,133 +211,114 @@ function New-PDAResearchFailure {
         status         = "failed"
         classification = $CategoryText
         input_summary  = $CommandText
-        output_type    = $OutputType
+        output_type    = "error"
+        reason         = $Reason
         output         = @{
             error = $Reason
+            source_count = 0
+            sources = @()
         }
         confidence     = 0
         warnings       = @("Research worker execution failed.")
         next_worker    = ""
         saved_path     = ""
-        result_path    = $ResultPath
+        result_path    = ""
+        source_of_truth = "Scripts/Invoke-PDAResearchWorker.ps1"
     }
 
-    try {
-        Write-PDAWorkerResultArtifact -TaskId $TaskId -ResultObject $FailureResult | Out-Null
-        Register-PDAWorkerArtifact -ArtifactPath $ResultPath -TaskId $TaskId -WorkerName "research-worker" -Command $CommandText -Category $CategoryText -ArtifactType "worker_result_json" -Summary "Research worker canonical result contract"
-    }
-    catch {
-        Write-Warning "Failed to write research worker failure result artifact: $($_.Exception.Message)"
-    }
+    return $FailureResult
+}
 
-    return ($FailureResult | ConvertTo-Json -Depth 20)
+$Task = Get-Content $TaskPath -Raw | ConvertFrom-Json
+
+$TaskId = if ($Task.task_id) { [string]$Task.task_id } else { [guid]::NewGuid().ToString() }
+$CommandText = if ($Task.command) { [string]$Task.command } elseif ($Task.target) { [string]$Task.target } else { "/research" }
+$CategoryText = if ($Task.classification) { [string]$Task.classification } elseif ($Task.category) { [string]$Task.category } else { "category_3" }
+$SourcePath = if ($Task.source_path) { [string]$Task.source_path } else { "" }
+$TargetText = if ($Task.target) { [string]$Task.target } else { "" }
+$SourceText = if (-not [string]::IsNullOrWhiteSpace($SourcePath) -and (Test-Path -LiteralPath $SourcePath -PathType Leaf)) {
+    Get-Content -LiteralPath $SourcePath -Raw
+}
+else {
+    $TargetText
 }
 
 if ([string]::IsNullOrWhiteSpace($SourceText)) {
-    New-PDAResearchFailure -Reason "No valid source_path or target provided." -OutputType "error"
+    $Failure = New-PDAResearchFailure -TaskId $TaskId -CommandText $CommandText -CategoryText $CategoryText -Reason "No valid source_path or target provided."
+    $Failure.result_path = Write-PDAWorkerResultArtifact -TaskId $TaskId -ResultObject $Failure
+    Register-PDAWorkerArtifact -ArtifactPath $Failure.result_path -TaskId $TaskId -WorkerName "research-worker" -Command $CommandText -Category $CategoryText -ArtifactType "worker_result_json" -Summary "Research worker canonical result contract"
+    ($Failure | ConvertTo-Json -Depth 20)
     return
 }
 
-$Prompt = @"
-You are research-worker inside the PDA ecosystem.
+$ResearchRequest = [string]$SourceText
+$SourcesResult = Get-COOPERResearchSources -RequestText $ResearchRequest -Root $Root -MaxSources 5
 
-Your job:
-Produce concise, operational research synthesis for the provided topic or source material.
-
-Requirements:
-- use the routed research model path
-- preserve uncertainty
-- clearly label confirmed findings vs open questions
-- keep output practical and deterministic
-- markdown format
-
-Task:
-$SourceText
-"@
-
-$FabricRender = Invoke-PDAFabricPromptRender -PatternName $DefaultPattern -WorkerName "research-worker" -TaskType "research" -Sensitivity "standard" -PromptText $Prompt -Category $CategoryText -SourcePath $SourcePath
-$PromptSource = "legacy"
-if ($FabricRender.used -and -not [string]::IsNullOrWhiteSpace([string]$FabricRender.rendered_prompt)) {
-    $Prompt = [string]$FabricRender.rendered_prompt
-    $PromptSource = "fabric"
-}
-elseif (-not [string]::IsNullOrWhiteSpace($DefaultPattern)) {
-    $PromptSource = "fabric_fallback"
-}
-
-try {
-    $RawInvocation = & pwsh -NoProfile -File $AdapterScript `
-        -WorkerName "research-worker" `
-        -TaskType "research" `
-        -Command "/research" `
-        -Category $RoutingCategory `
-        -Sensitivity $RoutingSensitivity `
-        -Prompt $Prompt `
-        -AsJson `
-        -NoThrow 2>&1
-
-    $JsonText = [string]($RawInvocation -join "`n")
-    $Invocation = ConvertFrom-PDAMixedJson -Text $JsonText -SourceName "Model adapter output"
-    if (-not $Invocation -or $Invocation.status -ne "pass") {
-        $ErrorText = if ($Invocation.response -and $Invocation.response.error_message) { [string]$Invocation.response.error_message } elseif ($Invocation.next_action) { [string]$Invocation.next_action } else { "Model invocation failed." }
-        throw $ErrorText
+if ($null -eq $SourcesResult -or [string]$SourcesResult.status -ne "pass" -or [int]$SourcesResult.source_count -le 0) {
+    $Reason = if ($SourcesResult -and $SourcesResult.PSObject.Properties.Name -contains "reason" -and -not [string]::IsNullOrWhiteSpace([string]$SourcesResult.reason)) {
+        [string]$SourcesResult.reason
+    }
+    else {
+        "no_sources_collected"
     }
 
-    $Content = [string]$Invocation.response_text
-    if ([string]::IsNullOrWhiteSpace($Content)) {
-        throw "Research model returned empty content."
-    }
-
-    New-Item -ItemType Directory -Force -Path $ResearchOutputFolder | Out-Null
-    $Timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
-    $MarkdownPath = Join-Path $ResearchOutputFolder "research-output-$Timestamp.md"
-    $Content | Set-Content -Path $MarkdownPath -Encoding UTF8
-
-    $TaskCommand = if ($Task.command) { [string]$Task.command } else { $CommandText }
-    $ResultObject = [ordered]@{
-        task_id        = $TaskId
-        worker         = "research-worker"
-        status         = "success"
-        classification = $CategoryText
-        input_summary  = $TaskCommand
-        output_type    = "research_markdown"
-        output         = @{
-            markdown_path  = $MarkdownPath
-            content        = $Content
-            model_route    = ConvertTo-PDAHashtable -Value $Invocation.routing
-            fallback       = ConvertTo-PDAHashtable -Value $Invocation.fallback
-            model_response = ConvertTo-PDAHashtable -Value $Invocation.response
-            fabric         = @{
-                default_pattern = $DefaultPattern
-                used = [bool]$FabricRender.used
-                render_status = [string]$FabricRender.status
-                pattern_path = [string]$FabricRender.pattern_path
-                pattern_category = [string]$FabricRender.pattern_category
-                prompt_source = $PromptSource
-                error = [string]$FabricRender.error
-            }
-            model_request = @{
-                prompt = $Prompt
-                prompt_source = $PromptSource
-                worker_name = "research-worker"
-                task_type = "research"
-                sensitivity = $RoutingSensitivity
-                category = $RoutingCategory
-            }
-        }
-        confidence     = 0.88
-        warnings       = @()
-        next_worker    = "review-worker"
-        saved_path     = $MarkdownPath
-        result_path    = $ResultPath
-    }
-
-    Write-PDAWorkerResultArtifact -TaskId $TaskId -ResultObject $ResultObject | Out-Null
-    Register-PDAWorkerArtifact -ArtifactPath $MarkdownPath -TaskId $TaskId -WorkerName "research-worker" -Command $TaskCommand -Category $CategoryText -ArtifactType "research_markdown" -Summary "Research worker markdown output"
-    Register-PDAWorkerArtifact -ArtifactPath $ResultPath -TaskId $TaskId -WorkerName "research-worker" -Command $TaskCommand -Category $CategoryText -ArtifactType "worker_result_json" -Summary "Research worker canonical result contract"
-
-    $ResultObject | ConvertTo-Json -Depth 20
+    $Failure = New-PDAResearchFailure -TaskId $TaskId -CommandText $CommandText -CategoryText $CategoryText -Reason $Reason
+    $Failure.output.source_catalog_path = if ($SourcesResult -and $SourcesResult.PSObject.Properties.Name -contains "source_catalog_path") { [string]$SourcesResult.source_catalog_path } else { "" }
+    $Failure.output.retrieved_at = if ($SourcesResult -and $SourcesResult.PSObject.Properties.Name -contains "retrieved_at") { [string]$SourcesResult.retrieved_at } else { (Get-Date).ToUniversalTime().ToString("o") }
+    $Failure.result_path = Write-PDAWorkerResultArtifact -TaskId $TaskId -ResultObject $Failure
+    Register-PDAWorkerArtifact -ArtifactPath $Failure.result_path -TaskId $TaskId -WorkerName "research-worker" -Command $CommandText -Category $CategoryText -ArtifactType "worker_result_json" -Summary "Research worker canonical result contract"
+    ($Failure | ConvertTo-Json -Depth 20)
+    return
 }
-catch {
-    New-PDAResearchFailure -Reason $_.Exception.Message -OutputType "error"
+
+$RetrievedAt = [string]$SourcesResult.retrieved_at
+$Sources = @($SourcesResult.sources)
+$Title = "WF-001 Research Summary"
+$MarkdownContent = New-PDAResearchMarkdown -Title $Title -RequestText $ResearchRequest -RetrievedAt $RetrievedAt -Sources $Sources
+
+if (Test-PDAResearchDisclaimerText -Text $MarkdownContent) {
+    $Failure = New-PDAResearchFailure -TaskId $TaskId -CommandText $CommandText -CategoryText $CategoryText -Reason "disclaimer_only_output"
+    $Failure.output.source_count = $Sources.Count
+    $Failure.output.sources = @($Sources | ForEach-Object { ConvertTo-PDAHashtable -Value $_ })
+    $Failure.output.retrieved_at = $RetrievedAt
+    $Failure.result_path = Write-PDAWorkerResultArtifact -TaskId $TaskId -ResultObject $Failure
+    Register-PDAWorkerArtifact -ArtifactPath $Failure.result_path -TaskId $TaskId -WorkerName "research-worker" -Command $CommandText -Category $CategoryText -ArtifactType "worker_result_json" -Summary "Research worker canonical result contract"
+    ($Failure | ConvertTo-Json -Depth 20)
+    return
 }
+
+New-Item -ItemType Directory -Force -Path $ResearchOutputFolder | Out-Null
+$Timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
+$MarkdownPath = Join-Path $ResearchOutputFolder "research-output-$Timestamp.md"
+$MarkdownContent | Set-Content -LiteralPath $MarkdownPath -Encoding UTF8
+
+$TaskCommand = if ($Task.command) { [string]$Task.command } else { $CommandText }
+$ResultObject = [ordered]@{
+    task_id        = $TaskId
+    worker         = "research-worker"
+    status         = "success"
+    classification = $CategoryText
+    input_summary  = $TaskCommand
+    output_type    = "research_markdown"
+    output         = @{
+        markdown_path = $MarkdownPath
+        content       = $MarkdownContent
+        source_count  = $Sources.Count
+        retrieved_at  = $RetrievedAt
+        sources       = @($Sources | ForEach-Object { ConvertTo-PDAHashtable -Value $_ })
+        source_catalog_path = [string]$SourcesResult.source_catalog_path
+        source_of_truth = "Scripts/Get-COOPERResearchSources.ps1"
+    }
+    confidence     = 0.94
+    warnings       = @()
+    next_worker    = "review-worker"
+    saved_path     = $MarkdownPath
+    result_path    = ""
+    source_of_truth = "Scripts/Invoke-PDAResearchWorker.ps1"
+}
+
+$ResultObject.result_path = Write-PDAWorkerResultArtifact -TaskId $TaskId -ResultObject $ResultObject
+Register-PDAWorkerArtifact -ArtifactPath $MarkdownPath -TaskId $TaskId -WorkerName "research-worker" -Command $TaskCommand -Category $CategoryText -ArtifactType "research_markdown" -Summary "Research worker markdown output"
+Register-PDAWorkerArtifact -ArtifactPath $ResultObject.result_path -TaskId $TaskId -WorkerName "research-worker" -Command $TaskCommand -Category $CategoryText -ArtifactType "worker_result_json" -Summary "Research worker canonical result contract"
+
+$ResultObject | ConvertTo-Json -Depth 20
