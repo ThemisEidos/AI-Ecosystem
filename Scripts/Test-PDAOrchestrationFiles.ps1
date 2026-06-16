@@ -112,6 +112,7 @@ $Required = @(
     "Scripts\Test-PDACommandInterpreter.ps1",
     "Scripts\Test-PDACommandHandoff.ps1",
     "Scripts\Test-PDAChatBridge.ps1",
+    "Scripts\Test-PDAChatBridgeIntegration.ps1",
     "Scripts\Invoke-PDADraftWorker.ps1",
     "Scripts\Test-PDADraftWorker.ps1",
     "Scripts\Invoke-PDAResearchWorker.ps1",

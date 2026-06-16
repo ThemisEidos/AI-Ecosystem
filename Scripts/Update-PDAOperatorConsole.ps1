@@ -967,6 +967,7 @@ pwsh -File Scripts\Invoke-PDACommandHandoff.ps1 -Text "review my latest findings
 pwsh -File Scripts\Test-PDACommandHandoff.ps1
 pwsh -File Scripts\Invoke-PDAChatBridge.ps1 -Message "review my latest findings" -AsJson
 pwsh -File Scripts\Test-PDAChatBridge.ps1
+pwsh -File Scripts\Test-PDAChatBridgeIntegration.ps1
 pwsh -File Scripts\Invoke-PDAWebhookBridge.ps1 -Message "review my latest findings" -AsJson
 pwsh -File Scripts\Test-PDAWebhookBridge.ps1
 pwsh -File Scripts\Get-PDAConversationState.ps1

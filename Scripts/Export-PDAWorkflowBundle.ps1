@@ -56,6 +56,7 @@ $Items = @(
     "Scripts\Test-PDACommandInterpreter.ps1",
     "Scripts\Test-PDACommandHandoff.ps1",
     "Scripts\Test-PDAChatBridge.ps1",
+    "Scripts\Test-PDAChatBridgeIntegration.ps1",
     "Scripts\Test-PDAWebhookBridge.ps1",
     "Scripts\Test-PDAHttpBridgeWorkflow.ps1",
     "Scripts\Test-PDAN8nClipboardWorkflow.ps1",
