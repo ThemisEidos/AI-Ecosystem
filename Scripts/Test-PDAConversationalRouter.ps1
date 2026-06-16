@@ -90,6 +90,12 @@ $Cases = @(
         expected_command = "List available workflows"
     }
     [pscustomobject]@{
+        name = "codex task generation"
+        input = "Create a Codex task to add Docker administration documentation to the Linux & Infrastructure collection."
+        expected_route = "codex_task_generator"
+        expected_command = "Create Codex task"
+    }
+    [pscustomobject]@{
         name = "research summary note"
         input = "Research official Pop!_OS documentation and prepare it for the Linux & Infrastructure knowledge collection."
         expected_route = "research_summary"
@@ -457,6 +463,10 @@ foreach ($Case in $Cases) {
         if ($Route.route_type -eq "workflow_catalog" -and $Direct.response_text -notmatch '(?i)Workflow catalog:') {
             $CasePassed = $false
             $Issues.Add("Workflow catalog response did not summarize available workflows.")
+        }
+        if ($Route.route_type -eq "codex_task_generator" -and $Direct.response_text -notmatch '(?i)Created Codex task at|WF-002 Codex task generation could not be completed') {
+            $CasePassed = $false
+            $Issues.Add("Codex task generation response did not reflect the governed workflow outcome.")
         }
         if ($Route.route_type -eq "research_summary" -and $Direct.response_text -notmatch '(?i)Created research summary at|WF-001 research summary could not be completed') {
             $CasePassed = $false

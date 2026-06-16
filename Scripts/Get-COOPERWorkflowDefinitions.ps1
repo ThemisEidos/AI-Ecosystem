@@ -65,6 +65,19 @@ function Get-COOPERWorkflowDefinitions {
     function Get-COOPERWorkflowDefinitionsFallback {
         return @(
             [pscustomobject]@{
+                id = "WF-002"
+                name = "Codex Task Generator"
+                workshop = "Open"
+                permission_level = 2
+                approval_required = $true
+                intent_keywords = @("codex task", "implementation task", "development task", "engineering task", "create task", "task generator", "task file", "turn this into a task", "convert this into a task", "project decision", "workflow output", "roadmap item", "finding", "issue")
+                executor = "codex_task_generator"
+                output_type = "markdown_file"
+                storage_target = "codex_tasks"
+                status = "operational"
+                source_of_truth = "Config/workflows.yaml"
+            }
+            [pscustomobject]@{
                 id = "WF-001"
                 name = "Research Summary"
                 workshop = "Open"

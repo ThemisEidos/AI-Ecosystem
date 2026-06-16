@@ -21,9 +21,19 @@ if (-not (Test-Path -LiteralPath $TempRoot -PathType Container)) {
 $Issues = New-Object System.Collections.Generic.List[string]
 
 $Definitions = @(Get-COOPERWorkflowDefinitions -Root $Root)
+$WF002 = @($Definitions | Where-Object { [string]$_.id -eq "WF-002" } | Select-Object -First 1)
 $WF001 = @($Definitions | Where-Object { [string]$_.id -eq "WF-001" } | Select-Object -First 1)
 $WF005 = @($Definitions | Where-Object { [string]$_.id -eq "WF-005" } | Select-Object -First 1)
 $WF006 = @($Definitions | Where-Object { [string]$_.id -eq "WF-006" } | Select-Object -First 1)
+
+if ($WF002.Count -eq 0) {
+    $Issues.Add("WF-002 is missing from the workflow definitions loader.")
+}
+else {
+    if ([string]$WF002[0].executor -ne "codex_task_generator") {
+        $Issues.Add("WF-002 does not map to the codex_task_generator executor.")
+    }
+}
 
 if ($WF001.Count -eq 0) {
     $Issues.Add("WF-001 is missing from the workflow definitions loader.")
@@ -58,19 +68,23 @@ if ([string]$Catalog.status -ne "pass") {
 }
 else {
     $WorkflowIds = @($Catalog.workflows | ForEach-Object { [string]$_.workflow_id })
-    foreach ($WorkflowId in @("WF-001", "WF-005", "WF-006")) {
+    foreach ($WorkflowId in @("WF-002", "WF-001", "WF-005", "WF-006")) {
         if ($WorkflowIds -notcontains $WorkflowId) {
             $Issues.Add("Workflow catalog summary is missing $WorkflowId.")
         }
     }
 }
 
+$CodexTaskRoute = Resolve-PDAConversationalRoute -Text "Create a Codex task to improve workflow routing." -Root $Root
 $ResearchRoute = Resolve-PDAConversationalRoute -Text "Research official Pop!_OS documentation and create a structured summary note in the Linux & Infrastructure collection." -Root $Root
 $NoteRoute = Resolve-PDAConversationalRoute -Text "Create an Obsidian note for WF-005." -Root $Root
 $WorkflowListingRoute = Resolve-PDAConversationalRoute -Text "List available workflows." -Root $Root
 $StatusRoute = Resolve-PDAConversationalRoute -Text "How is the PDA doing?" -Root $Root
 $SlashRoute = Resolve-PDAConversationalRoute -Text "/cooper status" -Root $Root
 
+if ([string]$CodexTaskRoute.route_type -ne "codex_task_generator") {
+    $Issues.Add("Codex task request did not route to codex_task_generator.")
+}
 if ([string]$ResearchRoute.route_type -ne "research_summary") {
     $Issues.Add("Research request did not route to research_summary.")
 }
@@ -126,6 +140,7 @@ $Report = [pscustomobject]@{
     status = if ($Issues.Count -eq 0) { "pass" } else { "fail" }
     definitions = @($Definitions)
     workflow_catalog = $Catalog
+    codex_task_route = $CodexTaskRoute
     research_route = $ResearchRoute
     note_route = $NoteRoute
     workflow_listing_route = $WorkflowListingRoute
@@ -137,10 +152,11 @@ $Report = [pscustomobject]@{
 
 Write-Host "[*] COOPER workflow governance test"
 Write-Host ("Status   : {0}" -f $Report.status)
+Write-Host ("WF-002   : {0}" -f $(if ($WF002.Count -gt 0) { [string]$WF002[0].executor } else { "<missing>" }))
 Write-Host ("WF-001   : {0}" -f $WF001Executor)
 Write-Host ("WF-005   : {0}" -f $WF005Executor)
 Write-Host ("WF-006   : {0}" -f $WF006Executor)
-Write-Host ("Route    : research={0}, note={1}, catalog={2}, status={3}" -f $ResearchRoute.route_type, $NoteRoute.route_type, $WorkflowListingRoute.route_type, $StatusRoute.route_type)
+Write-Host ("Route    : codex={0}, research={1}, note={2}, catalog={3}, status={4}" -f $CodexTaskRoute.route_type, $ResearchRoute.route_type, $NoteRoute.route_type, $WorkflowListingRoute.route_type, $StatusRoute.route_type)
 
 if ($Report.status -ne "pass") {
     foreach ($Issue in @($Report.issues)) {

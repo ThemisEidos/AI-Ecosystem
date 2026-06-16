@@ -91,7 +91,7 @@ function Get-COOPERReviewMarkdownContent {
     }
 
     if ($Result.PSObject.Properties.Name -contains "output" -and $Result.output) {
-        foreach ($Name in @("markdown_path", "note_path", "import_draft_path")) {
+        foreach ($Name in @("markdown_path", "note_path", "import_draft_path", "task_path")) {
             $Value = Test-COOPERReviewField -Object $Result.output -Names @($Name)
             if (-not [string]::IsNullOrWhiteSpace([string]$Value)) {
                 $CandidatePaths.Add([string]$Value)
@@ -197,6 +197,45 @@ if ($WorkflowId -eq "WF-006") {
             $Issues.Add("WF-006 markdown suggests a workspace import occurred.")
         }
     }
+}
+
+if ($WorkflowId -eq "WF-002") {
+    if ($Result.PSObject.Properties.Name -contains "output_type" -and -not [string]::IsNullOrWhiteSpace([string]$Result.output_type)) {
+        $ObservedOutputType = [string]$Result.output_type
+    }
+    elseif (-not [string]::IsNullOrWhiteSpace($ExpectedOutputType)) {
+        $ObservedOutputType = [string]$ExpectedOutputType
+    }
+    else {
+        $ObservedOutputType = "markdown_file"
+    }
+
+    $ObservedContent = Get-COOPERReviewMarkdownContent -Result $Result
+    if ($null -eq $ObservedContent -and -not [string]::IsNullOrWhiteSpace($ExpectedOutputPath) -and (Test-Path -LiteralPath $ExpectedOutputPath -PathType Leaf)) {
+        $ObservedContent = [pscustomobject]@{
+            path = $ExpectedOutputPath
+            content = [string](Get-Content -LiteralPath $ExpectedOutputPath -Raw)
+        }
+    }
+
+    if ($null -eq $ObservedContent) {
+        $Issues.Add("WF-002 output markdown file was not found.")
+    }
+    else {
+        $Content = [string]$ObservedContent.content
+        $FirstLine = ([string]$Content -split "`r?`n", 2)[0]
+        if ($FirstLine -match '^\s*#\s*$' -or $FirstLine -match '(?i)^#\s*Task Title\s*$') {
+            $Issues.Add("WF-002 markdown title is missing or still uses the placeholder.")
+        }
+
+        foreach ($Section in @("Objective", "Background", "Current State", "Required Work", "Constraints", "Validation", "Definition of Done")) {
+            if ($Content -notmatch ("(?m)^##\s+{0}\s*$" -f [regex]::Escape($Section))) {
+                $Issues.Add("WF-002 markdown missing '$Section' section.")
+            }
+        }
+    }
+
+    return New-COOPERReviewResult -Pass:($Issues.Count -eq 0) -Issues @($Issues.ToArray()) -ObservedOutputType $ObservedOutputType -ObservedOutputPath $(if ($ObservedContent) { [string]$ObservedContent.path } else { $ExpectedOutputPath })
 }
 
 if ($WorkflowId -eq "WF-005") {

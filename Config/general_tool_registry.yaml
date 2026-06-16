@@ -127,7 +127,7 @@ tools:
     name: Codex Task Launcher
     drawer: Code
     workshop: Open Workshop
-    description: Prepare the Codex CLI or app context for an approved coding task.
+    description: Prepare an approved Codex task file for implementation work in Codex_Tasks.
     permission_level: 4
     approval_required: true
     executor_type: cli_launcher
@@ -137,4 +137,4 @@ tools:
       - task_file
     outputs:
       - launch_status
-    notes: Launcher placeholder for WF-002. No direct execution logic in Phase 1.
+    notes: Used by WF-002 to write governed Codex task files. Launcher handoff remains optional.

@@ -108,6 +108,7 @@ This roadmap tracks the staged implementation of the COOPER-centered AI Ecosyste
 - Status: In Progress
 - Goal: Stabilize the first practical governed workflows.
 - Operational:
+  - WF-002 Codex Task Generator
   - WF-005 Note Creation
   - WF-001 Source-Backed Research Summary
   - WF-006 Knowledge Collection Import Draft

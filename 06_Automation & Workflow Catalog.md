@@ -37,15 +37,15 @@ Storage rules:
 - Workshop: Open Workshop
 - Trigger: project discussion, decisions, or implementation requirements
 - Inputs: project context, requirements, target repo, desired outcome
-- Tools Used: COOPER, writing model, task template, Codex_Tasks folder, launcher script
-- Execution Method: semi-automated task file generation
+- Tools Used: COOPER, writing model, task template, Codex_Tasks folder, governed workbench
+- Execution Method: governed task file generation
 - Permission Level: 2 for task file creation; 4 for launcher invocation
 - Approval Requirement: required
 - Output: Codex task file, optional launcher start
 - Storage Location: Project Workspace Codex_Tasks/
 - Security Notes: do not include secrets, API keys, credentials, private keys, or Category 2 material
-- Status: Planned
-- Next Step: define the task file template and launcher boundary
+- Status: Operational
+- Next Step: keep launcher invocation optional and defer it until explicitly requested
 - Suggested File Format: `TASK-###_<short-title>.md`
 - Suggested Path: `Codex_Tasks/`
 

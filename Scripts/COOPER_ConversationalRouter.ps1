@@ -387,6 +387,31 @@ function Test-PDAConversationalNoteCreation {
     return [bool]($ContainsNoteIntent -and -not $LooksLikeResearch)
 }
 
+function Test-PDAConversationalCodexTaskGenerator {
+    param([Parameter(Mandatory = $true)][string]$NormalizedText)
+
+    if ($NormalizedText.StartsWith("/")) {
+        return $false
+    }
+
+    $Definition = Get-COOPERWorkflowDefinitionById -WorkflowId "WF-002"
+    $TaskKeywords = if ($Definition -and $Definition.PSObject.Properties.Name -contains "intent_keywords") {
+        @($Definition.intent_keywords)
+    }
+    else {
+        @("codex task", "implementation task", "development task", "engineering task", "create task", "task generator", "task file")
+    }
+
+    return [bool](
+        (
+            (Test-PDAWorkflowDefinitionKeywordMatch -NormalizedText $NormalizedText -Keywords $TaskKeywords) -or
+            ($NormalizedText -match '(?i)\b(turn this|transform this|convert this|make this|draft this|create a task from this|write a task from this|generate a task from this)\b') -or
+            ($NormalizedText -match '(?i)\b(project decision|project discussion|issue|finding|roadmap item|workflow output|research summary|workflow review)\b' -and $NormalizedText -match '(?i)\b(task|codex task|implementation task|development task|engineering task)\b')
+        ) -and
+        ($NormalizedText -match '(?i)\b(task|codex task|implementation task|development task|engineering task|task file)\b')
+    )
+}
+
 function Test-PDAConversationalKnowledgeCollectionImport {
     param([Parameter(Mandatory = $true)][string]$NormalizedText)
 
@@ -901,6 +926,7 @@ function Get-COOPERWorkflowCatalogSummary {
 
     if ($Workflows.Count -eq 0) {
         $Workflows = @(
+            [pscustomobject]@{ workflow_id = "WF-002"; name = "Codex Task Generator"; purpose = "Turn project inputs into an implementation-ready Codex task file."; workshop = "Open Workshop"; category = "Category 1" }
             [pscustomobject]@{ workflow_id = "WF-001"; name = "Research Summary"; purpose = "Collect and summarize research findings."; workshop = "Open Workshop"; category = "Category 1" }
             [pscustomobject]@{ workflow_id = "WF-005"; name = "Obsidian Note Creation"; purpose = "Create non-sensitive Obsidian notes or drafts."; workshop = "Open Workshop"; category = "Category 1" }
         )
@@ -908,7 +934,7 @@ function Get-COOPERWorkflowCatalogSummary {
 
     $WorkflowLines = @($Workflows | ForEach-Object { "{0} {1}" -f $_.workflow_id, $_.name })
     if ($WorkflowLines.Count -eq 0) {
-        $WorkflowLines = @("WF-001 Research Summary", "WF-005 Obsidian Note Creation")
+        $WorkflowLines = @("WF-002 Codex Task Generator", "WF-001 Research Summary", "WF-005 Obsidian Note Creation")
     }
 
     return [pscustomobject]@{
@@ -968,6 +994,17 @@ function Resolve-PDAConversationalRoute {
         $Route.recommended_command = "List available workflows"
         $Route.reason = "Workflow catalog request."
         $Route.confidence = 1
+        return [pscustomobject]$Route
+    }
+
+    if (Test-PDAConversationalCodexTaskGenerator -NormalizedText $Normalized) {
+        $Route.route_type = "codex_task_generator"
+        $Route.response_mode = "governed_command"
+        $Route.recommended_command = "Create Codex task"
+        $Route.reason = "WF-002 Codex Task Generator request."
+        $Route.confidence = 1
+        $Route.intent = "codex_task_generator"
+        $Route.task_type = "codex_task_generator"
         return [pscustomobject]$Route
     }
 
@@ -1393,6 +1430,44 @@ function Get-PDAConversationalNaturalResponse {
             $BaseResponse.next_action = "Ask for a specific workflow description or a status check."
             $BaseResponse.latest_result_response_text = $BaseResponse.response_text
             $BaseResponse.runtime_status = $Catalog
+        }
+        "codex_task_generator" {
+            $TaskGeneratorScript = Join-Path $PSScriptRoot "Invoke-COOPERCodexTaskGenerator.ps1"
+            if (Test-Path -LiteralPath $TaskGeneratorScript -PathType Leaf) {
+                try {
+                    $TaskResult = & $TaskGeneratorScript -Text $Text -Approved -Root $Root
+                }
+                catch {
+                    $TaskResult = [pscustomobject]@{
+                        success = $false
+                        reason = $_.Exception.Message
+                        response_text = ""
+                        routed_tool = $null
+                        approval_decision = $null
+                        workbench_result = $null
+                    }
+                }
+            }
+            else {
+                $TaskResult = [pscustomobject]@{
+                    success = $false
+                    reason = "COOPER Codex task generation workflow is unavailable."
+                    response_text = ""
+                    routed_tool = $null
+                    approval_decision = $null
+                    workbench_result = $null
+                }
+            }
+
+            $BaseResponse.runtime_status = $TaskResult
+            $BaseResponse.response_text = if ($TaskResult -and [bool]$TaskResult.success -eq $true -and -not [string]::IsNullOrWhiteSpace([string]$TaskResult.response_text)) { [string]$TaskResult.response_text } else { if ($TaskResult -and $TaskResult.PSObject.Properties.Name -contains "reason" -and -not [string]::IsNullOrWhiteSpace([string]$TaskResult.reason)) { [string]$TaskResult.reason } else { "WF-002 Codex task generation could not be completed." } }
+            $BaseResponse.next_action = if ($TaskResult -and [bool]$TaskResult.success -eq $true) { "Review the Codex task or ask for another implementation task." } else { "Review approval or task path configuration." }
+            $BaseResponse.latest_result_response_text = $BaseResponse.response_text
+            $BaseResponse.codex_task_result = $TaskResult
+            if ($TaskResult -and $TaskResult.PSObject.Properties.Name -contains "task_path") {
+                $BaseResponse.latest_result_path = [string]$TaskResult.task_path
+                $BaseResponse.result_artifact_path = [string]$TaskResult.task_path
+            }
         }
         "research_summary" {
             $ResearchWorkerScript = Join-Path $PSScriptRoot "Invoke-PDAResearchWorker.ps1"
