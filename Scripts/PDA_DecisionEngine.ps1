@@ -29,6 +29,16 @@ function Test-PDACommanderDecisionDirectAnswer {
     )
 }
 
+function Test-PDACommanderDecisionTaskGeneration {
+    param([Parameter(Mandatory = $true)][string]$NormalizedText)
+
+    return [bool](
+        $NormalizedText -match '(?i)\b(codex task|implementation task|development task|engineering task|project task|action item|work item|task generator|task file)\b' -or
+        ($NormalizedText -match '(?i)\b(create|generate|draft|write|make)\b' -and $NormalizedText -match '(?i)\b(task|action item|work item)\b') -or
+        ($NormalizedText -match '(?i)\b(turn this into|convert this into|transform this into)\b' -and $NormalizedText -match '(?i)\b(task|action item|work item)\b')
+    )
+}
+
 function Test-PDACommanderDecisionEnvironmentAwareness {
     param([Parameter(Mandatory = $true)][string]$NormalizedText)
 
@@ -85,6 +95,7 @@ function Get-PDACommanderDecisionLegacyRouteType {
                 "status_lookup" { return "direct_status" }
                 "operator_help" { return "direct_help" }
                 "task_lookup" { return "task_lookup" }
+                "task_generation" { return "governed_request" }
                 "memory_candidates" { return "memory_candidates" }
                 "commander_briefing" { return "commander_briefing" }
                 "personality_status" { return "personality_status" }
@@ -151,6 +162,7 @@ function Get-PDACommanderDecisionRecommendedCommand {
                 "memory_candidates" { return "/memory" }
                 "commander_briefing" { return "/status" }
                 "task_lookup" { return "/tasks" }
+                "task_generation" { return "/codex-task" }
                 "personality_status" { return "" }
                 "personality_update" { return "" }
                 "personality_cancel" { return "" }
@@ -266,6 +278,15 @@ function New-PDACommanderDecision {
             $Intent = "status_lookup"
             $Reason = "Direct status request."
             $MatchedRules.Add("direct_status") | Out-Null
+        }
+    }
+    elseif (Test-PDACommanderDecisionTaskGeneration -NormalizedText $Normalized) {
+        $DecisionType = "dispatch_worker"
+        $Intent = "task_generation"
+        $Reason = "Task generation request should dispatch to the Codex task workflow."
+        $MatchedRules.Add("task_generation") | Out-Null
+        if (Get-Command -Name Get-PDACommanderRecommendation -ErrorAction SilentlyContinue) {
+            $FallbackRecommendation = Get-PDACommanderRecommendation -Text $Text -TaskType $TaskType -Category $CategoryValue -PreferredOutput $PreferredOutput -RequiresLocalOnly:$RequiresLocalOnly -Root $Root
         }
     }
     elseif (Test-PDACommanderDecisionEnvironmentAwareness -NormalizedText $Normalized) {

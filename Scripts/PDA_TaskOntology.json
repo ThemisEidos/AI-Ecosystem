@@ -94,6 +94,38 @@
       "notes": "Planning stays local and does not execute side effects."
     },
     {
+      "task_type": "task_generation",
+      "intent": "task_generation",
+      "command": "/codex-task",
+      "title": "Codex task generation",
+      "description": "Generate implementation-ready Codex task artifacts from project outcomes, findings, or requests.",
+      "supported_categories": [
+        "category_1",
+        "category_2"
+      ],
+      "sensitivity_category": "standard",
+      "required_approvals": {
+        "category_1": "human_approval",
+        "category_2": "human_approval"
+      },
+      "input_types": [
+        "message-only-test",
+        "queue-json",
+        "staged-json"
+      ],
+      "output_types": [
+        "markdown_file",
+        "result_json"
+      ],
+      "allowed_workers": [
+        "execute-worker"
+      ],
+      "routing_constraints": [
+        "local-only"
+      ],
+      "notes": "Codex task generation stays local and emits a markdown task artifact for governed review."
+    },
+    {
       "task_type": "operator_status",
       "intent": "operator_status",
       "command": "/status",

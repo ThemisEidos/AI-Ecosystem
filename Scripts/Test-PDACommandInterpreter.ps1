@@ -165,6 +165,33 @@ $TestCases = @(
         source_check     = $true
     }
     [pscustomobject]@{
+        name             = "codex task request"
+        input            = "Create a Codex task to add Docker host administration documentation to the Linux & Infrastructure collection."
+        expected_status  = "mapped"
+        expected_intent  = "task_generation"
+        expected_task    = "task_generation"
+        expected_command = "/codex-task"
+        source_check     = $true
+    }
+    [pscustomobject]@{
+        name             = "project task request"
+        input            = "Create a project task."
+        expected_status  = "mapped"
+        expected_intent  = "task_generation"
+        expected_task    = "task_generation"
+        expected_command = "/codex-task"
+        source_check     = $true
+    }
+    [pscustomobject]@{
+        name             = "development task synonym"
+        input            = "Turn this into a development task."
+        expected_status  = "mapped"
+        expected_intent  = "task_generation"
+        expected_task    = "task_generation"
+        expected_command = "/codex-task"
+        source_check     = $true
+    }
+    [pscustomobject]@{
         name             = "fabric research alias"
         input            = "run fabric research on this note"
         expected_status  = "mapped"
@@ -210,30 +237,30 @@ $TestCases = @(
         source_check     = $true
     }
     [pscustomobject]@{
-        name             = "cooper personality query"
+        name             = "cooper personality query unsupported"
         input            = "/cooper personality"
-        expected_status  = "mapped"
-        expected_intent  = "cooper_personality"
-        expected_task    = "cooper_personality"
-        expected_command = "/cooper personality"
+        expected_status  = "unknown"
+        expected_intent  = ""
+        expected_task    = ""
+        expected_command = ""
         source_check     = $false
     }
     [pscustomobject]@{
-        name             = "cooper profile"
+        name             = "cooper profile unsupported"
         input            = "/cooper profile cyber"
-        expected_status  = "mapped"
-        expected_intent  = "cooper_profile"
-        expected_task    = "cooper_profile"
-        expected_command = "/cooper profile"
+        expected_status  = "unknown"
+        expected_intent  = ""
+        expected_task    = ""
+        expected_command = ""
         source_check     = $false
     }
     [pscustomobject]@{
-        name             = "cooper setting"
+        name             = "cooper setting unsupported"
         input            = "/cooper humor 50"
-        expected_status  = "mapped"
-        expected_intent  = "cooper_setting"
-        expected_task    = "cooper_setting"
-        expected_command = "/cooper humor"
+        expected_status  = "unknown"
+        expected_intent  = ""
+        expected_task    = ""
+        expected_command = ""
         source_check     = $false
     }
     [pscustomobject]@{

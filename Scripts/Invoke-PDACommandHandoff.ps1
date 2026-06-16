@@ -401,6 +401,23 @@ if ($ConfirmDispatch -and $Interpreter.status -eq "mapped" -and $DispatchReady) 
         $DispatchNextAction = [string]$NotebookLMResult.next_action
         $DispatchTaskId = [string]$NotebookLMResult.task_id
     }
+    elseif ($RecommendedCommand -eq "/codex-task") {
+        $CodexTaskScript = Join-Path $PSScriptRoot "Invoke-COOPERCodexTaskGenerator.ps1"
+        if (-not (Test-Path -Path $CodexTaskScript -PathType Leaf)) {
+            throw "Codex task generator missing: $CodexTaskScript"
+        }
+
+        $CodexTaskResult = & $CodexTaskScript -Text $Text -Approved -Root $Root
+        $DispatchStatus = "completed"
+        $DispatchOutput = @($CodexTaskResult | ConvertTo-Json -Depth 40)
+        $DispatchPath = [string]$CodexTaskResult.task_path
+        $DispatchResponseText = [string]$CodexTaskResult.response_text
+        if ([string]::IsNullOrWhiteSpace($DispatchResponseText)) {
+            $DispatchResponseText = "Created Codex task."
+        }
+        $DispatchNextAction = "Review the generated task artifact or confirm another governed request."
+        $DispatchTaskId = if (-not [string]::IsNullOrWhiteSpace($DispatchPath)) { [System.IO.Path]::GetFileNameWithoutExtension($DispatchPath) } else { "" }
+    }
     elseif ($RecommendedCommand -like "/fabric*") {
         if (-not (Test-Path -Path $FabricSubmitScript -PathType Leaf)) {
             throw "Fabric submitter missing: $FabricSubmitScript"

@@ -70,7 +70,7 @@ function Get-COOPERWorkflowDefinitions {
                 workshop = "Open"
                 permission_level = 2
                 approval_required = $true
-                intent_keywords = @("codex task", "implementation task", "development task", "engineering task", "create task", "task generator", "task file", "turn this into a task", "convert this into a task", "project decision", "workflow output", "roadmap item", "finding", "issue")
+                intent_keywords = @("codex task", "implementation task", "development task", "engineering task", "project task", "action item", "work item", "create task", "task generator", "task file", "turn this into a task", "convert this into a task", "make a task from this", "turn this into a development task", "generate an implementation task", "create an engineering task", "write a task for codex", "project decision", "workflow output", "roadmap item", "finding", "issue")
                 executor = "codex_task_generator"
                 output_type = "markdown_file"
                 storage_target = "codex_tasks"

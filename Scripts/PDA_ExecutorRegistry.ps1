@@ -248,6 +248,7 @@ function Get-PDAExecutorRecommendation {
         "reporting" { @("reporter-worker", "planner-worker") }
         "review" { @("review-worker", "reporter-worker") }
         "coding" { @("codex", "execute-worker") }
+        "task_generation" { @("codex", "execute-worker") }
         "execute" { @("execute-worker", "codex") }
         "automation" { @("n8n", "execute-worker") }
         "knowledge_management" {
@@ -319,6 +320,7 @@ function Get-PDAExecutorRecommendation {
         "reporting" { "Reporting is handled by the local reporter-worker pipeline." }
         "review" { "Review tasks are best handled by the local review-worker pipeline." }
         "coding" { "Repository changes should use the local Codex execution path." }
+        "task_generation" { "Implementation-ready task generation should use the local Codex task workflow." }
         "execute" { "Execution tasks should use the local execute-worker or Codex path under approval." }
         "automation" { "Deterministic automation should use n8n." }
         "knowledge_management" { "Sanitized learning packages belong in NotebookLM before memory promotion." }

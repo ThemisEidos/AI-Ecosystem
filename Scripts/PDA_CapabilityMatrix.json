@@ -234,6 +234,34 @@
       "notes": "Planning should stay local-first and produce implementation-focused plan markdown."
     },
     {
+      "task_type": "task_generation",
+      "sensitivity_category": "category_1",
+      "preferred_tool": "Codex task workflow",
+      "backup_tool": "Planner worker",
+      "output_location": [
+        "Codex_Tasks/",
+        "PDA-Tasks/results/"
+      ],
+      "automation_readiness": "assisted",
+      "cloud_allowed": false,
+      "route_alias": "/codex-task",
+      "notes": "Codex task generation stays local and produces governed implementation-ready markdown artifacts."
+    },
+    {
+      "task_type": "task_generation",
+      "sensitivity_category": "category_2",
+      "preferred_tool": "Codex task workflow",
+      "backup_tool": "Planner worker",
+      "output_location": [
+        "Codex_Tasks/",
+        "PDA-Tasks/results/"
+      ],
+      "automation_readiness": "assisted",
+      "cloud_allowed": false,
+      "route_alias": "/codex-task",
+      "notes": "Category 2 Codex task generation stays local and requires approval before execution."
+    },
+    {
       "task_type": "planning",
       "sensitivity_category": "category_2",
       "preferred_tool": "PowerShell or Python local-first",

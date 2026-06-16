@@ -156,6 +156,33 @@ function Get-PDACommandInterpreterRules {
             recommendation = "Use /notebooklm to build a sanitized NotebookLM package from Category 1 Obsidian sources."
         }
         [pscustomobject]@{
+            rule_id        = "task_generation"
+            intent         = "task_generation"
+            task_type      = "task_generation"
+            command        = "/codex-task"
+            priority       = 94
+            exact_phrases  = @(
+                "create a codex task",
+                "generate an implementation task",
+                "turn this into a development task",
+                "create an engineering task",
+                "write a task for codex",
+                "make a task from this research",
+                "make a task from this",
+                "create a project task",
+                "make a project task",
+                "write a project task",
+                "draft a project task",
+                "create an action item",
+                "create a work item",
+                "turn this into a task",
+                "create a task from this",
+                "draft a codex task"
+            )
+            keywords       = @("codex", "implementation", "development", "engineering", "action item", "work item", "task generator", "task file")
+            recommendation = "Use /codex-task for implementation-ready task generation requests."
+        }
+        [pscustomobject]@{
             rule_id        = "research_task_requests"
             intent         = "research_synthesis"
             task_type      = "research_synthesis"
@@ -258,63 +285,6 @@ function Resolve-PDACommandInterpretation {
     $Ontology = Import-PDATaskOntology -Root $Root
     $NormalizedText = Normalize-PDACommandInterpreterText -Value $Text
     $NormalizedTokens = @($NormalizedText.Split(' ', [System.StringSplitOptions]::RemoveEmptyEntries))
-
-    if ($NormalizedText.StartsWith("/cooper")) {
-        $Tokens = @($Text.Trim() -split '\s+' | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
-        $Subcommand = if ($Tokens.Count -ge 2) { [string]$Tokens[1].ToLowerInvariant() } else { "personality" }
-        $SettingMap = @{
-            humor = "humor"
-            sarcasm = "sarcasm"
-            professionalism = "professionalism"
-            brevity = "brevity"
-            initiative = "initiative"
-            risk = "risk_awareness"
-            risk_awareness = "risk_awareness"
-        }
-
-        $Intent = "cooper_personality"
-        $TaskType = "cooper_personality"
-        $Command = "/cooper personality"
-        $Reason = "Direct COOPER personality command."
-        if ($Subcommand -eq "profile") {
-            $Intent = "cooper_profile"
-            $TaskType = "cooper_profile"
-            $Command = "/cooper profile"
-            $Reason = "Direct COOPER profile command."
-        }
-        elseif ($SettingMap.ContainsKey($Subcommand)) {
-            $Intent = "cooper_setting"
-            $TaskType = "cooper_setting"
-            $Command = "/cooper $Subcommand"
-            $Reason = "Direct COOPER personality setting command."
-        }
-
-        return [pscustomobject]@{
-            input_text             = $Text
-            normalized_text        = $NormalizedText
-            status                 = "mapped"
-            intent                 = $Intent
-            task_type              = $TaskType
-            command                = $Command
-            confidence             = 1
-            ontology_verified      = $false
-            source_of_truth        = "Scripts/PDA_CommandInterpreter.ps1"
-            ontology_command_count = @($Ontology.task_intents.command | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) }).Count
-            candidate_count        = 0
-            recommendations        = @(
-                [pscustomobject]@{
-                    intent         = $Intent
-                    task_type      = $TaskType
-                    command        = $Command
-                    score          = 1000
-                    recommendation = "Use COOPER personality commands to query, switch profile, or set a slider."
-                }
-            )
-            matched_rules          = @()
-            reason                 = $Reason
-            ontology_version       = [string]$Ontology.ontology_version
-        }
-    }
 
     if ($NormalizedText -match '(?i)\b(open the airlock|launch missiles?|unlock the door|delete all files)\b') {
         return [pscustomobject]@{

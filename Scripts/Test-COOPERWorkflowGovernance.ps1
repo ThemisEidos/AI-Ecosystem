@@ -76,6 +76,8 @@ else {
 }
 
 $CodexTaskRoute = Resolve-PDAConversationalRoute -Text "Create a Codex task to improve workflow routing." -Root $Root
+$CodexTaskInterpreterRaw = & pwsh -NoProfile -File (Join-Path $PSScriptRoot "PDA_CommandInterpreter.ps1") -Text "Create a Codex task to improve workflow routing." -AsJson 2>&1
+$CodexTaskInterpreter = ConvertFrom-PDAMixedJson -Text ([string]($CodexTaskInterpreterRaw -join "`n")) -SourceName (Join-Path $PSScriptRoot "PDA_CommandInterpreter.ps1")
 $ResearchRoute = Resolve-PDAConversationalRoute -Text "Research official Pop!_OS documentation and create a structured summary note in the Linux & Infrastructure collection." -Root $Root
 $NoteRoute = Resolve-PDAConversationalRoute -Text "Create an Obsidian note for WF-005." -Root $Root
 $WorkflowListingRoute = Resolve-PDAConversationalRoute -Text "List available workflows." -Root $Root
@@ -84,6 +86,9 @@ $SlashRoute = Resolve-PDAConversationalRoute -Text "/cooper status" -Root $Root
 
 if ([string]$CodexTaskRoute.route_type -ne "codex_task_generator") {
     $Issues.Add("Codex task request did not route to codex_task_generator.")
+}
+if (-not $CodexTaskInterpreter -or [string]$CodexTaskInterpreter.status -ne "mapped" -or [string]$CodexTaskInterpreter.command -ne "/codex-task") {
+    $Issues.Add("Codex task request did not map to the /codex-task governed command.")
 }
 if ([string]$ResearchRoute.route_type -ne "research_summary") {
     $Issues.Add("Research request did not route to research_summary.")

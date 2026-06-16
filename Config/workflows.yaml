@@ -9,11 +9,19 @@ workflows:
       - implementation task
       - development task
       - engineering task
+      - project task
+      - action item
+      - work item
       - create task
       - task generator
       - task file
       - turn this into a task
       - convert this into a task
+      - make a task from this
+      - turn this into a development task
+      - generate an implementation task
+      - create an engineering task
+      - write a task for codex
       - project decision
       - workflow output
       - roadmap item

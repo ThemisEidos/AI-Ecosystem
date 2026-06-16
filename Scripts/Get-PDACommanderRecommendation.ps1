@@ -126,6 +126,9 @@ function Resolve-PDACommanderTaskType {
 
     $Normalized = $Text.ToLowerInvariant()
     switch -Regex ($Normalized) {
+        '(?i)\b(codex task|implementation task|development task|engineering task|project task|action item|work item|task generator|task file)\b' { return "task_generation" }
+        '(?i)\b(create|generate|draft|write|make)\b.*\b(task|action item|work item)\b' { return "task_generation" }
+        '(?i)\b(turn this into|convert this into|transform this into)\b.*\b(task|action item|work item)\b' { return "task_generation" }
         '(?i)\b(research|investigate|evidence|sources|synthesis|study)\b' { return "research" }
         '(?i)\b(report|summary|summarize|briefing|brief)\b' { return "reporting" }
         '(?i)\b(review|audit|critique|evaluate|findings)\b' { return "review" }
@@ -149,6 +152,7 @@ function Get-PDACommanderExecutorFallback {
         "reporting" { return [pscustomobject]@{ selected_tool = "reporter-worker"; backup_tool = "planner-worker"; reason = "Report synthesis is deterministic and fits the local reporter pipeline." } }
         "review" { return [pscustomobject]@{ selected_tool = "review-worker"; backup_tool = "reporter-worker"; reason = "Review and checklist work are best handled by the local review pipeline." } }
         "coding" { return [pscustomobject]@{ selected_tool = "codex"; backup_tool = "execute-worker"; reason = "Repository or script modification should use the local Codex execution path." } }
+        "task_generation" { return [pscustomobject]@{ selected_tool = "codex"; backup_tool = "execute-worker"; reason = "Codex task generation should use the local Codex workflow path." } }
         "automation" { return [pscustomobject]@{ selected_tool = "n8n"; backup_tool = "execute-worker"; reason = "Deterministic automation should prefer n8n workflow orchestration." } }
         "knowledge_management" { return [pscustomobject]@{ selected_tool = "notebooklm"; backup_tool = "operator-console-worker"; reason = "Sanitized learning material belongs in NotebookLM before durable memory promotion." } }
         "administrative" { return [pscustomobject]@{ selected_tool = "operator-console-worker"; backup_tool = "human operator"; reason = "Administrative queue triage and approvals stay human-governed." } }
