@@ -22,6 +22,7 @@ $Issues = New-Object System.Collections.Generic.List[string]
 
 $Definitions = @(Get-COOPERWorkflowDefinitions -Root $Root)
 $WF002 = @($Definitions | Where-Object { [string]$_.id -eq "WF-002" } | Select-Object -First 1)
+$WF004 = @($Definitions | Where-Object { [string]$_.id -eq "WF-004" } | Select-Object -First 1)
 $WF001 = @($Definitions | Where-Object { [string]$_.id -eq "WF-001" } | Select-Object -First 1)
 $WF005 = @($Definitions | Where-Object { [string]$_.id -eq "WF-005" } | Select-Object -First 1)
 $WF006 = @($Definitions | Where-Object { [string]$_.id -eq "WF-006" } | Select-Object -First 1)
@@ -32,6 +33,18 @@ if ($WF002.Count -eq 0) {
 else {
     if ([string]$WF002[0].executor -ne "codex_task_generator") {
         $Issues.Add("WF-002 does not map to the codex_task_generator executor.")
+    }
+}
+
+if ($WF004.Count -eq 0) {
+    $Issues.Add("WF-004 is missing from the workflow definitions loader.")
+}
+else {
+    if ([string]$WF004[0].executor -ne "operational_status") {
+        $Issues.Add("WF-004 does not map to the operational_status executor.")
+    }
+    if ([string]$WF004[0].status -ne "operational") {
+        $Issues.Add("WF-004 is not marked operational in the workflow definitions loader.")
     }
 }
 
@@ -81,6 +94,7 @@ $CodexTaskInterpreter = ConvertFrom-PDAMixedJson -Text ([string]($CodexTaskInter
 $ResearchRoute = Resolve-PDAConversationalRoute -Text "Research official Pop!_OS documentation and create a structured summary note in the Linux & Infrastructure collection." -Root $Root
 $NoteRoute = Resolve-PDAConversationalRoute -Text "Create an Obsidian note for WF-005." -Root $Root
 $WorkflowListingRoute = Resolve-PDAConversationalRoute -Text "List available workflows." -Root $Root
+$OperationalStatusRoute = Resolve-PDAConversationalRoute -Text "What can you do?" -Root $Root
 $StatusRoute = Resolve-PDAConversationalRoute -Text "How is the PDA doing?" -Root $Root
 $SlashRoute = Resolve-PDAConversationalRoute -Text "/cooper status" -Root $Root
 
@@ -98,6 +112,9 @@ if ([string]$NoteRoute.route_type -ne "note_creation") {
 }
 if ([string]$WorkflowListingRoute.route_type -ne "workflow_catalog") {
     $Issues.Add("Workflow listing request did not route to workflow_catalog.")
+}
+if ([string]$OperationalStatusRoute.route_type -ne "direct_status") {
+    $Issues.Add("Operational status request did not route to direct_status.")
 }
 if ([string]$StatusRoute.route_type -ne "direct_status") {
     $Issues.Add("Status request did not route to direct_status.")
@@ -149,6 +166,7 @@ $Report = [pscustomobject]@{
     research_route = $ResearchRoute
     note_route = $NoteRoute
     workflow_listing_route = $WorkflowListingRoute
+    operational_status_route = $OperationalStatusRoute
     status_route = $StatusRoute
     slash_route = $SlashRoute
     failed_promotion = $FailedPromotion
@@ -161,7 +179,7 @@ Write-Host ("WF-002   : {0}" -f $(if ($WF002.Count -gt 0) { [string]$WF002[0].ex
 Write-Host ("WF-001   : {0}" -f $WF001Executor)
 Write-Host ("WF-005   : {0}" -f $WF005Executor)
 Write-Host ("WF-006   : {0}" -f $WF006Executor)
-Write-Host ("Route    : codex={0}, research={1}, note={2}, catalog={3}, status={4}" -f $CodexTaskRoute.route_type, $ResearchRoute.route_type, $NoteRoute.route_type, $WorkflowListingRoute.route_type, $StatusRoute.route_type)
+Write-Host ("Route    : codex={0}, research={1}, note={2}, catalog={3}, opstatus={4}, status={5}" -f $CodexTaskRoute.route_type, $ResearchRoute.route_type, $NoteRoute.route_type, $WorkflowListingRoute.route_type, $OperationalStatusRoute.route_type, $StatusRoute.route_type)
 
 if ($Report.status -ne "pass") {
     foreach ($Issue in @($Report.issues)) {

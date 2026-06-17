@@ -78,6 +78,19 @@ function Get-COOPERWorkflowDefinitions {
                 source_of_truth = "Config/workflows.yaml"
             }
             [pscustomobject]@{
+                id = "WF-004"
+                name = "Operational Status"
+                workshop = "Open"
+                permission_level = 1
+                approval_required = $false
+                intent_keywords = @("what can you do", "what workflows are available", "what capabilities do you have", "what phase are we in", "what is operational", "what is working right now", "show system status", "system status", "status report", "current status")
+                executor = "operational_status"
+                output_type = "status_report"
+                storage_target = "read_only"
+                status = "operational"
+                source_of_truth = "Config/workflows.yaml"
+            }
+            [pscustomobject]@{
                 id = "WF-001"
                 name = "Research Summary"
                 workshop = "Open"
@@ -87,7 +100,7 @@ function Get-COOPERWorkflowDefinitions {
                 executor = "research_summary"
                 output_type = "markdown_note"
                 storage_target = "project_workspace"
-                status = "planned"
+                status = "operational"
                 source_of_truth = "Config/workflows.yaml"
             }
             [pscustomobject]@{
