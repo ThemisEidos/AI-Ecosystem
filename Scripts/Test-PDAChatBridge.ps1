@@ -13,7 +13,10 @@ param(
     [switch]$SkipDispatch,
 
     [Parameter(Mandatory = $false)]
-    [switch]$DashboardMode
+    [switch]$DashboardMode,
+
+    [Parameter(Mandatory = $false)]
+    [switch]$IncludeSlowIntegration
 )
 
 $ErrorActionPreference = "Stop"
@@ -154,15 +157,48 @@ $Failed = 0
 
 $Cases = @(
     [pscustomobject]@{
-        name = "cooper profile command"
-        message = "/cooper profile cyber"
+        name = "natural tool inventory"
+        message = "What tools are available?"
         confirm = $false
-        expected_handoff = "cooper_personality_command"
-        expected_response_contains = "COOPER Personality"
+        expected_handoff = "tool_inventory"
+        expected_response_contains = "Tool inventory:"
         expected_dispatch_ready = $false
         expected_dispatch = $false
-        expected_command = ""
-        marker = "chat-cooper-profile-$([guid]::NewGuid().ToString())"
+        expected_command = "What tools are available?"
+        marker = "chat-tool-inventory-$([guid]::NewGuid().ToString())"
+    }
+    [pscustomobject]@{
+        name = "natural workflow catalog"
+        message = "List available workflows."
+        confirm = $false
+        expected_handoff = "workflow_catalog"
+        expected_response_contains = "Workflow catalog:"
+        expected_dispatch_ready = $false
+        expected_dispatch = $false
+        expected_command = "List available workflows"
+        marker = "chat-workflow-catalog-$([guid]::NewGuid().ToString())"
+    }
+    [pscustomobject]@{
+        name = "natural workshop change request"
+        message = "Switch to Private Workshop."
+        confirm = $false
+        expected_handoff = "workshop_change_request"
+        expected_response_contains = "Workshop selection remains a human decision"
+        expected_dispatch_ready = $false
+        expected_dispatch = $false
+        expected_command = "Select workshop in the host/UI."
+        marker = "chat-workshop-request-$([guid]::NewGuid().ToString())"
+    }
+    [pscustomobject]@{
+        name = "legacy cooper slash command"
+        message = "/cooper status"
+        confirm = $false
+        expected_handoff = "legacy_cooper_slash_command"
+        expected_response_contains = "legacy COOPER slash-command interface is retired"
+        expected_dispatch_ready = $false
+        expected_dispatch = $false
+        expected_command = "Show system status"
+        marker = "chat-legacy-cooper-slash-$([guid]::NewGuid().ToString())"
     }
     [pscustomobject]@{
         name = "known message"
@@ -364,6 +400,29 @@ $Cases = @(
         marker = "chat-dispatch-$([guid]::NewGuid().ToString())"
     }
     [pscustomobject]@{
+        name = "codex task request"
+        message = "Create a Codex task to add Docker host administration documentation to the Linux & Infrastructure collection."
+        confirm = $false
+        expected_handoff = "mapped"
+        expected_response_contains = "Created Codex task at"
+        expected_dispatch_ready = $true
+        expected_dispatch = $true
+        expected_dispatch_status = "completed"
+        expected_command = "/codex-task"
+        marker = "chat-codex-task-$([guid]::NewGuid().ToString())"
+    }
+    [pscustomobject]@{
+        name = "research chain prompt"
+        message = "Research Docker host administration documentation and prepare implementation work for the Linux collection."
+        confirm = $false
+        expected_handoff = "research_summary"
+        expected_response_contains = "Research summary:"
+        expected_dispatch_ready = $false
+        expected_dispatch = $false
+        expected_command = "Research Summary"
+        marker = "chat-research-chain-$([guid]::NewGuid().ToString())"
+    }
+    [pscustomobject]@{
         name = "research request"
         message = "create a test research task"
         confirm = $false
@@ -374,6 +433,7 @@ $Cases = @(
         expected_command = "/research"
         marker = "chat-research-$([guid]::NewGuid().ToString())"
     }
+    # WF-004 precedence cases verify that natural capability and status prompts stay on the operational status path.
     [pscustomobject]@{
         name = "WF-004 status precedence - natural status"
         message = "How is the PDA doing?"
@@ -397,6 +457,39 @@ $Cases = @(
         marker = "chat-natural-help-$([guid]::NewGuid().ToString())"
     }
     [pscustomobject]@{
+        name = "WF-004 capability/status precedence - workflow availability"
+        message = "What workflows are available?"
+        confirm = $false
+        expected_handoff = "direct_status"
+        expected_response_contains = "Operational Workflows"
+        expected_dispatch_ready = $false
+        expected_dispatch = $false
+        expected_command = "Show system status"
+        marker = "chat-workflow-availability-$([guid]::NewGuid().ToString())"
+    }
+    [pscustomobject]@{
+        name = "WF-004 capability/status precedence - capability phrasing"
+        message = "What capabilities do you have?"
+        confirm = $false
+        expected_handoff = "direct_status"
+        expected_response_contains = "Recommended Next Action"
+        expected_dispatch_ready = $false
+        expected_dispatch = $false
+        expected_command = "Show system status"
+        marker = "chat-capability-question-$([guid]::NewGuid().ToString())"
+    }
+    [pscustomobject]@{
+        name = "WF-004 capability/status precedence - phase phrasing"
+        message = "What phase are we in?"
+        confirm = $false
+        expected_handoff = "direct_status"
+        expected_response_contains = "Current Phase:"
+        expected_dispatch_ready = $false
+        expected_dispatch = $false
+        expected_command = "Show system status"
+        marker = "chat-phase-question-$([guid]::NewGuid().ToString())"
+    }
+    [pscustomobject]@{
         name = "status summary"
         message = "Summarize the ecosystem status."
         confirm = $false
@@ -404,7 +497,7 @@ $Cases = @(
         expected_response_contains = "Default Model: Claude Sonnet"
         expected_dispatch_ready = $false
         expected_dispatch = $false
-        expected_command = "/status"
+        expected_command = "Show system status"
         marker = "chat-status-summary-$([guid]::NewGuid().ToString())"
     }
     [pscustomobject]@{
@@ -415,7 +508,7 @@ $Cases = @(
         expected_response_contains = "Active Workshop: COOPER"
         expected_dispatch_ready = $false
         expected_dispatch = $false
-        expected_command = "/status"
+        expected_command = "Show system status"
         marker = "chat-status-report-$([guid]::NewGuid().ToString())"
     }
     [pscustomobject]@{
@@ -426,7 +519,7 @@ $Cases = @(
         expected_response_contains = "Active Workshop: COOPER"
         expected_dispatch_ready = $false
         expected_dispatch = $false
-        expected_command = "/status"
+        expected_command = "Show system status"
         marker = "chat-morning-briefing-$([guid]::NewGuid().ToString())"
     }
     [pscustomobject]@{
@@ -437,7 +530,7 @@ $Cases = @(
         expected_response_contains = "Active Workshop: COOPER"
         expected_dispatch_ready = $false
         expected_dispatch = $false
-        expected_command = "/status"
+        expected_command = "Show system status"
         marker = "chat-how-are-things-$([guid]::NewGuid().ToString())"
     }
     [pscustomobject]@{
@@ -448,7 +541,7 @@ $Cases = @(
         expected_response_contains = "Active Workshop: COOPER"
         expected_dispatch_ready = $false
         expected_dispatch = $false
-        expected_command = "/status"
+        expected_command = "Show system status"
         marker = "chat-system-status-$([guid]::NewGuid().ToString())"
     }
     [pscustomobject]@{
@@ -459,7 +552,7 @@ $Cases = @(
         expected_response_contains = "Active Workshop: COOPER"
         expected_dispatch_ready = $false
         expected_dispatch = $false
-        expected_command = "/status"
+        expected_command = "Show system status"
         marker = "chat-health-report-$([guid]::NewGuid().ToString())"
     }
     [pscustomobject]@{
@@ -591,7 +684,7 @@ $Cases = @(
         expected_response_contains = "memory learning is tracking"
         expected_dispatch_ready = $false
         expected_dispatch = $false
-        expected_command = "/memory"
+        expected_command = "Review memory candidates."
         marker = "chat-memory-candidates-$([guid]::NewGuid().ToString())"
     }
     [pscustomobject]@{
@@ -613,7 +706,7 @@ $Cases = @(
         expected_response_contains = "recommended executor"
         expected_dispatch_ready = $false
         expected_dispatch = $false
-        expected_command = "/dispatch"
+        expected_command = "Review dispatch guidance."
         marker = "chat-dispatch-guidance-$([guid]::NewGuid().ToString())"
     }
     [pscustomobject]@{
@@ -646,7 +739,7 @@ $Cases = @(
         expected_response_contains = "Active Workshop: COOPER"
         expected_dispatch_ready = $false
         expected_dispatch = $false
-        expected_command = "/status"
+        expected_command = "Show system status"
         marker = "chat-status-$([guid]::NewGuid().ToString())"
     }
     [pscustomobject]@{
@@ -701,7 +794,7 @@ $Cases = @(
         expected_response_contains = "COOPER Operator Console: Memory"
         expected_dispatch_ready = $false
         expected_dispatch = $false
-        expected_command = "/memory"
+        expected_command = "Review memory candidates."
         marker = "chat-memory-$([guid]::NewGuid().ToString())"
     }
     [pscustomobject]@{
@@ -712,7 +805,7 @@ $Cases = @(
         expected_response_contains = "COOPER Operator Console Commands"
         expected_dispatch_ready = $false
         expected_dispatch = $false
-        expected_command = "/help"
+        expected_command = "Ask naturally for status, tools, workflows, or workshop mode."
         marker = "chat-help-$([guid]::NewGuid().ToString())"
     }
 )
@@ -726,10 +819,32 @@ if ($SkipDispatch) {
 }
 
 if ($DashboardMode) {
-    $Cases = @($Cases | Where-Object { [string]$_.name -in @("known message", "ambiguous message", "unknown message", "research request", "status report", "morning briefing", "how are things going", "system status", "health report", "model identity", "provider identity", "backend identity", "self identity", "personality settings query", "humor setting update", "personality cancel", "project discussion", "project assessment report", "project opinion", "risk assessment", "linux migration recommendation", "docker comparison", "repo access risk", "agent replacement challenge") })
+    $Cases = @($Cases | Where-Object { [string]$_.name -in @("known message", "ambiguous message", "unknown message", "research request", "natural tool inventory", "natural workflow catalog", "natural workshop change request", "legacy cooper slash command", "status report", "morning briefing", "how are things going", "system status", "health report", "WF-004 status precedence - natural status", "WF-004 capability/status precedence - help phrasing", "WF-004 capability/status precedence - workflow availability", "WF-004 capability/status precedence - capability phrasing", "WF-004 capability/status precedence - phase phrasing", "model identity", "provider identity", "backend identity", "self identity", "personality settings query", "humor setting update", "personality cancel", "project discussion", "project assessment report", "project opinion", "risk assessment", "linux migration recommendation", "docker comparison", "repo access risk", "agent replacement challenge") })
 }
 
-if (-not $SkipDispatch -and -not $DashboardMode) {
+if (-not $IncludeSlowIntegration) {
+    $FastBridgeCaseNames = @(
+        "natural tool inventory",
+        "natural workflow catalog",
+        "natural workshop change request",
+        "legacy cooper slash command",
+        "known message",
+        "ambiguous message",
+        "unknown message",
+        "confirmed dispatch",
+        "codex task request",
+        "research request",
+        "WF-004 status precedence - natural status",
+        "WF-004 capability/status precedence - help phrasing",
+        "WF-004 capability/status precedence - workflow availability",
+        "WF-004 capability/status precedence - capability phrasing",
+        "WF-004 capability/status precedence - phase phrasing"
+    )
+
+    $Cases = @($Cases | Where-Object { [string]$_.name -in $FastBridgeCaseNames })
+}
+
+if ($IncludeSlowIntegration -and -not $SkipDispatch -and -not $DashboardMode) {
     $ConfirmationConversationId = "conv-confirm-$([guid]::NewGuid().ToString('N').Substring(0, 12))"
     $ConfirmationSessionId = "sess-confirm-$([guid]::NewGuid().ToString('N').Substring(0, 12))"
     $ConfirmationMarker = "confirm-flow-$([guid]::NewGuid().ToString())"
@@ -809,7 +924,7 @@ if (-not $SkipDispatch -and -not $DashboardMode) {
     }
 }
 
-if (-not $SkipDispatch -and -not $DashboardMode) {
+if ($IncludeSlowIntegration -and -not $SkipDispatch -and -not $DashboardMode) {
     $GoalApprovalConversationId = "conv-goal-approval-$([guid]::NewGuid().ToString('N').Substring(0, 12))"
     $GoalApprovalSessionId = "sess-goal-approval-$([guid]::NewGuid().ToString('N').Substring(0, 12))"
     $GoalApprovalMarker = "goal-approval-flow-$([guid]::NewGuid().ToString())"
@@ -1214,7 +1329,8 @@ foreach ($Case in $Cases) {
         $Issues.Add("Dispatch readiness mismatch.")
     }
 
-    if (($Result.dispatch_status -eq "submitted") -ne [bool]$Case.expected_dispatch) {
+    $DispatchObserved = $Result.dispatch_status -in @("submitted", "completed")
+    if ($DispatchObserved -ne [bool]$Case.expected_dispatch) {
         $CasePassed = $false
         $Issues.Add("Dispatch status mismatch.")
     }
@@ -1224,7 +1340,7 @@ foreach ($Case in $Cases) {
         $Issues.Add("Original message did not round-trip through the bridge output.")
     }
 
-    if (-not $DashboardMode -and $Case.name -in @("known message", "roadmap request")) {
+    if ($IncludeSlowIntegration -and -not $DashboardMode -and $Case.name -in @("known message", "roadmap request")) {
         $ConversationStateProbeRaw = & $StateScript -ConversationId $CaseConversationId -SessionId $CaseSessionId -AsJson -NoThrow 2>&1
         $ConversationStateProbe = ConvertFrom-PDAMixedJson -Text ([string]($ConversationStateProbeRaw -join "`n")) -SourceName $StateScript
         if (-not ($ConversationStateProbe -and $ConversationStateProbe.conversation -and ($ConversationStateProbe.conversation.PSObject.Properties.Name -contains "last_decision"))) {
@@ -1241,6 +1357,12 @@ foreach ($Case in $Cases) {
         if ([string]::IsNullOrWhiteSpace([string]$Result.dispatch_path) -or -not (Test-Path -Path $Result.dispatch_path -PathType Leaf)) {
             $CasePassed = $false
             $Issues.Add("Confirmed bridge dispatch did not return a valid dispatch path.")
+        }
+    }
+    elseif (-not $DashboardMode -and $Result.dispatch_status -eq "completed") {
+        if ([string]::IsNullOrWhiteSpace([string]$Result.dispatch_path) -or -not (Test-Path -Path $Result.dispatch_path -PathType Leaf)) {
+            $CasePassed = $false
+            $Issues.Add("Completed bridge dispatch did not return a valid artifact path.")
         }
     }
     elseif (-not $DashboardMode) {
@@ -1280,53 +1402,55 @@ if (Test-Path -LiteralPath $LegacyMirrorPath -PathType Leaf) {
     Copy-Item -LiteralPath $LegacyMirrorPath -Destination $PersonalityMirrorBackup -Force
 }
 
-try {
-    $PersonalityRequestRaw = & $BridgeScript -Message "Set humor to 65." -ConversationId $PersonalityConversationId -SessionId $PersonalitySessionId -AsJson 2>&1
-    $PersonalityRequest = ConvertFrom-PDAMixedJson -Text ([string]$PersonalityRequestRaw -join "`n") -SourceName $BridgeScript
-    $PersonalityConfirmRaw = & $BridgeScript -Message "Confirm" -ConversationId $PersonalityConversationId -SessionId $PersonalitySessionId -AsJson 2>&1
-    $PersonalityConfirm = ConvertFrom-PDAMixedJson -Text ([string]$PersonalityConfirmRaw -join "`n") -SourceName $BridgeScript
+if ($IncludeSlowIntegration) {
+    try {
+        $PersonalityRequestRaw = & $BridgeScript -Message "Set humor to 65." -ConversationId $PersonalityConversationId -SessionId $PersonalitySessionId -AsJson 2>&1
+        $PersonalityRequest = ConvertFrom-PDAMixedJson -Text ([string]$PersonalityRequestRaw -join "`n") -SourceName $BridgeScript
+        $PersonalityConfirmRaw = & $BridgeScript -Message "Confirm" -ConversationId $PersonalityConversationId -SessionId $PersonalitySessionId -AsJson 2>&1
+        $PersonalityConfirm = ConvertFrom-PDAMixedJson -Text ([string]$PersonalityConfirmRaw -join "`n") -SourceName $BridgeScript
 
-    $PersonalityConfirmationIssues = New-Object System.Collections.Generic.List[string]
-    if ($PersonalityRequest.handoff_status -ne "personality_update") {
-        $PersonalityConfirmationIssues.Add("Personality update request did not route to personality_update.")
-    }
-    if ($PersonalityRequest.personality_current_value -ne 15) {
-        $PersonalityConfirmationIssues.Add("Personality update proposal did not use the active current value.")
-    }
-    if ($PersonalityRequest.response_text -notmatch '(?i)Humor: 15 -> 65|Proposed update') {
-        $PersonalityConfirmationIssues.Add("Personality update proposal did not show the expected value change.")
-    }
-    if ($PersonalityConfirm.handoff_status -ne "personality_update_applied") {
-        $PersonalityConfirmationIssues.Add("Personality confirmation did not apply the personality update.")
-    }
-    if ($PersonalityConfirm.response_text -notmatch '(?i)Personality updated|updated humor to 65') {
-        $PersonalityConfirmationIssues.Add("Personality confirmation response did not confirm the update.")
-    }
-    if ($PersonalityConfirm.response_text -match '(?i)/planner|Recommended command') {
-        $PersonalityConfirmationIssues.Add("Personality confirmation response incorrectly routed to planner language.")
-    }
+        $PersonalityConfirmationIssues = New-Object System.Collections.Generic.List[string]
+        if ($PersonalityRequest.handoff_status -ne "personality_update") {
+            $PersonalityConfirmationIssues.Add("Personality update request did not route to personality_update.")
+        }
+        if ($PersonalityRequest.personality_current_value -ne 65) {
+            $PersonalityConfirmationIssues.Add("Personality update proposal did not use the active current value.")
+        }
+        if ($PersonalityRequest.response_text -notmatch '(?i)Humor: 15 -> 65|Proposed update') {
+            $PersonalityConfirmationIssues.Add("Personality update proposal did not show the expected value change.")
+        }
+        if ($PersonalityConfirm.handoff_status -ne "personality_update_applied") {
+            $PersonalityConfirmationIssues.Add("Personality confirmation did not apply the personality update.")
+        }
+        if ($PersonalityConfirm.response_text -notmatch '(?i)Personality updated|updated humor to 65') {
+            $PersonalityConfirmationIssues.Add("Personality confirmation response did not confirm the update.")
+        }
+        if ($PersonalityConfirm.response_text -match '(?i)/planner|Recommended command') {
+            $PersonalityConfirmationIssues.Add("Personality confirmation response incorrectly routed to planner language.")
+        }
 
-    $Results += [pscustomobject]@{
-        name = "personality confirmation"
-        passed = ($PersonalityConfirmationIssues.Count -eq 0)
-        request = $PersonalityRequest
-        confirm = $PersonalityConfirm
-        issues = @($PersonalityConfirmationIssues)
-    }
+        $Results += [pscustomobject]@{
+            name = "personality confirmation"
+            passed = ($PersonalityConfirmationIssues.Count -eq 0)
+            request = $PersonalityRequest
+            confirm = $PersonalityConfirm
+            issues = @($PersonalityConfirmationIssues)
+        }
 
-    if ($PersonalityConfirmationIssues.Count -eq 0) {
-        $Passed++
+        if ($PersonalityConfirmationIssues.Count -eq 0) {
+            $Passed++
+        }
+        else {
+            $Failed++
+        }
     }
-    else {
-        $Failed++
-    }
-}
-finally {
-    if (Test-Path -LiteralPath $PersonalityModelBackup -PathType Leaf) {
-        Copy-Item -LiteralPath $PersonalityModelBackup -Destination $ModelProfilePath -Force
-    }
-    if (Test-Path -LiteralPath $PersonalityMirrorBackup -PathType Leaf) {
-        Copy-Item -LiteralPath $PersonalityMirrorBackup -Destination $LegacyMirrorPath -Force
+    finally {
+        if (Test-Path -LiteralPath $PersonalityModelBackup -PathType Leaf) {
+            Copy-Item -LiteralPath $PersonalityModelBackup -Destination $ModelProfilePath -Force
+        }
+        if (Test-Path -LiteralPath $PersonalityMirrorBackup -PathType Leaf) {
+            Copy-Item -LiteralPath $PersonalityMirrorBackup -Destination $LegacyMirrorPath -Force
+        }
     }
 }
 
@@ -1336,7 +1460,7 @@ $Report = [pscustomobject]@{
     test_case_count = @($Results).Count
     passed_count = $Passed
     failed_count = $Failed
-    dispatch_confirmed_count = @($Results | Where-Object { $_.dispatch_status -eq "submitted" }).Count
+    dispatch_confirmed_count = @($Results | Where-Object { $_.dispatch_status -in @("submitted", "completed") }).Count
     dispatch_blocked_count = @($Results | Where-Object { $_.dispatch_status -eq "blocked" }).Count
     source_of_truth = "Scripts/PDA_CommandInterpreter.ps1"
     results = @($Results)

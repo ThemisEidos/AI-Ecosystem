@@ -106,7 +106,7 @@ function Get-COOPERResearchCategoryHints {
     if ($Normalized -match '(?i)\b(troubleshoot|troubleshooting|network|wireless|audio|failure)\b') {
         $Hints.Add("Troubleshooting")
     }
-    if ($Normalized -match '(?i)\b(driver|hardware|virtualization|development)\b') {
+    if ($Normalized -match '(?i)\b(driver|hardware|virtualization|development|docker|container|containers|host administration)\b') {
         $Hints.Add("Advanced Administration")
     }
 
@@ -210,7 +210,7 @@ function Get-COOPERResearchSources {
         }
     }
 
-    if ($RequestText -notmatch '(?i)\b(pop!?_?os|system76)\b') {
+    if ($RequestText -notmatch '(?i)\b(pop!?_?os|system76|linux|docker|host administration|virtualization|systemd|kvm|qemu)\b') {
         return [pscustomobject]@{
             status = "fail"
             reason = "no_sources_collected"

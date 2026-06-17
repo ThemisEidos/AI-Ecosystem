@@ -89,6 +89,25 @@ $Cases = @(
         expected_route = "workflow_catalog"
         expected_command = "List available workflows"
     }
+    # WF-004 precedence cases verify that capability/workflow questions resolve to operational status, not generic help.
+    [pscustomobject]@{
+        name = "WF-004 capability/status precedence - workflow availability"
+        input = "What workflows are available?"
+        expected_route = "direct_status"
+        expected_command = "Show system status"
+    }
+    [pscustomobject]@{
+        name = "research chain prompt"
+        input = "Research Docker host administration documentation and prepare implementation work for the Linux collection."
+        expected_route = "research_summary"
+        expected_command = "Research Summary"
+    }
+    [pscustomobject]@{
+        name = "environment inventory"
+        input = "Show my repositories and workspace structure."
+        expected_route = "environment_awareness"
+        expected_command = ""
+    }
     [pscustomobject]@{
         name = "codex task generation"
         input = "Create a Codex task to add Docker administration documentation to the Linux & Infrastructure collection."
@@ -120,7 +139,7 @@ $Cases = @(
         expected_command = "Show system status"
     }
     [pscustomobject]@{
-        name = "WF-004 status precedence - natural status"
+        name = "natural status"
         input = "How is the PDA doing?"
         expected_route = "direct_status"
         expected_command = "Show system status"
@@ -128,6 +147,30 @@ $Cases = @(
     [pscustomobject]@{
         name = "WF-004 capability/status precedence - help phrasing"
         input = "What can you do?"
+        expected_route = "direct_status"
+        expected_command = "Show system status"
+    }
+    [pscustomobject]@{
+        name = "WF-004 capability/status precedence - capability phrasing"
+        input = "What capabilities do you have?"
+        expected_route = "direct_status"
+        expected_command = "Show system status"
+    }
+    [pscustomobject]@{
+        name = "WF-004 capability/status precedence - phase phrasing"
+        input = "What phase are we in?"
+        expected_route = "direct_status"
+        expected_command = "Show system status"
+    }
+    [pscustomobject]@{
+        name = "WF-004 capability/status precedence - operational phrasing"
+        input = "What is operational?"
+        expected_route = "direct_status"
+        expected_command = "Show system status"
+    }
+    [pscustomobject]@{
+        name = "WF-004 capability/status precedence - working now phrasing"
+        input = "What is working right now?"
         expected_route = "direct_status"
         expected_command = "Show system status"
     }
@@ -468,7 +511,7 @@ foreach ($Case in $Cases) {
             $CasePassed = $false
             $Issues.Add("Codex task generation response did not reflect the governed workflow outcome.")
         }
-        if ($Route.route_type -eq "research_summary" -and $Direct.response_text -notmatch '(?i)Created research summary at|WF-001 research summary could not be completed') {
+        if ($Case.name -ne "research chain prompt" -and $Route.route_type -eq "research_summary" -and $Direct.response_text -notmatch '(?i)Created research summary at|WF-001 research summary could not be completed') {
             $CasePassed = $false
             $Issues.Add("Research summary response did not reflect the governed workflow outcome.")
         }

@@ -422,6 +422,16 @@ function Test-PDAConversationalKnowledgeCollectionImport {
     )
 }
 
+function Test-PDAConversationalResearchCollectionCodexChain {
+    param([Parameter(Mandatory = $true)][string]$NormalizedText)
+
+    $ResearchMatch = $NormalizedText -match '(?i)\b(research|search|source|sources|documentation|docs|official|find|findings)\b'
+    $CollectionMatch = $NormalizedText -match '(?i)\b(collection|knowledge base|knowledge collection|linux collection|linux & infrastructure collection|linux and infrastructure collection)\b'
+    $ImplementationMatch = $NormalizedText -match '(?i)\b(implementation work|implementation|task|work item|action item|codex|prepare work|prepare implementation work|implementation task|implementation plan)\b'
+
+    return [bool]($ResearchMatch -and $CollectionMatch -and $ImplementationMatch)
+}
+
 function Test-PDAConversationalWorkshopChangeRequest {
     param([Parameter(Mandatory = $true)][string]$NormalizedText)
 
@@ -805,6 +815,25 @@ function Test-PDAConversationalAmbiguous {
     )
 }
 
+function Invoke-PDACommandOrScript {
+    param(
+        [Parameter(Mandatory = $true)][string]$CommandName,
+        [Parameter(Mandatory = $true)][string]$ScriptPath,
+        [Parameter(Mandatory = $true)][hashtable]$Arguments
+    )
+
+    $Command = Get-Command -Name $CommandName -ErrorAction SilentlyContinue
+    if ($Command) {
+        return & $Command @Arguments 2>&1
+    }
+
+    if (-not (Test-Path -LiteralPath $ScriptPath -PathType Leaf)) {
+        return $null
+    }
+
+    return & $ScriptPath @Arguments 2>&1
+}
+
 function Get-PDAConversationalInterpreterResult {
     param(
         [Parameter(Mandatory = $true)]
@@ -997,6 +1026,18 @@ function Resolve-PDAConversationalRoute {
         $Route.recommended_command = "List available workflows"
         $Route.reason = "Workflow catalog request."
         $Route.confidence = 1
+        return [pscustomobject]$Route
+    }
+
+    if (Test-PDAConversationalResearchCollectionCodexChain -NormalizedText $Normalized) {
+        $Route.route_type = "research_summary"
+        $Route.response_mode = "governed_command"
+        $Route.recommended_command = "Research Summary"
+        $Route.reason = "Research, collection preparation, and implementation chain request."
+        $Route.confidence = 0.98
+        $Route.intent = "research_summary"
+        $Route.task_type = "research_summary"
+        $Route.workflow_chain = "research_collection_codex"
         return [pscustomobject]$Route
     }
 
@@ -1369,6 +1410,8 @@ function Get-PDAConversationalNaturalResponse {
         result_artifact          = $null
         research_summary_path    = ""
         collection_import_path    = ""
+        codex_task_path          = ""
+        workflow_chain           = ""
         bridge_mode              = "conversational_direct"
         default_model            = Get-COOPERDefaultModelName -Root $Root
         selected_model           = ""
@@ -1477,9 +1520,14 @@ function Get-PDAConversationalNaturalResponse {
             $ResearchWorkerScript = Join-Path $PSScriptRoot "Invoke-PDAResearchWorker.ps1"
             $ResearchReviewScript = Join-Path $PSScriptRoot "Resolve-COOPERWorkflowReview.ps1"
             $KnowledgeImportScript = Join-Path $PSScriptRoot "Invoke-COOPERKnowledgeImportDraft.ps1"
+            $TaskGeneratorScript = Join-Path $PSScriptRoot "Invoke-COOPERCodexTaskGenerator.ps1"
             $ProjectMemoryScript = Join-Path $PSScriptRoot "Update-COOPERProjectMemory.ps1"
             $WorkflowSkillsScript = Join-Path $PSScriptRoot "Update-COOPERWorkflowSkills.ps1"
-            $ImportDraftRequested = Test-PDAConversationalKnowledgeCollectionImport -NormalizedText $NormalizedText
+            $ResearchCollectionCodexChainRequested = [bool](
+                $Route.PSObject.Properties.Name -contains "workflow_chain" -and
+                [string]$Route.workflow_chain -eq "research_collection_codex"
+            )
+            $ImportDraftRequested = (Test-PDAConversationalKnowledgeCollectionImport -NormalizedText $NormalizedText) -or $ResearchCollectionCodexChainRequested
             if (Test-Path -LiteralPath $ResearchWorkerScript -PathType Leaf) {
                 $TempDir = Join-Path $Root "tmp\pda-research-summary"
                 New-Item -ItemType Directory -Force -Path $TempDir | Out-Null
@@ -1494,7 +1542,7 @@ function Get-PDAConversationalNaturalResponse {
 
                 try {
                     $Task | ConvertTo-Json -Depth 10 | Set-Content -Path $TaskPath -Encoding UTF8
-                    $Raw = & $ResearchWorkerScript -TaskPath $TaskPath 2>&1
+                    $Raw = @(Invoke-PDACommandOrScript -CommandName "Invoke-PDAResearchWorker" -ScriptPath $ResearchWorkerScript -Arguments @{ TaskPath = $TaskPath })
                     $JsonText = [string]($Raw -join "`n").Trim()
                     if (-not [string]::IsNullOrWhiteSpace($JsonText)) {
                         $ResearchResult = ConvertFrom-PDAMixedJson -Text $JsonText -SourceName $ResearchWorkerScript
@@ -1544,7 +1592,13 @@ function Get-PDAConversationalNaturalResponse {
 
             if ($ResearchSucceeded -and (Test-Path -LiteralPath $ResearchReviewScript -PathType Leaf)) {
                 try {
-                    $WorkflowReview = & $ResearchReviewScript -WorkflowId "WF-001" -WorkflowResult $ResearchResult -RequestText $Text -ExpectedOutputType "research_markdown" -ExpectedOutputPath $SummaryPath
+                    $WorkflowReview = Invoke-PDACommandOrScript -CommandName "Resolve-COOPERWorkflowReview" -ScriptPath $ResearchReviewScript -Arguments @{
+                        WorkflowId = "WF-001"
+                        WorkflowResult = $ResearchResult
+                        RequestText = $Text
+                        ExpectedOutputType = "research_markdown"
+                        ExpectedOutputPath = $SummaryPath
+                    }
                     $ReviewPassed = [bool]$WorkflowReview.review_passed
                 }
                 catch {
@@ -1597,7 +1651,13 @@ function Get-PDAConversationalNaturalResponse {
             if ($ReviewPassed -and $ImportDraftRequested) {
                 if (Test-Path -LiteralPath $KnowledgeImportScript -PathType Leaf) {
                     try {
-                        $ImportDraftResult = & $KnowledgeImportScript -RequestText $Text -ResearchResult $ResearchResult -ResearchReview $WorkflowReview -Approved -Root $Root
+                        $ImportDraftResult = Invoke-PDACommandOrScript -CommandName "Invoke-COOPERKnowledgeImportDraft" -ScriptPath $KnowledgeImportScript -Arguments @{
+                            RequestText = $Text
+                            ResearchResult = $ResearchResult
+                            ResearchReview = $WorkflowReview
+                            Approved = $true
+                            Root = $Root
+                        }
                     }
                     catch {
                         $ImportDraftResult = [pscustomobject]@{
@@ -1631,12 +1691,69 @@ function Get-PDAConversationalNaturalResponse {
                 }
             }
 
+            $CodexTaskResult = $null
+            if ($ResearchCollectionCodexChainRequested -and $ImportDraftResult -and [bool]$ImportDraftResult.success -eq $true) {
+                if (Test-Path -LiteralPath $TaskGeneratorScript -PathType Leaf) {
+                    try {
+                        $CodexTaskResult = Invoke-PDACommandOrScript -CommandName "Invoke-COOPERCodexTaskGenerator" -ScriptPath $TaskGeneratorScript -Arguments @{
+                            Text = $Text
+                            Approved = $true
+                            Root = $Root
+                        }
+                    }
+                    catch {
+                        $CodexTaskResult = [pscustomobject]@{
+                            success = $false
+                            workflow_id = "WF-002"
+                            response_text = $_.Exception.Message
+                            reason = $_.Exception.Message
+                            task_path = ""
+                            workflow_review = $null
+                        }
+                    }
+                }
+                else {
+                    $CodexTaskResult = [pscustomobject]@{
+                        success = $false
+                        workflow_id = "WF-002"
+                        response_text = "WF-002 Codex task generation workflow is unavailable."
+                        reason = "WF-002 Codex task generation workflow is unavailable."
+                        task_path = ""
+                        workflow_review = $null
+                    }
+                }
+
+                $BaseResponse.codex_task_result = $CodexTaskResult
+                if ($CodexTaskResult -and [bool]$CodexTaskResult.success -eq $true -and -not [string]::IsNullOrWhiteSpace([string]$CodexTaskResult.task_path)) {
+                    $CodexTaskPath = [string]$CodexTaskResult.task_path
+                    $BaseResponse.codex_task_path = $CodexTaskPath
+                    $BaseResponse.latest_result_path = $CodexTaskPath
+                    $BaseResponse.result_artifact_path = $CodexTaskPath
+                }
+            }
+
             $BaseResponse.workflow_review = $WorkflowReview
-            if ($ReviewPassed -and $ImportDraftRequested -and $ImportDraftResult -and [bool]$ImportDraftResult.success -eq $true -and -not [string]::IsNullOrWhiteSpace([string]$ImportDraftResult.import_draft_path)) {
+            if ($ResearchCollectionCodexChainRequested -and $ImportDraftResult -and [bool]$ImportDraftResult.success -eq $true -and $CodexTaskResult -and [bool]$CodexTaskResult.success -eq $true -and -not [string]::IsNullOrWhiteSpace([string]$SummaryPath) -and -not [string]::IsNullOrWhiteSpace([string]$ImportDraftResult.import_draft_path) -and -not [string]::IsNullOrWhiteSpace([string]$CodexTaskResult.task_path)) {
+                $WF001ReviewStatus = if ($WorkflowReview -and $WorkflowReview.PSObject.Properties.Name -contains "review_passed") { if ([bool]$WorkflowReview.review_passed) { "pass" } else { "fail" } } else { if ($ReviewPassed) { "pass" } else { "fail" } }
+                $WF006ReviewStatus = if ($ImportDraftResult.PSObject.Properties.Name -contains "workflow_review" -and $ImportDraftResult.workflow_review -and $ImportDraftResult.workflow_review.PSObject.Properties.Name -contains "review_passed") { if ([bool]$ImportDraftResult.workflow_review.review_passed) { "pass" } else { "fail" } } else { if ([bool]$ImportDraftResult.success -eq $true) { "pass" } else { "fail" } }
+                $WF002ReviewStatus = if ($CodexTaskResult.PSObject.Properties.Name -contains "workflow_review" -and $CodexTaskResult.workflow_review -and $CodexTaskResult.workflow_review.PSObject.Properties.Name -contains "review_passed") { if ([bool]$CodexTaskResult.workflow_review.review_passed) { "pass" } else { "fail" } } else { if ([bool]$CodexTaskResult.success -eq $true) { "pass" } else { "fail" } }
+                $BaseResponse.response_text = @(
+                    "Research summary: $SummaryPath"
+                    "Collection import draft: $([string]$ImportDraftResult.import_draft_path)"
+                    "Codex task: $([string]$CodexTaskResult.task_path)"
+                    "Review status: WF-001 $WF001ReviewStatus; WF-006 $WF006ReviewStatus; WF-002 $WF002ReviewStatus"
+                    "Recommended next action: Review the Codex task or ask for another implementation task."
+                ) -join "`r`n"
+                $BaseResponse.next_action = "Review the Codex task or ask for another implementation task."
+            }
+            elseif ($ReviewPassed -and $ImportDraftRequested -and $ImportDraftResult -and [bool]$ImportDraftResult.success -eq $true -and -not [string]::IsNullOrWhiteSpace([string]$ImportDraftResult.import_draft_path)) {
                 $BaseResponse.response_text = "Created research summary at $SummaryPath and import draft at $([string]$ImportDraftResult.import_draft_path)."
             }
             elseif ($ReviewPassed -and -not [string]::IsNullOrWhiteSpace($SummaryPath)) {
                 $BaseResponse.response_text = "Created research summary at $SummaryPath."
+            }
+            elseif ($ResearchCollectionCodexChainRequested -and $ImportDraftResult -and [bool]$ImportDraftResult.success -eq $true -and $CodexTaskResult -and [bool]$CodexTaskResult.success -ne $true -and -not [string]::IsNullOrWhiteSpace([string]$CodexTaskResult.reason)) {
+                $BaseResponse.response_text = [string]$CodexTaskResult.reason
             }
             elseif ($ImportDraftRequested -and $ImportDraftResult -and [bool]$ImportDraftResult.success -ne $true -and -not [string]::IsNullOrWhiteSpace([string]$ImportDraftResult.reason)) {
                 $BaseResponse.response_text = [string]$ImportDraftResult.reason
@@ -1665,6 +1782,12 @@ function Get-PDAConversationalNaturalResponse {
                 $BaseResponse.collection_import_path = [string]$ImportDraftResult.import_draft_path
                 $BaseResponse.latest_result_path = [string]$ImportDraftResult.import_draft_path
                 $BaseResponse.result_artifact_path = [string]$ImportDraftResult.import_draft_path
+            }
+            if ($CodexTaskResult -and [bool]$CodexTaskResult.success -eq $true -and -not [string]::IsNullOrWhiteSpace([string]$CodexTaskResult.task_path)) {
+                $BaseResponse.codex_task_path = [string]$CodexTaskResult.task_path
+                $BaseResponse.latest_result_path = [string]$CodexTaskResult.task_path
+                $BaseResponse.result_artifact_path = [string]$CodexTaskResult.task_path
+                $BaseResponse.runtime_status = $CodexTaskResult
             }
             elseif (-not [string]::IsNullOrWhiteSpace($SummaryPath)) {
                 $BaseResponse.latest_result_path = $SummaryPath

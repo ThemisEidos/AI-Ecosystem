@@ -211,9 +211,27 @@ Scope:
 - Purpose: High-level development methodology and release approach for Pop!_OS.
 - Suggested collection location: Linux & Infrastructure Collection > Pop!_OS > Advanced Administration
 
+### Docker Engine Installation
+- URL: https://docs.docker.com/engine/install/
+- Category: Advanced Administration
+- Purpose: Official Docker Engine installation guide for Linux host administration and container runtime setup.
+- Suggested collection location: Linux & Infrastructure Collection > Linux > Advanced Administration
+
+### Docker Engine Post-Install
+- URL: https://docs.docker.com/engine/install/linux-postinstall/
+- Category: Advanced Administration
+- Purpose: Official post-installation steps for Docker Engine permissions, service validation, and host configuration.
+- Suggested collection location: Linux & Infrastructure Collection > Linux > Advanced Administration
+
+### Docker Compose
+- URL: https://docs.docker.com/compose/
+- Category: Advanced Administration
+- Purpose: Official Docker Compose documentation for multi-container workflow setup and host administration.
+- Suggested collection location: Linux & Infrastructure Collection > Linux > Advanced Administration
+
 ## Source Count Summary
 
-Total official sources: 28
+Total official sources: 31
 
 | Category | Count |
 |---|---:|
@@ -228,7 +246,7 @@ Total official sources: 28
 | Keyboard Shortcuts | 2 |
 | Gaming | 2 |
 | Troubleshooting | 3 |
-| Advanced Administration | 3 |
+| Advanced Administration | 6 |
 
 ## Category Coverage Summary
 
