@@ -12,6 +12,7 @@ $ErrorActionPreference = "Stop"
 $SupportedToolIds = @("status_summary", "status_summary_private", "obsidian_note_writer", "codex_task_launcher")
 $SupportedExecutorTypes = @("informational", "note_editor", "cli_launcher")
 $WorkshopIdentityScript = Join-Path $PSScriptRoot "Get-COOPERWorkshopIdentity.ps1"
+$OperationalStatusScript = Join-Path $PSScriptRoot "Get-COOPEROperationalStatus.ps1"
 
 function Get-COOPERDecisionField {
     param(
@@ -477,44 +478,50 @@ if ($DryRun) {
 }
 
 $Root = Split-Path -Parent $PSScriptRoot
-$Status = [pscustomobject]@{
-    workspace_root = $Root
-    config_exists = (Test-Path -LiteralPath (Join-Path $Root "Config") -PathType Container)
-    scripts_exists = (Test-Path -LiteralPath (Join-Path $Root "Scripts") -PathType Container)
-    registry_exists = (Test-Path -LiteralPath (Join-Path $Root "Config\general_tool_registry.yaml") -PathType Leaf) -and (Test-Path -LiteralPath (Join-Path $Root "Config\private_tool_registry.yaml") -PathType Leaf)
-    workshop_mode = [string]$WorkshopIdentity.workshop_label
-    workshop_name = [string]$WorkshopIdentity.display_name
-    default_model = [string]$WorkshopIdentity.default_model
-    cloud_allowed = [bool]$WorkshopIdentity.cloud_allowed
-    active_registry = [string]$WorkshopIdentity.registry
-    status_workflow = "Available"
-    status_source = "Config/cooper_workshop_identities.yaml"
-    security_sources = [pscustomobject]@{
-        firewall_status = "Not Configured"
-        ids_status = "Not Configured"
-        backup_status = "Not Configured"
+$Status = $null
+if (Test-Path -LiteralPath $OperationalStatusScript -PathType Leaf) {
+    try {
+        $Status = & $OperationalStatusScript -Root $Root -WorkshopMode $WorkshopMode -WorkshopIdentity $WorkshopIdentity
     }
-    status_lines = @(
-        ("Active Workshop: {0}" -f [string]$WorkshopIdentity.display_name)
-        ("Workshop Mode: {0}" -f [string]$WorkshopIdentity.workshop_label)
-        ("Default Model: {0}" -f [string]$WorkshopIdentity.default_model)
-        ("Registry: {0}" -f [string]$WorkshopIdentity.registry)
-        ("Cloud Allowed: {0}" -f [bool]$WorkshopIdentity.cloud_allowed)
-        ("Status Workflow: Available")
-        ("Firewall Status: Not Configured")
-        ("IDS Status: Not Configured")
-        ("Backup Status: Not Configured")
-    )
-    guidance_docs_present = @(
-        "00_Project Charter.md",
-        "01_AI Ecosystem Architecture.md",
-        "02_COOPER System Specification.md",
-        "03_AI Tool Stack & Roles.md"
-    ) | ForEach-Object { Test-Path -LiteralPath (Join-Path $Root $_) -PathType Leaf }
+    catch {
+        $Status = [pscustomobject]@{
+            status = "fail"
+            review_passed = $false
+            review_reason = $_.Exception.Message
+            response_text = $_.Exception.Message
+            status_lines = @($_.Exception.Message)
+            summary_lines = @($_.Exception.Message)
+            status_source = "Scripts/Get-COOPEROperationalStatus.ps1"
+            workshop_mode = [string]$WorkshopIdentity.workshop_label
+            workshop_name = [string]$WorkshopIdentity.display_name
+            default_model = [string]$WorkshopIdentity.default_model
+            cloud_allowed = [bool]$WorkshopIdentity.cloud_allowed
+            active_registry = [string]$WorkshopIdentity.registry
+            workspace_root = $Root
+        }
+    }
+}
+
+if ($null -eq $Status) {
+    $Status = [pscustomobject]@{
+        status = "fail"
+        review_passed = $false
+        review_reason = "WF-004 operational status helper is unavailable."
+        response_text = "WF-004 operational status helper is unavailable."
+        status_lines = @("WF-004 operational status helper is unavailable.")
+        summary_lines = @("WF-004 operational status helper is unavailable.")
+        status_source = "Scripts/Get-COOPEROperationalStatus.ps1"
+        workshop_mode = [string]$WorkshopIdentity.workshop_label
+        workshop_name = [string]$WorkshopIdentity.display_name
+        default_model = [string]$WorkshopIdentity.default_model
+        cloud_allowed = [bool]$WorkshopIdentity.cloud_allowed
+        active_registry = [string]$WorkshopIdentity.registry
+        workspace_root = $Root
+    }
 }
 
 [pscustomobject]@{
-    success = $true
+    success = [bool]$Status.review_passed
     dry_run = $false
     tool_id = $ToolId
     workshop = $Workshop
@@ -522,5 +529,5 @@ $Status = [pscustomobject]@{
     executor_type = $ExecutorType
     action_taken = "local_status_check"
     output = $Status
-    reason = "Local read-only status check completed."
+    reason = if ([bool]$Status.review_passed) { "Local read-only status check completed." } else { [string]$Status.review_reason }
 }

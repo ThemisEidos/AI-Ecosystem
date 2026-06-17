@@ -119,6 +119,30 @@ $Cases = @(
         marker = "handoff-dispatch-$([guid]::NewGuid().ToString())"
     }
     [pscustomobject]@{
+        name = "codex task request"
+        input = "Create a Codex task to add Docker host administration documentation to the Linux & Infrastructure collection."
+        confirm = $false
+        expect_status = "mapped"
+        expect_ready = $true
+        expect_confirm = $false
+        expect_dispatch = $true
+        expect_dispatch_status = "completed"
+        expect_command = "/codex-task"
+        marker = "handoff-codex-task-$([guid]::NewGuid().ToString())"
+    }
+    [pscustomobject]@{
+        name = "fabric security request"
+        input = "run fabric security on this note"
+        confirm = $false
+        expect_status = "mapped"
+        expect_ready = $true
+        expect_confirm = $true
+        expect_dispatch = $false
+        expect_dispatch_status = "not_dispatched"
+        expect_command = "/fabric security"
+        marker = "handoff-fabric-security-$([guid]::NewGuid().ToString())"
+    }
+    [pscustomobject]@{
         name = "operator status"
         input = "/status"
         confirm = $false
@@ -327,9 +351,10 @@ foreach ($Case in $Cases) {
         $Issues.Add("Expected requires_confirmation '$($Case.expect_confirm)' but got '$($Result.requires_confirmation)'.")
     }
 
-    if (($Result.dispatch_status -eq "submitted") -ne [bool]$Case.expect_dispatch) {
+    $DispatchObserved = $Result.dispatch_status -in @("submitted", "completed")
+    if ($DispatchObserved -ne [bool]$Case.expect_dispatch) {
         $CasePassed = $false
-        $Issues.Add("Expected dispatch_status submitted '$($Case.expect_dispatch)' but got '$($Result.dispatch_status)'.")
+        $Issues.Add("Expected dispatch_status to reflect a dispatched task '$($Case.expect_dispatch)' but got '$($Result.dispatch_status)'.")
     }
 
     if ($Case.PSObject.Properties.Name -contains "expect_dispatch_status" -and $Case.expect_dispatch_status) {
@@ -395,6 +420,12 @@ foreach ($Case in $Cases) {
             }
         }
     }
+    elseif (-not $DashboardMode -and $Result.dispatch_status -eq "completed") {
+        if ([string]::IsNullOrWhiteSpace([string]$Result.dispatch_path) -or -not (Test-Path -LiteralPath $Result.dispatch_path -PathType Leaf)) {
+            $CasePassed = $false
+            $Issues.Add("Completed dispatch did not return a valid artifact path.")
+        }
+    }
     elseif (-not $DashboardMode) {
         $PendingMatch = Find-QueueArtifactByMarker -Marker $Case.marker
         if ($PendingMatch) {
@@ -437,7 +468,7 @@ $Report = [pscustomobject]@{
     test_case_count = $Total
     passed_count = $Passed
     failed_count = $Failed
-    dispatch_confirmed_count = @($Results | Where-Object { $_.dispatch_status -eq "submitted" }).Count
+    dispatch_confirmed_count = @($Results | Where-Object { $_.dispatch_status -in @("submitted", "completed") }).Count
     dispatch_blocked_count = @($Results | Where-Object { $_.dispatch_status -eq "blocked" }).Count
     source_of_truth = "Scripts/PDA_CommandInterpreter.ps1"
     results = @($Results)

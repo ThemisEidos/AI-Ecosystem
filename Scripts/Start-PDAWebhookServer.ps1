@@ -9,9 +9,13 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$BridgeScript = Join-Path $PSScriptRoot "Invoke-PDAWebhookBridge.ps1"
+$BridgeScript = Join-Path $PSScriptRoot "Invoke-PDAChatBridge.ps1"
+$OutputParsingScript = Join-Path $PSScriptRoot "PDA_OutputParsing.ps1"
 if (-not (Test-Path -Path $BridgeScript -PathType Leaf)) {
-    throw "Webhook bridge missing: $BridgeScript"
+    throw "Chat bridge missing: $BridgeScript"
+}
+if (Test-Path -LiteralPath $OutputParsingScript -PathType Leaf) {
+    . $OutputParsingScript
 }
 
 $Root = Split-Path -Parent $PSScriptRoot
@@ -195,7 +199,7 @@ Write-Host ("[OK]   http://localhost:{0}{1}" -f $Port, $HealthPath)
 Write-Host ("[OK]   http://host.docker.internal:{0}{1}/" -f $Port, $NormalizedPrefix)
 Write-Host ("[OK]   http://gateway.docker.internal:{0}{1}/" -f $Port, $NormalizedPrefix)
 Write-Host ("[OK]   http://0.0.0.0:{0}{1}/" -f $Port, $NormalizedPrefix)
-Write-Host "[OK] Bridge script: $BridgeScript"
+            Write-Host "[OK] Bridge script: $BridgeScript"
 Write-Host "[OK] Stop with Ctrl+C"
 
 try {
@@ -316,37 +320,45 @@ try {
                 # Ignore debug log failures.
             }
 
-            $BridgeArgs = @(
-                "-Message", $Message,
-                "-AsJson"
-            )
+            $BridgeParams = @{
+                Message = $Message
+                AsJson = $true
+            }
             if ($ConfirmDispatch) {
-                $BridgeArgs += "-ConfirmDispatch"
+                $BridgeParams.ConfirmDispatch = $true
             }
             if (-not [string]::IsNullOrWhiteSpace($ConversationId)) {
-                $BridgeArgs += @("-ConversationId", $ConversationId)
+                $BridgeParams.ConversationId = $ConversationId
             }
             if (-not [string]::IsNullOrWhiteSpace($SessionId)) {
-                $BridgeArgs += @("-SessionId", $SessionId)
+                $BridgeParams.SessionId = $SessionId
             }
             if (-not [string]::IsNullOrWhiteSpace($UserId)) {
-                $BridgeArgs += @("-UserId", $UserId)
+                $BridgeParams.UserId = $UserId
             }
             if (-not [string]::IsNullOrWhiteSpace($ConversationTitle)) {
-                $BridgeArgs += @("-ConversationTitle", $ConversationTitle)
+                $BridgeParams.ConversationTitle = $ConversationTitle
             }
 
-            $Raw = & pwsh -NoProfile -File $BridgeScript @BridgeArgs 2>&1
-            if ($LASTEXITCODE -ne 0) {
-                throw "Bridge returned exit code $LASTEXITCODE."
-            }
+            $Raw = & $BridgeScript @BridgeParams 2>&1
 
             $JsonText = [string]($Raw -join "`n").Trim()
             if ([string]::IsNullOrWhiteSpace($JsonText)) {
                 throw "Bridge returned no output."
             }
 
-            $Payload = $JsonText | ConvertFrom-Json
+            try {
+                if (Get-Command -Name ConvertFrom-PDAMixedJson -ErrorAction SilentlyContinue) {
+                    $Payload = ConvertFrom-PDAMixedJson -Text $JsonText -SourceName "PDA webhook bridge"
+                }
+                else {
+                    $Payload = $JsonText | ConvertFrom-Json
+                }
+            }
+            catch {
+                Add-Content -Path $LogPath -Value ("{0} bridge-raw {1}" -f (Get-Date -Format o), ($JsonText -replace "`r?`n", " "))
+                throw
+            }
             Write-PDARawResponse -Stream $Stream -Payload $Payload -StatusCode 200
         }
         catch {

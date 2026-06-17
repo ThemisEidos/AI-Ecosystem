@@ -1345,6 +1345,132 @@ if (Get-Command -Name Resolve-PDAConversationalRoute -ErrorAction SilentlyContin
                 Write-Host ("Next action          : {0}" -f $DirectResult.next_action)
                 return
             }
+            "tool_inventory" {
+                $DirectResult = Get-PDAConversationalNaturalResponse -Route $ConversationRoute -ConversationId $ConversationId -SessionId $SessionId -UserId $UserId -ConversationTitle $ConversationTitle -Text $Message -Root $Root
+                $DirectResult = Set-PDABridgeDecisionMetadata -Result $DirectResult -RouteType ([string]$ConversationRoute.route_type) -Decision $script:PDACommanderDecision
+                Invoke-PDAConversationStateUpdate -ConversationId $ConversationId -SessionId $SessionId -UserId $UserId -ConversationTitle $ConversationTitle -Message $Message -TaskId "" -TaskStatus "" -TaskFilePath "" -ApprovalFilePath "" -ResultPath "" -ResultSummary "" -BridgeStatus ([string]$DirectResult.bridge_status) -DispatchStatus ([string]$DirectResult.dispatch_status) -NextAction ([string]$DirectResult.next_action) -ResponseText ([string]$DirectResult.response_text) -RecommendedCommand ([string]$DirectResult.recommended_command) -Intent ([string]$DirectResult.intent) -Confidence ([double]$DirectResult.confidence) -RequiresConfirmation:$false | Out-Null
+                $DirectResult = Add-PDACommanderRuntimeContextFields -Result $DirectResult
+
+                if ($AsJson) {
+                    $DirectResult | ConvertTo-Json -Depth 20
+                    return
+                }
+
+                Write-Host "[OK] PDA chat bridge result:"
+                Write-Host ("Response text        : {0}" -f $DirectResult.response_text)
+                Write-Host ("Recommended command  : {0}" -f $(if ($DirectResult.recommended_command) { $DirectResult.recommended_command } else { "(none)" }))
+                Write-Host ("Intent               : {0}" -f $(if ($DirectResult.intent) { $DirectResult.intent } else { "(none)" }))
+                Write-Host ("Confidence           : {0}" -f $DirectResult.confidence)
+                Write-Host ("Dispatch ready       : {0}" -f $DirectResult.dispatch_ready)
+                Write-Host ("Dispatch status      : {0}" -f $DirectResult.dispatch_status)
+                Write-Host ("Next action          : {0}" -f $DirectResult.next_action)
+                return
+            }
+            "workflow_catalog" {
+                $DirectResult = Get-PDAConversationalNaturalResponse -Route $ConversationRoute -ConversationId $ConversationId -SessionId $SessionId -UserId $UserId -ConversationTitle $ConversationTitle -Text $Message -Root $Root
+                $DirectResult = Set-PDABridgeDecisionMetadata -Result $DirectResult -RouteType ([string]$ConversationRoute.route_type) -Decision $script:PDACommanderDecision
+                Invoke-PDAConversationStateUpdate -ConversationId $ConversationId -SessionId $SessionId -UserId $UserId -ConversationTitle $ConversationTitle -Message $Message -TaskId "" -TaskStatus "" -TaskFilePath "" -ApprovalFilePath "" -ResultPath "" -ResultSummary "" -BridgeStatus ([string]$DirectResult.bridge_status) -DispatchStatus ([string]$DirectResult.dispatch_status) -NextAction ([string]$DirectResult.next_action) -ResponseText ([string]$DirectResult.response_text) -RecommendedCommand ([string]$DirectResult.recommended_command) -Intent ([string]$DirectResult.intent) -Confidence ([double]$DirectResult.confidence) -RequiresConfirmation:$false | Out-Null
+                $DirectResult = Add-PDACommanderRuntimeContextFields -Result $DirectResult
+
+                if ($AsJson) {
+                    $DirectResult | ConvertTo-Json -Depth 20
+                    return
+                }
+
+                Write-Host "[OK] PDA chat bridge result:"
+                Write-Host ("Response text        : {0}" -f $DirectResult.response_text)
+                Write-Host ("Recommended command  : {0}" -f $(if ($DirectResult.recommended_command) { $DirectResult.recommended_command } else { "(none)" }))
+                Write-Host ("Intent               : {0}" -f $(if ($DirectResult.intent) { $DirectResult.intent } else { "(none)" }))
+                Write-Host ("Confidence           : {0}" -f $DirectResult.confidence)
+                Write-Host ("Dispatch ready       : {0}" -f $DirectResult.dispatch_ready)
+                Write-Host ("Dispatch status      : {0}" -f $DirectResult.dispatch_status)
+                Write-Host ("Next action          : {0}" -f $DirectResult.next_action)
+                return
+            }
+            "research_summary" {
+                $DirectResult = Get-PDAConversationalNaturalResponse -Route $ConversationRoute -ConversationId $ConversationId -SessionId $SessionId -UserId $UserId -ConversationTitle $ConversationTitle -Text $Message -Root $Root
+                $DirectResult = Set-PDABridgeDecisionMetadata -Result $DirectResult -RouteType ([string]$ConversationRoute.route_type) -Decision $script:PDACommanderDecision
+                Invoke-PDAConversationStateUpdate -ConversationId $ConversationId -SessionId $SessionId -UserId $UserId -ConversationTitle $ConversationTitle -Message $Message -TaskId "" -TaskStatus $(if ($DirectResult.PSObject.Properties.Name -contains "research_summary_result" -and $DirectResult.research_summary_result -and (($DirectResult.research_summary_result.PSObject.Properties.Name -contains "status" -and [string]$DirectResult.research_summary_result.status -eq "success") -or ($DirectResult.research_summary_result.PSObject.Properties.Name -contains "success" -and [bool]$DirectResult.research_summary_result.success -eq $true))) { "completed" } else { "" }) -TaskFilePath "" -ApprovalFilePath "" -ResultPath $(if ($DirectResult.PSObject.Properties.Name -contains "latest_result_path") { [string]$DirectResult.latest_result_path } else { "" }) -ResultSummary "" -BridgeStatus ([string]$DirectResult.bridge_status) -DispatchStatus ([string]$DirectResult.dispatch_status) -NextAction ([string]$DirectResult.next_action) -ResponseText ([string]$DirectResult.response_text) -RecommendedCommand ([string]$DirectResult.recommended_command) -Intent ([string]$DirectResult.intent) -Confidence ([double]$DirectResult.confidence) -RequiresConfirmation:$false | Out-Null
+                $DirectResult = Add-PDACommanderRuntimeContextFields -Result $DirectResult
+
+                if ($AsJson) {
+                    $DirectResult | ConvertTo-Json -Depth 20
+                    return
+                }
+
+                Write-Host "[OK] PDA chat bridge result:"
+                Write-Host ("Response text        : {0}" -f $DirectResult.response_text)
+                Write-Host ("Recommended command  : {0}" -f $(if ($DirectResult.recommended_command) { $DirectResult.recommended_command } else { "(none)" }))
+                Write-Host ("Intent               : {0}" -f $(if ($DirectResult.intent) { $DirectResult.intent } else { "(none)" }))
+                Write-Host ("Confidence           : {0}" -f $DirectResult.confidence)
+                Write-Host ("Dispatch ready       : {0}" -f $DirectResult.dispatch_ready)
+                Write-Host ("Dispatch status      : {0}" -f $DirectResult.dispatch_status)
+                Write-Host ("Next action          : {0}" -f $DirectResult.next_action)
+                return
+            }
+            "note_creation" {
+                $DirectResult = Get-PDAConversationalNaturalResponse -Route $ConversationRoute -ConversationId $ConversationId -SessionId $SessionId -UserId $UserId -ConversationTitle $ConversationTitle -Text $Message -Root $Root
+                $DirectResult = Set-PDABridgeDecisionMetadata -Result $DirectResult -RouteType ([string]$ConversationRoute.route_type) -Decision $script:PDACommanderDecision
+                Invoke-PDAConversationStateUpdate -ConversationId $ConversationId -SessionId $SessionId -UserId $UserId -ConversationTitle $ConversationTitle -Message $Message -TaskId "" -TaskStatus $(if ($DirectResult.PSObject.Properties.Name -contains "note_creation_result" -and $DirectResult.note_creation_result -and $DirectResult.note_creation_result.PSObject.Properties.Name -contains "approval_decision" -and $DirectResult.note_creation_result.approval_decision -and [bool]$DirectResult.note_creation_result.approval_decision.execution_authorized) { "completed" } else { "" }) -TaskFilePath "" -ApprovalFilePath $(if ($DirectResult.PSObject.Properties.Name -contains "note_creation_result" -and $DirectResult.note_creation_result -and $DirectResult.note_creation_result.PSObject.Properties.Name -contains "approval_decision" -and $DirectResult.note_creation_result.approval_decision -and $DirectResult.note_creation_result.approval_decision.PSObject.Properties.Name -contains "approval_path") { [string]$DirectResult.note_creation_result.approval_decision.approval_path } else { "" }) -ResultPath $(if ($DirectResult.PSObject.Properties.Name -contains "latest_result_path") { [string]$DirectResult.latest_result_path } else { "" }) -ResultSummary "" -BridgeStatus ([string]$DirectResult.bridge_status) -DispatchStatus ([string]$DirectResult.dispatch_status) -NextAction ([string]$DirectResult.next_action) -ResponseText ([string]$DirectResult.response_text) -RecommendedCommand ([string]$DirectResult.recommended_command) -Intent ([string]$DirectResult.intent) -Confidence ([double]$DirectResult.confidence) -RequiresConfirmation:$false | Out-Null
+                $DirectResult = Add-PDACommanderRuntimeContextFields -Result $DirectResult
+
+                if ($AsJson) {
+                    $DirectResult | ConvertTo-Json -Depth 20
+                    return
+                }
+
+                Write-Host "[OK] PDA chat bridge result:"
+                Write-Host ("Response text        : {0}" -f $DirectResult.response_text)
+                Write-Host ("Recommended command  : {0}" -f $(if ($DirectResult.recommended_command) { $DirectResult.recommended_command } else { "(none)" }))
+                Write-Host ("Intent               : {0}" -f $(if ($DirectResult.intent) { $DirectResult.intent } else { "(none)" }))
+                Write-Host ("Confidence           : {0}" -f $DirectResult.confidence)
+                Write-Host ("Dispatch ready       : {0}" -f $DirectResult.dispatch_ready)
+                Write-Host ("Dispatch status      : {0}" -f $DirectResult.dispatch_status)
+                Write-Host ("Next action          : {0}" -f $DirectResult.next_action)
+                return
+            }
+            "workshop_change_request" {
+                $DirectResult = Get-PDAConversationalNaturalResponse -Route $ConversationRoute -ConversationId $ConversationId -SessionId $SessionId -UserId $UserId -ConversationTitle $ConversationTitle -Text $Message -Root $Root
+                $DirectResult = Set-PDABridgeDecisionMetadata -Result $DirectResult -RouteType ([string]$ConversationRoute.route_type) -Decision $script:PDACommanderDecision
+                Invoke-PDAConversationStateUpdate -ConversationId $ConversationId -SessionId $SessionId -UserId $UserId -ConversationTitle $ConversationTitle -Message $Message -TaskId "" -TaskStatus "" -TaskFilePath "" -ApprovalFilePath "" -ResultPath "" -ResultSummary "" -BridgeStatus ([string]$DirectResult.bridge_status) -DispatchStatus ([string]$DirectResult.dispatch_status) -NextAction ([string]$DirectResult.next_action) -ResponseText ([string]$DirectResult.response_text) -RecommendedCommand ([string]$DirectResult.recommended_command) -Intent ([string]$DirectResult.intent) -Confidence ([double]$DirectResult.confidence) -RequiresConfirmation:$false | Out-Null
+                $DirectResult = Add-PDACommanderRuntimeContextFields -Result $DirectResult
+
+                if ($AsJson) {
+                    $DirectResult | ConvertTo-Json -Depth 20
+                    return
+                }
+
+                Write-Host "[OK] PDA chat bridge result:"
+                Write-Host ("Response text        : {0}" -f $DirectResult.response_text)
+                Write-Host ("Recommended command  : {0}" -f $(if ($DirectResult.recommended_command) { $DirectResult.recommended_command } else { "(none)" }))
+                Write-Host ("Intent               : {0}" -f $(if ($DirectResult.intent) { $DirectResult.intent } else { "(none)" }))
+                Write-Host ("Confidence           : {0}" -f $DirectResult.confidence)
+                Write-Host ("Dispatch ready       : {0}" -f $DirectResult.dispatch_ready)
+                Write-Host ("Dispatch status      : {0}" -f $DirectResult.dispatch_status)
+                Write-Host ("Next action          : {0}" -f $DirectResult.next_action)
+                return
+            }
+            "legacy_cooper_slash_command" {
+                $DirectResult = Get-PDAConversationalNaturalResponse -Route $ConversationRoute -ConversationId $ConversationId -SessionId $SessionId -UserId $UserId -ConversationTitle $ConversationTitle -Text $Message -Root $Root
+                $DirectResult = Set-PDABridgeDecisionMetadata -Result $DirectResult -RouteType ([string]$ConversationRoute.route_type) -Decision $script:PDACommanderDecision
+                Invoke-PDAConversationStateUpdate -ConversationId $ConversationId -SessionId $SessionId -UserId $UserId -ConversationTitle $ConversationTitle -Message $Message -TaskId "" -TaskStatus "" -TaskFilePath "" -ApprovalFilePath "" -ResultPath "" -ResultSummary "" -BridgeStatus ([string]$DirectResult.bridge_status) -DispatchStatus ([string]$DirectResult.dispatch_status) -NextAction ([string]$DirectResult.next_action) -ResponseText ([string]$DirectResult.response_text) -RecommendedCommand ([string]$DirectResult.recommended_command) -Intent ([string]$DirectResult.intent) -Confidence ([double]$DirectResult.confidence) -RequiresConfirmation:$false | Out-Null
+                $DirectResult = Add-PDACommanderRuntimeContextFields -Result $DirectResult
+
+                if ($AsJson) {
+                    $DirectResult | ConvertTo-Json -Depth 20
+                    return
+                }
+
+                Write-Host "[OK] PDA chat bridge result:"
+                Write-Host ("Response text        : {0}" -f $DirectResult.response_text)
+                Write-Host ("Recommended command  : {0}" -f $(if ($DirectResult.recommended_command) { $DirectResult.recommended_command } else { "(none)" }))
+                Write-Host ("Intent               : {0}" -f $(if ($DirectResult.intent) { $DirectResult.intent } else { "(none)" }))
+                Write-Host ("Confidence           : {0}" -f $DirectResult.confidence)
+                Write-Host ("Dispatch ready       : {0}" -f $DirectResult.dispatch_ready)
+                Write-Host ("Dispatch status      : {0}" -f $DirectResult.dispatch_status)
+                Write-Host ("Next action          : {0}" -f $DirectResult.next_action)
+                return
+            }
             "direct_help" {
                 $DirectResult = Get-PDAConversationalNaturalResponse -Route $ConversationRoute -ConversationId $ConversationId -SessionId $SessionId -UserId $UserId -ConversationTitle $ConversationTitle -Text $Message -Root $Root
                 $DirectResult = Set-PDABridgeDecisionMetadata -Result $DirectResult -RouteType ([string]$ConversationRoute.route_type) -Decision $script:PDACommanderDecision
@@ -1433,7 +1559,7 @@ if (Get-Command -Name Resolve-PDAConversationalRoute -ErrorAction SilentlyContin
             }
             "cooper_personality_command" {
                 $PersonalityCommand = Invoke-COOPERPersonalityCommand -Text $Message -Root $Root
-                Invoke-PDAConversationStateUpdate -ConversationId $ConversationId -SessionId $SessionId -UserId $UserId -ConversationTitle $ConversationTitle -Message $Message -TaskId "" -TaskStatus "" -TaskFilePath "" -ApprovalFilePath "" -ResultPath "" -ResultSummary "" -BridgeStatus "ready" -DispatchStatus "not_dispatched" -NextAction "Use /cooper personality, /cooper profile <name>, or /cooper <setting> <0-100>." -ResponseText ([string]$PersonalityCommand.response_text) -RecommendedCommand "" -Intent "cooper_personality_command" -Confidence 1 -RequiresConfirmation:$false | Out-Null
+                Invoke-PDAConversationStateUpdate -ConversationId $ConversationId -SessionId $SessionId -UserId $UserId -ConversationTitle $ConversationTitle -Message $Message -TaskId "" -TaskStatus "" -TaskFilePath "" -ApprovalFilePath "" -ResultPath "" -ResultSummary "" -BridgeStatus "ready" -DispatchStatus "not_dispatched" -NextAction "Use conversational language to ask for personality settings or propose an adjustment." -ResponseText ([string]$PersonalityCommand.response_text) -RecommendedCommand "" -Intent "cooper_personality_command" -Confidence 1 -RequiresConfirmation:$false | Out-Null
                 $DirectResult = [pscustomobject]@{
                     original_message         = $Message
                     response_text            = [string]$PersonalityCommand.response_text
@@ -1444,7 +1570,7 @@ if (Get-Command -Name Resolve-PDAConversationalRoute -ErrorAction SilentlyContin
                     requires_confirmation    = $false
                     dispatch_ready           = $false
                     dispatch_status          = "not_dispatched"
-                    next_action              = "Use /cooper personality, /cooper profile <name>, or /cooper <setting> <0-100>."
+                    next_action              = "Use conversational language to ask for personality settings or propose an adjustment."
                     bridge_status            = "ready"
                     handoff_status           = "cooper_personality_command"
                     source_of_truth          = "Scripts/COOPER_PersonalityEngine.ps1"

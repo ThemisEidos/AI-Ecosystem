@@ -25,10 +25,16 @@ param(
 $ErrorActionPreference = "Stop"
 
 $BridgeScript = Join-Path $PSScriptRoot "Invoke-PDAChatBridge.ps1"
+$ParsingHelpers = Join-Path $PSScriptRoot "PDA_OutputParsing.ps1"
 
 if (-not (Test-Path -Path $BridgeScript -PathType Leaf)) {
     throw "Chat bridge missing: $BridgeScript"
 }
+if (-not (Test-Path -Path $ParsingHelpers -PathType Leaf)) {
+    throw "Parsing helpers missing: $ParsingHelpers"
+}
+
+. $ParsingHelpers
 
 function Write-PDAWebhookBridgeFailure {
     param(
@@ -103,7 +109,7 @@ try {
         throw "Chat bridge returned no output."
     }
 
-    $Parsed = $JsonText | ConvertFrom-Json
+    $Parsed = ConvertFrom-PDAMixedJson -Text $JsonText -SourceName "PDA chat bridge"
     if (-not $Parsed) {
         throw "Chat bridge returned invalid JSON."
     }

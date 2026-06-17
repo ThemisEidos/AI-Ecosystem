@@ -161,6 +161,6 @@ $WorkbenchResult | Add-Member -NotePropertyName routed_tool -NotePropertyValue $
 $WorkbenchResult | Add-Member -NotePropertyName approval_decision -NotePropertyValue $ApprovalDecision -Force
 $WorkbenchResult | Add-Member -NotePropertyName workbench_result -NotePropertyValue $WorkbenchSnapshot -Force
 $WorkbenchResult | Add-Member -NotePropertyName response_text -NotePropertyValue $ResponseText -Force
-$WorkbenchResult | Add-Member -NotePropertyName command -NotePropertyValue "/cooper status" -Force
+$WorkbenchResult | Add-Member -NotePropertyName command -NotePropertyValue "Show system status" -Force
 
 return $WorkbenchResult

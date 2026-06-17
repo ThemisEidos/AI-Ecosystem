@@ -290,13 +290,15 @@ $CapabilityMatrixSummary = [pscustomobject]@{
 $Eligibility = $null
 $OperatorConsoleResponse = $null
 $OperatorCommands = @("/status", "/tasks", "/approvals", "/workers", "/reports", "/memory", "/dispatch", "/help")
+$AutoDispatchCommands = @("/codex-task")
 $IsOperatorConsoleCommand = $OperatorCommands -contains [string]$RecommendedCommand
+$IsAutoDispatchCommand = $AutoDispatchCommands -contains [string]$RecommendedCommand
 
 if ($Interpreter.status -eq "mapped" -and -not [string]::IsNullOrWhiteSpace($RecommendedCommand) -and -not $IsOperatorConsoleCommand) {
     $DispatchCategory = Get-PDAHandoffClassification -Command $RecommendedCommand -Root $Root
     $Eligibility = Get-PDATaskWorkerEligibility -Root $Root -Command $RecommendedCommand -Classification $DispatchCategory -Approved $true
     $DispatchReady = @($Eligibility.eligible_workers).Count -gt 0
-    $RequiresConfirmation = -not [bool]$ConfirmDispatch
+    $RequiresConfirmation = if ($IsAutoDispatchCommand) { $false } else { -not [bool]$ConfirmDispatch }
     $AmbiguityReason = [string]$Interpreter.reason
 }
 elseif ($Interpreter.status -eq "mapped" -and $IsOperatorConsoleCommand) {
@@ -377,7 +379,7 @@ if ($Interpreter.status -eq "mapped" -and -not [string]::IsNullOrWhiteSpace($Rec
     }
 }
 
-if ($ConfirmDispatch -and $Interpreter.status -eq "mapped" -and $DispatchReady) {
+if (($ConfirmDispatch -or $IsAutoDispatchCommand) -and $Interpreter.status -eq "mapped" -and $DispatchReady) {
     if ($RecommendedCommand -eq "/notebooklm") {
         if (-not (Test-Path -Path $NotebookLMCommandScript -PathType Leaf)) {
             throw "NotebookLM command helper missing: $NotebookLMCommandScript"
