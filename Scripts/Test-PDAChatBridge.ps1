@@ -375,25 +375,25 @@ $Cases = @(
         marker = "chat-research-$([guid]::NewGuid().ToString())"
     }
     [pscustomobject]@{
-        name = "natural status"
+        name = "WF-004 status precedence - natural status"
         message = "How is the PDA doing?"
         confirm = $false
         expected_handoff = "direct_status"
         expected_response_contains = "Active Workshop: COOPER"
         expected_dispatch_ready = $false
         expected_dispatch = $false
-        expected_command = "/status"
+        expected_command = "Show system status"
         marker = "chat-natural-status-$([guid]::NewGuid().ToString())"
     }
     [pscustomobject]@{
-        name = "natural help"
+        name = "WF-004 capability/status precedence - help phrasing"
         message = "What can you do?"
         confirm = $false
-        expected_handoff = "direct_help"
-        expected_response_contains = "Status, reports, research, planning, execution"
+        expected_handoff = "direct_status"
+        expected_response_contains = "Current Phase:"
         expected_dispatch_ready = $false
         expected_dispatch = $false
-        expected_command = "/help"
+        expected_command = "Show system status"
         marker = "chat-natural-help-$([guid]::NewGuid().ToString())"
     }
     [pscustomobject]@{

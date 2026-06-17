@@ -120,16 +120,16 @@ $Cases = @(
         expected_command = "Show system status"
     }
     [pscustomobject]@{
-        name = "natural status"
+        name = "WF-004 status precedence - natural status"
         input = "How is the PDA doing?"
         expected_route = "direct_status"
         expected_command = "Show system status"
     }
     [pscustomobject]@{
-        name = "natural help"
+        name = "WF-004 capability/status precedence - help phrasing"
         input = "What can you do?"
-        expected_route = "direct_help"
-        expected_command = "Ask naturally for status, tools, workflows, or workshop mode."
+        expected_route = "direct_status"
+        expected_command = "Show system status"
     }
     [pscustomobject]@{
         name = "status summary"
@@ -448,9 +448,9 @@ foreach ($Case in $Cases) {
             $CasePassed = $false
             $Issues.Add("Direct response text was empty.")
         }
-        if ($Route.route_type -eq "direct_status" -and $Direct.response_text -notmatch '(?i)Active Workshop: COOPER|Default Model: Claude Sonnet') {
+        if ($Route.route_type -eq "direct_status" -and $Direct.response_text -notmatch '(?i)Current Phase: Phase 5 - First Operational Workflows|Operational Workflows|Recommended Next Action') {
             $CasePassed = $false
-            $Issues.Add("Direct status response did not look like a status summary.")
+            $Issues.Add("Direct status response did not look like an operational status summary.")
         }
         if ($Route.route_type -eq "direct_help" -and $Direct.response_text -notmatch '(?i)Ask naturally for status, tools, workflows, planning, research, or execution help') {
             $CasePassed = $false

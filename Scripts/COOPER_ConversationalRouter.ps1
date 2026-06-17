@@ -185,6 +185,7 @@ function Test-COOPERLightweightStatusMode {
     return [bool]($Value -notmatch '^(0|false|no)$')
 }
 
+if (-not (Get-Command -Name Invoke-COOPERDefaultModelChat -ErrorAction SilentlyContinue)) {
 function Invoke-COOPERDefaultModelChat {
     param(
         [Parameter(Mandatory = $true)]
@@ -296,6 +297,7 @@ function Invoke-COOPERDefaultModelChat {
         return [pscustomobject]$Result
     }
 }
+}
 
 function Test-PDAConversationalSlashCommand {
     param([Parameter(Mandatory = $true)][string]$NormalizedText)
@@ -307,7 +309,7 @@ function Test-PDAConversationalDirectHelp {
     param([Parameter(Mandatory = $true)][string]$NormalizedText)
 
     return [bool](
-        $NormalizedText -match '(?i)\b(what can you do|what do you do|help|what commands|available commands|show me help|show the command list)\b'
+        $NormalizedText -match '(?i)\b(what do you do|help|what commands|available commands|show me help|show the command list)\b'
     )
 }
 
@@ -315,7 +317,7 @@ function Test-PDAConversationalDirectStatus {
     param([Parameter(Mandatory = $true)][string]$NormalizedText)
 
     return [bool](
-        $NormalizedText -match '(?i)\b(status report|operational status|health report|morning briefing|daily briefing|what''?s the status|what is the status|how are things going|how are you doing|how is the pda doing|how is the ecosystem|summarize the ecosystem status|summarise the ecosystem status|show me the current status|current status|system status|how are things|pda status|how is everything|status|what workshop am i in|what mode am i in|which workshop am i in|which mode am i in)\b'
+        $NormalizedText -match '(?i)\b(status report|operational status|health report|morning briefing|daily briefing|what''?s the status|what is the status|how are things going|how are you doing|how is the pda doing|how is the ecosystem|summarize the ecosystem status|summarise the ecosystem status|show me the current status|current status|system status|how are things|pda status|how is everything|status|what workshop am i in|what mode am i in|which workshop am i in|which mode am i in|what can you do|what workflows are available|what capabilities do you have|what phase are we in|what is operational|what is working right now)\b'
     )
 }
 
@@ -331,7 +333,7 @@ function Test-PDAConversationalWorkflowCatalog {
     param([Parameter(Mandatory = $true)][string]$NormalizedText)
 
     return [bool](
-        $NormalizedText -match '(?i)\b(list available workflows|what workflows are available|what workflows do you have|workflow catalog|workflow list|show workflows|show available workflows|available workflows)\b'
+        $NormalizedText -match '(?i)\b(list available workflows|workflow catalog|workflow list|show workflows|show available workflows)\b'
     )
 }
 
@@ -927,6 +929,7 @@ function Get-COOPERWorkflowCatalogSummary {
     if ($Workflows.Count -eq 0) {
         $Workflows = @(
             [pscustomobject]@{ workflow_id = "WF-002"; name = "Codex Task Generator"; purpose = "Turn project inputs into an implementation-ready Codex task file."; workshop = "Open Workshop"; category = "Category 1" }
+            [pscustomobject]@{ workflow_id = "WF-004"; name = "Operational Status"; purpose = "Summarize current operational state from runtime sources."; workshop = "Open Workshop"; category = "Category 1" }
             [pscustomobject]@{ workflow_id = "WF-001"; name = "Research Summary"; purpose = "Collect and summarize research findings."; workshop = "Open Workshop"; category = "Category 1" }
             [pscustomobject]@{ workflow_id = "WF-005"; name = "Obsidian Note Creation"; purpose = "Create non-sensitive Obsidian notes or drafts."; workshop = "Open Workshop"; category = "Category 1" }
         )
@@ -934,7 +937,7 @@ function Get-COOPERWorkflowCatalogSummary {
 
     $WorkflowLines = @($Workflows | ForEach-Object { "{0} {1}" -f $_.workflow_id, $_.name })
     if ($WorkflowLines.Count -eq 0) {
-        $WorkflowLines = @("WF-002 Codex Task Generator", "WF-001 Research Summary", "WF-005 Obsidian Note Creation")
+        $WorkflowLines = @("WF-002 Codex Task Generator", "WF-004 Operational Status", "WF-001 Research Summary", "WF-005 Obsidian Note Creation")
     }
 
     return [pscustomobject]@{
@@ -1077,20 +1080,21 @@ function Resolve-PDAConversationalRoute {
         return [pscustomobject]$Route
     }
 
-    if (Test-PDAConversationalDirectHelp -NormalizedText $Normalized) {
-        $Route.route_type = "direct_help"
-        $Route.response_mode = "direct_answer"
-        $Route.recommended_command = "Ask naturally for status, tools, workflows, or workshop mode."
-        $Route.reason = "Direct help request."
-        $Route.confidence = 1
-        return [pscustomobject]$Route
-    }
-
+    # Capability and status questions should resolve to WF-004 before generic help.
     if (Test-PDAConversationalDirectStatus -NormalizedText $Normalized) {
         $Route.route_type = "direct_status"
         $Route.response_mode = "direct_answer"
         $Route.recommended_command = "Show system status"
         $Route.reason = "Direct status request."
+        $Route.confidence = 1
+        return [pscustomobject]$Route
+    }
+
+    if (Test-PDAConversationalDirectHelp -NormalizedText $Normalized) {
+        $Route.route_type = "direct_help"
+        $Route.response_mode = "direct_answer"
+        $Route.recommended_command = "Ask naturally for status, tools, workflows, or workshop mode."
+        $Route.reason = "Direct help request."
         $Route.confidence = 1
         return [pscustomobject]$Route
     }
