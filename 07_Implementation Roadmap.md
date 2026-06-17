@@ -145,6 +145,7 @@ This roadmap tracks the staged implementation of the COOPER-centered AI Ecosyste
   - agentic loop experiments
   - workflow chaining
   - broader toolbox expansion
+  - backlog: implement governed multi-intent execution queue
 - Success Criteria:
   - only after core workflows are stable
   - no premature agent complexity

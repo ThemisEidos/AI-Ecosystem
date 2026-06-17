@@ -96,6 +96,14 @@ $Cases = @(
         expected_route = "direct_status"
         expected_command = "Show system status"
     }
+    # Segmentation exists, but only the first actionable intent should route until a future execution queue is added.
+    [pscustomobject]@{
+        name = "compound COOPER requests"
+        input = "COOPER, what can you do? COOPER, create a note about Docker networking."
+        expected_route = "direct_status"
+        expected_command = "Show system status"
+        expected_intent_segments = 2
+    }
     [pscustomobject]@{
         name = "research chain prompt"
         input = "Research Docker host administration documentation and prepare implementation work for the Linux collection."
@@ -440,6 +448,14 @@ foreach ($Case in $Cases) {
     elseif (-not [string]::IsNullOrWhiteSpace([string]$Route.recommended_command) -and $Route.route_type -notin @("direct_status", "direct_help")) {
         $CasePassed = $false
         $Issues.Add("Expected no recommended command but got '$($Route.recommended_command)'.")
+    }
+
+    if ($Case.PSObject.Properties.Name -contains "expected_intent_segments") {
+        $SegmentCount = @($Route.intent_segments).Count
+        if ($SegmentCount -ne [int]$Case.expected_intent_segments) {
+            $CasePassed = $false
+            $Issues.Add("Expected $($Case.expected_intent_segments) intent segments but got $SegmentCount.")
+        }
     }
 
     if ($Route.route_type -in @("direct_status", "direct_help", "task_lookup", "dispatch_guidance", "goal_planning", "research_summary", "judgment_advice", "ambiguous", "fallback")) {

@@ -815,6 +815,48 @@ function Test-PDAConversationalAmbiguous {
     )
 }
 
+function Split-PDAConversationalIntents {
+    param([Parameter(Mandatory = $true)][string]$Text)
+
+    if ([string]::IsNullOrWhiteSpace($Text)) {
+        return @()
+    }
+
+    # Segment compound prompts conservatively; execution still uses only the first actionable intent.
+    $SentenceSegments = @(
+        [regex]::Split([string]$Text, '(?<=[\.\!\?;])\s+')
+        | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) }
+    )
+
+    $NormalizedSegments = New-Object System.Collections.Generic.List[string]
+    foreach ($Segment in $SentenceSegments) {
+        $Current = [string]$Segment
+        $Current = [regex]::Replace($Current, '^\s*COOPER\s*[:,]?\s*', '', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+        $Current = $Current.Trim()
+        if (-not [string]::IsNullOrWhiteSpace($Current)) {
+            $NormalizedSegments.Add($Current)
+        }
+    }
+
+    if ($NormalizedSegments.Count -gt 0) {
+        return @($NormalizedSegments)
+    }
+
+    return @($Text.Trim())
+}
+
+function Test-PDAConversationalPreludeOnly {
+    param([Parameter(Mandatory = $true)][string]$NormalizedText)
+
+    return [bool](
+        $NormalizedText -match '^(good (morning|afternoon|evening)|hello|hi|hey|greetings|morning|afternoon|evening|good day)\b(?:\s+cooper)?$' -or
+        (
+            $NormalizedText -match '^(good (morning|afternoon|evening)|hello|hi|hey|greetings|morning|afternoon|evening|good day)\b' -and
+            $NormalizedText -notmatch '(?i)\b(status|workflow|workflows|tool|tools|research|note|task|codex|report|brief|help|what can you do|what is operational|what capabilities do you have|what workflows are available|what phase are we in)\b'
+        )
+    )
+}
+
 function Invoke-PDACommandOrScript {
     param(
         [Parameter(Mandatory = $true)][string]$CommandName,
@@ -988,7 +1030,15 @@ function Resolve-PDAConversationalRoute {
         [string]$Root = (Split-Path -Parent $PSScriptRoot)
     )
 
-    $Normalized = Normalize-PDAConversationalText -Value $Text
+    $IntentSegments = @(Split-PDAConversationalIntents -Text $Text)
+    $PrimaryText = if ($IntentSegments.Count -gt 0) { [string]$IntentSegments[0] } else { [string]$Text }
+    if ($IntentSegments.Count -gt 1) {
+        $PrimaryNormalized = Normalize-PDAConversationalText -Value $PrimaryText
+        if (Test-PDAConversationalPreludeOnly -NormalizedText $PrimaryNormalized) {
+            $PrimaryText = [string]$IntentSegments[1]
+        }
+    }
+    $Normalized = Normalize-PDAConversationalText -Value $PrimaryText
     $Route = [ordered]@{
         route_type           = "fallback"
         response_mode        = "direct_answer"
@@ -1004,6 +1054,7 @@ function Resolve-PDAConversationalRoute {
         command              = ""
         source_of_truth      = "Scripts/COOPER_ConversationalRouter.ps1"
         root_path            = $Root
+        intent_segments      = @()
     }
 
     if ([string]::IsNullOrWhiteSpace($Normalized)) {
@@ -1017,6 +1068,7 @@ function Resolve-PDAConversationalRoute {
         $Route.recommended_command = "What tools are available?"
         $Route.reason = "Tool inventory request."
         $Route.confidence = 1
+        if ($IntentSegments.Count -gt 1) { $Route.intent_segments = @($IntentSegments) }
         return [pscustomobject]$Route
     }
 
@@ -1026,6 +1078,7 @@ function Resolve-PDAConversationalRoute {
         $Route.recommended_command = "List available workflows"
         $Route.reason = "Workflow catalog request."
         $Route.confidence = 1
+        if ($IntentSegments.Count -gt 1) { $Route.intent_segments = @($IntentSegments) }
         return [pscustomobject]$Route
     }
 
@@ -1038,6 +1091,7 @@ function Resolve-PDAConversationalRoute {
         $Route.intent = "research_summary"
         $Route.task_type = "research_summary"
         $Route.workflow_chain = "research_collection_codex"
+        if ($IntentSegments.Count -gt 1) { $Route.intent_segments = @($IntentSegments) }
         return [pscustomobject]$Route
     }
 
@@ -1049,6 +1103,7 @@ function Resolve-PDAConversationalRoute {
         $Route.confidence = 1
         $Route.intent = "codex_task_generator"
         $Route.task_type = "codex_task_generator"
+        if ($IntentSegments.Count -gt 1) { $Route.intent_segments = @($IntentSegments) }
         return [pscustomobject]$Route
     }
 
@@ -1060,6 +1115,7 @@ function Resolve-PDAConversationalRoute {
         $Route.confidence = 1
         $Route.intent = "research_summary"
         $Route.task_type = "research_summary"
+        if ($IntentSegments.Count -gt 1) { $Route.intent_segments = @($IntentSegments) }
         return [pscustomobject]$Route
     }
 
@@ -1071,6 +1127,7 @@ function Resolve-PDAConversationalRoute {
         $Route.confidence = 1
         $Route.intent = "note_creation"
         $Route.task_type = "note_creation"
+        if ($IntentSegments.Count -gt 1) { $Route.intent_segments = @($IntentSegments) }
         return [pscustomobject]$Route
     }
 
@@ -1080,6 +1137,7 @@ function Resolve-PDAConversationalRoute {
         $Route.recommended_command = "Select workshop in the host/UI."
         $Route.reason = "Workshop change request."
         $Route.confidence = 1
+        if ($IntentSegments.Count -gt 1) { $Route.intent_segments = @($IntentSegments) }
         return [pscustomobject]$Route
     }
 
@@ -1092,6 +1150,7 @@ function Resolve-PDAConversationalRoute {
             $Route.confidence = 1
             $Route.command = ""
             $Route.cooper_command = $Text
+            if ($IntentSegments.Count -gt 1) { $Route.intent_segments = @($IntentSegments) }
             return [pscustomobject]$Route
         }
 
@@ -1107,6 +1166,7 @@ function Resolve-PDAConversationalRoute {
             $Route.intent = [string]$InterpreterResult.intent
             $Route.task_type = [string]$InterpreterResult.task_type
             $Route.command = [string]$InterpreterResult.command
+            if ($IntentSegments.Count -gt 1) { $Route.intent_segments = @($IntentSegments) }
             return [pscustomobject]$Route
         }
 
@@ -1118,6 +1178,7 @@ function Resolve-PDAConversationalRoute {
         $Route.reason = "Explicit slash command."
         $Route.ambiguity_reason = "Explicit slash command."
         $Route.command = $Route.recommended_command
+        if ($IntentSegments.Count -gt 1) { $Route.intent_segments = @($IntentSegments) }
         return [pscustomobject]$Route
     }
 
@@ -1128,6 +1189,7 @@ function Resolve-PDAConversationalRoute {
         $Route.recommended_command = "Show system status"
         $Route.reason = "Direct status request."
         $Route.confidence = 1
+        if ($IntentSegments.Count -gt 1) { $Route.intent_segments = @($IntentSegments) }
         return [pscustomobject]$Route
     }
 
@@ -1137,6 +1199,7 @@ function Resolve-PDAConversationalRoute {
         $Route.recommended_command = "Ask naturally for status, tools, workflows, or workshop mode."
         $Route.reason = "Direct help request."
         $Route.confidence = 1
+        if ($IntentSegments.Count -gt 1) { $Route.intent_segments = @($IntentSegments) }
         return [pscustomobject]$Route
     }
 
@@ -1146,6 +1209,7 @@ function Resolve-PDAConversationalRoute {
         $Route.recommended_command = ""
         $Route.reason = "Runtime identity or backend awareness request."
         $Route.confidence = 1
+        if ($IntentSegments.Count -gt 1) { $Route.intent_segments = @($IntentSegments) }
         return [pscustomobject]$Route
     }
 
@@ -1155,6 +1219,7 @@ function Resolve-PDAConversationalRoute {
         $Route.recommended_command = ""
         $Route.reason = "Direct personality profile request."
         $Route.confidence = 1
+        if ($IntentSegments.Count -gt 1) { $Route.intent_segments = @($IntentSegments) }
         return [pscustomobject]$Route
     }
 
@@ -1164,6 +1229,7 @@ function Resolve-PDAConversationalRoute {
         $Route.recommended_command = ""
         $Route.reason = "Direct personality cancellation request."
         $Route.confidence = 1
+        if ($IntentSegments.Count -gt 1) { $Route.intent_segments = @($IntentSegments) }
         return [pscustomobject]$Route
     }
 
@@ -1173,6 +1239,7 @@ function Resolve-PDAConversationalRoute {
         $Route.recommended_command = ""
         $Route.reason = "Direct personality adjustment request."
         $Route.confidence = 1
+        if ($IntentSegments.Count -gt 1) { $Route.intent_segments = @($IntentSegments) }
         return [pscustomobject]$Route
     }
 
@@ -1408,6 +1475,7 @@ function Get-PDAConversationalNaturalResponse {
         latest_result_response_text = ""
         result_artifact_path     = ""
         result_artifact          = $null
+        intent_segments          = @()
         research_summary_path    = ""
         collection_import_path    = ""
         codex_task_path          = ""
@@ -1424,6 +1492,9 @@ function Get-PDAConversationalNaturalResponse {
         runtime_status           = $null
     }
     $NormalizedText = Normalize-PDAConversationalText -Value $Text
+    if ($Route.PSObject.Properties.Name -contains "intent_segments" -and $Route.intent_segments) {
+        $BaseResponse.intent_segments = @($Route.intent_segments)
+    }
 
     switch ([string]$Route.route_type) {
         "direct_status" {

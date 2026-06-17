@@ -411,6 +411,19 @@ $Cases = @(
         expected_command = "/codex-task"
         marker = "chat-codex-task-$([guid]::NewGuid().ToString())"
     }
+    # Segmentation exists, but only the first actionable intent should route until a future execution queue is added.
+    [pscustomobject]@{
+        name = "compound COOPER requests"
+        message = "COOPER, what can you do? COOPER, create a note about Docker networking."
+        confirm = $false
+        expected_handoff = "direct_status"
+        expected_response_contains = "Current Phase:"
+        expected_dispatch_ready = $false
+        expected_dispatch = $false
+        expected_command = "Show system status"
+        expected_intent_segments = 2
+        marker = "chat-compound-cooper-$([guid]::NewGuid().ToString())"
+    }
     [pscustomobject]@{
         name = "research chain prompt"
         message = "Research Docker host administration documentation and prepare implementation work for the Linux collection."
@@ -1327,6 +1340,14 @@ foreach ($Case in $Cases) {
     elseif ([bool]$Result.dispatch_ready -ne [bool]($Case.expected_handoff -eq "mapped")) {
         $CasePassed = $false
         $Issues.Add("Dispatch readiness mismatch.")
+    }
+
+    if ($Case.PSObject.Properties.Name -contains "expected_intent_segments") {
+        $SegmentCount = @($Result.intent_segments).Count
+        if ($SegmentCount -ne [int]$Case.expected_intent_segments) {
+            $CasePassed = $false
+            $Issues.Add("Expected $($Case.expected_intent_segments) intent segments but got $SegmentCount.")
+        }
     }
 
     $DispatchObserved = $Result.dispatch_status -in @("submitted", "completed")
