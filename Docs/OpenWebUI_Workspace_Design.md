@@ -123,6 +123,7 @@ This is the intended future flow, not a fully implemented integration path yet.
 - create the `AI Ecosystem Governance` collection manually in Open WebUI
 - upload approved governance documents
 - verify retrieval quality
+- record the implementation in `Docs/OpenWebUI_Workspace_Implementation_Log.md`
 
 ### Phase 5B
 

@@ -9,18 +9,21 @@ This roadmap tracks the staged implementation of the COOPER-centered AI Ecosyste
 - Current priority remains status governance cleanup and Git alignment.
 - Workspace and Fabric integration remain deferred until the current operational milestone is committed and stable.
 - Current Phase: Phase 5 - First Operational Workflows
+- Status: In Progress
 - Current Objective: Stabilize the first governed workflow chain and its review path.
 - Next Build Artifact:
   - `Docs/2026-06-16 Operational Workflow Milestone.md`
-- Why This Comes Next: COOPER now has a minimal governed execution path for note creation, source-backed research, and collection import drafting. The remaining work is to document the milestone cleanly and keep the workflow boundary stable.
+- Why This Comes Next: Phase 1 through Phase 4 foundations are complete enough to support the first operational workflows. COOPER now has a minimal governed execution path for note creation, source-backed research, Codex task generation, and collection import drafting. The remaining work is to document the milestone cleanly and keep the workflow boundary stable.
 - Dependencies:
   - governed routing remains registry-driven
   - approval gate remains required before execution
   - review gate remains required before state updates
   - runtime artifacts stay separated from source and docs
 - Definition of Done:
+  - WF-001 Research Summary remains operational
+  - WF-002 Codex Task Generator remains operational
+  - WF-004 Operational Status remains operational
   - WF-005 Note Creation remains operational
-  - WF-001 Source-Backed Research Summary remains operational
   - WF-006 Knowledge Collection Import Draft remains operational
   - WF-001 -> WF-006 chain remains operational
   - milestone status is recorded
@@ -50,9 +53,9 @@ This roadmap tracks the staged implementation of the COOPER-centered AI Ecosyste
   - storage model documented
   - workflow definition of done documented
 
-### Phase 1 - Tool Registry Foundation
+### Phase 1 - Tool Registry Inventory
 
-- Status: Current
+- Status: Complete
 - Goal: Create runtime-readable Open and Private Tool Box inventories.
 - Build Artifacts:
   - `Config/general_tool_registry.yaml`
@@ -62,11 +65,11 @@ This roadmap tracks the staged implementation of the COOPER-centered AI Ecosyste
   - registries validate
   - Open and Private tools separated
   - permission levels assigned
-  - no execution implemented
+  - no execution was implemented at this stage
 
 ### Phase 2 - Quartermaster / Tool Router
 
-- Status: Next
+- Status: Complete
 - Goal: Allow COOPER to identify which tool should be used without executing it.
 - Build Artifacts:
   - `Scripts/Invoke-COOPERTool.ps1`
@@ -76,11 +79,11 @@ This roadmap tracks the staged implementation of the COOPER-centered AI Ecosyste
   - tool selection works
   - invalid workshop/tool combinations are blocked
   - approval requirement is reported
-  - no real execution implemented
+  - no real execution was implemented at this stage
 
 ### Phase 3 - Safety Officer / Approval Gate
 
-- Status: Planned
+- Status: Complete
 - Goal: Enforce permission levels and approval requirements before execution.
 - Build Artifacts:
   - approval validation logic
@@ -93,7 +96,7 @@ This roadmap tracks the staged implementation of the COOPER-centered AI Ecosyste
 
 ### Phase 4 - First Workbench / Execution Gateway
 
-- Status: Planned
+- Status: Complete
 - Goal: Add one harmless execution pathway.
 - Build Artifacts:
   - one safe local workbench
@@ -108,9 +111,10 @@ This roadmap tracks the staged implementation of the COOPER-centered AI Ecosyste
 - Status: In Progress
 - Goal: Stabilize the first practical governed workflows.
 - Operational:
+  - WF-001 Research Summary
   - WF-002 Codex Task Generator
+  - WF-004 Operational Status
   - WF-005 Note Creation
-  - WF-001 Source-Backed Research Summary
   - WF-006 Knowledge Collection Import Draft
   - First workflow chain: WF-001 → WF-006
 - Success Criteria:
@@ -122,7 +126,7 @@ This roadmap tracks the staged implementation of the COOPER-centered AI Ecosyste
 
 ### Phase 6 - Private Workshop Hardening
 
-- Status: Planned
+- Status: Future
 - Goal: Make COOPER Private safe enough for restricted DMZ workflows.
 - Build Artifacts:
   - private registry hardening

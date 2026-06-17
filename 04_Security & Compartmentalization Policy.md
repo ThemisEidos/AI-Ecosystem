@@ -14,6 +14,7 @@ The policy uses two practical categories:
 Use the least exposed tool that can reasonably complete the task.
 
 The policy is the rule. The architecture enforces the rule. Private Workshop is an execution boundary, not a personality setting.
+Low-friction auto-dispatch is allowed only for approved low-risk Open Workshop workflows. It does not weaken the approval boundary for higher-risk actions.
 
 ## COOPER Workshop Mapping
 
@@ -69,6 +70,7 @@ Phase 1 approval rule:
 - image generation providers
 - research APIs
 - requires approval
+- auto-dispatch does not apply unless the workflow policy explicitly allows the external call and the request is already approved
 - allowed only in Open Workshop
 - forbidden in Private Workshop
 
@@ -80,6 +82,7 @@ Phase 1 approval rule:
 - Docker
 - local workflow automation
 - requires approval
+- auto-dispatch does not apply to launcher or execution actions
 - use dry-run where practical
 - Private Workshop allows only local scripts and workflows with no cloud calls
 
@@ -96,6 +99,7 @@ Phase 1 approval rule:
 - installs software
 - changes firewall, DNS, or security settings
 - blocked by default in Phase 1
+- auto-dispatch is blocked by default
 
 Private Workshop rules:
 
@@ -104,6 +108,7 @@ Private Workshop rules:
 - Level 4 is local-only and requires approval
 - Level 5 is blocked by default
 - Private Workshop never falls back to cloud models
+- Private Workshop remains local-only and cannot use cloud fallback
 
 File modification actions such as delete, move, rename, or overwrite are Level 5 and blocked in Phase 1.
 

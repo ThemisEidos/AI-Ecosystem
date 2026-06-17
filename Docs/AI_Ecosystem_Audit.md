@@ -127,12 +127,12 @@ Recommendation:
 | Registry-first routing | Partial | `Scripts/Invoke-COOPERTool.ps1:268-315` routes from registries, but eagerly loads both registries |
 | Approved execution model remains auditable | Compliant | router, approval, and workbench decision objects all return structured results; tests pass |
 | Phase 4 scope remains limited | Compliant | `Scripts/Invoke-COOPERWorkbench.ps1:12-243` supports one read-only action only |
-| WF-001 Research Summary readiness | Partially Ready | `06_Automation & Workflow Catalog.md:15-29`; no implemented research execution path yet |
-| WF-002 Codex Task Generator readiness | Partially Ready | `06_Automation & Workflow Catalog.md:31-65`; router/approval/workbench exist, but no task writer or launcher implementation exists |
+| WF-001 Research Summary readiness | Operational | `06_Automation & Workflow Catalog.md:15-29`; source-backed research execution now exists and is review-gated |
+| WF-002 Codex Task Generator readiness | Operational | `06_Automation & Workflow Catalog.md:31-65`; governed task generation and low-friction dispatch now exist |
 | WF-003 Codex Prompt Helper readiness | Ready | `06_Automation & Workflow Catalog.md:130-144`; manual prompt generation is already achievable in chat |
 | WF-004 System Status Check readiness | Partially Ready | `06_Automation & Workflow Catalog.md:146-160`; `Scripts/Invoke-COOPERWorkbench.ps1:197-243` only provides a narrow local status check |
-| WF-005 Obsidian Note Creation readiness | Blocked | `06_Automation & Workflow Catalog.md:162-176`; no note-writing workbench exists yet |
-| WF-006 Image Generation readiness | Blocked | `06_Automation & Workflow Catalog.md:178-192`; no image-generation execution path exists |
+| WF-005 Note Creation readiness | Operational | `06_Automation & Workflow Catalog.md:162-176`; governed note creation now exists and is review-gated |
+| WF-006 Knowledge Collection Import Draft readiness | Operational | `06_Automation & Workflow Catalog.md:178-192`; chained import-draft execution now exists after WF-001 review pass |
 | WF-007 Private Local Analysis readiness | Partially Ready | `06_Automation & Workflow Catalog.md:194-208`; policies are in place, but no local analysis workbench exists yet |
 
 ## Test Coverage Review

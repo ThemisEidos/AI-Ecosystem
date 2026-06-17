@@ -15,52 +15,61 @@ Storage rules:
 - Open WebUI Workspace is the knowledge and reference-asset layer.
 - Workspace should not hold registries, approval rules, runtime state, secrets, private data, or personality state.
 
+## Workflow Approval Matrix
+
+Higher-risk workflows continue to require explicit confirmation. The approved low-risk workflows below may use governed routing and, where policy allows, low-friction dispatch.
+
+| Workflow                                 | Behavior                                       | Risk | Write Location                             | External Access             |
+| ---------------------------------------- | ---------------------------------------------- | ---- | ------------------------------------------ | --------------------------- |
+| WF-001 Research Summary                  | Direct execution after governed routing/review | Low  | Obsidian Agent Findings/Research           | Approved official docs only |
+| WF-002 Codex Task Generator              | Auto-dispatch for task file generation         | Low  | Codex_Tasks/                               | None                        |
+| WF-005 Note Creation                     | Direct execution after governed routing/review | Low  | Obsidian Agent Findings/Drafts             | None                        |
+| WF-006 Knowledge Collection Import Draft | Chained after WF-001 review pass               | Low  | Obsidian Agent Findings/Collection Imports | None                        |
+
 ## WF-001 Research Summary
 
 - Purpose: turn source material into a concise research brief
 - Workshop: Open Workshop
-- Trigger: user requests a summary of public or sanitized material
-- Inputs: notes, links, source excerpts
-- Tools Used: COOPER, research tool, writing model, Obsidian
-- Execution Method: approved general workflow
+- Trigger: user requests research, summary, analysis, or a source-backed brief
+- Inputs: approved official sources, notes, links, source excerpts
+- Tools Used: COOPER, approved source retrieval, writing model, Obsidian
+- Execution Method: direct execution after governed routing and review
 - Permission Level: 1
 - Approval Requirement: required if external execution or side effects are involved
 - Output: structured research summary
-- Storage Location: Obsidian
-- Security Notes: sanitize before cloud use if needed
-- Status: Planned
-- Next Step: define the summary template
+- Storage Location: Obsidian Agent Findings/Research
+- Security Notes: approved official docs only
+- Status: Operational
+- Next Step: keep source collection and review enforcement stable
 
 ## WF-002 Codex Task Generator
 
-- Purpose: turn COOPER project discussion, decisions, and requirements into a structured Codex task file and optionally launch Codex CLI with user approval
+- Purpose: turn project discussion, decisions, findings, and requirements into a structured Codex task file
 - Workshop: Open Workshop
-- Trigger: project discussion, decisions, or implementation requirements
+- Trigger: task requests, implementation requests, project decisions, findings, or workflow outputs
 - Inputs: project context, requirements, target repo, desired outcome
 - Tools Used: COOPER, writing model, task template, Codex_Tasks folder, governed workbench
-- Execution Method: governed task file generation
+- Execution Method: auto-dispatch for approved low-risk task generation
 - Permission Level: 2 for task file creation; 4 for launcher invocation
 - Approval Requirement: required
-- Output: Codex task file, optional launcher start
+- Output: Codex task file
 - Storage Location: Project Workspace Codex_Tasks/
 - Security Notes: do not include secrets, API keys, credentials, private keys, or Category 2 material
 - Status: Operational
-- Next Step: keep launcher invocation optional and defer it until explicitly requested
+- Next Step: keep launcher invocation separate from task generation unless explicitly requested
 - Suggested File Format: `TASK-###_<short-title>.md`
 - Suggested Path: `Codex_Tasks/`
 
 ### WF-002 Phases
 
 - Phase 1 - Manual
-  - COOPER generates a Codex prompt.
-  - User manually copies or pastes it into Codex.
-  - No execution.
+  - COOPER generates a Codex-ready task prompt.
+  - User may manually copy or paste it into Codex if desired.
+  - No workflow dispatch.
 - Phase 2 - Semi-Automated
   - COOPER writes a task file to `Codex_Tasks/`.
-  - User approves launcher.
-  - Launcher opens Codex CLI or app context in the target repo.
-  - User remains responsible for starting or confirming Codex work.
-  - This is the selected near-term target.
+  - Governed routing and approval determine whether dispatch can proceed automatically.
+  - Task generation is the selected near-term target.
 - Phase 3 - Integrated / Deferred
   - COOPER directly invokes Codex CLI.
   - Treat as Level 4 execution.
@@ -71,11 +80,11 @@ Storage rules:
 
 - Open WebUI Workspace Knowledge Layer
   - Purpose: organize governance documents, reference libraries, and project knowledge collections.
-  - Status: future
+  - Status: Future
   - Notes: cloud-connected collections remain Category 1 only unless the Workspace is confirmed local-only and Private Workshop safe.
 - Fabric Prompt Pattern Layer
   - Purpose: store reusable prompt patterns for analysis, summarization, report review, threat analysis, and decision support.
-  - Status: future
+  - Status: Future
   - Notes: patterns must not contain secrets, runtime state, or registry logic.
 
 ## Workflow Definition of Done
@@ -154,56 +163,56 @@ Workflow completion is measured by outcome quality, not by workflow execution al
 - Output: Codex-ready prompt text
 - Storage Location: Project Workspace or temporary working notes
 - Security Notes: keep sensitive details out of the prompt
-- Status: Planned
+- Status: Future
 - Next Step: keep as a fallback only
 
-## WF-004 System Status Check
+## WF-004 Operational Status
 
-- Purpose: summarize the health and readiness of the ecosystem
+- Purpose: summarize the health and readiness of the ecosystem from runtime state
 - Workshop: Open Workshop
-- Trigger: user asks for status
-- Inputs: service health, approvals, workflow state, mode state
-- Tools Used: COOPER, status sources, dashboard data
+- Trigger: user asks what is operational, what can you do, or show system status
+- Inputs: roadmap phase, workflow definitions, project memory, skill state, recent activity
+- Tools Used: COOPER, status sources, dashboard data, workflow definitions
 - Execution Method: read-only status aggregation
 - Permission Level: 1
 - Approval Requirement: none for read-only status
 - Output: operational status summary
-- Storage Location: Obsidian or dashboard notes
+- Storage Location: read-only summary only
 - Security Notes: do not include secrets
-- Status: Planned
-- Next Step: define status fields
+- Status: Operational
+- Next Step: keep the runtime summary aligned with state files and workflow definitions
 
-## WF-005 Obsidian Note Creation
+## WF-005 Note Creation
 
 - Purpose: create a structured note in the vault
 - Workshop: Open Workshop or Private Workshop
 - Trigger: new idea, decision, summary, or reusable reference
 - Inputs: title, body, tags, target folder
 - Tools Used: COOPER, note template, Obsidian
-- Execution Method: approved note creation workflow
+- Execution Method: direct execution after governed routing and review
 - Permission Level: 2
 - Approval Requirement: required if the note creation writes to a governed location
 - Output: new note
-- Storage Location: Obsidian
+- Storage Location: Obsidian Agent Findings/Drafts
 - Security Notes: private notes must stay in the restricted compartment
-- Status: Planned
-- Next Step: define naming and template conventions
+- Status: Operational
+- Next Step: keep the note workflow aligned with governed storage boundaries
 
-## WF-006 Image Generation
+## WF-006 Knowledge Collection Import Draft
 
-- Purpose: generate an image from a prompt
+- Purpose: turn approved research output into a collection import draft
 - Workshop: Open Workshop
-- Trigger: user requests image creation
-- Inputs: prompt, style, size, usage constraints
-- Tools Used: COOPER, image generation tool, execution gateway
-- Execution Method: approved external or local image generation workflow
-- Permission Level: 3
-- Approval Requirement: true
-- Output: image file
-- Storage Location: Project Workspace or Restricted DMZ Workspace, depending on workshop
-- Security Notes: do not send sensitive prompts to cloud image tools
-- Status: Planned
-- Next Step: define approved image tool entries
+- Trigger: approved research summary, collection curation request, or follow-on import drafting
+- Inputs: source-backed research summary, source list, target collection
+- Tools Used: COOPER, writing model, governed workbench, Obsidian
+- Execution Method: chained after WF-001 review pass
+- Permission Level: 2
+- Approval Requirement: required if governed write is involved
+- Output: knowledge collection import draft
+- Storage Location: Obsidian Agent Findings/Collection Imports
+- Security Notes: only approved sources and source URLs should be carried forward
+- Status: Operational
+- Next Step: keep the WF-001 -> WF-006 chain stable
 
 ## WF-007 Private Local Analysis
 
@@ -218,7 +227,7 @@ Workflow completion is measured by outcome quality, not by workflow execution al
 - Output: restricted analysis note or local summary
 - Storage Location: Restricted DMZ Workspace
 - Security Notes: no cloud AI, no external webhooks, no plain-text sensitive logging
-- Status: Planned
+- Status: Future
 - Next Step: define the approved local analysis pipeline
 
 ## Glossary

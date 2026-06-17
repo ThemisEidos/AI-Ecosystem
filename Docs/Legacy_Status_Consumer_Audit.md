@@ -4,7 +4,7 @@
 
 This audit covers remaining non-governed consumers of `Get-COOPERRuntimeStatus.ps1` and related legacy status reporting behavior.
 
-The governed `/cooper status` path does not use the legacy helper.
+The governed conversational status path does not use the legacy helper.
 
 ## Consumer List
 
@@ -12,17 +12,17 @@ The governed `/cooper status` path does not use the legacy helper.
 |---|---|---:|---:|---|---|
 | `Scripts/Invoke-PDAChatBridge.ps1` | `Get-PDACommanderRuntimeContext` -> `Get-COOPERRuntimeStatus` | Yes | Yes | High | Quarantine |
 | `Scripts/Get-PDADashboardStatus.ps1` | dashboard status assembly -> `Get-COOPERRuntimeStatus` | Yes | Yes | High | Quarantine |
-| `Scripts/COOPER_ConversationalRouter.ps1` | orphaned `Get-COOPERRuntimeStatus.ps1` reference; not used by governed `/cooper status` | Yes, indirectly | Potentially, if reactivated | Low | Preserve as deprecated non-authoritative |
+| `Scripts/COOPER_ConversationalRouter.ps1` | orphaned `Get-COOPERRuntimeStatus.ps1` reference; not used by governed conversational status | Yes, indirectly | Potentially, if reactivated | Low | Preserve as deprecated non-authoritative |
 
 ## Notes on Legacy Helper
 
 - `Scripts/Get-COOPERRuntimeStatus.ps1` is deprecated.
 - It is not authoritative for governed COOPER status.
-- It should remain isolated from the `/cooper status` command surface.
+- It should remain isolated from the governed conversational status surface.
 
 ## Risk Assessment
 
-- Immediate safety issue for governed `/cooper status`: none.
+- Immediate safety issue for governed conversational status: none.
 - Immediate safety issue for legacy PDA status surfaces: yes, because those paths can still emit status text without passing through the COOPER governance chain.
 
 ## Recommended Remediation Order
@@ -35,5 +35,5 @@ The governed `/cooper status` path does not use the legacy helper.
 ## Validation
 
 - `Scripts/Test-COOPERStatusCommand.ps1` passed.
-- Governed `/cooper status` remains routed through the identity -> registry -> router -> approval -> workbench chain.
+- Governed conversational status remains routed through the identity -> registry -> router -> approval -> workbench chain.
 - The governed status path does not use `Get-COOPERRuntimeStatus.ps1`.

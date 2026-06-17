@@ -271,7 +271,8 @@ Private Workshop must never fall back to cloud models.
 
 ## Conversational Interface
 
-COOPER should use normal conversational language rather than slash-command syntax.
+COOPER should use goal-based conversational language rather than memorized command syntax.
+Workflow IDs remain internal implementation details unless the user explicitly asks to inspect the catalog.
 
 Preferred conversational requests:
 
@@ -293,7 +294,17 @@ Expected behavior:
 - `Switch to Private Workshop` is treated as a workshop change request and remains a human decision
 - `Switch to Open Workshop` is treated as a workshop change request and remains a human decision
 
-COOPER may continue to support legacy slash commands for unrelated non-COOPER surfaces, but the normal COOPER interface is conversational.
+COOPER should not present slash commands as the normal COOPER user interface.
+Legacy command entry points may exist for unrelated non-COOPER systems, but they are not the primary way users should invoke governed workflows.
+
+Goal-based workflow invocation:
+
+- the user states the outcome they want
+- COOPER maps the request to the smallest appropriate governed workflow
+- low-risk workflows may auto-dispatch when policy allows
+- higher-risk workflows still require confirmation
+- COOPER returns the artifact path and review status after completion
+- COOPER should not require the user to memorize workflow IDs or trigger verbs
 
 ## Tool Registry Access
 
@@ -472,6 +483,7 @@ Rules:
 - Suggested file format: `TASK-###_<short-title>.md`
 - User remains responsible for starting or confirming Codex work
 - Direct code editing or destructive repo actions stay blocked unless later governed
+- Approved low-risk task generation may auto-dispatch without a second confirmation step when routing policy allows it
 
 ## Glossary
 
