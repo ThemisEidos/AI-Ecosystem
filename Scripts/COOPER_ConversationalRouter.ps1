@@ -427,7 +427,7 @@ function Test-PDAConversationalResearchCollectionCodexChain {
 
     $ResearchMatch = $NormalizedText -match '(?i)\b(research|search|source|sources|documentation|docs|official|find|findings)\b'
     $CollectionMatch = $NormalizedText -match '(?i)\b(collection|knowledge base|knowledge collection|linux collection|linux & infrastructure collection|linux and infrastructure collection)\b'
-    $ImplementationMatch = $NormalizedText -match '(?i)\b(implementation work|implementation|task|work item|action item|codex|prepare work|prepare implementation work|implementation task|implementation plan)\b'
+    $ImplementationMatch = $NormalizedText -match '(?i)\b(prepare implementation work|prepare work|implementation work|implementation task|implementation plan|work item|action item|collection draft|prepare the collection draft)\b'
 
     return [bool]($ResearchMatch -and $CollectionMatch -and $ImplementationMatch)
 }
