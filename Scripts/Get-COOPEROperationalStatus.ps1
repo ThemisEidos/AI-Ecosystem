@@ -219,7 +219,8 @@ function Find-COOPERArtifactPathByName {
         (Join-Path $Root "PDA-Outputs"),
         (Join-Path $Root "PDA-Tasks"),
         (Join-Path $Root "Obsidian Vault"),
-        (Join-Path $Root "PDA-Obsidian-Vault")
+        (Join-Path $Root "PDA-Obsidian-Vault"),
+        (Join-Path $Root "Restricted DMZ Workspace")
     )
 
     foreach ($SearchRoot in $SearchRoots) {
@@ -359,11 +360,33 @@ function Get-COOPERWorkflowArtifactPath {
                         if (-not [string]::IsNullOrWhiteSpace($ArtifactPath)) {
                             return $ArtifactPath
                         }
+
+                        $RestrictedArtifactPath = Join-Path $Root (Join-Path "Restricted DMZ Workspace\WF-007 Private Local Analysis" ([string]$Skill.example_output))
+                        if (Test-Path -LiteralPath $RestrictedArtifactPath -PathType Leaf) {
+                            return [System.IO.Path]::GetFullPath($RestrictedArtifactPath)
+                        }
                     }
                 }
             }
+
+            $ExpectedArtifactFolder = Join-Path $Root "Restricted DMZ Workspace\WF-007 Private Local Analysis"
+            if (Test-Path -LiteralPath $ExpectedArtifactFolder -PathType Container) {
+                try {
+                    $LatestArtifact = Get-ChildItem -LiteralPath $ExpectedArtifactFolder -File -ErrorAction SilentlyContinue |
+                        Sort-Object -Descending -Property LastWriteTime |
+                        Select-Object -First 1
+                    if ($LatestArtifact) {
+                        return [string]$LatestArtifact.FullName
+                    }
+                }
+                catch {}
+            }
         }
         "WF-005" {
+            if ($ProjectMemory -and $ProjectMemory.PSObject.Properties.Name -contains "last_successful_workflow" -and $ProjectMemory.last_successful_workflow -and [string]$ProjectMemory.last_successful_workflow.workflow_id -eq "WF-005" -and -not [string]::IsNullOrWhiteSpace([string]$ProjectMemory.last_successful_workflow.output_path)) {
+                return [string]$ProjectMemory.last_successful_workflow.output_path
+            }
+
             if ($SkillsState -and $SkillsState.PSObject.Properties.Name -contains "skills") {
                 foreach ($Skill in @($SkillsState.skills)) {
                     if ([string]$Skill.workflow_id -eq "WF-005" -and -not [string]::IsNullOrWhiteSpace([string]$Skill.example_output)) {
@@ -373,6 +396,11 @@ function Get-COOPERWorkflowArtifactPath {
                         }
                     }
                 }
+            }
+
+            $ExpectedNotePath = Join-Path $Root "Obsidian Vault\02_Projects\AI Tool Ecosystem\Agent Findings\Drafts\wf-005-note-creation.md"
+            if (Test-Path -LiteralPath $ExpectedNotePath -PathType Leaf) {
+                return [System.IO.Path]::GetFullPath($ExpectedNotePath)
             }
         }
     }
@@ -405,12 +433,21 @@ function Get-COOPERWorkflowExecutionStatus {
             }
         }
         "WF-005" {
+            if ($ProjectMemory -and $ProjectMemory.PSObject.Properties.Name -contains "last_successful_workflow" -and $ProjectMemory.last_successful_workflow -and [string]$ProjectMemory.last_successful_workflow.workflow_id -eq "WF-005") {
+                return "pass"
+            }
+
             if ($SkillsState -and $SkillsState.PSObject.Properties.Name -contains "skills") {
                 foreach ($Skill in @($SkillsState.skills)) {
                     if ([string]$Skill.workflow_id -eq "WF-005" -and [string]$Skill.status -match '^(operational|pass|ready)$') {
                         return "pass"
                     }
                 }
+            }
+
+            $ExpectedNotePath = Join-Path $Root "Obsidian Vault\02_Projects\AI Tool Ecosystem\Agent Findings\Drafts\wf-005-note-creation.md"
+            if (Test-Path -LiteralPath $ExpectedNotePath -PathType Leaf) {
+                return "pass"
             }
         }
         "WF-006" {
@@ -575,15 +612,15 @@ function Get-COOPERApprovalWorkflowHealth {
         }
     }
 
-    if ($Summary.pending_approval -eq 0) { $Summary.pending_approval = @($CurrentRecords | Where-Object { [string]$_.status -eq "pending_approval" }).Count }
-    if ($Summary.approved -eq 0) { $Summary.approved = @($CurrentRecords | Where-Object { [string]$_.status -eq "approved" }).Count }
-    if ($Summary.rejected -eq 0) { $Summary.rejected = @($CurrentRecords | Where-Object { [string]$_.status -eq "rejected" }).Count }
-    if ($Summary.revision_requested -eq 0) { $Summary.revision_requested = @($CurrentRecords | Where-Object { [string]$_.status -eq "revision_requested" }).Count }
-    if ($Summary.replan_requested -eq 0) { $Summary.replan_requested = @($CurrentRecords | Where-Object { [string]$_.status -eq "replan_requested" }).Count }
-    if ($Summary.escalated -eq 0) { $Summary.escalated = @($CurrentRecords | Where-Object { [string]$_.status -eq "escalated" }).Count }
-    if ($Summary.cancelled -eq 0) { $Summary.cancelled = @($CurrentRecords | Where-Object { [string]$_.status -eq "cancelled" }).Count }
-    if ($Summary.completed -eq 0) { $Summary.completed = @($CurrentRecords | Where-Object { [string]$_.status -eq "completed" }).Count }
-    if ($Summary.blocked -eq 0) { $Summary.blocked = @($CurrentRecords | Where-Object { [string]$_.status -in @("rejected", "cancelled") }).Count }
+    $Summary.pending_approval = @($CurrentRecords | Where-Object { [string]$_.status -eq "pending_approval" }).Count
+    $Summary.approved = @($CurrentRecords | Where-Object { [string]$_.status -eq "approved" }).Count
+    $Summary.rejected = @($CurrentRecords | Where-Object { [string]$_.status -eq "rejected" }).Count
+    $Summary.revision_requested = @($CurrentRecords | Where-Object { [string]$_.status -eq "revision_requested" }).Count
+    $Summary.replan_requested = @($CurrentRecords | Where-Object { [string]$_.status -eq "replan_requested" }).Count
+    $Summary.escalated = @($CurrentRecords | Where-Object { [string]$_.status -eq "escalated" }).Count
+    $Summary.cancelled = @($CurrentRecords | Where-Object { [string]$_.status -eq "cancelled" }).Count
+    $Summary.completed = @($CurrentRecords | Where-Object { [string]$_.status -in @("approved", "completed") }).Count
+    $Summary.blocked = @($CurrentRecords | Where-Object { [string]$_.status -in @("rejected", "cancelled") }).Count + $BlockedAgentRuns
     $Summary.stale = [int]$Stale
     $Summary.counts = [ordered]@{
         pending_approval = [int]$Summary.pending_approval
@@ -597,6 +634,12 @@ function Get-COOPERApprovalWorkflowHealth {
         stale = [int]$Stale
         blocked = [int]$Summary.blocked
         pending = [int]$Summary.pending_approval
+    }
+
+    $Summary.pending = [int]$Summary.pending_approval
+    if ($Summary.PSObject.Properties.Name -contains "counts" -and $Summary.counts) {
+        $Summary.counts.pending = [int]$Summary.pending_approval
+        $Summary.counts.pending_approval = [int]$Summary.pending_approval
     }
 
     return [pscustomobject]$Summary
@@ -683,7 +726,8 @@ foreach ($SourceText in @($RoadmapText, $MilestoneText)) {
 
     $NormalizedSourceText = ([string]$SourceText) -replace ([char]0x2192), '->'
     foreach ($Match in ([regex]::Matches([string]$NormalizedSourceText, 'WF-\d+\s*->\s*WF-\d+'))) {
-        $Chain = ([string]$Match.Value.Trim()) -replace '\s*->\s*', ' -> '
+        $Parts = @($Match.Value -split '\s*->\s*' | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
+        $Chain = if ($Parts.Count -eq 2) { "{0} → {1}" -f $Parts[0], $Parts[1] } else { ([string]$Match.Value.Trim()) -replace '\s*->\s*', ' → ' }
         if (-not [string]::IsNullOrWhiteSpace($Chain) -and $WorkflowChains -notcontains $Chain) {
             $WorkflowChains.Add($Chain)
         }

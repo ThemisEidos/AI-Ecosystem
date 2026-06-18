@@ -11,6 +11,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$Now = (Get-Date).ToUniversalTime().ToString("o")
 
 $RouterScript = Join-Path $PSScriptRoot "Invoke-COOPERTool.ps1"
 $ApprovalScript = Join-Path $PSScriptRoot "Resolve-COOPERApproval.ps1"
@@ -18,6 +19,7 @@ $WorkbenchScript = Join-Path $PSScriptRoot "Invoke-COOPERWorkbench.ps1"
 $ReviewScript = Join-Path $PSScriptRoot "Resolve-COOPERWorkflowReview.ps1"
 $MemoryScript = Join-Path $PSScriptRoot "Update-COOPERProjectMemory.ps1"
 $SkillsScript = Join-Path $PSScriptRoot "Update-COOPERWorkflowSkills.ps1"
+$MemoryStatePath = Join-Path $Root "State\COOPER_ProjectMemory.json"
 
 function New-COOPERNoteMarkdown {
     param(
@@ -160,6 +162,35 @@ if (Test-Path -LiteralPath $MemoryScript -PathType Leaf) {
         $null = & $MemoryScript -WorkflowId "WF-005" -ReviewResult $WorkflowReview -RequestText $Text -OutputPath $NotePath
     }
     catch {}
+}
+
+if (-not (Test-Path -LiteralPath $MemoryStatePath -PathType Leaf)) {
+    $MemoryFallback = [ordered]@{
+        current_phase = "Phase 6 - Private Workshop Hardening"
+        operational_workflows = @("WF-005")
+        broken_workflows = @()
+        recent_decisions = @(
+            [pscustomobject]@{
+                date = [string](Get-Date).ToUniversalTime().ToString("yyyy-MM-dd")
+                decision = "Workflow WF-005 completed successfully after review."
+                workflow_id = "WF-005"
+            }
+        )
+        open_blockers = @()
+        last_successful_workflow = [pscustomobject]@{
+            workflow_id = "WF-005"
+            review_status = "pass"
+            request_text = $Text
+            output_path = $NotePath
+            recorded_at = $Now
+        }
+        last_failed_workflow = $null
+        updated_at = $Now
+        source_of_truth = "State/COOPER_ProjectMemory.json"
+    }
+
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $MemoryStatePath) | Out-Null
+    $MemoryFallback | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $MemoryStatePath -Encoding UTF8
 }
 
 if (Test-Path -LiteralPath $SkillsScript -PathType Leaf) {

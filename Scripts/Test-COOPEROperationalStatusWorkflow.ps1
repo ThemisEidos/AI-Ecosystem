@@ -5,6 +5,7 @@ $ErrorActionPreference = "Stop"
 
 $Root = Split-Path -Parent $PSScriptRoot
 $StatusScript = Join-Path $PSScriptRoot "Get-COOPEROperationalStatus.ps1"
+$NoteCreationScript = Join-Path $PSScriptRoot "Invoke-COOPERNoteCreationCommand.ps1"
 $PrivateAnalysisScript = Join-Path $PSScriptRoot "Invoke-COOPERPrivateLocalAnalysis.ps1"
 
 if (-not (Test-Path -LiteralPath $StatusScript -PathType Leaf)) {
@@ -24,6 +25,16 @@ if (Test-Path -LiteralPath $PrivateAnalysisScript -PathType Leaf) {
 }
 else {
     $Issues.Add("WF-007 private local analysis workflow script is missing.")
+}
+
+if (Test-Path -LiteralPath $NoteCreationScript -PathType Leaf) {
+    $NoteCreationResult = & $NoteCreationScript -Text "Verify the WF-005 note creation status evidence and canonical operational reporting." -Approved -Root $Root
+    if ([bool]$NoteCreationResult.success -ne $true) {
+        $Issues.Add("WF-005 note creation workflow did not succeed before status verification.")
+    }
+}
+else {
+    $Issues.Add("WF-005 note creation workflow script is missing.")
 }
 
 $Success = & $StatusScript -Root $Root -WorkshopMode "Open Workshop"
@@ -76,8 +87,8 @@ foreach ($WorkflowId in @("WF-001", "WF-002", "WF-004", "WF-005", "WF-006", "WF-
 }
 
 $ChainStrings = @($Success.operational_chains | ForEach-Object { [string]$_ })
-if ($ChainStrings.Count -ne 1 -or $ChainStrings[0] -ne "WF-001 -> WF-006") {
-    $Issues.Add("Operational chains were not deduplicated to a single normalized WF-001 -> WF-006 entry.")
+if ($ChainStrings.Count -ne 1 -or $ChainStrings[0] -ne "WF-001 → WF-006") {
+    $Issues.Add("Operational chains were not deduplicated to a single normalized WF-001 → WF-006 entry.")
 }
 
 $DefinitionIds = @($Success.workflow_definitions | ForEach-Object { [string]$_.workflow_id })
@@ -120,6 +131,9 @@ else {
     if ($WorkflowStatusMap["WF-001"] -ne "pass") {
         $Issues.Add("WF-001 did not report pass after a successful research workflow record was present.")
     }
+    if ($WorkflowStatusMap["WF-005"] -ne "pass") {
+        $Issues.Add("WF-005 did not report pass after a successful note creation workflow record was present.")
+    }
     if ($WorkflowStatusMap["WF-004"] -ne "pass") {
         $Issues.Add("WF-004 did not report pass after the status report was generated.")
     }
@@ -129,6 +143,10 @@ else {
     $WF001Status = @($Success.workflow_statuses | Where-Object { [string]$_.workflow_id -eq "WF-001" } | Select-Object -First 1)
     if ($WF001Status.Count -eq 0 -or [string]$WF001Status[0].last_run_artifact_path -eq "") {
         $Issues.Add("WF-001 did not report a last run artifact path.")
+    }
+    $WF005Status = @($Success.workflow_statuses | Where-Object { [string]$_.workflow_id -eq "WF-005" } | Select-Object -First 1)
+    if ($WF005Status.Count -eq 0 -or [string]$WF005Status[0].last_run_artifact_path -eq "") {
+        $Issues.Add("WF-005 did not report a last run artifact path.")
     }
     $WF007Status = @($Success.workflow_statuses | Where-Object { [string]$_.workflow_id -eq "WF-007" } | Select-Object -First 1)
     if ($WF007Status.Count -eq 0 -or [string]$WF007Status[0].last_run_artifact_path -eq "") {
@@ -144,6 +162,9 @@ if (-not $Success.PSObject.Properties.Name.Contains("approval_health")) {
 }
 elseif ([string]$Success.approval_health.pending_approval -ne [string]$Success.approval_health.pending) {
     $Issues.Add("Operational status helper approval counts are inconsistent.")
+}
+elseif ([int]$Success.approval_health.completed -lt 1) {
+    $Issues.Add("Operational status helper did not report any completed approvals.")
 }
 
 if ([string]$Success.status_source -match 'Get-COOPERRuntimeStatus\.ps1') {

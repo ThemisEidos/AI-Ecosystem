@@ -57,6 +57,10 @@ Assert-PDACondition -Condition ([string]$ApproveResult.current_status -eq 'appro
 Assert-PDACondition -Condition (Test-Path -LiteralPath $ApproveResult.approval.approval_path -PathType Leaf) -Message 'Approved approval file missing.' -Issues $Issues | Out-Null
 Assert-PDACondition -Condition (($ApproveResult.approval.history | Select-Object -Last 1).to_status -eq 'approved') -Message 'Approval history did not record the approved transition.' -Issues $Issues | Out-Null
 
+$LiveApprovalStatus = Get-PDAApprovalWorkflowStatus -Root $Root -Latest 10
+Assert-PDACondition -Condition ([int]$LiveApprovalStatus.counts.completed -ge 1) -Message 'Approval workflow status did not report a completed approval.' -Issues $Issues | Out-Null
+Assert-PDACondition -Condition (@($LiveApprovalStatus.recent_pending | Where-Object { [string]$_.approval_id -eq [string]$CreateResult.approval_id }).Count -eq 0) -Message 'Completed approval still appears in the pending approval list.' -Issues $Issues | Out-Null
+
 $InvalidTransition = Update-PDAApprovalRequest -ApprovalId $CreateResult.approval_id -Status 'pending_approval' -Approver 'human operator' -Rationale 'Invalid transition.' -Root $Root -NoThrow
 Assert-PDACondition -Condition ([string]$InvalidTransition.status -eq 'blocked') -Message 'Invalid approval transition should be blocked.' -Issues $Issues | Out-Null
 Assert-PDACondition -Condition (-not [string]::IsNullOrWhiteSpace([string]$InvalidTransition.blocked_reason)) -Message 'Invalid approval transition should provide a blocked reason.' -Issues $Issues | Out-Null
@@ -92,6 +96,8 @@ Assert-PDACondition -Condition ($BridgeCancel.response_text -notmatch 'No pendin
 
 $WorkflowStatus = Get-PDAApprovalWorkflowStatus -Root $Root -Latest 10
 Assert-PDACondition -Condition ([int]$WorkflowStatus.counts.pending_approval -ge 0) -Message 'Approval workflow status missing pending count.' -Issues $Issues | Out-Null
+Assert-PDACondition -Condition ([int]$WorkflowStatus.pending_approval_count -eq [int]$WorkflowStatus.counts.pending_approval) -Message 'Approval workflow pending count is inconsistent.' -Issues $Issues | Out-Null
+Assert-PDACondition -Condition ([int]$WorkflowStatus.approval_count -ge [int]$WorkflowStatus.counts.completed) -Message 'Approval workflow completed count exceeds total approvals.' -Issues $Issues | Out-Null
 Assert-PDACondition -Condition ($WorkflowStatus.PSObject.Properties.Name -contains 'recent_approvals') -Message 'Approval workflow status missing recent approvals.' -Issues $Issues | Out-Null
 Assert-PDACondition -Condition ($WorkflowStatus.PSObject.Properties.Name -contains 'stale_count') -Message 'Approval workflow status missing stale_count.' -Issues $Issues | Out-Null
 Assert-PDACondition -Condition ($WorkflowStatus.PSObject.Properties.Name -contains 'blocked_count') -Message 'Approval workflow status missing blocked_count.' -Issues $Issues | Out-Null
