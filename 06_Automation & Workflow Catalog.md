@@ -6,6 +6,8 @@ This document catalogs proven workflows that COOPER can route to approved execut
 
 The intent is to keep the first workflow set useful and small.
 
+Phase 5 workflows are operational. Cleanup and stabilization remain in progress while the next major build is Phase 6 Private Workshop Hardening.
+
 Storage rules:
 
 - Open Workshop writes to Obsidian or Project Workspace with approval.
@@ -40,7 +42,7 @@ Higher-risk workflows continue to require explicit confirmation. The approved lo
 - Storage Location: Obsidian Agent Findings/Research
 - Security Notes: approved official docs only
 - Status: Operational
-- Next Step: keep source collection and review enforcement stable
+- Next Step: keep source collection, review enforcement, and artifact-path reporting stable
 
 ## WF-002 Codex Task Generator
 
@@ -180,7 +182,8 @@ Workflow completion is measured by outcome quality, not by workflow execution al
 - Storage Location: read-only summary only
 - Security Notes: do not include secrets
 - Status: Operational
-- Next Step: keep the runtime summary aligned with state files and workflow definitions
+- Next Step: keep the runtime summary aligned with state files, workflow definitions, and approval lifecycle categories
+- Operational Chains: WF-001 → WF-006 and WF-001 → WF-006 → WF-002
 
 ## WF-005 Note Creation
 

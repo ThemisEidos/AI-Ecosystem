@@ -31,6 +31,7 @@ foreach ($Field in @(
     "known_capabilities",
     "known_issues",
     "known_limitations",
+    "approval_health",
     "recent_activity",
     "approval_or_pending_action_status",
     "recommended_next_action",
@@ -52,6 +53,9 @@ foreach ($Field in @(
 if ([string]$Success.current_phase -notmatch '^Phase 5 - First Operational Workflows$') {
     $Issues.Add("Operational status helper did not report the current roadmap phase.")
 }
+if ([string]$Success.status -ne "pass") {
+    $Issues.Add("WF-004 did not report pass after generating the operational status summary.")
+}
 
 $WorkflowIds = @($Success.operational_workflows | ForEach-Object { [string]$_.workflow_id })
 foreach ($WorkflowId in @("WF-001", "WF-002", "WF-004", "WF-005", "WF-006")) {
@@ -61,8 +65,8 @@ foreach ($WorkflowId in @("WF-001", "WF-002", "WF-004", "WF-005", "WF-006")) {
 }
 
 $ChainStrings = @($Success.operational_chains | ForEach-Object { [string]$_ })
-if ($ChainStrings -notcontains "WF-001 -> WF-006") {
-    $Issues.Add("Operational chain WF-001 -> WF-006 was not reported.")
+if ($ChainStrings.Count -ne 1 -or $ChainStrings[0] -ne "WF-001 → WF-006") {
+    $Issues.Add("Operational chains were not deduplicated to a single normalized WF-001 → WF-006 entry.")
 }
 
 $DefinitionIds = @($Success.workflow_definitions | ForEach-Object { [string]$_.workflow_id })
@@ -82,6 +86,9 @@ if ([string]$Success.response_text -notmatch '(?i)Current Phase:|Approval / Pend
 if ([string]$Success.response_text -notmatch '(?i)WF-002 Codex Task Generator \| status:|WF-004 Operational Status \| status:|WF-001 Research Summary \| status:|WF-005 Note Creation \| status:|WF-006 Knowledge Collection Import Draft \| status:') {
     $Issues.Add("Operational status response text is missing the workflow status summary.")
 }
+if ((@($Success.summary_lines | Where-Object { [string]$_ -like '- Recent decision:*' }) | Select-Object -Unique).Count -ne @($Success.summary_lines | Where-Object { [string]$_ -like '- Recent decision:*' }).Count) {
+    $Issues.Add("Operational status response text repeated recent decision lines.")
+}
 
 if ($Success.workflow_statuses.Count -lt 5) {
     $Issues.Add("Operational status helper did not return per-workflow status entries.")
@@ -99,10 +106,26 @@ else {
             $Issues.Add("Workflow status summary is missing $WorkflowId.")
         }
     }
+    if ($WorkflowStatusMap["WF-001"] -ne "pass") {
+        $Issues.Add("WF-001 did not report pass after a successful research workflow record was present.")
+    }
+    if ($WorkflowStatusMap["WF-004"] -ne "pass") {
+        $Issues.Add("WF-004 did not report pass after the status report was generated.")
+    }
+    $WF001Status = @($Success.workflow_statuses | Where-Object { [string]$_.workflow_id -eq "WF-001" } | Select-Object -First 1)
+    if ($WF001Status.Count -eq 0 -or [string]$WF001Status[0].last_run_artifact_path -eq "") {
+        $Issues.Add("WF-001 did not report a last run artifact path.")
+    }
 }
 
-if ([string]$Success.approval_or_pending_action_status -notmatch '(?i)pending approvals|none pending') {
-    $Issues.Add("Operational status helper did not summarize approval or pending action state.")
+if ([string]$Success.approval_or_pending_action_status -notmatch '(?i)pending:\s*\d+\s*\|\s*completed:\s*\d+\s*\|\s*stale:\s*\d+\s*\|\s*blocked:\s*\d+') {
+    $Issues.Add("Operational status helper did not categorize approval lifecycle counts.")
+}
+if (-not $Success.PSObject.Properties.Name.Contains("approval_health")) {
+    $Issues.Add("Operational status helper did not expose approval_health.")
+}
+elseif ([string]$Success.approval_health.pending_approval -ne [string]$Success.approval_health.pending) {
+    $Issues.Add("Operational status helper approval counts are inconsistent.")
 }
 
 if ([string]$Success.status_source -match 'Get-COOPERRuntimeStatus\.ps1') {
