@@ -92,6 +92,174 @@ function ConvertTo-COOPERStatusList {
     )
 }
 
+function Get-COOPERWorkflowStatusLabel {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$WorkflowId,
+
+        [Parameter(Mandatory = $false)]
+        $ProjectMemory,
+
+        [Parameter(Mandatory = $false)]
+        $SkillsState
+    )
+
+    $BrokenWorkflows = @()
+    if ($ProjectMemory -and $ProjectMemory.PSObject.Properties.Name -contains "broken_workflows") {
+        $BrokenWorkflows = @(ConvertTo-COOPERStatusList -Value $ProjectMemory.broken_workflows)
+    }
+
+    $LastFailedWorkflowId = ""
+    if ($ProjectMemory -and $ProjectMemory.PSObject.Properties.Name -contains "last_failed_workflow" -and $ProjectMemory.last_failed_workflow -and $ProjectMemory.last_failed_workflow.PSObject.Properties.Name -contains "workflow_id") {
+        $LastFailedWorkflowId = [string]$ProjectMemory.last_failed_workflow.workflow_id
+    }
+
+    if ($BrokenWorkflows -contains $WorkflowId -or $LastFailedWorkflowId -eq $WorkflowId) {
+        return "fail"
+    }
+
+    if ($SkillsState -and $SkillsState.PSObject.Properties.Name -contains "skills") {
+        foreach ($Skill in @($SkillsState.skills)) {
+            if ([string]$Skill.workflow_id -ne $WorkflowId) {
+                continue
+            }
+
+            $SkillStatus = [string]$Skill.status
+            if ($SkillStatus -match '^(operational|ready|pass)$') {
+                return "pass"
+            }
+            if ($SkillStatus -match '^(fail|failed|blocked|unknown)$') {
+                return "unknown"
+            }
+        }
+    }
+
+    if ($ProjectMemory -and $ProjectMemory.PSObject.Properties.Name -contains "last_successful_workflow" -and $ProjectMemory.last_successful_workflow -and $ProjectMemory.last_successful_workflow.PSObject.Properties.Name -contains "workflow_id") {
+        if ([string]$ProjectMemory.last_successful_workflow.workflow_id -eq $WorkflowId) {
+            return "pass"
+        }
+    }
+
+    if ($ProjectMemory -and $ProjectMemory.PSObject.Properties.Name -contains "recent_decisions") {
+        foreach ($Decision in @($ProjectMemory.recent_decisions)) {
+            if ([string]$Decision.workflow_id -ne $WorkflowId) {
+                continue
+            }
+
+            if ([string]$Decision.decision -match '(?i)\bcompleted successfully\b') {
+                return "pass"
+            }
+            if ([string]$Decision.decision -match '(?i)\bfailed\b') {
+                return "fail"
+            }
+        }
+    }
+
+    return "unknown"
+}
+
+function Find-COOPERArtifactPathByName {
+    param(
+        [Parameter(Mandatory = $false)]
+        [string]$FileName,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Root
+    )
+
+    if ([string]::IsNullOrWhiteSpace($FileName)) {
+        return ""
+    }
+
+    $SearchRoots = @(
+        (Join-Path $Root "Codex_Tasks"),
+        (Join-Path $Root "Outputs"),
+        (Join-Path $Root "PDA-Outputs"),
+        (Join-Path $Root "PDA-Tasks"),
+        (Join-Path $Root "Obsidian Vault"),
+        (Join-Path $Root "PDA-Obsidian-Vault")
+    )
+
+    foreach ($SearchRoot in $SearchRoots) {
+        if (-not (Test-Path -LiteralPath $SearchRoot -PathType Container)) {
+            continue
+        }
+
+        try {
+            $Match = Get-ChildItem -Path $SearchRoot -Recurse -File -Filter $FileName -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($Match) {
+                return [string]$Match.FullName
+            }
+        }
+        catch {
+            continue
+        }
+    }
+
+    return ""
+}
+
+function Get-COOPERWorkflowArtifactPath {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$WorkflowId,
+
+        [Parameter(Mandatory = $false)]
+        $ProjectMemory,
+
+        [Parameter(Mandatory = $false)]
+        $SkillsState,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Root
+    )
+
+    switch ([string]$WorkflowId) {
+        "WF-002" {
+            if ($ProjectMemory -and $ProjectMemory.PSObject.Properties.Name -contains "last_successful_workflow" -and $ProjectMemory.last_successful_workflow -and [string]$ProjectMemory.last_successful_workflow.workflow_id -eq "WF-002" -and -not [string]::IsNullOrWhiteSpace([string]$ProjectMemory.last_successful_workflow.output_path)) {
+                return [string]$ProjectMemory.last_successful_workflow.output_path
+            }
+
+            if ($SkillsState -and $SkillsState.PSObject.Properties.Name -contains "skills") {
+                foreach ($Skill in @($SkillsState.skills)) {
+                    if ([string]$Skill.workflow_id -eq "WF-002" -and -not [string]::IsNullOrWhiteSpace([string]$Skill.example_output)) {
+                        $ArtifactPath = Find-COOPERArtifactPathByName -FileName [string]$Skill.example_output -Root $Root
+                        if (-not [string]::IsNullOrWhiteSpace($ArtifactPath)) {
+                            return $ArtifactPath
+                        }
+                    }
+                }
+            }
+        }
+        "WF-006" {
+            if ($SkillsState -and $SkillsState.PSObject.Properties.Name -contains "skills") {
+                foreach ($Skill in @($SkillsState.skills)) {
+                    if ([string]$Skill.workflow_id -eq "WF-006" -and -not [string]::IsNullOrWhiteSpace([string]$Skill.example_output)) {
+                        $ArtifactPath = Find-COOPERArtifactPathByName -FileName [string]$Skill.example_output -Root $Root
+                        if (-not [string]::IsNullOrWhiteSpace($ArtifactPath)) {
+                            return $ArtifactPath
+                        }
+                    }
+                }
+            }
+        }
+        "WF-005" {
+            if ($SkillsState -and $SkillsState.PSObject.Properties.Name -contains "skills") {
+                foreach ($Skill in @($SkillsState.skills)) {
+                    if ([string]$Skill.workflow_id -eq "WF-005" -and -not [string]::IsNullOrWhiteSpace([string]$Skill.example_output)) {
+                        $ArtifactPath = Find-COOPERArtifactPathByName -FileName [string]$Skill.example_output -Root $Root
+                        if (-not [string]::IsNullOrWhiteSpace($ArtifactPath)) {
+                            return $ArtifactPath
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    return ""
+}
+
 $RoadmapPath = if ([string]::IsNullOrWhiteSpace($RoadmapPath)) { Join-Path $Root "07_Implementation Roadmap.md" } else { $RoadmapPath }
 $ProjectMemoryPath = if ([string]::IsNullOrWhiteSpace($ProjectMemoryPath)) { Join-Path $Root "State\COOPER_ProjectMemory.json" } else { $ProjectMemoryPath }
 $SkillsStatePath = if ([string]::IsNullOrWhiteSpace($SkillsStatePath)) { Join-Path $Root "State\COOPER_Skills.json" } else { $SkillsStatePath }
@@ -215,27 +383,65 @@ if ($ProjectMemory -and $ProjectMemory.PSObject.Properties.Name -contains "last_
     $LastFailedWorkflow = $ProjectMemory.last_failed_workflow
 }
 
+$PendingApprovalCount = 0
+if (Test-Path -LiteralPath (Join-Path $Root "PDA-Tasks\approvals\pending") -PathType Container) {
+    try {
+        $PendingApprovalCount = @(Get-ChildItem -Path (Join-Path $Root "PDA-Tasks\approvals\pending") -Filter *.json -File -ErrorAction SilentlyContinue).Count
+    }
+    catch {
+        $PendingApprovalCount = 0
+    }
+}
+
+$WorkflowStatusEntries = @(
+    $OperationalWorkflowDefinitions | ForEach-Object {
+        $WorkflowId = [string]$_.id
+        $WorkflowStatus = Get-COOPERWorkflowStatusLabel -WorkflowId $WorkflowId -ProjectMemory $ProjectMemory -SkillsState $SkillsState
+        $ArtifactPath = Get-COOPERWorkflowArtifactPath -WorkflowId $WorkflowId -ProjectMemory $ProjectMemory -SkillsState $SkillsState -Root $Root
+        [pscustomobject]@{
+            workflow_id         = $WorkflowId
+            name                = [string]$_.name
+            status              = $WorkflowStatus
+            definition_status    = [string]$_.status
+            approval_status     = if ([bool]$_.approval_required) { "approval required" } else { "approval not required" }
+            last_run_artifact    = $ArtifactPath
+            last_run_artifact_path = $ArtifactPath
+        }
+    }
+)
+
 $OperationalWorkflows = @(
     $OperationalWorkflowDefinitions | ForEach-Object {
+        $WorkflowId = [string]$_.id
+        $WorkflowStatus = @($WorkflowStatusEntries | Where-Object { [string]$_.workflow_id -eq $WorkflowId } | Select-Object -First 1)
         [pscustomobject]@{
-            workflow_id    = [string]$_.id
-            name           = [string]$_.name
-            status         = [string]$_.status
-            executor       = [string]$_.executor
-            permission_lvl = $_.permission_level
-            storage_target = [string]$_.storage_target
+            workflow_id        = $WorkflowId
+            name               = [string]$_.name
+            status             = if ($WorkflowStatus.Count -gt 0) { [string]$WorkflowStatus[0].status } else { "unknown" }
+            definition_status  = [string]$_.status
+            executor           = [string]$_.executor
+            permission_lvl     = $_.permission_level
+            storage_target     = [string]$_.storage_target
+            approval_status    = if ($WorkflowStatus.Count -gt 0) { [string]$WorkflowStatus[0].approval_status } else { "approval required" }
+            last_run_artifact  = if ($WorkflowStatus.Count -gt 0) { [string]$WorkflowStatus[0].last_run_artifact } else { "" }
         }
     }
 )
 
 $WorkflowDefinitionSummary = @(
     $WorkflowDefinitions | ForEach-Object {
+        $WorkflowId = [string]$_.id
+        $WorkflowStatus = @($WorkflowStatusEntries | Where-Object { [string]$_.workflow_id -eq $WorkflowId } | Select-Object -First 1)
         [pscustomobject]@{
-            workflow_id    = [string]$_.id
-            name           = [string]$_.name
-            status         = [string]$_.status
-            executor       = [string]$_.executor
-            storage_target = [string]$_.storage_target
+            workflow_id       = $WorkflowId
+            name              = [string]$_.name
+            status            = [string]$_.status
+            definition_status = [string]$_.status
+            workflow_status   = if ($WorkflowStatus.Count -gt 0) { [string]$WorkflowStatus[0].status } else { "unknown" }
+            executor          = [string]$_.executor
+            storage_target    = [string]$_.storage_target
+            approval_status   = if ($WorkflowStatus.Count -gt 0) { [string]$WorkflowStatus[0].approval_status } else { "approval required" }
+            last_run_artifact = if ($WorkflowStatus.Count -gt 0) { [string]$WorkflowStatus[0].last_run_artifact } else { "" }
         }
     }
 )
@@ -271,8 +477,15 @@ $ResponseLines.Add("")
 $ResponseLines.Add(("Active Workshop: {0}" -f $(if ($ResolvedWorkshopIdentity.PSObject.Properties.Name -contains "display_name" -and -not [string]::IsNullOrWhiteSpace([string]$ResolvedWorkshopIdentity.display_name)) { [string]$ResolvedWorkshopIdentity.display_name } else { "COOPER" })))
 $ResponseLines.Add(("Workshop Mode: {0}" -f $(if ($ResolvedWorkshopIdentity.PSObject.Properties.Name -contains "workshop_label" -and -not [string]::IsNullOrWhiteSpace([string]$ResolvedWorkshopIdentity.workshop_label)) { [string]$ResolvedWorkshopIdentity.workshop_label } else { $ResolvedWorkshopMode })))
 $ResponseLines.Add(("Default Model: {0}" -f $(if ($ResolvedWorkshopIdentity.PSObject.Properties.Name -contains "default_model" -and -not [string]::IsNullOrWhiteSpace([string]$ResolvedWorkshopIdentity.default_model)) { [string]$ResolvedWorkshopIdentity.default_model } else { "Claude Sonnet" })))
+$ResponseLines.Add(("Approval / Pending Action: {0}" -f $(if ($PendingApprovalCount -gt 0) { "{0} pending approval(s)" -f $PendingApprovalCount } else { "none pending" })))
 $ResponseLines.Add("")
 $ResponseLines.Add(("Current Phase: {0}" -f $(if ([string]::IsNullOrWhiteSpace($CurrentPhase)) { "Unknown" } else { $CurrentPhase })))
+$ResponseLines.Add("")
+$ResponseLines.Add("Operational Workflow Status")
+foreach ($Workflow in $OperationalWorkflows) {
+    $ArtifactText = if (-not [string]::IsNullOrWhiteSpace([string]$Workflow.last_run_artifact)) { $Workflow.last_run_artifact } else { "unavailable" }
+    $ResponseLines.Add(("- {0} {1} | status: {2} | approval: {3} | last artifact: {4}" -f $Workflow.workflow_id, $Workflow.name, $Workflow.status, $Workflow.approval_status, $ArtifactText))
+}
 $ResponseLines.Add("")
 $ResponseLines.Add("Operational Workflows")
 foreach ($Workflow in $OperationalWorkflows) {
@@ -339,7 +552,12 @@ if ($RecentDecisions.Count -gt 0) {
 $ResponseLines.Add("")
 $ResponseLines.Add("Recommended Next Action")
 if ($OperationalWorkflowCount -gt 0) {
-    $ResponseLines.Add(("- Ask for a research summary, Codex task, note creation, or collection import draft."))
+    if ($PendingApprovalCount -gt 0) {
+        $ResponseLines.Add(("- Review or clear the pending approval queue, then ask for a specific workflow.")) 
+    }
+    else {
+        $ResponseLines.Add(("- Ask for a research summary, Codex task, note creation, or collection import draft."))
+    }
 }
 else {
     $ResponseLines.Add(("- Restore workflow definitions before dispatching governed work."))
@@ -363,6 +581,13 @@ if ([string]::IsNullOrWhiteSpace($ResponseText) -or @($StatusLines | Where-Objec
     $ReviewReasons.Add("status report is empty")
 }
 
+$KnownLimitations = @()
+$KnownLimitations += @($KnownBlockers)
+if ($PendingApprovalCount -gt 0) {
+    $KnownLimitations += "Pending approval queue contains $PendingApprovalCount item(s)."
+}
+$KnownLimitations += "Artifact paths are only reported when workflow state or local files expose them."
+
 $Result = [pscustomobject]@{
     status                   = $(if ($ReviewPassed) { "pass" } else { "fail" })
     review_passed            = [bool]$ReviewPassed
@@ -383,11 +608,14 @@ $Result = [pscustomobject]@{
     workflow_definition_count  = [int]$WorkflowDefinitionCount
     workflow_definitions     = @($WorkflowDefinitionSummary)
     operational_workflows    = @($OperationalWorkflows)
+    workflow_statuses        = @($WorkflowStatusEntries)
     operational_chains       = @($WorkflowChains)
     known_capabilities       = @($KnownCapabilities | Select-Object -Unique)
     known_issues             = @($KnownBlockers)
+    known_limitations        = @($KnownLimitations | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
+    approval_or_pending_action_status = if ($PendingApprovalCount -gt 0) { "pending approvals: $PendingApprovalCount" } else { "none pending" }
     recent_activity          = @($RecentDecisions)
-    recommended_next_action  = if ($OperationalWorkflowCount -gt 0) { "Ask for a research summary, Codex task, note creation, or collection import draft." } else { "Restore workflow definitions before dispatching governed work." }
+    recommended_next_action  = if ($OperationalWorkflowCount -gt 0) { if ($PendingApprovalCount -gt 0) { "Review or clear the pending approval queue, then ask for a specific workflow." } else { "Ask for a research summary, Codex task, note creation, or collection import draft." } } else { "Restore workflow definitions before dispatching governed work." }
     project_memory           = $ProjectMemory
     skill_state              = $SkillSummary
     last_successful_workflow = $LastSuccessfulWorkflow

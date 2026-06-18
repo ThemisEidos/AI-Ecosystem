@@ -317,7 +317,7 @@ function Test-PDAConversationalDirectStatus {
     param([Parameter(Mandatory = $true)][string]$NormalizedText)
 
     return [bool](
-        $NormalizedText -match '(?i)\b(status report|operational status|health report|morning briefing|daily briefing|what''?s the status|what is the status|how are things going|how are you doing|how is the pda doing|how is the ecosystem|summarize the ecosystem status|summarise the ecosystem status|show me the current status|current status|system status|how are things|pda status|how is everything|status|what workshop am i in|what mode am i in|which workshop am i in|which mode am i in|what can you do|what workflows are available|what capabilities do you have|what phase are we in|what is operational|what is working right now)\b'
+        $NormalizedText -match '(?i)\b(status report|operational status|show operational status|show workflow status|workflow status|health report|morning briefing|daily briefing|what''?s the status|what is the status|how are things going|how are you doing|how is the pda doing|how is the ecosystem|summarize the ecosystem status|summarise the ecosystem status|show me the current status|current status|system status|how are things|pda status|how is everything|status|what workshop am i in|what mode am i in|which workshop am i in|which mode am i in|what can you do|what can you do right now|what workflows are available|what workflows are operational|what workflow(s)? are operational|what capabilities do you have|what phase are we in|what is operational|what is working right now)\b'
     )
 }
 
@@ -1524,8 +1524,13 @@ function Get-PDAConversationalNaturalResponse {
             }
 
             $BaseResponse.runtime_status = $StatusResult
-            if ($StatusResult -and [bool]$StatusResult.success -eq $true) {
-                $BaseResponse.response_text = if ($StatusResult.PSObject.Properties.Name -contains "response_text" -and -not [string]::IsNullOrWhiteSpace([string]$StatusResult.response_text)) { [string]$StatusResult.response_text } else { [string]$StatusResult.reason }
+            if ($StatusResult -and ($StatusResult.PSObject.Properties.Name -contains "response_text" -and -not [string]::IsNullOrWhiteSpace([string]$StatusResult.response_text))) {
+                $BaseResponse.response_text = [string]$StatusResult.response_text
+                $BaseResponse.next_action = "Ask about tools, workflows, identity, or memory."
+                $BaseResponse.latest_result_response_text = $BaseResponse.response_text
+            }
+            elseif ($StatusResult -and [bool]$StatusResult.success -eq $true) {
+                $BaseResponse.response_text = if ($StatusResult.PSObject.Properties.Name -contains "reason" -and -not [string]::IsNullOrWhiteSpace([string]$StatusResult.reason)) { [string]$StatusResult.reason } else { "COOPER status summary completed." }
                 $BaseResponse.next_action = "Ask about tools, workflows, identity, or memory."
                 $BaseResponse.latest_result_response_text = $BaseResponse.response_text
             }

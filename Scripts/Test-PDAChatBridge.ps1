@@ -525,6 +525,50 @@ $Cases = @(
         marker = "chat-status-report-$([guid]::NewGuid().ToString())"
     }
     [pscustomobject]@{
+        name = "WF-004 operational workflows"
+        message = "COOPER, what workflows are operational?"
+        confirm = $false
+        expected_handoff = "direct_status"
+        expected_response_contains = "Operational Workflow Status"
+        expected_dispatch_ready = $false
+        expected_dispatch = $false
+        expected_command = "Show system status"
+        marker = "chat-operational-workflows-$([guid]::NewGuid().ToString())"
+    }
+    [pscustomobject]@{
+        name = "WF-004 workflow status"
+        message = "COOPER, show workflow status."
+        confirm = $false
+        expected_handoff = "direct_status"
+        expected_response_contains = "Operational Workflow Status"
+        expected_dispatch_ready = $false
+        expected_dispatch = $false
+        expected_command = "Show system status"
+        marker = "chat-workflow-status-$([guid]::NewGuid().ToString())"
+    }
+    [pscustomobject]@{
+        name = "WF-004 right now"
+        message = "COOPER, what can you do right now?"
+        confirm = $false
+        expected_handoff = "direct_status"
+        expected_response_contains = "Approval / Pending Action"
+        expected_dispatch_ready = $false
+        expected_dispatch = $false
+        expected_command = "Show system status"
+        marker = "chat-right-now-$([guid]::NewGuid().ToString())"
+    }
+    [pscustomobject]@{
+        name = "WF-004 operational status"
+        message = "COOPER, show operational status."
+        confirm = $false
+        expected_handoff = "direct_status"
+        expected_response_contains = "Operational Workflow Status"
+        expected_dispatch_ready = $false
+        expected_dispatch = $false
+        expected_command = "Show system status"
+        marker = "chat-operational-status-$([guid]::NewGuid().ToString())"
+    }
+    [pscustomobject]@{
         name = "morning briefing"
         message = "Morning briefing please."
         confirm = $false
@@ -832,7 +876,7 @@ if ($SkipDispatch) {
 }
 
 if ($DashboardMode) {
-    $Cases = @($Cases | Where-Object { [string]$_.name -in @("known message", "ambiguous message", "unknown message", "research request", "natural tool inventory", "natural workflow catalog", "natural workshop change request", "legacy cooper slash command", "status report", "morning briefing", "how are things going", "system status", "health report", "WF-004 status precedence - natural status", "WF-004 capability/status precedence - help phrasing", "WF-004 capability/status precedence - workflow availability", "WF-004 capability/status precedence - capability phrasing", "WF-004 capability/status precedence - phase phrasing", "model identity", "provider identity", "backend identity", "self identity", "personality settings query", "humor setting update", "personality cancel", "project discussion", "project assessment report", "project opinion", "risk assessment", "linux migration recommendation", "docker comparison", "repo access risk", "agent replacement challenge") })
+    $Cases = @($Cases | Where-Object { [string]$_.name -in @("known message", "ambiguous message", "unknown message", "research request", "natural tool inventory", "natural workflow catalog", "natural workshop change request", "legacy cooper slash command", "status report", "WF-004 operational workflows", "WF-004 workflow status", "WF-004 right now", "WF-004 operational status", "morning briefing", "how are things going", "system status", "health report", "WF-004 status precedence - natural status", "WF-004 capability/status precedence - help phrasing", "WF-004 capability/status precedence - workflow availability", "WF-004 capability/status precedence - capability phrasing", "WF-004 capability/status precedence - phase phrasing", "model identity", "provider identity", "backend identity", "self identity", "personality settings query", "humor setting update", "personality cancel", "project discussion", "project assessment report", "project opinion", "risk assessment", "linux migration recommendation", "docker comparison", "repo access risk", "agent replacement challenge") })
 }
 
 if (-not $IncludeSlowIntegration) {
@@ -847,6 +891,10 @@ if (-not $IncludeSlowIntegration) {
         "confirmed dispatch",
         "codex task request",
         "research request",
+        "WF-004 operational workflows",
+        "WF-004 workflow status",
+        "WF-004 right now",
+        "WF-004 operational status",
         "WF-004 status precedence - natural status",
         "WF-004 capability/status precedence - help phrasing",
         "WF-004 capability/status precedence - workflow availability",

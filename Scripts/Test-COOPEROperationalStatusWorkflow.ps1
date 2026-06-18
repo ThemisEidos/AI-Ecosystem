@@ -26,10 +26,13 @@ if ([bool]$Success.review_passed -ne $true) {
 foreach ($Field in @(
     "current_phase",
     "operational_workflows",
+    "workflow_statuses",
     "operational_chains",
     "known_capabilities",
     "known_issues",
+    "known_limitations",
     "recent_activity",
+    "approval_or_pending_action_status",
     "recommended_next_action",
     "workflow_definitions",
     "project_memory",
@@ -73,8 +76,33 @@ else {
     }
 }
 
-if ([string]$Success.response_text -notmatch '(?i)Current Phase:|Operational Workflows|Operational Chains|Known Capabilities|Known Issues|Recent Activity|Recommended Next Action') {
+if ([string]$Success.response_text -notmatch '(?i)Current Phase:|Approval / Pending Action|Operational Workflow Status|Operational Workflows|Operational Chains|Known Capabilities|Known Issues|Recent Activity|Recommended Next Action') {
     $Issues.Add("Operational status response text is missing one or more expected sections.")
+}
+if ([string]$Success.response_text -notmatch '(?i)WF-002 Codex Task Generator \| status:|WF-004 Operational Status \| status:|WF-001 Research Summary \| status:|WF-005 Note Creation \| status:|WF-006 Knowledge Collection Import Draft \| status:') {
+    $Issues.Add("Operational status response text is missing the workflow status summary.")
+}
+
+if ($Success.workflow_statuses.Count -lt 5) {
+    $Issues.Add("Operational status helper did not return per-workflow status entries.")
+}
+else {
+    $WorkflowStatusMap = @{}
+    foreach ($Entry in @($Success.workflow_statuses)) {
+        $WorkflowStatusMap[[string]$Entry.workflow_id] = [string]$Entry.status
+        if ([string]$Entry.status -notin @("pass", "fail", "unknown")) {
+            $Issues.Add("Workflow $([string]$Entry.workflow_id) returned an invalid status '$([string]$Entry.status)'.")
+        }
+    }
+    foreach ($WorkflowId in @("WF-001", "WF-002", "WF-004", "WF-005", "WF-006")) {
+        if (-not $WorkflowStatusMap.ContainsKey($WorkflowId)) {
+            $Issues.Add("Workflow status summary is missing $WorkflowId.")
+        }
+    }
+}
+
+if ([string]$Success.approval_or_pending_action_status -notmatch '(?i)pending approvals|none pending') {
+    $Issues.Add("Operational status helper did not summarize approval or pending action state.")
 }
 
 if ([string]$Success.status_source -match 'Get-COOPERRuntimeStatus\.ps1') {

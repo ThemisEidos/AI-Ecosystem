@@ -72,6 +72,30 @@ $Cases = @(
         expected_command = "Show system status"
     }
     [pscustomobject]@{
+        name = "WF-004 operational workflows"
+        input = "COOPER, what workflows are operational?"
+        expected_route = "direct_status"
+        expected_command = "Show system status"
+    }
+    [pscustomobject]@{
+        name = "WF-004 workflow status"
+        input = "COOPER, show workflow status."
+        expected_route = "direct_status"
+        expected_command = "Show system status"
+    }
+    [pscustomobject]@{
+        name = "WF-004 right now"
+        input = "COOPER, what can you do right now?"
+        expected_route = "direct_status"
+        expected_command = "Show system status"
+    }
+    [pscustomobject]@{
+        name = "WF-004 operational status"
+        input = "COOPER, show operational status."
+        expected_route = "direct_status"
+        expected_command = "Show system status"
+    }
+    [pscustomobject]@{
         name = "fabric report slash"
         input = "/fabric report Summarize the current PDA ecosystem status..."
         expected_route = "slash_command"
@@ -507,7 +531,7 @@ foreach ($Case in $Cases) {
             $CasePassed = $false
             $Issues.Add("Direct response text was empty.")
         }
-        if ($Route.route_type -eq "direct_status" -and $Direct.response_text -notmatch '(?i)Current Phase: Phase 5 - First Operational Workflows|Operational Workflows|Recommended Next Action') {
+        if ($Route.route_type -eq "direct_status" -and $Direct.response_text -notmatch '(?i)Current Phase: Phase 5 - First Operational Workflows|Operational Workflow Status|Operational Workflows|Approval / Pending Action|Recommended Next Action') {
             $CasePassed = $false
             $Issues.Add("Direct status response did not look like an operational status summary.")
         }

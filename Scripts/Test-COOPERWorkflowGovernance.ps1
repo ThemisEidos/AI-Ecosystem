@@ -94,6 +94,8 @@ $CodexTaskInterpreter = ConvertFrom-PDAMixedJson -Text ([string]($CodexTaskInter
 $ResearchRoute = Resolve-PDAConversationalRoute -Text "Research official Pop!_OS documentation and create a structured summary note in the Linux & Infrastructure collection." -Root $Root
 $NoteRoute = Resolve-PDAConversationalRoute -Text "Create an Obsidian note for WF-005." -Root $Root
 $WorkflowListingRoute = Resolve-PDAConversationalRoute -Text "List available workflows." -Root $Root
+$OperationalWorkflowsRoute = Resolve-PDAConversationalRoute -Text "COOPER, what workflows are operational?" -Root $Root
+$WorkflowStatusRoute = Resolve-PDAConversationalRoute -Text "COOPER, show workflow status." -Root $Root
 $OperationalStatusRoute = Resolve-PDAConversationalRoute -Text "What can you do?" -Root $Root
 $StatusRoute = Resolve-PDAConversationalRoute -Text "How is the PDA doing?" -Root $Root
 $SlashRoute = Resolve-PDAConversationalRoute -Text "/cooper status" -Root $Root
@@ -112,6 +114,12 @@ if ([string]$NoteRoute.route_type -ne "note_creation") {
 }
 if ([string]$WorkflowListingRoute.route_type -ne "workflow_catalog") {
     $Issues.Add("Workflow listing request did not route to workflow_catalog.")
+}
+if ([string]$OperationalWorkflowsRoute.route_type -ne "direct_status") {
+    $Issues.Add("Operational workflow request did not route to direct_status.")
+}
+if ([string]$WorkflowStatusRoute.route_type -ne "direct_status") {
+    $Issues.Add("Workflow status request did not route to direct_status.")
 }
 if ([string]$OperationalStatusRoute.route_type -ne "direct_status") {
     $Issues.Add("Operational status request did not route to direct_status.")
@@ -166,6 +174,8 @@ $Report = [pscustomobject]@{
     research_route = $ResearchRoute
     note_route = $NoteRoute
     workflow_listing_route = $WorkflowListingRoute
+    operational_workflows_route = $OperationalWorkflowsRoute
+    workflow_status_route = $WorkflowStatusRoute
     operational_status_route = $OperationalStatusRoute
     status_route = $StatusRoute
     slash_route = $SlashRoute
