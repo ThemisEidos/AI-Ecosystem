@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $false)]
-    [string]$Root = (Split-Path -Parent $PSScriptRoot),
+    [string]$Root,
 
     [Parameter(Mandatory = $false)]
     [switch]$AsJson,
@@ -11,9 +11,18 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-. (Join-Path $PSScriptRoot 'PDA_ApprovalWorkflow.ps1')
-. (Join-Path $PSScriptRoot 'PDA_AgentLoop.ps1')
-. (Join-Path $PSScriptRoot 'PDA_OutputParsing.ps1')
+$ScriptRoot = if ([string]::IsNullOrWhiteSpace([string]$PSScriptRoot)) {
+    Split-Path -Parent $MyInvocation.MyCommand.Path
+}
+else {
+    $PSScriptRoot
+}
+if ([string]::IsNullOrWhiteSpace([string]$Root)) {
+    $Root = Split-Path -Parent $ScriptRoot
+}
+. (Join-Path $ScriptRoot 'PDA_ApprovalWorkflow.ps1')
+. (Join-Path $ScriptRoot 'PDA_AgentLoop.ps1')
+. (Join-Path $ScriptRoot 'PDA_OutputParsing.ps1')
 
 function Assert-PDACondition {
     param(
@@ -84,6 +93,21 @@ Assert-PDACondition -Condition ($BridgeCancel.response_text -notmatch 'No pendin
 $WorkflowStatus = Get-PDAApprovalWorkflowStatus -Root $Root -Latest 10
 Assert-PDACondition -Condition ([int]$WorkflowStatus.counts.pending_approval -ge 0) -Message 'Approval workflow status missing pending count.' -Issues $Issues | Out-Null
 Assert-PDACondition -Condition ($WorkflowStatus.PSObject.Properties.Name -contains 'recent_approvals') -Message 'Approval workflow status missing recent approvals.' -Issues $Issues | Out-Null
+Assert-PDACondition -Condition ($WorkflowStatus.PSObject.Properties.Name -contains 'stale_count') -Message 'Approval workflow status missing stale_count.' -Issues $Issues | Out-Null
+Assert-PDACondition -Condition ($WorkflowStatus.PSObject.Properties.Name -contains 'blocked_count') -Message 'Approval workflow status missing blocked_count.' -Issues $Issues | Out-Null
+Assert-PDACondition -Condition ($WorkflowStatus.counts.PSObject.Properties.Name -contains 'completed') -Message 'Approval workflow status missing completed lifecycle count.' -Issues $Issues | Out-Null
+Assert-PDACondition -Condition ($WorkflowStatus.counts.PSObject.Properties.Name -contains 'stale') -Message 'Approval workflow status missing stale lifecycle count.' -Issues $Issues | Out-Null
+Assert-PDACondition -Condition ($WorkflowStatus.counts.PSObject.Properties.Name -contains 'blocked') -Message 'Approval workflow status missing blocked lifecycle count.' -Issues $Issues | Out-Null
+
+if (Get-Command -Name Load-PDAApprovalWorkflowStore -ErrorAction SilentlyContinue) {
+    $Store = Load-PDAApprovalWorkflowStore -Root $Root
+    if ($Store.PSObject.Properties.Name -contains 'pending_approval_count') {
+        Assert-PDACondition -Condition ([int]$WorkflowStatus.pending_approval_count -eq [int]$Store.pending_approval_count) -Message 'Approval workflow status pending count does not match the store.' -Issues $Issues | Out-Null
+    }
+    if ($Store.PSObject.Properties.Name -contains 'blocked_count') {
+        Assert-PDACondition -Condition ([int]$WorkflowStatus.blocked_count -eq [int]$Store.blocked_count) -Message 'Approval workflow status blocked count does not match the store.' -Issues $Issues | Out-Null
+    }
+}
 
 $Report = [pscustomobject]@{
     status = if ($Issues.Count -eq 0) { 'pass' } else { 'fail' }

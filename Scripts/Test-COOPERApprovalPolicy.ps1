@@ -5,6 +5,7 @@ $ErrorActionPreference = "Stop"
 
 $RouterScript = Join-Path $PSScriptRoot "Invoke-COOPERTool.ps1"
 $ApprovalScript = Join-Path $PSScriptRoot "Resolve-COOPERApproval.ps1"
+$WorkbenchScript = Join-Path $PSScriptRoot "Invoke-COOPERWorkbench.ps1"
 
 function Invoke-ApprovalDecision {
     param(
@@ -17,6 +18,15 @@ function Invoke-ApprovalDecision {
     & $ApprovalScript -RoutedToolResult $RoutedToolResult -Approved:$Approved
 }
 
+function Invoke-WorkbenchDecision {
+    param(
+        [Parameter(Mandatory = $true)]
+        [object]$ApprovalDecision
+    )
+
+    & $WorkbenchScript -ApprovalDecision $ApprovalDecision -DryRun
+}
+
 function New-RoutedToolObject {
     param(
         [Parameter(Mandatory = $true)]
@@ -24,6 +34,9 @@ function New-RoutedToolObject {
 
         [Parameter(Mandatory = $true)]
         [string]$Workshop,
+
+        [Parameter(Mandatory = $false)]
+        [string]$WorkshopMode = "",
 
         [Parameter(Mandatory = $true)]
         [int]$PermissionLevel,
@@ -46,6 +59,7 @@ function New-RoutedToolObject {
         name = "Test Tool $ToolId"
         drawer = "Test Drawer"
         workshop = $Workshop
+        workshop_mode = $(if ([string]::IsNullOrWhiteSpace($WorkshopMode)) { $Workshop } else { $WorkshopMode })
         description = "Synthetic routed tool for approval testing."
         permission_level = $PermissionLevel
         approval_required = $ApprovalRequired
@@ -155,6 +169,28 @@ $Cases = @(
         expect_authorized = $false
         expect_reason_like = "Private Workshop does not allow external executor types"
     }
+    [pscustomobject]@{
+        name = "private note writer blocked"
+        input = (New-RoutedToolObject -ToolId "obsidian_note_writer" -Workshop "Private Workshop" -WorkshopMode "Private Workshop" -PermissionLevel 2 -ApprovalRequired $true -ExecutorType "note_editor" -Enabled $true)
+        approved = $true
+        expect_allowed = $true
+        expect_blocked = $false
+        expect_requires = $true
+        expect_authorized = $true
+        expect_reason_like = "Level 2 requires user approval"
+        workbench_block_reason = "Private Workshop must not execute note creation tools"
+    }
+    [pscustomobject]@{
+        name = "private codex launcher blocked"
+        input = (New-RoutedToolObject -ToolId "codex_task_launcher" -Workshop "Private Workshop" -WorkshopMode "Private Workshop" -PermissionLevel 4 -ApprovalRequired $true -ExecutorType "cli_launcher" -Enabled $true)
+        approved = $true
+        expect_allowed = $true
+        expect_blocked = $false
+        expect_requires = $true
+        expect_authorized = $true
+        expect_reason_like = "Level 4 requires user approval"
+        workbench_block_reason = "Private Workshop must not execute Codex task generation tools"
+    }
 )
 
 $Results = @()
@@ -162,7 +198,7 @@ $Passed = 0
 $Failed = 0
 
 foreach ($Case in $Cases) {
-    $Result = Invoke-ApprovalDecision -RoutedToolResult $Case.input
+    $Result = Invoke-ApprovalDecision -RoutedToolResult $Case.input -Approved:([bool]($Case.PSObject.Properties.Name -contains "approved" -and $Case.approved))
     $Issues = New-Object System.Collections.Generic.List[string]
 
     foreach ($Field in @(
@@ -195,6 +231,16 @@ foreach ($Case in $Cases) {
     }
     if ([string]$Result.reason -notmatch [regex]::Escape([string]$Case.expect_reason_like)) {
         $Issues.Add("Expected reason to contain '$($Case.expect_reason_like)' but got '$([string]$Result.reason)'.")
+    }
+
+    if ($Case.PSObject.Properties.Name -contains "workbench_block_reason") {
+        $WorkbenchResult = Invoke-WorkbenchDecision -ApprovalDecision $Result
+        if ([bool]$WorkbenchResult.success -ne $false) {
+            $Issues.Add("Private workshop workbench should block '$($Case.name)'.")
+        }
+        if ([string]$WorkbenchResult.reason -notmatch [regex]::Escape([string]$Case.workbench_block_reason)) {
+            $Issues.Add("Expected workbench reason to contain '$($Case.workbench_block_reason)' but got '$([string]$WorkbenchResult.reason)'.")
+        }
     }
 
     if ($Case.name -eq "level 0 allowed without approval" -and [bool]$Result.approval_required -ne $false) {

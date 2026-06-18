@@ -687,16 +687,65 @@ function Get-PDAApprovalWorkflowStatus {
     )
 
     $Store = Load-PDAApprovalWorkflowStore -Root $Root
-    $Records = @(Get-PDAApprovalWorkflowRecentSummaries -Root $Root -Latest $Latest)
+    $AllRecords = @(Get-PDAApprovalWorkflowRecordCandidates -Root $Root)
+    $DedupedRecords = New-Object System.Collections.Generic.List[object]
+    if ($AllRecords.Count -gt 0) {
+        foreach ($Group in @($AllRecords | Group-Object -Property { [string]$_.approval_id })) {
+            $LatestRecord = @(
+                $Group.Group |
+                    Sort-Object -Descending -Property @{
+                        Expression = {
+                            if ($_.PSObject.Properties.Name -contains "updated_at" -and -not [string]::IsNullOrWhiteSpace([string]$_.updated_at)) {
+                                [datetime]::Parse([string]$_.updated_at)
+                            }
+                            elseif ($_.PSObject.Properties.Name -contains "requested_at" -and -not [string]::IsNullOrWhiteSpace([string]$_.requested_at)) {
+                                [datetime]::Parse([string]$_.requested_at)
+                            }
+                            else {
+                                [datetime]::MinValue
+                            }
+                        }
+                    } |
+                    Select-Object -First 1
+            )[0]
+            if ($LatestRecord) {
+                $DedupedRecords.Add($LatestRecord) | Out-Null
+            }
+        }
+    }
+
     $Counts = [ordered]@{
-        pending_approval   = @($Records | Where-Object { [string]$_.status -eq "pending_approval" }).Count
-        approved           = @($Records | Where-Object { [string]$_.status -eq "approved" }).Count
-        rejected           = @($Records | Where-Object { [string]$_.status -eq "rejected" }).Count
-        revision_requested  = @($Records | Where-Object { [string]$_.status -eq "revision_requested" }).Count
-        replan_requested    = @($Records | Where-Object { [string]$_.status -eq "replan_requested" }).Count
-        escalated           = @($Records | Where-Object { [string]$_.status -eq "escalated" }).Count
-        cancelled           = @($Records | Where-Object { [string]$_.status -eq "cancelled" }).Count
-        completed           = @($Records | Where-Object { [string]$_.status -eq "completed" }).Count
+        pending_approval   = @($DedupedRecords | Where-Object { [string]$_.status -eq "pending_approval" }).Count
+        approved           = @($DedupedRecords | Where-Object { [string]$_.status -eq "approved" }).Count
+        rejected           = @($DedupedRecords | Where-Object { [string]$_.status -eq "rejected" }).Count
+        revision_requested = @($DedupedRecords | Where-Object { [string]$_.status -eq "revision_requested" }).Count
+        replan_requested   = @($DedupedRecords | Where-Object { [string]$_.status -eq "replan_requested" }).Count
+        escalated          = @($DedupedRecords | Where-Object { [string]$_.status -eq "escalated" }).Count
+        cancelled          = @($DedupedRecords | Where-Object { [string]$_.status -eq "cancelled" }).Count
+        completed          = @($DedupedRecords | Where-Object { [string]$_.status -eq "completed" }).Count
+    }
+
+    $StaleCount = 0
+    foreach ($Group in @($AllRecords | Group-Object -Property { [string]$_.approval_id })) {
+        $Statuses = @($Group.Group | ForEach-Object { [string]$_.status } | Select-Object -Unique)
+        if ($Statuses.Count -gt 1 -and $Statuses -contains "pending_approval") {
+            $LatestStatus = [string]((@($Group.Group | Sort-Object -Descending -Property @{
+                Expression = {
+                    if ($_.PSObject.Properties.Name -contains "updated_at" -and -not [string]::IsNullOrWhiteSpace([string]$_.updated_at)) {
+                        [datetime]::Parse([string]$_.updated_at)
+                    }
+                    elseif ($_.PSObject.Properties.Name -contains "requested_at" -and -not [string]::IsNullOrWhiteSpace([string]$_.requested_at)) {
+                        [datetime]::Parse([string]$_.requested_at)
+                    }
+                    else {
+                        [datetime]::MinValue
+                    }
+                }
+            } | Select-Object -First 1)[0]).status)
+            if ($LatestStatus -ne "pending_approval") {
+                $StaleCount++
+            }
+        }
     }
 
     $Index = Get-PDAApprovalWorkflowIndexPath -Root $Root
@@ -730,13 +779,40 @@ function Get-PDAApprovalWorkflowStatus {
             escalated = [int]$Counts.escalated
             cancelled = [int]$Counts.cancelled
             completed = [int]$Counts.completed
+            stale = [int]$StaleCount
+            blocked = [int](($Counts.rejected + $Counts.cancelled + $BlockedAgentRuns))
             blocked_agent_runs = [int]$BlockedAgentRuns
             pending_agent_runs = [int]$PendingAgentRuns
         }
-        approval_count = [int]@($Records).Count
+        approval_count = [int](@($AllRecords).Count)
         pending_approval_count = [int]$Counts.pending_approval
         blocked_count = [int](($Counts.rejected + $Counts.cancelled + $BlockedAgentRuns))
-        recent_approvals = @($Records | Select-Object -First $Latest)
-        recent_pending = @($Records | Where-Object { [string]$_.status -eq "pending_approval" } | Select-Object -First $Latest)
+        stale_count = [int]$StaleCount
+        recent_approvals = @($AllRecords | Sort-Object -Descending -Property @{
+            Expression = {
+                if ($_.PSObject.Properties.Name -contains "updated_at" -and -not [string]::IsNullOrWhiteSpace([string]$_.updated_at)) {
+                    [datetime]::Parse([string]$_.updated_at)
+                }
+                elseif ($_.PSObject.Properties.Name -contains "requested_at" -and -not [string]::IsNullOrWhiteSpace([string]$_.requested_at)) {
+                    [datetime]::Parse([string]$_.requested_at)
+                }
+                else {
+                    [datetime]::MinValue
+                }
+            }
+        } | Select-Object -First $Latest)
+        recent_pending = @($AllRecords | Where-Object { [string]$_.status -eq "pending_approval" } | Sort-Object -Descending -Property @{
+            Expression = {
+                if ($_.PSObject.Properties.Name -contains "updated_at" -and -not [string]::IsNullOrWhiteSpace([string]$_.updated_at)) {
+                    [datetime]::Parse([string]$_.updated_at)
+                }
+                elseif ($_.PSObject.Properties.Name -contains "requested_at" -and -not [string]::IsNullOrWhiteSpace([string]$_.requested_at)) {
+                    [datetime]::Parse([string]$_.requested_at)
+                }
+                else {
+                    [datetime]::MinValue
+                }
+            }
+        } | Select-Object -First $Latest)
     }
 }

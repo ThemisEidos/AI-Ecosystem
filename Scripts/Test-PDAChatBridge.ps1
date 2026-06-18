@@ -1324,15 +1324,12 @@ foreach ($Case in $Cases) {
     }
 
     if ($Case.PSObject.Properties.Name -contains "judgment_request" -and [bool]$Case.judgment_request) {
-        $SentenceCount = @(
-            [regex]::Split([string]$Result.response_text, '(?<=[\.\!\?])\s+')
-            | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) }
-        ).Count
+        $SentenceCount = @([regex]::Split([string]$Result.response_text, '(?<=[\.\!\?])\s+') | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) }).Count
         if ($SentenceCount -gt 4) {
             $CasePassed = $false
             $Issues.Add("Judgment response should stay within 4 sentences.")
         }
-        if ($Result.response_text -notmatch '(?i)\b(think|consider|concern|risk|because|but|however|problem|tradeoff|complexity|uncertain|safe|stability|security|control|restricted|trusted|careful|access controls?|roles?|responsibilities?|integrity|风险|控制|权限|审计|确保|考虑|安全|访问|信任)\b') {
+        if ($Result.response_text -notmatch '(?i)\b(think|consider|concern|risk|because|but|however|problem|tradeoff|complexity|uncertain|safe|stability|security|control|restricted|trusted|careful|access controls?|roles?|responsibilities?|integrity|risk|control|permission|audit|ensure|consider|security|access|trust)\b') {
             $CasePassed = $false
             $Issues.Add("Judgment response did not read like a grounded opinion.")
         }

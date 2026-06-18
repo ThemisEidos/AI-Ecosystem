@@ -823,10 +823,7 @@ function Split-PDAConversationalIntents {
     }
 
     # Segment compound prompts conservatively; execution still uses only the first actionable intent.
-    $SentenceSegments = @(
-        [regex]::Split([string]$Text, '(?<=[\.\!\?;])\s+')
-        | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) }
-    )
+    $SentenceSegments = @([regex]::Split([string]$Text, '(?<=[\.\!\?;])\s+') | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
 
     $NormalizedSegments = New-Object System.Collections.Generic.List[string]
     foreach ($Segment in $SentenceSegments) {

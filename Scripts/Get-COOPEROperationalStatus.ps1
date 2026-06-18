@@ -652,8 +652,9 @@ foreach ($SourceText in @($RoadmapText, $MilestoneText)) {
         continue
     }
 
-    foreach ($Match in ([regex]::Matches([string]$SourceText, 'WF-\d+\s*(?:->|→)\s*WF-\d+'))) {
-        $Chain = ([string]$Match.Value.Trim()) -replace '\s*->\s*', ' → '
+    $NormalizedSourceText = ([string]$SourceText) -replace ([char]0x2192), '->'
+    foreach ($Match in ([regex]::Matches([string]$NormalizedSourceText, 'WF-\d+\s*->\s*WF-\d+'))) {
+        $Chain = ([string]$Match.Value.Trim()) -replace '\s*->\s*', ' -> '
         if (-not [string]::IsNullOrWhiteSpace($Chain) -and $WorkflowChains -notcontains $Chain) {
             $WorkflowChains.Add($Chain)
         }

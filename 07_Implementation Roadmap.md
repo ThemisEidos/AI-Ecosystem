@@ -6,14 +6,15 @@ This roadmap tracks the staged implementation of the COOPER-centered AI Ecosyste
 
 ## Current Focus
 
-- Phase 5 workflows are operational; current priority is cleanup/stabilization and Git alignment.
-- Workspace and Fabric integration remain deferred until the current operational milestone is committed and stable.
-- Current Phase: Phase 5 - First Operational Workflows
-- Status: Operational, cleanup/stabilization in progress
-- Current Objective: Stabilize the first governed workflow chain, approval lifecycle, and operational status reporting.
+- Phase 5 workflows are operational and stabilized.
+- Phase 6 Private Workshop Hardening is now the current implementation focus.
+- Workspace and Fabric integration remain deferred until private-workshop boundaries are verified and committed.
+- Current Phase: Phase 6 - Private Workshop Hardening
+- Status: In Progress
+- Current Objective: Verify private-workshop routing boundaries, local-only model use, restricted DMZ path enforcement, and approval lifecycle accuracy.
 - Next Build Artifact:
-  - `Docs/2026-06-16 Operational Workflow Milestone.md`
-- Why This Comes Next: Phase 1 through Phase 4 foundations are complete enough to support the first operational workflows. COOPER now has a minimal governed execution path for note creation, source-backed research, Codex task generation, collection import drafting, and operational status reporting. The remaining work is to clean up reporting, align documentation, and keep the workflow boundary stable.
+  - `Scripts/Test-COOPERWorkshopIdentity.ps1`
+- Why This Comes Next: Phase 1 through Phase 5 foundations are complete enough to support the first operational workflows. COOPER now has a minimal governed execution path for note creation, source-backed research, Codex task generation, collection import drafting, operational status reporting, and private-workshop containment. The remaining work is to keep hardening tests green and keep the workflow boundary stable.
 - Dependencies:
   - governed routing remains registry-driven
   - approval gate remains required before execution
@@ -108,8 +109,8 @@ This roadmap tracks the staged implementation of the COOPER-centered AI Ecosyste
 
 ### Phase 5 - First Operational Workflows
 
-- Status: Operational, cleanup/stabilization in progress
-- Goal: Stabilize the first practical governed workflows and keep the status layer accurate.
+- Status: Operational
+- Goal: Keep the first practical governed workflows stable and documented.
 - Operational:
   - WF-001 Research Summary
   - WF-002 Codex Task Generator
@@ -123,23 +124,23 @@ This roadmap tracks the staged implementation of the COOPER-centered AI Ecosyste
   - permission model enforced
   - storage boundaries enforced
   - COOPER review step included
-  - workflow status reporting is deterministic and reflects recent execution evidence
-  - approval lifecycle counts are categorized clearly
   - workflow outputs are recorded without conflating runtime state with source documentation
 
 ### Phase 6 - Private Workshop Hardening
 
-- Status: Next Major Build
+- Status: In Progress
 - Goal: Make COOPER Private safe enough for restricted DMZ workflows.
 - Build Artifacts:
   - private registry hardening
   - Restricted DMZ path validation
   - local-only workflow checks
+  - approval lifecycle transition validation
 - Success Criteria:
   - Private Workshop uses local-only tools
   - no cloud fallback possible
   - outputs remain in Restricted DMZ Workspace
-  - cleanup from Phase 5 is complete before hardening work begins
+  - Open Workshop and Private Workshop routing remain separated
+  - private-tool routing originates from the private registry only
 
 ### Phase 7 - PDA Evolution
 

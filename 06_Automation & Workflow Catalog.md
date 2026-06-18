@@ -6,7 +6,7 @@ This document catalogs proven workflows that COOPER can route to approved execut
 
 The intent is to keep the first workflow set useful and small.
 
-Phase 5 workflows are operational. Cleanup and stabilization remain in progress while the next major build is Phase 6 Private Workshop Hardening.
+Phase 5 workflows are operational. Phase 6 Private Workshop Hardening is now in progress to verify private-only routing, restricted DMZ boundaries, and approval lifecycle accuracy.
 
 Storage rules:
 
@@ -184,6 +184,7 @@ Workflow completion is measured by outcome quality, not by workflow execution al
 - Status: Operational
 - Next Step: keep the runtime summary aligned with state files, workflow definitions, and approval lifecycle categories
 - Operational Chains: WF-001 → WF-006 and WF-001 → WF-006 → WF-002
+- Private Workshop hardening: private-tool routing remains local-only and registry-separated from Open Workshop
 
 ## WF-005 Note Creation
 

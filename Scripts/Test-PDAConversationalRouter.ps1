@@ -531,7 +531,7 @@ foreach ($Case in $Cases) {
             $CasePassed = $false
             $Issues.Add("Direct response text was empty.")
         }
-        if ($Route.route_type -eq "direct_status" -and $Direct.response_text -notmatch '(?i)Current Phase: Phase 5 - First Operational Workflows|Operational Workflow Status|Operational Workflows|Approval / Pending Action|Recommended Next Action') {
+        if ($Route.route_type -eq "direct_status" -and $Direct.response_text -notmatch '(?i)Current Phase: Phase 6 - Private Workshop Hardening|Current Phase: Phase 5 - First Operational Workflows|Operational Workflow Status|Operational Workflows|Approval / Pending Action|Recommended Next Action') {
             $CasePassed = $false
             $Issues.Add("Direct status response did not look like an operational status summary.")
         }
@@ -612,10 +612,7 @@ foreach ($Case in $Cases) {
             $Issues.Add("Judgment advice should not produce workflow-routing language.")
         }
         if ($Route.route_type -eq "judgment_advice") {
-            $SentenceCount = @(
-                [regex]::Split([string]$Direct.response_text, '(?<=[\.\!\?])\s+')
-                | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) }
-            ).Count
+            $SentenceCount = @([regex]::Split([string]$Direct.response_text, '(?<=[\.\!\?])\s+') | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) }).Count
             if ($SentenceCount -gt 4) {
                 $CasePassed = $false
                 $Issues.Add("Judgment advice should stay within 4 sentences.")

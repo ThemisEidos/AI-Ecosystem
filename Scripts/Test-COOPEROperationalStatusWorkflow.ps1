@@ -50,7 +50,7 @@ foreach ($Field in @(
     }
 }
 
-if ([string]$Success.current_phase -notmatch '^Phase 5 - First Operational Workflows$') {
+if ([string]$Success.current_phase -notmatch '^Phase 6 - Private Workshop Hardening$') {
     $Issues.Add("Operational status helper did not report the current roadmap phase.")
 }
 if ([string]$Success.status -ne "pass") {
@@ -65,8 +65,8 @@ foreach ($WorkflowId in @("WF-001", "WF-002", "WF-004", "WF-005", "WF-006")) {
 }
 
 $ChainStrings = @($Success.operational_chains | ForEach-Object { [string]$_ })
-if ($ChainStrings.Count -ne 1 -or $ChainStrings[0] -ne "WF-001 → WF-006") {
-    $Issues.Add("Operational chains were not deduplicated to a single normalized WF-001 → WF-006 entry.")
+if ($ChainStrings.Count -ne 1 -or $ChainStrings[0] -ne "WF-001 -> WF-006") {
+    $Issues.Add("Operational chains were not deduplicated to a single normalized WF-001 -> WF-006 entry.")
 }
 
 $DefinitionIds = @($Success.workflow_definitions | ForEach-Object { [string]$_.workflow_id })
