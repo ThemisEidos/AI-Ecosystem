@@ -159,6 +159,12 @@ $Cases = @(
         expected_command = "Create Obsidian note"
     }
     [pscustomobject]@{
+        name = "wf-007 private local analysis"
+        input = "Perform a private local analysis of this request."
+        expected_route = "private_local_analysis"
+        expected_command = "Run private local analysis"
+    }
+    [pscustomobject]@{
         name = "natural workshop change request"
         input = "Switch to Private Workshop."
         expected_route = "workshop_change_request"

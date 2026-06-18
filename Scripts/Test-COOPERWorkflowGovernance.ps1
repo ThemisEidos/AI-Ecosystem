@@ -26,6 +26,7 @@ $WF004 = @($Definitions | Where-Object { [string]$_.id -eq "WF-004" } | Select-O
 $WF001 = @($Definitions | Where-Object { [string]$_.id -eq "WF-001" } | Select-Object -First 1)
 $WF005 = @($Definitions | Where-Object { [string]$_.id -eq "WF-005" } | Select-Object -First 1)
 $WF006 = @($Definitions | Where-Object { [string]$_.id -eq "WF-006" } | Select-Object -First 1)
+$WF007 = @($Definitions | Where-Object { [string]$_.id -eq "WF-007" } | Select-Object -First 1)
 
 if ($WF002.Count -eq 0) {
     $Issues.Add("WF-002 is missing from the workflow definitions loader.")
@@ -75,13 +76,25 @@ else {
     }
 }
 
+if ($WF007.Count -eq 0) {
+    $Issues.Add("WF-007 is missing from the workflow definitions loader.")
+}
+else {
+    if ([string]$WF007[0].executor -ne "private_local_analysis") {
+        $Issues.Add("WF-007 does not map to the private_local_analysis executor.")
+    }
+    if ([string]$WF007[0].workshop -ne "Private") {
+        $Issues.Add("WF-007 is not marked as a Private workflow in the definitions loader.")
+    }
+}
+
 $Catalog = Get-COOPERWorkflowCatalogSummary
 if ([string]$Catalog.status -ne "pass") {
     $Issues.Add("Workflow catalog summary did not pass.")
 }
 else {
     $WorkflowIds = @($Catalog.workflows | ForEach-Object { [string]$_.workflow_id })
-    foreach ($WorkflowId in @("WF-002", "WF-001", "WF-005", "WF-006")) {
+    foreach ($WorkflowId in @("WF-002", "WF-001", "WF-005", "WF-006", "WF-007")) {
         if ($WorkflowIds -notcontains $WorkflowId) {
             $Issues.Add("Workflow catalog summary is missing $WorkflowId.")
         }

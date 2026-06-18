@@ -129,6 +129,19 @@ function Get-COOPERWorkflowDefinitions {
                 status = "operational"
                 source_of_truth = "Config/workflows.yaml"
             }
+            [pscustomobject]@{
+                id = "WF-007"
+                name = "Private Local Analysis"
+                workshop = "Private"
+                permission_level = 2
+                approval_required = $true
+                intent_keywords = @("private local analysis", "private analysis", "restricted analysis", "local analysis", "analyze privately", "analyse privately", "private workshop analysis", "dmz analysis")
+                executor = "private_local_analysis"
+                output_type = "markdown_file"
+                storage_target = "restricted_dmz_workspace"
+                status = "operational"
+                source_of_truth = "Config/workflows.yaml"
+            }
         )
     }
 

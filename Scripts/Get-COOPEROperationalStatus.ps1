@@ -347,6 +347,22 @@ function Get-COOPERWorkflowArtifactPath {
                 }
             }
         }
+        "WF-007" {
+            if ($ProjectMemory -and $ProjectMemory.PSObject.Properties.Name -contains "last_successful_workflow" -and $ProjectMemory.last_successful_workflow -and [string]$ProjectMemory.last_successful_workflow.workflow_id -eq "WF-007" -and -not [string]::IsNullOrWhiteSpace([string]$ProjectMemory.last_successful_workflow.output_path)) {
+                return [string]$ProjectMemory.last_successful_workflow.output_path
+            }
+
+            if ($SkillsState -and $SkillsState.PSObject.Properties.Name -contains "skills") {
+                foreach ($Skill in @($SkillsState.skills)) {
+                    if ([string]$Skill.workflow_id -eq "WF-007" -and -not [string]::IsNullOrWhiteSpace([string]$Skill.example_output)) {
+                        $ArtifactPath = Find-COOPERArtifactPathByName -FileName [string]$Skill.example_output -Root $Root
+                        if (-not [string]::IsNullOrWhiteSpace($ArtifactPath)) {
+                            return $ArtifactPath
+                        }
+                    }
+                }
+            }
+        }
         "WF-005" {
             if ($SkillsState -and $SkillsState.PSObject.Properties.Name -contains "skills") {
                 foreach ($Skill in @($SkillsState.skills)) {
@@ -401,6 +417,19 @@ function Get-COOPERWorkflowExecutionStatus {
             if ($SkillsState -and $SkillsState.PSObject.Properties.Name -contains "skills") {
                 foreach ($Skill in @($SkillsState.skills)) {
                     if ([string]$Skill.workflow_id -eq "WF-006" -and [string]$Skill.status -match '^(operational|pass|ready)$') {
+                        return "pass"
+                    }
+                }
+            }
+        }
+        "WF-007" {
+            if ($ProjectMemory -and $ProjectMemory.PSObject.Properties.Name -contains "last_successful_workflow" -and $ProjectMemory.last_successful_workflow -and [string]$ProjectMemory.last_successful_workflow.workflow_id -eq "WF-007") {
+                return "pass"
+            }
+
+            if ($SkillsState -and $SkillsState.PSObject.Properties.Name -contains "skills") {
+                foreach ($Skill in @($SkillsState.skills)) {
+                    if ([string]$Skill.workflow_id -eq "WF-007" -and [string]$Skill.status -match '^(operational|pass|ready)$') {
                         return "pass"
                     }
                 }

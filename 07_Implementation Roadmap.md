@@ -26,6 +26,7 @@ This roadmap tracks the staged implementation of the COOPER-centered AI Ecosyste
   - WF-004 Operational Status remains operational
   - WF-005 Note Creation remains operational
   - WF-006 Knowledge Collection Import Draft remains operational
+  - WF-007 Private Local Analysis becomes operational
   - WF-001 -> WF-006 chain remains operational
   - milestone status is recorded
   - runtime noise is not treated as source of truth
@@ -131,6 +132,7 @@ This roadmap tracks the staged implementation of the COOPER-centered AI Ecosyste
 - Status: In Progress
 - Goal: Make COOPER Private safe enough for restricted DMZ workflows.
 - Build Artifacts:
+  - WF-007 Private Local Analysis
   - private registry hardening
   - Restricted DMZ path validation
   - local-only workflow checks
@@ -141,6 +143,7 @@ This roadmap tracks the staged implementation of the COOPER-centered AI Ecosyste
   - outputs remain in Restricted DMZ Workspace
   - Open Workshop and Private Workshop routing remain separated
   - private-tool routing originates from the private registry only
+  - WF-007 reports completion status through WF-004
 
 ### Phase 7 - PDA Evolution
 

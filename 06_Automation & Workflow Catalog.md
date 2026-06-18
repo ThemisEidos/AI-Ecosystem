@@ -27,6 +27,7 @@ Higher-risk workflows continue to require explicit confirmation. The approved lo
 | WF-002 Codex Task Generator              | Auto-dispatch for task file generation         | Low  | Codex_Tasks/                               | None                        |
 | WF-005 Note Creation                     | Direct execution after governed routing/review | Low  | Obsidian Agent Findings/Drafts             | None                        |
 | WF-006 Knowledge Collection Import Draft | Chained after WF-001 review pass               | Low  | Obsidian Agent Findings/Collection Imports | None                        |
+| WF-007 Private Local Analysis            | Private Workshop local-only execution          | Med  | Restricted DMZ Workspace                   | None                        |
 
 ## WF-001 Research Summary
 
@@ -231,8 +232,8 @@ Workflow completion is measured by outcome quality, not by workflow execution al
 - Output: restricted analysis note or local summary
 - Storage Location: Restricted DMZ Workspace
 - Security Notes: no cloud AI, no external webhooks, no plain-text sensitive logging
-- Status: Future
-- Next Step: define the approved local analysis pipeline
+- Status: Operational
+- Next Step: keep routing local-only, approval-gated, and restricted to the private registry
 
 ## Glossary
 

@@ -4,12 +4,15 @@ param(
     [object]$ApprovalDecision,
 
     [Parameter(Mandatory = $false)]
-    [switch]$DryRun
+    [switch]$DryRun,
+
+    [Parameter(Mandatory = $false)]
+    [string]$Root = (Split-Path -Parent $PSScriptRoot)
 )
 
 $ErrorActionPreference = "Stop"
 
-$SupportedToolIds = @("status_summary", "status_summary_private", "obsidian_note_writer", "codex_task_launcher")
+$SupportedToolIds = @("status_summary", "status_summary_private", "obsidian_note_writer", "codex_task_launcher", "restricted_dmz_writer")
 $SupportedExecutorTypes = @("informational", "note_editor", "cli_launcher")
 $WorkshopIdentityScript = Join-Path $PSScriptRoot "Get-COOPERWorkshopIdentity.ps1"
 $OperationalStatusScript = Join-Path $PSScriptRoot "Get-COOPEROperationalStatus.ps1"
@@ -197,7 +200,7 @@ if ($ToolId -eq "codex_task_launcher" -and [bool]$WorkshopIdentity.cloud_allowed
     }
 }
 
-if ([bool]$WorkshopIdentity.cloud_allowed -eq $false -and $ExecutorType -and $SupportedExecutorTypes -notcontains $ExecutorType) {
+if ($ToolId -ne "restricted_dmz_writer" -and [bool]$WorkshopIdentity.cloud_allowed -eq $false -and $ExecutorType -and $SupportedExecutorTypes -notcontains $ExecutorType) {
     return [pscustomobject]@{
         success = $false
         dry_run = [bool]$DryRun
@@ -259,6 +262,115 @@ function Resolve-COOPERCodexTaskPath {
     }
 
     return $CandidatePath
+}
+
+function Resolve-COOPERRestrictedDMZPath {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Root,
+
+        [Parameter(Mandatory = $true)]
+        [string]$RequestedPath
+    )
+
+    $WorkspaceRoot = [System.IO.Path]::GetFullPath((Join-Path $Root "Restricted DMZ Workspace"))
+    $CandidatePath = if ([System.IO.Path]::IsPathRooted($RequestedPath)) {
+        [System.IO.Path]::GetFullPath($RequestedPath)
+    }
+    else {
+        [System.IO.Path]::GetFullPath((Join-Path $Root $RequestedPath))
+    }
+
+    $WorkspacePrefix = $WorkspaceRoot.TrimEnd('\') + '\'
+    if (-not ($CandidatePath -eq $WorkspaceRoot -or $CandidatePath.StartsWith($WorkspacePrefix, [System.StringComparison]::OrdinalIgnoreCase))) {
+        throw "Restricted DMZ output must stay within the Restricted DMZ Workspace."
+    }
+
+    return $CandidatePath
+}
+
+if ($ToolId -eq "restricted_dmz_writer") {
+    if ([string]::IsNullOrWhiteSpace($NotePath)) {
+        return [pscustomobject]@{
+            success = $false
+            dry_run = [bool]$DryRun
+            tool_id = $ToolId
+            workshop = $Workshop
+            workshop_mode = $WorkshopMode
+            executor_type = $ExecutorType
+            action_taken = "blocked"
+            output = $null
+            reason = "Restricted DMZ writing requires file_path."
+        }
+    }
+
+    if ([string]::IsNullOrWhiteSpace($MarkdownContent)) {
+        return [pscustomobject]@{
+            success = $false
+            dry_run = [bool]$DryRun
+            tool_id = $ToolId
+            workshop = $Workshop
+            workshop_mode = $WorkshopMode
+            executor_type = $ExecutorType
+            action_taken = "blocked"
+            output = $null
+            reason = "Restricted DMZ writing requires content."
+        }
+    }
+
+    try {
+        $ResolvedOutputPath = Resolve-COOPERRestrictedDMZPath -Root $Root -RequestedPath $NotePath
+    }
+    catch {
+        return [pscustomobject]@{
+            success = $false
+            dry_run = [bool]$DryRun
+            tool_id = $ToolId
+            workshop = $Workshop
+            workshop_mode = $WorkshopMode
+            executor_type = $ExecutorType
+            action_taken = "blocked"
+            output = $null
+            reason = $_.Exception.Message
+        }
+    }
+
+    if ($DryRun) {
+        return [pscustomobject]@{
+            success = $true
+            dry_run = $true
+            tool_id = $ToolId
+            workshop = $Workshop
+            workshop_mode = $WorkshopMode
+            executor_type = $ExecutorType
+            action_taken = "dry_run_restricted_dmz_write"
+            output = [pscustomobject]@{
+                file_path = $ResolvedOutputPath
+                content = $MarkdownContent
+                would_create = $true
+            }
+            reason = "Dry run only. No restricted DMZ file was written."
+        }
+    }
+
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $ResolvedOutputPath) | Out-Null
+    Set-Content -LiteralPath $ResolvedOutputPath -Value $MarkdownContent -Encoding UTF8
+
+    return [pscustomobject]@{
+        success = $true
+        dry_run = $false
+        tool_id = $ToolId
+        workshop = $Workshop
+        workshop_mode = $WorkshopMode
+        executor_type = $ExecutorType
+        action_taken = "write_restricted_dmz_file"
+        output = [pscustomobject]@{
+            file_path = $ResolvedOutputPath
+            file_exists = (Test-Path -LiteralPath $ResolvedOutputPath -PathType Leaf)
+            bytes_written = (Get-Item -LiteralPath $ResolvedOutputPath).Length
+        }
+        reason = "Restricted DMZ markdown written."
+    }
 }
 
 if ($ToolId -eq "obsidian_note_writer") {

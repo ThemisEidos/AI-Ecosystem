@@ -5,6 +5,7 @@ $ErrorActionPreference = "Stop"
 
 $Root = Split-Path -Parent $PSScriptRoot
 $StatusScript = Join-Path $PSScriptRoot "Get-COOPEROperationalStatus.ps1"
+$PrivateAnalysisScript = Join-Path $PSScriptRoot "Invoke-COOPERPrivateLocalAnalysis.ps1"
 
 if (-not (Test-Path -LiteralPath $StatusScript -PathType Leaf)) {
     throw "WF-004 operational status helper is missing: $StatusScript"
@@ -14,6 +15,16 @@ $TempRoot = Join-Path $Root "tmp\cooper-operational-status-tests"
 New-Item -ItemType Directory -Force -Path $TempRoot | Out-Null
 
 $Issues = New-Object System.Collections.Generic.List[string]
+
+if (Test-Path -LiteralPath $PrivateAnalysisScript -PathType Leaf) {
+    $PrivateAnalysisResult = & $PrivateAnalysisScript -Text "Verify the private local analysis workflow and confirm the restricted DMZ boundary." -Approved -WorkshopMode "Private Workshop" -Root $Root
+    if ([bool]$PrivateAnalysisResult.success -ne $true) {
+        $Issues.Add("WF-007 private local analysis workflow did not succeed before status verification.")
+    }
+}
+else {
+    $Issues.Add("WF-007 private local analysis workflow script is missing.")
+}
 
 $Success = & $StatusScript -Root $Root -WorkshopMode "Open Workshop"
 
@@ -58,7 +69,7 @@ if ([string]$Success.status -ne "pass") {
 }
 
 $WorkflowIds = @($Success.operational_workflows | ForEach-Object { [string]$_.workflow_id })
-foreach ($WorkflowId in @("WF-001", "WF-002", "WF-004", "WF-005", "WF-006")) {
+foreach ($WorkflowId in @("WF-001", "WF-002", "WF-004", "WF-005", "WF-006", "WF-007")) {
     if ($WorkflowIds -notcontains $WorkflowId) {
         $Issues.Add("Operational workflow list is missing $WorkflowId.")
     }
@@ -101,7 +112,7 @@ else {
             $Issues.Add("Workflow $([string]$Entry.workflow_id) returned an invalid status '$([string]$Entry.status)'.")
         }
     }
-    foreach ($WorkflowId in @("WF-001", "WF-002", "WF-004", "WF-005", "WF-006")) {
+    foreach ($WorkflowId in @("WF-001", "WF-002", "WF-004", "WF-005", "WF-006", "WF-007")) {
         if (-not $WorkflowStatusMap.ContainsKey($WorkflowId)) {
             $Issues.Add("Workflow status summary is missing $WorkflowId.")
         }
@@ -112,9 +123,16 @@ else {
     if ($WorkflowStatusMap["WF-004"] -ne "pass") {
         $Issues.Add("WF-004 did not report pass after the status report was generated.")
     }
+    if ($WorkflowStatusMap["WF-007"] -ne "pass") {
+        $Issues.Add("WF-007 did not report pass after the private local analysis workflow completed.")
+    }
     $WF001Status = @($Success.workflow_statuses | Where-Object { [string]$_.workflow_id -eq "WF-001" } | Select-Object -First 1)
     if ($WF001Status.Count -eq 0 -or [string]$WF001Status[0].last_run_artifact_path -eq "") {
         $Issues.Add("WF-001 did not report a last run artifact path.")
+    }
+    $WF007Status = @($Success.workflow_statuses | Where-Object { [string]$_.workflow_id -eq "WF-007" } | Select-Object -First 1)
+    if ($WF007Status.Count -eq 0 -or [string]$WF007Status[0].last_run_artifact_path -eq "") {
+        $Issues.Add("WF-007 did not report a last run artifact path.")
     }
 }
 

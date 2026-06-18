@@ -118,6 +118,29 @@ $Cases = @(
         expect_reason_like = "Private Workshop must not execute external executor types"
     }
     [pscustomobject]@{
+        name = "restricted dmz writer dry run"
+        decision = [pscustomobject]@{
+            tool_id = "restricted_dmz_writer"
+            workshop = "Private Workshop"
+            workshop_mode = "Private Workshop"
+            permission_level = 2
+            approval_required = $true
+            allowed = $true
+            blocked = $false
+            reason = "Level 2 requires user approval."
+            requires_user_approval = $true
+            execution_authorized = $true
+            executor_type = "filesystem"
+            enabled = $true
+            file_path = (Join-Path (Split-Path -Parent $PSScriptRoot) "Restricted DMZ Workspace\tests\wf-007-workbench-dry-run.md")
+            content = "# WF-007 Restricted DMZ Test`r`n`r`nDry run."
+        }
+        dry_run = $true
+        expect_success = $true
+        expect_action = "dry_run_restricted_dmz_write"
+        expect_reason_like = "Dry run only"
+    }
+    [pscustomobject]@{
         name = "approved harmless status action succeeds"
         decision = $StatusApproval
         dry_run = $false
@@ -212,6 +235,15 @@ foreach ($Case in $Cases) {
             elseif ([string]$Result.output.security_sources.$Field -ne "Not Configured") {
                 $Issues.Add("Status action output $Field should be Not Configured.")
             }
+        }
+    }
+
+    if ($Case.name -eq "restricted dmz writer dry run") {
+        if ($Result.output.PSObject.Properties.Name -notcontains "file_path") {
+            $Issues.Add("Restricted DMZ writer dry run output must include file_path.")
+        }
+        elseif ([string]$Result.output.file_path -notmatch 'Restricted DMZ Workspace') {
+            $Issues.Add("Restricted DMZ writer dry run output path must stay inside the Restricted DMZ Workspace.")
         }
     }
 

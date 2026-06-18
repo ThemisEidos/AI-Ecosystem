@@ -389,6 +389,23 @@ function Test-PDAConversationalNoteCreation {
     return [bool]($ContainsNoteIntent -and -not $LooksLikeResearch)
 }
 
+function Test-PDAConversationalPrivateLocalAnalysis {
+    param([Parameter(Mandatory = $true)][string]$NormalizedText)
+
+    $Definition = Get-COOPERWorkflowDefinitionById -WorkflowId "WF-007"
+    $AnalysisKeywords = if ($Definition -and $Definition.PSObject.Properties.Name -contains "intent_keywords") {
+        @($Definition.intent_keywords)
+    }
+    else {
+        @("private local analysis", "private analysis", "restricted analysis", "local analysis", "analyze privately", "analyse privately")
+    }
+
+    return [bool](
+        (Test-PDAWorkflowDefinitionKeywordMatch -NormalizedText $NormalizedText -Keywords $AnalysisKeywords) -or
+        ($NormalizedText -match '(?i)\b(private|restricted|local)\b.*\b(analysis|analyze|analyse|assessment)\b')
+    )
+}
+
 function Test-PDAConversationalCodexTaskGenerator {
     param([Parameter(Mandatory = $true)][string]$NormalizedText)
 
@@ -1000,12 +1017,13 @@ function Get-COOPERWorkflowCatalogSummary {
             [pscustomobject]@{ workflow_id = "WF-004"; name = "Operational Status"; purpose = "Summarize current operational state from runtime sources."; workshop = "Open Workshop"; category = "Category 1" }
             [pscustomobject]@{ workflow_id = "WF-001"; name = "Research Summary"; purpose = "Collect and summarize research findings."; workshop = "Open Workshop"; category = "Category 1" }
             [pscustomobject]@{ workflow_id = "WF-005"; name = "Obsidian Note Creation"; purpose = "Create non-sensitive Obsidian notes or drafts."; workshop = "Open Workshop"; category = "Category 1" }
+            [pscustomobject]@{ workflow_id = "WF-007"; name = "Private Local Analysis"; purpose = "Run private local analysis and write a restricted DMZ artifact."; workshop = "Private Workshop"; category = "Category 2" }
         )
     }
 
     $WorkflowLines = @($Workflows | ForEach-Object { "{0} {1}" -f $_.workflow_id, $_.name })
     if ($WorkflowLines.Count -eq 0) {
-        $WorkflowLines = @("WF-002 Codex Task Generator", "WF-004 Operational Status", "WF-001 Research Summary", "WF-005 Obsidian Note Creation")
+        $WorkflowLines = @("WF-002 Codex Task Generator", "WF-004 Operational Status", "WF-001 Research Summary", "WF-005 Obsidian Note Creation", "WF-007 Private Local Analysis")
     }
 
     return [pscustomobject]@{
@@ -1124,6 +1142,18 @@ function Resolve-PDAConversationalRoute {
         $Route.confidence = 1
         $Route.intent = "note_creation"
         $Route.task_type = "note_creation"
+        if ($IntentSegments.Count -gt 1) { $Route.intent_segments = @($IntentSegments) }
+        return [pscustomobject]$Route
+    }
+
+    if (Test-PDAConversationalPrivateLocalAnalysis -NormalizedText $Normalized) {
+        $Route.route_type = "private_local_analysis"
+        $Route.response_mode = "governed_command"
+        $Route.recommended_command = "Run private local analysis"
+        $Route.reason = "WF-007 Private Local Analysis request."
+        $Route.confidence = 1
+        $Route.intent = "private_local_analysis"
+        $Route.task_type = "private_local_analysis"
         if ($IntentSegments.Count -gt 1) { $Route.intent_segments = @($IntentSegments) }
         return [pscustomobject]$Route
     }
@@ -1904,6 +1934,59 @@ function Get-PDAConversationalNaturalResponse {
             if ($NoteResult -and $NoteResult.PSObject.Properties.Name -contains "note_path") {
                 $BaseResponse.latest_result_path = [string]$NoteResult.note_path
                 $BaseResponse.result_artifact_path = [string]$NoteResult.note_path
+            }
+        }
+        "private_local_analysis" {
+            $ResolvedWorkshopMode = [string]$WorkshopMode
+            if ([string]::IsNullOrWhiteSpace($ResolvedWorkshopMode) -and -not [string]::IsNullOrWhiteSpace([string]$env:COOPER_WORKSHOP_MODE)) {
+                $ResolvedWorkshopMode = [string]$env:COOPER_WORKSHOP_MODE
+            }
+
+            if ($ResolvedWorkshopMode -ne "Private Workshop") {
+                $BaseResponse.response_text = "WF-007 Private Local Analysis is available only in Private Workshop."
+                $BaseResponse.next_action = "Select COOPER Private, then ask for private local analysis again."
+                $BaseResponse.runtime_status = [pscustomobject]@{
+                    success = $false
+                    workflow_id = "WF-007"
+                    reason = "WF-007 is Private Workshop only."
+                    workshop_mode = $ResolvedWorkshopMode
+                }
+                break
+            }
+
+            $PrivateAnalysisScript = Join-Path $PSScriptRoot "Invoke-COOPERPrivateLocalAnalysis.ps1"
+            if (Test-Path -LiteralPath $PrivateAnalysisScript -PathType Leaf) {
+                try {
+                    $PrivateAnalysisResult = & $PrivateAnalysisScript -Text $Text -Approved -WorkshopMode $ResolvedWorkshopMode -Root $Root
+                }
+                catch {
+                    $PrivateAnalysisResult = [pscustomobject]@{
+                        success = $false
+                        reason = $_.Exception.Message
+                        response_text = ""
+                        analysis_path = ""
+                        result_artifact_path = ""
+                    }
+                }
+            }
+            else {
+                $PrivateAnalysisResult = [pscustomobject]@{
+                    success = $false
+                    reason = "WF-007 private local analysis workflow is unavailable."
+                    response_text = ""
+                    analysis_path = ""
+                    result_artifact_path = ""
+                }
+            }
+
+            $BaseResponse.runtime_status = $PrivateAnalysisResult
+            $BaseResponse.response_text = if ($PrivateAnalysisResult -and [bool]$PrivateAnalysisResult.success -eq $true -and -not [string]::IsNullOrWhiteSpace([string]$PrivateAnalysisResult.response_text)) { [string]$PrivateAnalysisResult.response_text } else { if ($PrivateAnalysisResult -and $PrivateAnalysisResult.PSObject.Properties.Name -contains "reason" -and -not [string]::IsNullOrWhiteSpace([string]$PrivateAnalysisResult.reason)) { [string]$PrivateAnalysisResult.reason } else { "WF-007 private local analysis could not be completed." } }
+            $BaseResponse.next_action = if ($PrivateAnalysisResult -and [bool]$PrivateAnalysisResult.success -eq $true) { "Review the restricted analysis or ask for another private follow-up." } else { "Review approval or restricted DMZ path configuration." }
+            $BaseResponse.latest_result_response_text = $BaseResponse.response_text
+            $BaseResponse.private_local_analysis_result = $PrivateAnalysisResult
+            if ($PrivateAnalysisResult -and $PrivateAnalysisResult.PSObject.Properties.Name -contains "analysis_path") {
+                $BaseResponse.latest_result_path = [string]$PrivateAnalysisResult.analysis_path
+                $BaseResponse.result_artifact_path = [string]$PrivateAnalysisResult.analysis_path
             }
         }
         "workshop_change_request" {
