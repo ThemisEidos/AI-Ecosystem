@@ -1563,7 +1563,7 @@ function Get-PDAConversationalNaturalResponse {
             }
             else {
                 $BaseResponse.response_text = if ($StatusResult -and $StatusResult.PSObject.Properties.Name -contains "reason" -and -not [string]::IsNullOrWhiteSpace([string]$StatusResult.reason)) { [string]$StatusResult.reason } else { "COOPER status is unavailable because workshop mode was not selected." }
-                $BaseResponse.next_action = "Select COOPER or COOPER Private, then ask for system status again."
+                $BaseResponse.next_action = "Select COOPER or COOPER - Private, then ask for system status again."
                 $BaseResponse.latest_result_response_text = $BaseResponse.response_text
             }
         }
@@ -1944,7 +1944,7 @@ function Get-PDAConversationalNaturalResponse {
 
             if ($ResolvedWorkshopMode -ne "Private Workshop") {
                 $BaseResponse.response_text = "WF-007 Private Local Analysis is available only in Private Workshop."
-                $BaseResponse.next_action = "Select COOPER Private, then ask for private local analysis again."
+                $BaseResponse.next_action = "Select COOPER - Private, then ask for private local analysis again."
                 $BaseResponse.runtime_status = [pscustomobject]@{
                     success = $false
                     workflow_id = "WF-007"
@@ -1990,7 +1990,7 @@ function Get-PDAConversationalNaturalResponse {
             }
         }
         "workshop_change_request" {
-            $BaseResponse.response_text = "Workshop selection remains a human decision. Select COOPER or COOPER Private in the host or UI, then ask for status again."
+            $BaseResponse.response_text = "Workshop selection remains a human decision. Select COOPER or COOPER - Private in the host or UI, then ask for status again."
             $BaseResponse.next_action = "Switch the workshop in the host/UI."
             $BaseResponse.latest_result_response_text = $BaseResponse.response_text
         }
@@ -2041,7 +2041,7 @@ function Get-PDAConversationalNaturalResponse {
             }
             else {
                 $BaseResponse.response_text = if ($StatusResult -and $StatusResult.PSObject.Properties.Name -contains "reason" -and -not [string]::IsNullOrWhiteSpace([string]$StatusResult.reason)) { [string]$StatusResult.reason } else { "COOPER status is unavailable because workshop mode was not selected." }
-                $BaseResponse.next_action = "Select COOPER or COOPER Private, then ask for system status again."
+                $BaseResponse.next_action = "Select COOPER or COOPER - Private, then ask for system status again."
             }
         }
         "personality_status" {

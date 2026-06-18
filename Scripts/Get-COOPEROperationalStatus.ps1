@@ -718,18 +718,20 @@ if ([string]::IsNullOrWhiteSpace($CurrentPhase) -and $ProjectMemory -and $Projec
     $CurrentPhase = [string]$ProjectMemory.current_phase
 }
 
-$WorkflowChains = New-Object System.Collections.Generic.List[string]
+$WorkflowChains = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
+$WorkflowChainArrow = [char]0x2192
 foreach ($SourceText in @($RoadmapText, $MilestoneText)) {
     if ([string]::IsNullOrWhiteSpace([string]$SourceText)) {
         continue
     }
 
     $NormalizedSourceText = ([string]$SourceText) -replace ([char]0x2192), '->'
-    foreach ($Match in ([regex]::Matches([string]$NormalizedSourceText, 'WF-\d+\s*->\s*WF-\d+'))) {
-        $Parts = @($Match.Value -split '\s*->\s*' | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
-        $Chain = if ($Parts.Count -eq 2) { "{0} → {1}" -f $Parts[0], $Parts[1] } else { ([string]$Match.Value.Trim()) -replace '\s*->\s*', ' → ' }
-        if (-not [string]::IsNullOrWhiteSpace($Chain) -and $WorkflowChains -notcontains $Chain) {
-            $WorkflowChains.Add($Chain)
+    foreach ($Match in [regex]::Matches([string]$NormalizedSourceText, 'WF-\d+\s*->\s*WF-\d+')) {
+        $Chain = ([string]$Match.Value).Trim()
+        $Chain = $Chain -replace '\s*->\s*', " $WorkflowChainArrow "
+        $Chain = ($Chain -replace '\s+', ' ').Trim()
+        if (-not [string]::IsNullOrWhiteSpace($Chain)) {
+            [void]$WorkflowChains.Add($Chain)
         }
     }
 }

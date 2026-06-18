@@ -1,6 +1,7 @@
 workshops:
   - id: cooper_open
     display_name: COOPER
+    model_identity: COOPER
     workshop_label: Open Workshop
     workshop: open
     default_model: Claude Sonnet
@@ -8,6 +9,7 @@ workshops:
     cloud_allowed: true
   - id: cooper_private
     display_name: COOPER Private
+    model_identity: COOPER - Private
     workshop_label: Private Workshop
     workshop: private
     default_model: local Qwen via Ollama

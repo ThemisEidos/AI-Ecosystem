@@ -14,10 +14,15 @@ model_list:
       model: ollama/llama3.2
       # Emergency / lightweight fallback for conversational continuity.
       api_base: http://host.docker.internal:11434
-  - model_name: cooper-personality
+  - model_name: COOPER
     litellm_params:
       model: ollama/cooper-personality
-      # Keep the local personality model visible through the same Ollama gateway.
+      # User-facing Open Workshop identity alias.
+      api_base: http://host.docker.internal:11434
+  - model_name: COOPER - Private
+    litellm_params:
+      model: ollama/qwen2.5:7b
+      # User-facing Private Workshop identity alias.
       api_base: http://host.docker.internal:11434
   - model_name: openai
     litellm_params:

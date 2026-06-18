@@ -61,8 +61,44 @@ def test_pipe_exposes_cooper_pipe_identity() -> None:
     pipe = make_pipe()
     entries = pipe.pipes()
 
-    assert entries == [{"id": "cooper", "name": "COOPER"}]
+    assert entries == [
+        {"id": "cooper", "name": "COOPER"},
+        {"id": "cooper_private", "name": "COOPER - Private"},
+    ]
     assert pipe.valves.TITLE_SAFE_RESPONSE == "COOPER"
+
+
+def test_private_selection_sets_private_workshop_context() -> None:
+    pipe = make_pipe()
+    calls = []
+
+    async def fake_call(message, confirm_dispatch, conversation_context):
+        calls.append((message, confirm_dispatch, conversation_context))
+        return {
+            "response_text": "Recommended command: /status.",
+            "recommended_command": "/status",
+            "intent": "status",
+            "confidence": 1.0,
+            "requires_confirmation": False,
+            "dispatch_status": "not_dispatched",
+            "next_action": "Check system status.",
+            "bridge_status": "ready",
+        }
+
+    pipe._call_bridge = fake_call  # type: ignore[method-assign]
+    body = {
+        "messages": [{"role": "user", "content": "show status"}],
+        "chat_id": "chat-private-model",
+        "model": "cooper_private",
+    }
+
+    rendered = run(pipe.pipe(body))
+    assert "Recommended command: /status." in rendered
+    assert len(calls) == 1
+    assert calls[0][2]["selected_model_identity"] == "COOPER - Private"
+    assert calls[0][2]["selected_model_id"] == "cooper_private"
+    assert calls[0][2]["workshop_mode"] == "Private Workshop"
+    assert calls[0][2]["workshop_identity"] == "COOPER - Private"
 
 
 def test_confirm_dispatch_replays_pending_message() -> None:

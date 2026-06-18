@@ -10,9 +10,14 @@ $Issues = New-Object System.Collections.Generic.List[string]
 
 $OpenIdentity = & $IdentityScript -WorkshopMode "Open Workshop"
 $PrivateIdentity = & $IdentityScript -WorkshopMode "Private Workshop"
+$PrivateIdentityFromModel = & $IdentityScript -ModelIdentity "COOPER - Private"
 
 if ([string]$OpenIdentity.default_model -ne "Claude Sonnet") { $Issues.Add("Open COOPER should resolve to Claude Sonnet.") }
 if ([string]$PrivateIdentity.default_model -ne "local Qwen via Ollama") { $Issues.Add("Private COOPER should resolve to local Qwen via Ollama.") }
+if ([string]$OpenIdentity.model_identity -ne "COOPER") { $Issues.Add("Open COOPER should expose the COOPER model identity.") }
+if ([string]$PrivateIdentity.model_identity -ne "COOPER - Private") { $Issues.Add("Private COOPER should expose the COOPER - Private model identity.") }
+if ([string]$PrivateIdentityFromModel.workshop_label -ne "Private Workshop") { $Issues.Add("Model identity COOPER - Private should resolve to Private Workshop.") }
+if ([bool]$PrivateIdentityFromModel.cloud_allowed -ne $false) { $Issues.Add("Model identity COOPER - Private should block cloud usage.") }
 if ([string]$OpenIdentity.registry -ne "Config/general_tool_registry.yaml") { $Issues.Add("Open COOPER should use the general registry.") }
 if ([string]$PrivateIdentity.registry -ne "Config/private_tool_registry.yaml") { $Issues.Add("Private COOPER should use the private registry.") }
 if ([bool]$OpenIdentity.cloud_allowed -ne $true) { $Issues.Add("Open COOPER should allow cloud usage.") }

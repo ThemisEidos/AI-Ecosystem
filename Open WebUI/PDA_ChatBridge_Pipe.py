@@ -72,11 +72,24 @@ class Pipe:
         self._state_lock = asyncio.Lock()
 
     def pipes(self):
-        return [{"id": "cooper", "name": "COOPER"}]
+        return [
+            {"id": "cooper", "name": "COOPER"},
+            {"id": "cooper_private", "name": "COOPER - Private"},
+        ]
 
     async def pipe(self, body: dict, __user__: dict | None = None, __request__: Any = None) -> str:
+        selected_model_identity = self._extract_selected_model_identity(body)
+        workshop_mode = self._resolve_workshop_mode(selected_model_identity)
         session_key = self._get_session_key(body, __user__)
         conversation_context = self._extract_conversation_context(body, __user__, session_key)
+        conversation_context.update(
+            {
+                "selected_model_identity": selected_model_identity,
+                "selected_model_id": self._extract_selected_model_id(body),
+                "workshop_mode": workshop_mode,
+                "workshop_identity": self._resolve_workshop_identity(selected_model_identity, workshop_mode),
+            }
+        )
         latest_message = self._extract_user_message(body)
         explicit_confirm = self._extract_confirm_flag(body)
         internal_prompt_reason = self._detect_internal_prompt(body, latest_message)
@@ -164,6 +177,40 @@ class Pipe:
             return "internal_prompt_metadata"
 
         return ""
+
+    def _extract_selected_model_id(self, body: dict) -> str:
+        for key in ("model", "model_id", "selected_model_id", "pipe_id"):
+            candidate = body.get(key)
+            if isinstance(candidate, str) and candidate.strip():
+                return candidate.strip()
+        return ""
+
+    def _extract_selected_model_identity(self, body: dict) -> str:
+        candidate = self._extract_selected_model_id(body)
+        normalized = candidate.strip().lower()
+        if normalized in {"cooper_private", "cooper-private", "pda_chat_bridge.cooper_private", "pda_chat_bridge.cooper-private", "cooper - private"}:
+            return "COOPER - Private"
+        if normalized in {"cooper", "pda_chat_bridge.cooper"}:
+            return "COOPER"
+        return ""
+
+    def _resolve_workshop_mode(self, selected_model_identity: str) -> str:
+        normalized = selected_model_identity.strip().lower()
+        if normalized in {"cooper - private", "cooper private"}:
+            return "Private Workshop"
+        if normalized in {"cooper", "pda_chat_bridge.cooper", "pda_chat_bridge.cooper_private", "cooper_private", "cooper-private"}:
+            return "Open Workshop" if normalized == "cooper" or normalized == "pda_chat_bridge.cooper" else "Private Workshop"
+        workshop_mode = os.environ.get("COOPER_WORKSHOP_MODE", "").strip()
+        if workshop_mode in {"Open Workshop", "Private Workshop"}:
+            return workshop_mode
+        return "Open Workshop"
+
+    def _resolve_workshop_identity(self, selected_model_identity: str, workshop_mode: str) -> str:
+        if workshop_mode == "Private Workshop":
+            return "COOPER - Private"
+        if selected_model_identity == "COOPER - Private":
+            return "COOPER - Private"
+        return "COOPER"
 
     def _extract_user_message(self, body: dict) -> str:
         candidate = body.get("user_message")

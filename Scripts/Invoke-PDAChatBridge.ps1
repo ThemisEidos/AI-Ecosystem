@@ -19,7 +19,13 @@ param(
     [string]$UserId,
 
     [Parameter(Mandatory = $false)]
-    [string]$ConversationTitle
+    [string]$ConversationTitle,
+
+    [Parameter(Mandatory = $false)]
+    [string]$ModelIdentity = "",
+
+    [Parameter(Mandatory = $false)]
+    [string]$WorkshopMode = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -51,6 +57,46 @@ if (Test-Path -Path $ApprovalWorkflowScript -PathType Leaf) {
 if (Test-Path -Path $COOPERIdentityScript -PathType Leaf) {
     . $COOPERIdentityScript
 }
+
+function Resolve-PDAWorkshopModeFromIdentity {
+    param(
+        [Parameter(Mandatory = $false)]
+        [string]$ModelIdentity = "",
+
+        [Parameter(Mandatory = $false)]
+        [string]$WorkshopMode = ""
+    )
+
+    $Normalized = [string]$ModelIdentity.Trim().ToLowerInvariant()
+    switch ($Normalized) {
+        { $_ -in @("cooper - private", "cooper private", "cooper_private", "cooper-private", "pda_chat_bridge.cooper_private", "pda_chat_bridge.cooper-private") } {
+            return "Private Workshop"
+        }
+        { $_ -in @("cooper", "pda_chat_bridge.cooper") } {
+            return "Open Workshop"
+        }
+        default {
+            break
+        }
+    }
+
+    if ([string]::IsNullOrWhiteSpace($WorkshopMode) -eq $false -and $WorkshopMode -in @("Open Workshop", "Private Workshop")) {
+        return [string]$WorkshopMode
+    }
+
+    $EnvMode = [string]$env:COOPER_WORKSHOP_MODE
+    if ($EnvMode -in @("Open Workshop", "Private Workshop")) {
+        return $EnvMode
+    }
+
+    return "Open Workshop"
+}
+
+$ResolvedWorkshopMode = Resolve-PDAWorkshopModeFromIdentity -ModelIdentity $ModelIdentity -WorkshopMode $WorkshopMode
+if ([string]::IsNullOrWhiteSpace($ResolvedWorkshopMode)) {
+    $ResolvedWorkshopMode = "Open Workshop"
+}
+$env:COOPER_WORKSHOP_MODE = $ResolvedWorkshopMode
 
 if (-not (Test-Path -Path $HandoffScript -PathType Leaf)) {
     throw "Command handoff missing: $HandoffScript"

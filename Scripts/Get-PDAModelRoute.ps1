@@ -78,7 +78,8 @@ function Load-PDAModelRoutingPolicy {
         throw "Model routing policy is empty: $ResolvedPolicyPath"
     }
 
-    $Policy = $Raw | ConvertFrom-Json -AsHashtable
+    $Policy = $Raw | ConvertFrom-Json
+    $Policy = ConvertTo-PDAHashtable -Value $Policy
     if (-not $Policy.command_routes) {
         throw "Model routing policy is missing command_routes."
     }

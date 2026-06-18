@@ -1,8 +1,11 @@
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory = $true)]
-    [ValidateSet("Open Workshop", "Private Workshop")]
-    [string]$WorkshopMode,
+    [Parameter(Mandatory = $false)]
+    [ValidateSet("", "Open Workshop", "Private Workshop")]
+    [string]$WorkshopMode = "",
+
+    [Parameter(Mandatory = $false)]
+    [string]$ModelIdentity = "",
 
     [Parameter(Mandatory = $false)]
     [string]$ConfigPath = "",
@@ -49,9 +52,30 @@ if (-not (Test-Path -LiteralPath $ConfigPath -PathType Leaf)) {
 }
 
 $Config = ConvertFrom-COOPERYamlText -Path $ConfigPath
-$WorkshopEntry = $Config.workshops | Where-Object { [string]$_.workshop_label -eq $WorkshopMode } | Select-Object -First 1
+$ResolvedWorkshopMode = [string]$WorkshopMode
+if ([string]::IsNullOrWhiteSpace($ResolvedWorkshopMode) -and -not [string]::IsNullOrWhiteSpace([string]$ModelIdentity)) {
+    $NormalizedModelIdentity = [string]$ModelIdentity.Trim().ToLowerInvariant()
+    switch ($NormalizedModelIdentity) {
+        { $_ -in @("cooper - private", "cooper private", "pda_chat_bridge.cooper_private", "pda_chat_bridge.cooper-private", "cooper_private") } {
+            $ResolvedWorkshopMode = "Private Workshop"
+            break
+        }
+        { $_ -in @("cooper", "pda_chat_bridge.cooper") } {
+            $ResolvedWorkshopMode = "Open Workshop"
+            break
+        }
+    }
+}
+if ([string]::IsNullOrWhiteSpace($ResolvedWorkshopMode)) {
+    $ResolvedWorkshopMode = "Open Workshop"
+}
+
+$WorkshopEntry = $Config.workshops | Where-Object {
+    [string]$_.workshop_label -eq $ResolvedWorkshopMode -or
+    ([string]$_.model_identity -and [string]$_.model_identity -eq $ModelIdentity)
+} | Select-Object -First 1
 if ($null -eq $WorkshopEntry) {
-    throw "Workshop mode '$WorkshopMode' was not found in $ConfigPath."
+    throw "Workshop mode '$ResolvedWorkshopMode' was not found in $ConfigPath."
 }
 
 $RegistryPath = Join-Path $Root ([string]$WorkshopEntry.registry)
@@ -59,6 +83,7 @@ $RegistryPath = Join-Path $Root ([string]$WorkshopEntry.registry)
 [pscustomobject]@{
     status = "pass"
     display_name = [string]$WorkshopEntry.display_name
+    model_identity = if ($WorkshopEntry.PSObject.Properties.Name -contains "model_identity" -and -not [string]::IsNullOrWhiteSpace([string]$WorkshopEntry.model_identity)) { [string]$WorkshopEntry.model_identity } else { [string]$WorkshopEntry.display_name }
     workshop_label = [string]$WorkshopEntry.workshop_label
     workshop = [string]$WorkshopEntry.workshop
     default_model = [string]$WorkshopEntry.default_model

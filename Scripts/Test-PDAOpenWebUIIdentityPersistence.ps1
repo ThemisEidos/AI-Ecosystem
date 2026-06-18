@@ -20,6 +20,8 @@ $Result = [ordered]@{
     api_functions = @()
     visible_model_id = ""
     visible_model_name = ""
+    private_model_id = ""
+    private_model_name = ""
     legacy_model_present = $false
     function_name = ""
     function_title = ""
@@ -82,9 +84,12 @@ import os
 import sqlite3
 import time
 import uuid
+import warnings
 
 import jwt
 import requests
+
+warnings.filterwarnings("ignore", category=Warning)
 
 
 def read_secret():
@@ -160,13 +165,19 @@ def main():
         )
         for item in model_entries
     )
-    visible_model = next(
-        (
-            item
-            for item in model_entries
-            if isinstance(item, dict) and item.get("id") == "pda_chat_bridge.cooper"
-        ),
-        None,
+    visible_models = [
+        item
+        for item in model_entries
+        if isinstance(item, dict) and item.get("id") in ("COOPER", "COOPER - Private")
+    ]
+    cooper_model = next((item for item in visible_models if item.get("id") == "COOPER"), None)
+    private_model = next((item for item in visible_models if item.get("id") == "COOPER - Private"), None)
+    cooper_personality_present = any(
+        isinstance(item, dict) and (
+            item.get("id") == "cooper-personality"
+            or item.get("name") == "cooper-personality"
+        )
+        for item in model_entries
     )
     function_record = next(
         (
@@ -180,9 +191,12 @@ def main():
     passed = (
         models_response.status_code == 200
         and functions_response.status_code == 200
-        and visible_model is not None
-        and visible_model.get("name") == "COOPER"
+        and cooper_model is not None
+        and private_model is not None
+        and cooper_model.get("name") == "COOPER"
+        and private_model.get("name") == "COOPER - Private"
         and not legacy_present
+        and not cooper_personality_present
         and function_record is not None
         and function_record.get("name") == "COOPER"
         and isinstance(function_record.get("meta"), dict)
@@ -191,11 +205,14 @@ def main():
 
     print(json.dumps({
         "status": "pass" if passed else "fail",
-        "target_model": visible_model,
+        "target_models": visible_models,
         "target_function": function_record,
-        "visible_model_id": visible_model.get("id") if visible_model else "",
-        "visible_model_name": visible_model.get("name") if visible_model else "",
+        "visible_model_id": cooper_model.get("id") if cooper_model else "",
+        "visible_model_name": cooper_model.get("name") if cooper_model else "",
+        "private_model_id": private_model.get("id") if private_model else "",
+        "private_model_name": private_model.get("name") if private_model else "",
         "legacy_model_present": legacy_present,
+        "cooper_personality_present": cooper_personality_present,
         "function_name": function_record.get("name") if function_record else "",
         "function_title": function_record.get("meta", {}).get("manifest", {}).get("title") if function_record else "",
     }, ensure_ascii=False))
@@ -218,18 +235,33 @@ if __name__ == "__main__":
         $Result.api_functions = @($ApiJson.target_function)
         $Result.visible_model_id = [string]$ApiJson.visible_model_id
         $Result.visible_model_name = [string]$ApiJson.visible_model_name
+        $Result.private_model_id = [string]$ApiJson.private_model_id
+        $Result.private_model_name = [string]$ApiJson.private_model_name
         $Result.legacy_model_present = [bool]$ApiJson.legacy_model_present
+        $Result.cooper_personality_present = [bool]$ApiJson.cooper_personality_present
         $Result.function_name = [string]$ApiJson.function_name
         $Result.function_title = [string]$ApiJson.function_title
 
         if ([string]$ApiJson.status -ne "pass") {
             Add-PDAIssue "Open WebUI API did not expose the expected COOPER model identity."
         }
-        if ($Result.visible_model_id -ne "pda_chat_bridge.cooper") {
-            Add-PDAIssue "Selectable Open WebUI model id should be pda_chat_bridge.cooper."
+        if ($Result.visible_model_id -ne "COOPER") {
+            Add-PDAIssue "Selectable Open WebUI model id should be COOPER."
+        }
+        if ($Result.private_model_id -ne "COOPER - Private") {
+            Add-PDAIssue "Selectable Open WebUI private model id should be COOPER - Private."
+        }
+        if ($Result.visible_model_name -ne "COOPER") {
+            Add-PDAIssue "Selectable Open WebUI COOPER model name should be COOPER."
+        }
+        if ($Result.private_model_name -ne "COOPER - Private") {
+            Add-PDAIssue "Selectable Open WebUI private model name should be COOPER - Private."
         }
         if ($Result.legacy_model_present) {
             Add-PDAIssue "Legacy pda_commander model id is still exposed in /api/models."
+        }
+        if ($Result.cooper_personality_present) {
+            Add-PDAIssue "Legacy cooper-personality model name is still exposed in /api/models."
         }
         if ($Result.function_name -ne "COOPER" -or $Result.function_title -ne "COOPER") {
             Add-PDAIssue "Function metadata did not persist the COOPER identity."
