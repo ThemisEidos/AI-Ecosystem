@@ -22,6 +22,8 @@ $Result = [ordered]@{
     visible_model_name = ""
     private_model_id = ""
     private_model_name = ""
+    cooper_model_count = 0
+    private_model_count = 0
     legacy_model_present = $false
     function_name = ""
     function_title = ""
@@ -168,10 +170,18 @@ def main():
     visible_models = [
         item
         for item in model_entries
-        if isinstance(item, dict) and item.get("id") in ("COOPER", "COOPER - Private")
+        if isinstance(item, dict) and item.get("name") in ("COOPER", "COOPER - Private")
     ]
-    cooper_model = next((item for item in visible_models if item.get("id") == "COOPER"), None)
-    private_model = next((item for item in visible_models if item.get("id") == "COOPER - Private"), None)
+    cooper_models = [
+        item for item in visible_models
+        if item.get("name") == "COOPER"
+    ]
+    private_models = [
+        item for item in visible_models
+        if item.get("name") == "COOPER - Private"
+    ]
+    cooper_model = cooper_models[0] if cooper_models else None
+    private_model = private_models[0] if private_models else None
     cooper_personality_present = any(
         isinstance(item, dict) and (
             item.get("id") == "cooper-personality"
@@ -195,6 +205,10 @@ def main():
         and private_model is not None
         and cooper_model.get("name") == "COOPER"
         and private_model.get("name") == "COOPER - Private"
+        and len(cooper_models) == 1
+        and len(private_models) == 1
+        and cooper_model.get("id") == "pda_chat_bridge.cooper"
+        and private_model.get("id") == "COOPER - Private"
         and not legacy_present
         and not cooper_personality_present
         and function_record is not None
@@ -211,6 +225,8 @@ def main():
         "visible_model_name": cooper_model.get("name") if cooper_model else "",
         "private_model_id": private_model.get("id") if private_model else "",
         "private_model_name": private_model.get("name") if private_model else "",
+        "cooper_model_count": len(cooper_models),
+        "private_model_count": len(private_models),
         "legacy_model_present": legacy_present,
         "cooper_personality_present": cooper_personality_present,
         "function_name": function_record.get("name") if function_record else "",
@@ -237,6 +253,8 @@ if __name__ == "__main__":
         $Result.visible_model_name = [string]$ApiJson.visible_model_name
         $Result.private_model_id = [string]$ApiJson.private_model_id
         $Result.private_model_name = [string]$ApiJson.private_model_name
+        $Result.cooper_model_count = [int]$ApiJson.cooper_model_count
+        $Result.private_model_count = [int]$ApiJson.private_model_count
         $Result.legacy_model_present = [bool]$ApiJson.legacy_model_present
         $Result.cooper_personality_present = [bool]$ApiJson.cooper_personality_present
         $Result.function_name = [string]$ApiJson.function_name
@@ -245,8 +263,14 @@ if __name__ == "__main__":
         if ([string]$ApiJson.status -ne "pass") {
             Add-PDAIssue "Open WebUI API did not expose the expected COOPER model identity."
         }
-        if ($Result.visible_model_id -ne "COOPER") {
-            Add-PDAIssue "Selectable Open WebUI model id should be COOPER."
+        if ($Result.cooper_model_count -ne 1) {
+            Add-PDAIssue "Selectable Open WebUI COOPER model should appear exactly once."
+        }
+        if ($Result.private_model_count -ne 1) {
+            Add-PDAIssue "Selectable Open WebUI private model should appear exactly once."
+        }
+        if ($Result.visible_model_id -ne "pda_chat_bridge.cooper") {
+            Add-PDAIssue "Selectable Open WebUI COOPER model id should be pda_chat_bridge.cooper."
         }
         if ($Result.private_model_id -ne "COOPER - Private") {
             Add-PDAIssue "Selectable Open WebUI private model id should be COOPER - Private."
