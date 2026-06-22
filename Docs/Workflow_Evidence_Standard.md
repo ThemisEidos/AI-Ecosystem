@@ -11,6 +11,7 @@ It is a file-based standard only.
 - It does not introduce agents or new orchestration.
 - It does not replace the existing workflow runtime or approval policy.
 - It defines the records that workflow code should write, read, and preserve.
+- It defines the file-based standard for Phase 7A and the validation target for Phase 7B.
 
 ## Purpose
 
@@ -46,6 +47,14 @@ This is the canonical record that states a workflow completed, what it produced,
 This is the canonical record that tracks an approval request from creation through approval, completion, staleness, blocking, or rejection.
 
 ## Canonical Workflow Completion Record
+
+### Canonical Serialization
+
+- Canonical machine-readable format: `JSON`
+- Phase 7B writers and readers must produce and consume canonical JSON records
+- YAML may appear only as illustrative documentation examples, not as implementation evidence
+- Each record must be a single JSON object per file
+- Field names must remain stable and snake_case
 
 ### Required Fields
 
@@ -88,8 +97,8 @@ This is the canonical record that tracks an approval request from creation throu
 - `workshop_id`: `open` or `private`.
 - `workshop_name`: `Open Workshop` or `Private Workshop`.
 - `approval_id`: related approval record id, or an empty string when not applicable.
-- `artifact_paths`: one or more file paths or artifact references produced by the workflow.
-- `review_status`: review outcome for the workflow output.
+- `artifact_paths`: a JSON array of one or more file paths or artifact references produced by the workflow; use an empty array when nothing was produced.
+- `review_status`: review outcome for the workflow output. Use the Phase 7A workflow status values: `pass`, `fail`, `blocked`, or `unknown`.
 - `user_accepted`: boolean indicating whether the user accepted the result.
 - `notes`: free-text summary, excluding sensitive material.
 
@@ -106,8 +115,17 @@ This is the canonical record that tracks an approval request from creation throu
 - `fail` means the workflow completed but did not satisfy requirements or review.
 - `blocked` means execution stopped due to policy, missing approval, missing prerequisites, or restricted boundary enforcement.
 - `unknown` means the workflow has no canonical completion record yet or its status cannot be established from the canonical record.
+- `review_status` must use the same value set unless a future phase explicitly expands it.
 
 ## Canonical Approval Lifecycle Record
+
+### Canonical Serialization
+
+- Canonical machine-readable format: `JSON`
+- Phase 7B writers and readers must produce and consume canonical JSON records
+- YAML may appear only as illustrative documentation examples, not as implementation evidence
+- Each record must be a single JSON object per file
+- Field names must remain stable and snake_case
 
 ### Required Fields
 
@@ -158,12 +176,25 @@ This is the canonical record that tracks an approval request from creation throu
 
 ## Canonical Storage Expectations
 
-The standard is file-based. Implementations may store records in JSON, JSONL, YAML, or another file format that preserves the field names and semantics below.
+The standard is file-based. Implementation records must be written as JSON files at the locations below.
 
 ### Recommended Workflow Evidence Locations
 
-- Category 1 / Open Workshop evidence may live in normal project state or a documented workflow evidence folder.
-- Category 2 / Private Workshop evidence must remain in the Restricted DMZ Workspace.
+#### Open Workshop
+
+- `State/Workflow_Evidence/completion/`
+- `State/Workflow_Evidence/approval/`
+- `State/Workflow_Evidence/archive/`
+
+#### Private Workshop
+
+- `Restricted DMZ Workspace/State/Workflow_Evidence/completion/`
+- `Restricted DMZ Workspace/State/Workflow_Evidence/approval/`
+- `Restricted DMZ Workspace/State/Workflow_Evidence/archive/`
+
+- Category 1 evidence may live in normal project state.
+- Category 2 / Private Workshop evidence must remain inside the Restricted DMZ Workspace unless sanitized by the user.
+- Private evidence must not be routed to cloud AI or written into Open Workshop state.
 - Sanitized Open Workshop summaries may be copied out of the Restricted DMZ Workspace only after sensitive content is removed.
 
 ### Recommended Approval Record Locations
@@ -171,27 +202,54 @@ The standard is file-based. Implementations may store records in JSON, JSONL, YA
 - Approval records should live in the same governed file system region as the workflow that created them.
 - Private Workshop approvals should remain in Restricted DMZ storage unless sanitized copies are explicitly required for Open Workshop reporting.
 
+### Filename Patterns
+
+- Workflow completion record: `workflow_completion_<workflow_id>_<execution_id>.json`
+- Approval lifecycle record: `approval_lifecycle_<approval_id>.json`
+- Archived records preserve the original filename
+- Archived records move under the appropriate `archive/` path
+- Archived records must not be renamed unless required to prevent filename collision
+
+### Timestamp Format
+
+- Mandatory format: ISO 8601 UTC
+- Example: `2026-06-21T20:30:12Z`
+- Apply to `completion_time`, `requested_time`, `approved_time`, `completed_time`, `blocked_time`, `stale_time`, and `expiration_time`
+- Use `null` when a lifecycle timestamp does not apply yet
+
 ## Retention Rules
 
 ### Workflow Completion Records
 
+- Active records remain in the active evidence folders while status is `pending`, `approved`, `blocked`, `stale`, or `unknown`.
+- `pass` records may be archived after they are no longer needed for active WF-004 reporting.
+- `fail`, `blocked`, `stale`, and `unknown` records remain active until reviewed or superseded.
 - Keep the most recent canonical completion record for each workflow execution.
 - Retain historical records long enough for operational review, audit, and workflow regression analysis.
 - Do not overwrite a prior execution record with a newer run.
 - Do not collapse distinct executions into one mutable record.
+- No automated deletion is authorized in this phase.
 
 ### Approval Lifecycle Records
 
+- Active records remain in the active evidence folders while status is `pending`, `approved`, `blocked`, or `stale`.
+- `completed` approval records remain recorded as history and must not continue to count as pending.
+- `rejected` approval records remain visible as historical records.
+- Approval records must not be archived before the related workflow completion record.
 - Retain the full approval lifecycle for auditability.
 - A completed approval must remain recorded as history.
 - A completed approval must not continue to count as pending.
 - A stale or rejected approval must remain visible as a historical record.
+- No automated deletion is authorized in this phase.
 
 ### Practical Retention Guidance
 
 - Active records should remain immediately queryable.
 - Historical records should remain discoverable for governance review.
 - Archival thresholds should be file-based and deterministic, not hidden inside runtime code.
+- If a fixed retention window is needed for tests or migration scaffolding, use a conservative active reporting window of 30 days.
+- Archive eligibility for `pass` records with `user_accepted: true` begins after 30 days.
+- No deletion window is defined.
 
 ## Archival Rules
 
@@ -200,17 +258,19 @@ The standard is file-based. Implementations may store records in JSON, JSONL, YA
 - Archive completed records once they are no longer needed for active WF-004 reporting.
 - Archived records must remain readable and attributable to their original workflow and execution id.
 - Archived records must preserve the original status, completion time, and artifact references.
+- Archived records must stay inside the appropriate Open Workshop or Restricted DMZ archive path.
 
 ### Approval Lifecycle Records
 
 - Archive resolved approvals only after they are no longer active.
 - Resolved means `completed`, `stale`, `blocked`, or `rejected`.
 - Archived approval history must remain available for governance review.
+- Approval records must not be archived before the related workflow completion record.
 
 ### Restricted DMZ Archival Rules
 
 - Private Workshop evidence may be archived inside the Restricted DMZ Workspace.
-- If evidence is exported to Open Workshop space, it must first be sanitized.
+- If evidence is exported to Open Workshop space, it must first be sanitized by the user.
 - Sanitization must remove secrets, raw restricted content, and any data that would violate compartment boundaries.
 
 ## WF-004 Consumption Rules
@@ -224,6 +284,13 @@ WF-004 should eventually use canonical workflow completion records and approval 
 - WF-004 must not mutate workflow evidence records.
 - WF-004 must continue to emit canonical workflow chain formatting: `WF-001 → WF-006`.
 - WF-004 may use artifact fallback only when canonical records are missing or incomplete during the transition period.
+- Canonical evidence records are authoritative when present.
+- Artifact fallback is transition-only and lower priority than canonical records.
+- WF-004 should select the latest execution by `completion_time`, then `execution_id` as a tie-breaker.
+- If multiple records conflict for the same `workflow_id` and `execution_id`, WF-004 should surface an evidence conflict instead of silently choosing one.
+- If approval and completion records disagree, WF-004 should surface an approval/evidence mismatch.
+- If a canonical record exists but referenced artifacts are missing, WF-004 should report `pass` with warning or `unknown` depending on the record status and missing artifact severity.
+- If no canonical record exists, WF-004 may use legacy artifact fallback and must label the result as transition fallback.
 
 ### Transition Behavior
 
@@ -232,6 +299,7 @@ Until every workflow consistently writes canonical evidence:
 - WF-004 may merge canonical records with artifact fallback.
 - WF-004 should clearly distinguish canonical evidence from fallback evidence in its internal reasoning.
 - WF-004 should treat fallback as transitional, not authoritative, when canonical records are available.
+- WF-004 should report evidence conflicts and approval/evidence mismatches explicitly.
 
 ### WF-004 Reporting Expectations
 
@@ -261,6 +329,7 @@ Until every workflow consistently writes canonical evidence:
 - if operational, write a completion record when it produces a governed output
 - keep the evidence minimal and non-sensitive
 - preserve Open Workshop separation
+- future/deferred evidence types are not valid for Phase 7A records
 
 ### WF-004 Operational Status
 
@@ -268,6 +337,8 @@ Until every workflow consistently writes canonical evidence:
 - include the report artifact or summary path when one exists
 - record review status for the generated status summary
 - do not treat its own evidence as mutable runtime state
+- use canonical JSON evidence records as the primary status source when available
+- treat non-canonical fallback evidence as transitional only
 
 ### WF-005 Note Creation
 
@@ -290,6 +361,7 @@ Until every workflow consistently writes canonical evidence:
 - record approval linkage and review status
 - do not route private workflow evidence to cloud AI
 - sanitize any Open Workshop-facing summary before it leaves the Restricted DMZ Workspace
+- never write private evidence directly into Open Workshop state
 
 ## Security Rules
 
@@ -298,6 +370,10 @@ Until every workflow consistently writes canonical evidence:
 - Private evidence may be summarized for Open Workshop reporting only if the summary is sanitized.
 - Open Workshop evidence must not collapse restricted evidence into a general workspace file without sanitization.
 - Evidence files should be treated as governed artifacts, not raw conversation logs.
+- Category 1 evidence may live in normal project state.
+- Category 2 / Private Workshop evidence must remain inside Restricted DMZ Workspace unless sanitized by the user.
+- Private workflow evidence must not be routed to cloud AI.
+- Future or deferred status values are not valid for Phase 7A records.
 
 ## Canonical Chain Formatting
 
@@ -315,3 +391,16 @@ Future implementation work may add writer helpers, loaders, validators, or migra
 
 Phase 7A is about making evidence consistent enough that WF-004 can trust it without guessing.
 
+## Definition of Done
+
+Phase 7A is complete only when:
+
+- canonical JSON serialization is defined
+- exact storage paths are defined
+- filename patterns are defined
+- timestamp format is defined
+- WF-004 precedence and conflict rules are defined
+- retention and archival rules are testable
+- Open/Private evidence separation is preserved
+- roadmap and catalog cross-references are updated
+- no workflow execution code is changed

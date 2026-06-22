@@ -7,29 +7,51 @@ This roadmap tracks the staged implementation of the COOPER-centered AI Ecosyste
 ## Current Focus
 
 - Phase 5 workflows are operational and stabilized.
-- Phase 6 Private Workshop Hardening is now the current implementation focus.
-- Workspace and Fabric integration remain deferred until private-workshop boundaries are verified and committed.
-- Current Phase: Phase 6 - Private Workshop Hardening
+- Phase 7A Workflow Evidence Standardization is now the current documentation and governance focus.
+- Phase 6 Private Workshop Hardening remains complete and operational.
+- Workspace and Fabric integration remain deferred until evidence standardization is validated and committed.
+- Current Phase: Phase 7A - Workflow Evidence Standardization
 - Status: In Progress
-- Current Objective: Verify private-workshop routing boundaries, local-only model use, restricted DMZ path enforcement, and approval lifecycle accuracy.
+- Current Objective: Define canonical workflow completion and approval evidence so WF-004 can consume deterministic records.
 - Next Build Artifact:
-  - `Scripts/Test-COOPERWorkshopIdentity.ps1`
-- Why This Comes Next: Phase 1 through Phase 5 foundations are complete enough to support the first operational workflows. COOPER now has a minimal governed execution path for note creation, source-backed research, Codex task generation, collection import drafting, operational status reporting, and private-workshop containment. The remaining work is to keep hardening tests green and keep the workflow boundary stable.
+  - `Docs/Workflow_Evidence_Standard.md`
+- Why This Comes Next: Phase 1 through Phase 6 foundations are complete enough to support the first operational workflows and private-workshop containment. The remaining work is to standardize the evidence records that WF-004 and later workflow consumers rely on so reporting becomes deterministic instead of inferred from mixed runtime sources.
 - Dependencies:
   - governed routing remains registry-driven
   - approval gate remains required before execution
   - review gate remains required before state updates
   - runtime artifacts stay separated from source and docs
+  - evidence schemas remain file-based and deterministic
 - Definition of Done:
+  - canonical evidence standard is documented
+  - exact storage paths and filename patterns are defined
+  - timestamp format is defined
+  - WF-004 precedence and conflict rules are defined
+  - roadmap and workflow catalog cross-references are updated
   - WF-001 Research Summary remains operational
   - WF-002 Codex Task Generator remains operational
   - WF-004 Operational Status remains operational
   - WF-005 Note Creation remains operational
   - WF-006 Knowledge Collection Import Draft remains operational
-  - WF-007 Private Local Analysis becomes operational
+  - WF-007 Private Local Analysis remains operational
   - WF-001 -> WF-006 chain remains operational
   - milestone status is recorded
   - runtime noise is not treated as source of truth
+
+### Phase 7A - Workflow Evidence Standardization
+
+- Status: In Progress
+- Goal: define canonical workflow evidence records for WF-004 and future workflow status reporting.
+- Build Artifacts:
+  - `Docs/Workflow_Evidence_Standard.md`
+- Success Criteria:
+  - canonical workflow completion records are defined
+  - canonical approval lifecycle records are defined
+  - exact file paths and filename patterns are defined
+  - WF-004 consumption precedence is defined
+  - retention and archival rules are testable
+  - Open and Private evidence separation remains preserved
+  - Phase 7B can validate schemas before workflow emitters are modified
 
 ## Phase Map
 
@@ -129,7 +151,7 @@ This roadmap tracks the staged implementation of the COOPER-centered AI Ecosyste
 
 ### Phase 6 - Private Workshop Hardening
 
-- Status: In Progress
+- Status: Complete
 - Goal: Make COOPER Private safe enough for restricted DMZ workflows.
 - Build Artifacts:
   - WF-007 Private Local Analysis
