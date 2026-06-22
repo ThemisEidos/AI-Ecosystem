@@ -477,13 +477,15 @@ Rules:
 - Open Workshop only
 - Semi-automated workflow
 - Level 0: generate prompt in chat
-- Level 2: write task file
+- Level 2: create a workflow package folder or legacy task file
 - Level 4: launch Codex CLI or app context with approval
-- Task files live in Project Workspace Codex_Tasks/
-- Suggested file format: `TASK-###_<short-title>.md`
+- Task packages live in Project Workspace `Codex_Tasks/TASK-###_short-title/`
+- Preferred artifact format: workflow package folder
+- Legacy or fallback file format: `TASK-###_<short-title>.md`
 - User remains responsible for starting or confirming Codex work
 - Direct code editing or destructive repo actions stay blocked unless later governed
 - Approved low-risk task generation may auto-dispatch without a second confirmation step when routing policy allows it
+- Standard reference: [Docs/WF002_Workflow_Package_Standard.md](Docs/WF002_Workflow_Package_Standard.md)
 
 ## Glossary
 

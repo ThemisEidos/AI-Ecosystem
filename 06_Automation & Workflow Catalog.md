@@ -8,7 +8,8 @@ The intent is to keep the first workflow set useful and small.
 
 Phase 5 workflows are operational. Phase 6 Private Workshop Hardening is complete. Phase 7A workflow evidence standardization is now the documentation focus for deterministic WF-004 reporting.
 Phase 7A workflow evidence standardization is documented in `Docs/Workflow_Evidence_Standard.md`.
-WF-001 through WF-007 must eventually emit canonical workflow evidence records that conform to that standard.
+Phase 7A.1 WF-002 workflow package standard is documented in `Docs/WF002_Workflow_Package_Standard.md`.
+WF-001 through WF-007 must eventually emit canonical workflow evidence records that conform to the Phase 7A standard.
 
 Storage rules:
 
@@ -55,15 +56,18 @@ Higher-risk workflows continue to require explicit confirmation. The approved lo
 - Inputs: project context, requirements, target repo, desired outcome
 - Tools Used: COOPER, writing model, task template, Codex_Tasks folder, governed workbench
 - Execution Method: auto-dispatch for approved low-risk task generation
-- Permission Level: 2 for task file creation; 4 for launcher invocation
+- Permission Level: 2 for package creation; 4 for launcher invocation
 - Approval Requirement: required
-- Output: Codex task file
+- Output: Codex task package folder or legacy fallback task file
 - Storage Location: Project Workspace Codex_Tasks/
 - Security Notes: do not include secrets, API keys, credentials, private keys, or Category 2 material
 - Status: Operational
 - Next Step: keep launcher invocation separate from task generation unless explicitly requested
-- Suggested File Format: `TASK-###_<short-title>.md`
-- Suggested Path: `Codex_Tasks/`
+- Preferred Artifact Format: workflow package folder
+- Preferred Package Path: `Codex_Tasks/TASK-###_short-title/`
+- Legacy or Fallback File Format: `TASK-###_<short-title>.md`
+- Standard Reference: `Docs/WF002_Workflow_Package_Standard.md`
+- Package Structure: use the required folder layout defined in the standard
 
 ### WF-002 Phases
 
