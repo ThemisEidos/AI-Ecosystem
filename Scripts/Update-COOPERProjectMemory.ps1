@@ -25,7 +25,7 @@ if ([string]::IsNullOrWhiteSpace($StatePath)) {
 
 function New-COOPERProjectMemorySnapshot {
     return [ordered]@{
-        current_phase = "Phase 5 - First Operational Workflows"
+        current_phase = "Phase 6 - Private Workshop Hardening"
         operational_workflows = @()
         broken_workflows = @()
         recent_decisions = @()
@@ -115,6 +115,7 @@ if ($ReviewResult) {
 }
 
 if ($ReviewPassed) {
+    $Memory.current_phase = "Phase 6 - Private Workshop Hardening"
     $Operational = ConvertTo-COOPERWorkflowIdList -Value $Memory.operational_workflows
     if ($Operational -notcontains $WorkflowId) {
         $Operational += $WorkflowId
@@ -129,27 +130,13 @@ if ($ReviewPassed) {
         recorded_at = $Now
     }
 
-    $RecentDecisions = New-Object System.Collections.Generic.List[object]
-    foreach ($Decision in @($Memory.recent_decisions) + @([pscustomobject]@{
-            date = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd")
-            decision = "Workflow $WorkflowId completed successfully after review."
-            workflow_id = $WorkflowId
-        })) {
-        if ($null -eq $Decision) {
-            continue
-        }
-
-        $DecisionText = if ($Decision.PSObject.Properties.Name -contains "decision") { [string]$Decision.decision } else { "" }
-        $DecisionDate = if ($Decision.PSObject.Properties.Name -contains "date") { [string]$Decision.date } else { "" }
-        $DecisionWorkflowId = if ($Decision.PSObject.Properties.Name -contains "workflow_id") { [string]$Decision.workflow_id } else { "" }
-        $DecisionKey = "{0}|{1}|{2}" -f $DecisionWorkflowId, $DecisionDate, $DecisionText
-        if ($RecentDecisions | Where-Object { $_.PSObject.Properties.Name -contains "decision" -and $_.PSObject.Properties.Name -contains "workflow_id" -and $_.PSObject.Properties.Name -contains "date" -and ("{0}|{1}|{2}" -f [string]$_.workflow_id, [string]$_.date, [string]$_.decision) -eq $DecisionKey }) {
-            continue
-        }
-
-        $RecentDecisions.Add($Decision) | Out-Null
+    $RecentDecisions = @($Memory.recent_decisions)
+    $RecentDecisions += [pscustomobject]@{
+        date = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd")
+        decision = "Workflow $WorkflowId completed successfully after review."
+        workflow_id = $WorkflowId
     }
-    $Memory.recent_decisions = @($RecentDecisions)
+    $Memory.recent_decisions = @($RecentDecisions | Where-Object { $null -ne $_ })
 }
 else {
     $Broken = ConvertTo-COOPERMemoryList -Value $Memory.broken_workflows
