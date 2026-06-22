@@ -36,6 +36,8 @@ Phase 7A.1 - WF-002 Workflow Package Standard
 Phase 7A.2 - Minimal Context Doctrine
 Phase 7A.3 - Folder-Based Workflow State
 Phase 7A.4 - AI Judgment / Mechanical Work Separation
+Phase 7A.5 - Lightweight Workflow Linting
+Phase 7B - Workflow Evidence Validation
 ```
 
 Current operational model:
@@ -84,18 +86,18 @@ Phase 7A.5 is creating the lightweight workflow linting standard so packages and
 ### Current Phase
 
 ```text
-Phase 7A.5 - Lightweight Workflow Linting
+Phase 7C - Workflow Evidence Emitters
 ```
 
 ### Current Objective
 
-Adopt a governance standard for lightweight workflow linting so workflow packages and folders can be checked before any linting script is implemented.
+Begin workflow evidence emitter work so operational workflows can start producing canonical completion and approval records without changing WF-004 yet.
 
-This is a governance and documentation improvement only. It is not a new orchestration layer, agent system, database, task queue, or execution framework.
+This is a workflow implementation step only. It is not a new orchestration layer, agent system, database, task queue, or execution framework.
 
 ### Why This Comes Next
 
-Recent work introduced canonical evidence, WF-002 package folders, minimal context, folder-based workflow state, and AI/mechanical separation. The next improvement is to define the lint checks that future scripts will perform so structural and security issues are easier to catch before execution or acceptance.
+Recent work introduced canonical evidence, WF-002 package folders, minimal context, folder-based workflow state, AI/mechanical separation, and evidence validation. The next improvement is to add emitters that produce canonical workflow evidence records while preserving compartment boundaries.
 
 This improves workflow reliability without changing the existing approval model, launcher boundary, or evidence standard.
 
@@ -183,7 +185,7 @@ Phase 7A.2 is complete when:
 
 ### Phase 7A.5 - Lightweight Workflow Linting
 
-- Status: Current
+- Status: Complete
 - Goal: Define lightweight lint checks for workflow packages and workflow-state folders before future lint scripts are implemented.
 - Build Artifacts:
   - `Docs/Workflow_Linting_Standard.md`
@@ -200,13 +202,13 @@ Phase 7A.2 is complete when:
   - no launcher behavior is changed
   - no approval logic is changed
 
-### After This, Build Next
+### Next Build
 
 ```text
-Phase 7B - Workflow Evidence Validation
+Phase 7C - Workflow Evidence Emitters
 ```
 
-Phase 7B should validate canonical evidence schemas before workflow emitters are modified.
+Phase 7C should add canonical evidence emitters after validation has established the evidence standard, schema shape, link rules, and security boundaries.
 
 ---
 
@@ -220,13 +222,13 @@ Phase 7A.1 - Define WF-002 workflow package standard            COMPLETE
 Phase 7A.2 - Define minimal context doctrine                    COMPLETE
 Phase 7A.3 - Define folder-based workflow state                 COMPLETE
 Phase 7A.4 - Define AI judgment / mechanical work separation    COMPLETE
-Phase 7A.5 - Define lightweight workflow linting                 CURRENT
-Phase 7B   - Validate workflow evidence schemas                 NEXT TECHNICAL STEP
-Phase 7C   - Update workflows to emit canonical evidence         FUTURE
+Phase 7A.5 - Define lightweight workflow linting                 COMPLETE
+Phase 7B   - Validate workflow evidence schemas                 COMPLETE
+Phase 7C   - Update workflows to emit canonical evidence         CURRENT
 Phase 7D   - Update WF-004 to consume canonical evidence         FUTURE
 ```
 
-Do not skip directly to Phase 7C or Phase 7D before validation exists.
+Do not skip directly to Phase 7D before Phase 7C emitter work is complete.
 
 Do not expand into agents, Hermes integration, multi-intent execution, or new orchestration layers while evidence validation and WF-004 visibility remain unresolved.
 
@@ -406,12 +408,14 @@ Do not expand into agents, Hermes integration, multi-intent execution, or new or
 
 ### Phase 7B - Workflow Evidence Validation
 
-- Status: Next
+- Status: Complete
 - Goal: Add tests that validate the Phase 7A evidence standard before workflows are modified to emit records.
 - Candidate Build Artifacts:
+  - `Docs/Phase_7B_Exit_Review.md`
   - `Scripts/Test-COOPERWorkflowEvidenceStandard.ps1`
   - `Scripts/Test-COOPERWorkflowEvidenceSchemas.ps1`
-  - `Scripts/Test-COOPERApprovalLifecycleEvidence.ps1`
+  - `Scripts/Test-COOPERWorkflowEvidenceLinks.ps1`
+  - `Scripts/Test-COOPERWorkflowEvidenceSecurity.ps1`
 - Success Criteria:
   - required fields validate
   - JSON record format validates
@@ -421,14 +425,16 @@ Do not expand into agents, Hermes integration, multi-intent execution, or new or
   - approval and workflow record links validate
   - invalid statuses are rejected
   - Private evidence path violations are detected
+  - sensitive-marker checks are best-effort and do not replace human review
 
 ---
 
 ### Phase 7C - Workflow Evidence Emitters
 
-- Status: Future
+- Status: Current
 - Goal: Update operational workflows to emit canonical workflow completion and approval lifecycle evidence records.
 - Candidate Build Artifacts:
+  - shared evidence writer helper, if needed
   - workflow completion record writers
   - approval lifecycle record writers
   - workflow-specific evidence integration for WF-001 through WF-007
@@ -438,6 +444,7 @@ Do not expand into agents, Hermes integration, multi-intent execution, or new or
   - evidence records reference output artifacts
   - workflows fail visibly if evidence cannot be written
   - Open and Private storage boundaries are preserved
+  - Phase 7B validation remains the acceptance gate for emitted records
 
 ---
 
@@ -457,6 +464,7 @@ Do not expand into agents, Hermes integration, multi-intent execution, or new or
   - approval/completion mismatches are reported
   - workflow chain formatting is preserved
   - WF-004 does not mutate evidence records
+  - do not skip Phase 7C emitter work before this stage
 
 ---
 
