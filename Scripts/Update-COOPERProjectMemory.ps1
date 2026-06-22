@@ -18,14 +18,55 @@ param(
 
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
+$RoadmapPath = Join-Path $Root "07_Implementation Roadmap.md"
 
 if ([string]::IsNullOrWhiteSpace($StatePath)) {
     $StatePath = Join-Path $Root "State\COOPER_ProjectMemory.json"
 }
 
+function Get-COOPERProjectPhase {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Root,
+
+        [Parameter(Mandatory = $false)]
+        $ProjectMemory = $null,
+
+        [Parameter(Mandatory = $false)]
+        [string]$RoadmapPath = ""
+    )
+
+    if ($ProjectMemory -and $ProjectMemory.PSObject.Properties.Name -contains "current_phase") {
+        $CurrentPhase = [string]$ProjectMemory.current_phase
+        if (-not [string]::IsNullOrWhiteSpace($CurrentPhase)) {
+            return $CurrentPhase
+        }
+    }
+
+    $ResolvedRoadmapPath = if ([string]::IsNullOrWhiteSpace($RoadmapPath)) { Join-Path $Root "07_Implementation Roadmap.md" } else { $RoadmapPath }
+    if (Test-Path -LiteralPath $ResolvedRoadmapPath -PathType Leaf) {
+        try {
+            $RoadmapText = Get-Content -LiteralPath $ResolvedRoadmapPath -Raw -ErrorAction Stop
+            if (-not [string]::IsNullOrWhiteSpace($RoadmapText)) {
+                $Matches = [regex]::Matches($RoadmapText, '(?ms)^###\s+(Phase\s+[^\r\n]+)\s*$.*?(?=^###\s+Phase|\z)')
+                foreach ($Match in @($Matches)) {
+                    if ($Match.Value -match '(?is)WF-007\s+Private\s+Local\s+Analysis|Private\s+Workshop\s+Hardening') {
+                        return [string]$Match.Groups[1].Value.Trim()
+                    }
+                }
+            }
+        }
+        catch {}
+    }
+
+    return ""
+}
+
 function New-COOPERProjectMemorySnapshot {
+    param([Parameter(Mandatory = $true)][string]$Root)
+
     return [ordered]@{
-        current_phase = "Phase 6 - Private Workshop Hardening"
+        current_phase = Get-COOPERProjectPhase -Root $Root -RoadmapPath $RoadmapPath
         operational_workflows = @()
         broken_workflows = @()
         recent_decisions = @()
@@ -40,17 +81,21 @@ function New-COOPERProjectMemorySnapshot {
 }
 
 function Read-COOPERProjectMemorySnapshot {
-    param([Parameter(Mandatory = $true)][string]$Path)
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+
+        [Parameter(Mandatory = $true)][string]$Root
+    )
 
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
-        return New-COOPERProjectMemorySnapshot
+        return New-COOPERProjectMemorySnapshot -Root $Root
     }
 
     try {
         return Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json
     }
     catch {
-        return New-COOPERProjectMemorySnapshot
+        return New-COOPERProjectMemorySnapshot -Root $Root
     }
 }
 
@@ -93,7 +138,11 @@ function ConvertTo-COOPERWorkflowIdList {
     return @($WorkflowIds)
 }
 
-$Memory = Read-COOPERProjectMemorySnapshot -Path $StatePath
+$Memory = Read-COOPERProjectMemorySnapshot -Path $StatePath -Root $Root
+$DerivedProjectPhase = Get-COOPERProjectPhase -Root $Root -ProjectMemory $Memory -RoadmapPath $RoadmapPath
+if ([string]::IsNullOrWhiteSpace($DerivedProjectPhase)) {
+    $DerivedProjectPhase = "Unknown"
+}
 $Now = (Get-Date).ToUniversalTime().ToString("o")
 $ReviewStatus = ""
 $ReviewReason = ""
@@ -115,7 +164,7 @@ if ($ReviewResult) {
 }
 
 if ($ReviewPassed) {
-    $Memory.current_phase = "Phase 6 - Private Workshop Hardening"
+    $Memory.current_phase = $DerivedProjectPhase
     $Operational = ConvertTo-COOPERWorkflowIdList -Value $Memory.operational_workflows
     if ($Operational -notcontains $WorkflowId) {
         $Operational += $WorkflowId
