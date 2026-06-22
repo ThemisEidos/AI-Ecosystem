@@ -1,0 +1,16 @@
+{
+  "workflow_id": "WF-007",
+  "workflow_name": "Private Local Analysis",
+  "execution_id": "20260622T000000Z-private",
+  "status": "pass",
+  "completion_time": "2026-06-22T00:00:00Z",
+  "workshop_id": "private",
+  "workshop_name": "Private Workshop",
+  "approval_id": "",
+  "artifact_paths": [
+    "Restricted DMZ Workspace/WF-007 Private Local Analysis/sample-analysis.md"
+  ],
+  "review_status": "pass",
+  "user_accepted": true,
+  "notes": "Sample private completion record for security boundary validation."
+}

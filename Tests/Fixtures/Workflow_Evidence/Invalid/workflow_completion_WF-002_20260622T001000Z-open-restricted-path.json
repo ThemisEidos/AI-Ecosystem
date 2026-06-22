@@ -1,0 +1,16 @@
+{
+  "workflow_id": "WF-002",
+  "workflow_name": "Codex Task Generator",
+  "execution_id": "20260622T001000Z-open-restricted-path",
+  "status": "pass",
+  "completion_time": "2026-06-22T00:10:00Z",
+  "workshop_id": "open",
+  "workshop_name": "Open Workshop",
+  "approval_id": "AP-20260622-000001",
+  "artifact_paths": [
+    "Restricted DMZ Workspace/WF-002/should-not-appear.md"
+  ],
+  "review_status": "pass",
+  "user_accepted": true,
+  "notes": "Negative fixture for open workshop restricted-path validation."
+}

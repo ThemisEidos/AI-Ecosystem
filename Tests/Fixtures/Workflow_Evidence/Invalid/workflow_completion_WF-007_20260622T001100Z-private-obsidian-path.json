@@ -1,0 +1,16 @@
+{
+  "workflow_id": "WF-007",
+  "workflow_name": "Private Local Analysis",
+  "execution_id": "20260622T001100Z-private-obsidian-path",
+  "status": "pass",
+  "completion_time": "2026-06-22T00:11:00Z",
+  "workshop_id": "private",
+  "workshop_name": "Private Workshop",
+  "approval_id": "",
+  "artifact_paths": [
+    "Obsidian Vault/02_Projects/AI Tool Ecosystem/Agent Findings/Restricted/private-obsidian.md"
+  ],
+  "review_status": "pass",
+  "user_accepted": true,
+  "notes": "Negative fixture for private workshop Obsidian path validation."
+}
