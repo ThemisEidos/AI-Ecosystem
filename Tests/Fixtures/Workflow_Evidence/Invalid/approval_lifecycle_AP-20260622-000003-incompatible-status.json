@@ -1,0 +1,13 @@
+{
+  "approval_id": "AP-20260622-000003",
+  "workflow_id": "WF-002",
+  "status": "rejected",
+  "requested_time": "2026-06-22T00:03:00Z",
+  "approved_time": "2026-06-22T00:04:00Z",
+  "completed_time": "2026-06-22T00:05:00Z",
+  "blocked_time": "2026-06-22T00:03:00Z",
+  "stale_time": "2026-06-22T00:03:00Z",
+  "expiration_time": "2026-07-22T00:03:00Z",
+  "reason": "Negative fixture for incompatible workflow/approval status pairing.",
+  "notes": "Approval record intentionally conflicts with the workflow completion status."
+}

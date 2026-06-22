@@ -1,0 +1,13 @@
+{
+  "approval_id": "AP-20260622-000005",
+  "workflow_id": "WF-002",
+  "status": "completed",
+  "requested_time": "2026-06-22T00:02:50Z",
+  "approved_time": "2026-06-22T00:03:50Z",
+  "completed_time": "2026-06-22T00:04:50Z",
+  "blocked_time": "2026-06-22T00:02:50Z",
+  "stale_time": "2026-06-22T00:02:50Z",
+  "expiration_time": "2026-07-22T00:02:50Z",
+  "reason": "Negative fixture for approval_id mismatch validation.",
+  "notes": "Approval record intentionally uses a different approval_id than the linked completion record."
+}

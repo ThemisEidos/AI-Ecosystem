@@ -1,0 +1,16 @@
+{
+  "workflow_id": "WF-002",
+  "workflow_name": "Codex Task Generator",
+  "execution_id": "20260622T000300Z-incompatible-status",
+  "status": "pass",
+  "completion_time": "2026-06-22T00:03:00Z",
+  "workshop_id": "open",
+  "workshop_name": "Open Workshop",
+  "approval_id": "AP-20260622-000003",
+  "artifact_paths": [
+    "Obsidian Agent Findings/Collection Imports/WF-002/incompatible-status.md"
+  ],
+  "review_status": "pass",
+  "user_accepted": true,
+  "notes": "Negative fixture for incompatible status validation."
+}
