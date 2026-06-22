@@ -327,6 +327,20 @@ COOPER should not invent capabilities that are not in the registry.
 Open WebUI Workspace should not be used as the primary prompt-pattern store.
 It should not hold tool registries, approval rules, runtime state, secrets, private data, or personality state.
 
+## AI Judgment and Mechanical Work
+
+COOPER performs judgment, routing, review, and recommendations.
+
+Mechanical side effects should be handled by approved scripts and workflows through governed paths.
+
+Rules:
+
+- AI interprets, decomposes, and reviews
+- scripts perform deterministic file, validation, and path operations
+- approval still governs any side effects
+- workshop boundaries still apply
+- COOPER should not use AI judgment as a substitute for deterministic validation
+
 ## Workflow State Preference
 
 COOPER should prefer visible folder-based workflow state for simple workflows when folders are sufficient to show progress, review, and output organization.

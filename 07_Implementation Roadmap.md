@@ -34,6 +34,7 @@ Phase 6 - Private Workshop Hardening
 Phase 7A - Workflow Evidence Standardization
 Phase 7A.1 - WF-002 Workflow Package Standard
 Phase 7A.2 - Minimal Context Doctrine
+Phase 7A.3 - Folder-Based Workflow State
 ```
 
 Current operational model:
@@ -71,7 +72,8 @@ Operational visibility is the bottleneck.
 Phase 7A created the canonical workflow evidence standard so future status reporting can rely on consistent file-based evidence instead of scattered artifacts and mixed state sources.
 Phase 7A.1 created the WF-002 workflow package standard so task handoffs can use structured package folders instead of a single markdown file.
 Phase 7A.2 created the minimal context doctrine so context files stay short, scoped, and task-relevant.
-Phase 7A.3 is creating the folder-based workflow state standard so visible folders can organize early-phase workflow progress without introducing databases or orchestration layers.
+Phase 7A.3 created the folder-based workflow state standard so visible folders can organize early-phase workflow progress without introducing databases or orchestration layers.
+Phase 7A.4 is creating the AI judgment / mechanical work separation standard so scripts can handle deterministic work while AI focuses on interpretation and review.
 
 ---
 
@@ -80,28 +82,28 @@ Phase 7A.3 is creating the folder-based workflow state standard so visible folde
 ### Current Phase
 
 ```text
-Phase 7A.3 - Folder-Based Workflow State
+Phase 7A.4 - AI Judgment / Mechanical Work Separation
 ```
 
 ### Current Objective
 
-Adopt a folder-based workflow state standard for early-phase workflow progress and artifact organization.
+Adopt a governance standard that separates AI judgment work from deterministic mechanical script work.
 
 This is a governance and documentation improvement only. It is not a new orchestration layer, agent system, database, task queue, or execution framework.
 
 ### Why This Comes Next
 
-Recent work introduced canonical evidence, WF-002 package folders, and a minimal context doctrine. The next improvement is to use visible workflow-state folders for simple workflows so progress is easier to review without adding heavier infrastructure.
+Recent work introduced canonical evidence, WF-002 package folders, minimal context, and folder-based workflow state. The next improvement is to separate AI judgment from mechanical script work so deterministic operations stay repeatable and testable.
 
-This improves workflow visibility without changing the existing approval model, launcher boundary, or evidence standard.
+This improves workflow reliability without changing the existing approval model, launcher boundary, or evidence standard.
 
 ### Next Build Artifacts
 
 ```text
-Docs/Folder_Based_Workflow_State_Standard.md
+Docs/AI_Judgment_Mechanical_Work_Separation.md
 06_Automation & Workflow Catalog.md
 02_COOPER System Specification.md
-Docs/WF002_Workflow_Package_Standard.md
+01_AI Ecosystem Architecture.md
 ```
 
 Optional later artifacts after the standard is accepted:
@@ -148,7 +150,7 @@ Phase 7A.2 is complete when:
 
 ### Phase 7A.3 - Folder-Based Workflow State
 
-- Status: Current
+- Status: Complete
 - Goal: Define a visible folder-based workflow state model for early-phase workflows.
 - Build Artifacts:
   - `Docs/Folder_Based_Workflow_State_Standard.md`
@@ -160,6 +162,22 @@ Phase 7A.2 is complete when:
   - folder movement is not treated as approval
   - no database, queue, event bus, or orchestration system is introduced
   - no workflow execution code is changed
+
+### Phase 7A.4 - AI Judgment / Mechanical Work Separation
+
+- Status: Current
+- Goal: Define the boundary between AI judgment and deterministic mechanical script work.
+- Build Artifacts:
+  - `Docs/AI_Judgment_Mechanical_Work_Separation.md`
+- Success Criteria:
+  - AI-owned responsibilities are defined
+  - script-owned responsibilities are defined
+  - boundary rules are defined
+  - workflow examples are documented
+  - prohibited patterns are defined
+  - no execution code is changed
+  - no launcher behavior is changed
+  - no approval logic is changed
 
 ### After This, Build Next
 
@@ -179,7 +197,8 @@ The current near-term sequence is:
 Phase 7A   - Define workflow evidence standard                 COMPLETE
 Phase 7A.1 - Define WF-002 workflow package standard            COMPLETE
 Phase 7A.2 - Define minimal context doctrine                    COMPLETE
-Phase 7A.3 - Define folder-based workflow state                 CURRENT
+Phase 7A.3 - Define folder-based workflow state                 COMPLETE
+Phase 7A.4 - Define AI judgment / mechanical work separation    CURRENT
 Phase 7B   - Validate workflow evidence schemas                 NEXT TECHNICAL STEP
 Phase 7C   - Update workflows to emit canonical evidence         FUTURE
 Phase 7D   - Update WF-004 to consume canonical evidence         FUTURE

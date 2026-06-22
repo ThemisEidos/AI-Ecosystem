@@ -42,6 +42,11 @@ COOPER may later select Fabric patterns during workflow planning, but Fabric doe
 
 Registries, approval policy, routing logic, and execution rules remain in code and config, not in Workspace.
 
+AI judgment and mechanical execution are separate concerns in the architecture.
+
+COOPER governs, interprets, and reviews.
+Scripts and tools perform deterministic work through the Execution Gateway.
+
 ## Workshop Model
 
 ```text

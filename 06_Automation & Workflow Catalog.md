@@ -11,7 +11,9 @@ Phase 7A workflow evidence standardization is documented in `Docs/Workflow_Evide
 Phase 7A.1 WF-002 workflow package standard is documented in `Docs/WF002_Workflow_Package_Standard.md`.
 Phase 7A.2 minimal context doctrine is documented in `Docs/Minimal_Context_Doctrine.md`.
 Phase 7A.3 folder-based workflow state is documented in `Docs/Folder_Based_Workflow_State_Standard.md`.
+Phase 7A.4 AI judgment / mechanical work separation is documented in `Docs/AI_Judgment_Mechanical_Work_Separation.md`.
 WF-001 through WF-007 must eventually emit canonical workflow evidence records that conform to the Phase 7A standard.
+Workflows should keep AI judgment separate from deterministic script work.
 
 Storage rules:
 
@@ -50,6 +52,7 @@ Higher-risk workflows continue to require explicit confirmation. The approved lo
 - Status: Operational
 - Next Step: keep source collection, review enforcement, and artifact-path reporting stable
 - Folder State: may use the standard visible folder layout where useful
+- Mechanical Work: AI should handle interpretation and review while scripts perform repeatable mechanical work when automation is used
 
 ## WF-002 Codex Task Generator
 
@@ -74,6 +77,7 @@ Higher-risk workflows continue to require explicit confirmation. The approved lo
 - Context Standard: keep `01_Context.md` minimal and task-specific; reference `Docs/Minimal_Context_Doctrine.md`
 - Constraints File: keep `04_Constraints.md` limited to task-relevant constraints plus mandatory security boundaries
 - Folder State: for larger tasks, optional `20_Working/`, `30_Output/`, and `40_Review/` folders may be added; keep the required WF-002 files intact
+- Mechanical Work: AI drafts the package contents while scripts may create template-based files and folders
 
 ### WF-002 Phases
 
@@ -217,6 +221,7 @@ Workflow completion is measured by outcome quality, not by workflow execution al
 - Status: Operational
 - Next Step: keep the note workflow aligned with governed storage boundaries
 - Folder State: may use the standard visible folder layout where useful
+- Mechanical Work: scripts should gather deterministic status facts while AI summarizes findings
 
 ## WF-006 Knowledge Collection Import Draft
 
@@ -234,6 +239,7 @@ Workflow completion is measured by outcome quality, not by workflow execution al
 - Status: Operational
 - Next Step: keep the WF-001 -> WF-006 chain stable
 - Folder State: may use the standard visible folder layout where useful
+- Mechanical Work: AI can recommend the analysis approach while scripts enforce local path boundaries and repeatable file operations
 
 ## WF-007 Private Local Analysis
 
@@ -251,6 +257,7 @@ Workflow completion is measured by outcome quality, not by workflow execution al
 - Status: Operational
 - Next Step: keep routing local-only, approval-gated, and restricted to the private registry
 - Folder State: may use the standard visible folder layout inside the Restricted DMZ Workspace
+- Mechanical Work: AI may review restricted material locally while scripts enforce path and boundary checks
 
 ## Glossary
 
