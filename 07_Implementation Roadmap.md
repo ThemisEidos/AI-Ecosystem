@@ -35,6 +35,7 @@ Phase 7A - Workflow Evidence Standardization
 Phase 7A.1 - WF-002 Workflow Package Standard
 Phase 7A.2 - Minimal Context Doctrine
 Phase 7A.3 - Folder-Based Workflow State
+Phase 7A.4 - AI Judgment / Mechanical Work Separation
 ```
 
 Current operational model:
@@ -73,7 +74,8 @@ Phase 7A created the canonical workflow evidence standard so future status repor
 Phase 7A.1 created the WF-002 workflow package standard so task handoffs can use structured package folders instead of a single markdown file.
 Phase 7A.2 created the minimal context doctrine so context files stay short, scoped, and task-relevant.
 Phase 7A.3 created the folder-based workflow state standard so visible folders can organize early-phase workflow progress without introducing databases or orchestration layers.
-Phase 7A.4 is creating the AI judgment / mechanical work separation standard so scripts can handle deterministic work while AI focuses on interpretation and review.
+Phase 7A.4 created the AI judgment / mechanical work separation standard so scripts can handle deterministic work while AI focuses on interpretation and review.
+Phase 7A.5 is creating the lightweight workflow linting standard so packages and folders can be checked for structure, metadata, and obvious security issues before implementation.
 
 ---
 
@@ -82,28 +84,28 @@ Phase 7A.4 is creating the AI judgment / mechanical work separation standard so 
 ### Current Phase
 
 ```text
-Phase 7A.4 - AI Judgment / Mechanical Work Separation
+Phase 7A.5 - Lightweight Workflow Linting
 ```
 
 ### Current Objective
 
-Adopt a governance standard that separates AI judgment work from deterministic mechanical script work.
+Adopt a governance standard for lightweight workflow linting so workflow packages and folders can be checked before any linting script is implemented.
 
 This is a governance and documentation improvement only. It is not a new orchestration layer, agent system, database, task queue, or execution framework.
 
 ### Why This Comes Next
 
-Recent work introduced canonical evidence, WF-002 package folders, minimal context, and folder-based workflow state. The next improvement is to separate AI judgment from mechanical script work so deterministic operations stay repeatable and testable.
+Recent work introduced canonical evidence, WF-002 package folders, minimal context, folder-based workflow state, and AI/mechanical separation. The next improvement is to define the lint checks that future scripts will perform so structural and security issues are easier to catch before execution or acceptance.
 
 This improves workflow reliability without changing the existing approval model, launcher boundary, or evidence standard.
 
 ### Next Build Artifacts
 
 ```text
-Docs/AI_Judgment_Mechanical_Work_Separation.md
+Docs/Workflow_Linting_Standard.md
 06_Automation & Workflow Catalog.md
-02_COOPER System Specification.md
-01_AI Ecosystem Architecture.md
+Docs/WF002_Workflow_Package_Standard.md
+Docs/Folder_Based_Workflow_State_Standard.md
 ```
 
 Optional later artifacts after the standard is accepted:
@@ -165,7 +167,7 @@ Phase 7A.2 is complete when:
 
 ### Phase 7A.4 - AI Judgment / Mechanical Work Separation
 
-- Status: Current
+- Status: Complete
 - Goal: Define the boundary between AI judgment and deterministic mechanical script work.
 - Build Artifacts:
   - `Docs/AI_Judgment_Mechanical_Work_Separation.md`
@@ -175,6 +177,25 @@ Phase 7A.2 is complete when:
   - boundary rules are defined
   - workflow examples are documented
   - prohibited patterns are defined
+  - no execution code is changed
+  - no launcher behavior is changed
+  - no approval logic is changed
+
+### Phase 7A.5 - Lightweight Workflow Linting
+
+- Status: Current
+- Goal: Define lightweight lint checks for workflow packages and workflow-state folders before future lint scripts are implemented.
+- Build Artifacts:
+  - `Docs/Workflow_Linting_Standard.md`
+- Success Criteria:
+  - structure checks are defined
+  - metadata checks are defined
+  - security checks are defined
+  - governance checks are defined
+  - WF-002 lint profile is defined
+  - folder-state lint profile is defined
+  - lint result values are defined
+  - actual lint scripts remain deferred
   - no execution code is changed
   - no launcher behavior is changed
   - no approval logic is changed
@@ -198,7 +219,8 @@ Phase 7A   - Define workflow evidence standard                 COMPLETE
 Phase 7A.1 - Define WF-002 workflow package standard            COMPLETE
 Phase 7A.2 - Define minimal context doctrine                    COMPLETE
 Phase 7A.3 - Define folder-based workflow state                 COMPLETE
-Phase 7A.4 - Define AI judgment / mechanical work separation    CURRENT
+Phase 7A.4 - Define AI judgment / mechanical work separation    COMPLETE
+Phase 7A.5 - Define lightweight workflow linting                 CURRENT
 Phase 7B   - Validate workflow evidence schemas                 NEXT TECHNICAL STEP
 Phase 7C   - Update workflows to emit canonical evidence         FUTURE
 Phase 7D   - Update WF-004 to consume canonical evidence         FUTURE

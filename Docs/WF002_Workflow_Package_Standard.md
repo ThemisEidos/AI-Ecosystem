@@ -23,6 +23,7 @@ This is a file and folder template standard only.
 - Does not apply to Private Workshop restricted data unless the user has sanitized it before entering WF-002.
 - Context inside the package must remain minimal and task-specific per [Docs/Minimal_Context_Doctrine.md](Docs/Minimal_Context_Doctrine.md).
 - Larger WF-002 tasks may optionally use the folder-based workflow state model per [Docs/Folder_Based_Workflow_State_Standard.md](Docs/Folder_Based_Workflow_State_Standard.md).
+- WF-002 packages should remain structured so a future lint script can validate required files, metadata, and security boundaries per [Docs/Workflow_Linting_Standard.md](Docs/Workflow_Linting_Standard.md).
 
 ## Non-Goals
 
@@ -155,6 +156,13 @@ Example artifact reference:
   "Codex_Tasks/TASK-123_workflow-package-standard/"
 ]
 ```
+
+## Lint Compatibility
+
+- WF-002 packages should be arranged so future lint checks can validate structure, metadata, security, and governance fields.
+- Required files should remain stable so linting can verify them deterministically.
+- Required folder names should remain predictable so linting can check them mechanically.
+- This is a compatibility note only and does not add a linter implementation.
 
 ## Security Rules
 

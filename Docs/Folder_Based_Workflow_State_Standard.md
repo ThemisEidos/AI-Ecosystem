@@ -103,6 +103,12 @@ Codex_Tasks/TASK-###_short-title/
 - WF-004 should eventually read canonical evidence, not infer status from folder names alone.
 - Folder paths can support status reporting only as artifact references or transition fallback.
 
+## Lint Compatibility
+
+- The standard folder names support future structural validation.
+- Future lint checks should be able to confirm the presence of the expected folder names.
+- This compatibility note does not add any lint implementation.
+
 ## Security Rules
 
 - No secrets in Open Workshop folder state.

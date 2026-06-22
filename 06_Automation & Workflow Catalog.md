@@ -12,8 +12,10 @@ Phase 7A.1 WF-002 workflow package standard is documented in `Docs/WF002_Workflo
 Phase 7A.2 minimal context doctrine is documented in `Docs/Minimal_Context_Doctrine.md`.
 Phase 7A.3 folder-based workflow state is documented in `Docs/Folder_Based_Workflow_State_Standard.md`.
 Phase 7A.4 AI judgment / mechanical work separation is documented in `Docs/AI_Judgment_Mechanical_Work_Separation.md`.
+Phase 7A.5 lightweight workflow linting is documented in `Docs/Workflow_Linting_Standard.md`.
 WF-001 through WF-007 must eventually emit canonical workflow evidence records that conform to the Phase 7A standard.
 Workflows should keep AI judgment separate from deterministic script work.
+WF-002 packages should eventually be lintable before execution or acceptance.
 
 Storage rules:
 
@@ -78,6 +80,7 @@ Higher-risk workflows continue to require explicit confirmation. The approved lo
 - Constraints File: keep `04_Constraints.md` limited to task-relevant constraints plus mandatory security boundaries
 - Folder State: for larger tasks, optional `20_Working/`, `30_Output/`, and `40_Review/` folders may be added; keep the required WF-002 files intact
 - Mechanical Work: AI drafts the package contents while scripts may create template-based files and folders
+- Linting: WF-002 packages should be structured so future lint scripts can validate required files, metadata, and security boundaries
 
 ### WF-002 Phases
 
@@ -222,6 +225,7 @@ Workflow completion is measured by outcome quality, not by workflow execution al
 - Next Step: keep the note workflow aligned with governed storage boundaries
 - Folder State: may use the standard visible folder layout where useful
 - Mechanical Work: scripts should gather deterministic status facts while AI summarizes findings
+- Linting: folder state should use standard folder names so future validation is straightforward
 
 ## WF-006 Knowledge Collection Import Draft
 
@@ -240,6 +244,7 @@ Workflow completion is measured by outcome quality, not by workflow execution al
 - Next Step: keep the WF-001 -> WF-006 chain stable
 - Folder State: may use the standard visible folder layout where useful
 - Mechanical Work: AI can recommend the analysis approach while scripts enforce local path boundaries and repeatable file operations
+- Linting: workflow folders should remain predictable enough for future structural validation
 
 ## WF-007 Private Local Analysis
 
@@ -258,6 +263,7 @@ Workflow completion is measured by outcome quality, not by workflow execution al
 - Next Step: keep routing local-only, approval-gated, and restricted to the private registry
 - Folder State: may use the standard visible folder layout inside the Restricted DMZ Workspace
 - Mechanical Work: AI may review restricted material locally while scripts enforce path and boundary checks
+- Linting: private folder state should remain local-only and use standard folder names when possible
 
 ## Glossary
 
