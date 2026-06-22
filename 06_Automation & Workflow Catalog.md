@@ -10,6 +10,7 @@ Phase 5 workflows are operational. Phase 6 Private Workshop Hardening is complet
 Phase 7A workflow evidence standardization is documented in `Docs/Workflow_Evidence_Standard.md`.
 Phase 7A.1 WF-002 workflow package standard is documented in `Docs/WF002_Workflow_Package_Standard.md`.
 Phase 7A.2 minimal context doctrine is documented in `Docs/Minimal_Context_Doctrine.md`.
+Phase 7A.3 folder-based workflow state is documented in `Docs/Folder_Based_Workflow_State_Standard.md`.
 WF-001 through WF-007 must eventually emit canonical workflow evidence records that conform to the Phase 7A standard.
 
 Storage rules:
@@ -48,6 +49,7 @@ Higher-risk workflows continue to require explicit confirmation. The approved lo
 - Security Notes: approved official docs only
 - Status: Operational
 - Next Step: keep source collection, review enforcement, and artifact-path reporting stable
+- Folder State: may use the standard visible folder layout where useful
 
 ## WF-002 Codex Task Generator
 
@@ -71,6 +73,7 @@ Higher-risk workflows continue to require explicit confirmation. The approved lo
 - Package Structure: use the required folder layout defined in the standard
 - Context Standard: keep `01_Context.md` minimal and task-specific; reference `Docs/Minimal_Context_Doctrine.md`
 - Constraints File: keep `04_Constraints.md` limited to task-relevant constraints plus mandatory security boundaries
+- Folder State: for larger tasks, optional `20_Working/`, `30_Output/`, and `40_Review/` folders may be added; keep the required WF-002 files intact
 
 ### WF-002 Phases
 
@@ -213,6 +216,7 @@ Workflow completion is measured by outcome quality, not by workflow execution al
 - Security Notes: private notes must stay in the restricted compartment
 - Status: Operational
 - Next Step: keep the note workflow aligned with governed storage boundaries
+- Folder State: may use the standard visible folder layout where useful
 
 ## WF-006 Knowledge Collection Import Draft
 
@@ -229,6 +233,7 @@ Workflow completion is measured by outcome quality, not by workflow execution al
 - Security Notes: only approved sources and source URLs should be carried forward
 - Status: Operational
 - Next Step: keep the WF-001 -> WF-006 chain stable
+- Folder State: may use the standard visible folder layout where useful
 
 ## WF-007 Private Local Analysis
 
@@ -245,6 +250,7 @@ Workflow completion is measured by outcome quality, not by workflow execution al
 - Security Notes: no cloud AI, no external webhooks, no plain-text sensitive logging
 - Status: Operational
 - Next Step: keep routing local-only, approval-gated, and restricted to the private registry
+- Folder State: may use the standard visible folder layout inside the Restricted DMZ Workspace
 
 ## Glossary
 

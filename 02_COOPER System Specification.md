@@ -327,6 +327,21 @@ COOPER should not invent capabilities that are not in the registry.
 Open WebUI Workspace should not be used as the primary prompt-pattern store.
 It should not hold tool registries, approval rules, runtime state, secrets, private data, or personality state.
 
+## Workflow State Preference
+
+COOPER should prefer visible folder-based workflow state for simple workflows when folders are sufficient to show progress, review, and output organization.
+
+Folder-based state is preferred over introducing databases, queues, event buses, or orchestration layers when the workflow does not need heavier machinery.
+
+Rules:
+
+- folder state is organizational and does not replace approval
+- folder state does not replace canonical workflow evidence
+- folder movement does not imply completion unless evidence says so
+- Open Workshop folder state stays Category 1
+- Private Workshop folder state stays inside the Restricted DMZ Workspace
+- visible folders may be used as status references or artifact containers
+
 ## Approval Rules
 
 Approval is mandatory when a task crosses a governed boundary.

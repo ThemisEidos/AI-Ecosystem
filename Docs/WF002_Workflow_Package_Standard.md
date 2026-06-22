@@ -22,6 +22,7 @@ This is a file and folder template standard only.
 - Applies to Open Workshop / Category 1 task packages.
 - Does not apply to Private Workshop restricted data unless the user has sanitized it before entering WF-002.
 - Context inside the package must remain minimal and task-specific per [Docs/Minimal_Context_Doctrine.md](Docs/Minimal_Context_Doctrine.md).
+- Larger WF-002 tasks may optionally use the folder-based workflow state model per [Docs/Folder_Based_Workflow_State_Standard.md](Docs/Folder_Based_Workflow_State_Standard.md).
 
 ## Non-Goals
 
@@ -130,6 +131,7 @@ Codex_Tasks/
 - Destination for Codex-generated outputs, review notes, logs, drafts, or result artifacts when needed.
 - Should not be used for canonical workflow evidence.
 - Canonical workflow evidence remains under `State/Workflow_Evidence/` per [Docs/Workflow_Evidence_Standard.md](Docs/Workflow_Evidence_Standard.md).
+- For larger WF-002 tasks, `Output/` may coexist with optional `20_Working/`, `30_Output/`, and `40_Review/` folders, but the required WF-002 files remain mandatory.
 
 ## Optional Files
 
@@ -176,6 +178,7 @@ Example artifact reference:
 - Single-file `TASK-###_short-title.md` remains allowed as a legacy or fallback format.
 - Preferred format going forward is the package folder.
 - Existing task files do not need migration unless useful.
+- Optional folder-state subfolders may be added for larger tasks, but they do not replace the required WF-002 files.
 
 ## Future WF-002 Generator Requirements
 
@@ -188,6 +191,7 @@ These are future requirements for generator work, not implementation in this pha
 - Generator should record the package folder path as an artifact in canonical evidence when evidence emitters exist.
 - Generator changes are deferred until separately approved.
 - Generator should keep context sections minimal and reference [Docs/Minimal_Context_Doctrine.md](Docs/Minimal_Context_Doctrine.md) rather than duplicating governance.
+- Generator may optionally create folder-state subfolders for larger tasks per [Docs/Folder_Based_Workflow_State_Standard.md](Docs/Folder_Based_Workflow_State_Standard.md).
 
 ## Definition of Done
 

@@ -32,6 +32,8 @@ Phase 4 - First Workbench / Execution Gateway
 Phase 5 - Operational Workflows
 Phase 6 - Private Workshop Hardening
 Phase 7A - Workflow Evidence Standardization
+Phase 7A.1 - WF-002 Workflow Package Standard
+Phase 7A.2 - Minimal Context Doctrine
 ```
 
 Current operational model:
@@ -68,7 +70,8 @@ Operational visibility is the bottleneck.
 
 Phase 7A created the canonical workflow evidence standard so future status reporting can rely on consistent file-based evidence instead of scattered artifacts and mixed state sources.
 Phase 7A.1 created the WF-002 workflow package standard so task handoffs can use structured package folders instead of a single markdown file.
-Phase 7A.2 is creating the minimal context doctrine so context files stay short, scoped, and task-relevant.
+Phase 7A.2 created the minimal context doctrine so context files stay short, scoped, and task-relevant.
+Phase 7A.3 is creating the folder-based workflow state standard so visible folders can organize early-phase workflow progress without introducing databases or orchestration layers.
 
 ---
 
@@ -77,28 +80,28 @@ Phase 7A.2 is creating the minimal context doctrine so context files stay short,
 ### Current Phase
 
 ```text
-Phase 7A.2 - Minimal Context Doctrine
+Phase 7A.3 - Folder-Based Workflow State
 ```
 
 ### Current Objective
 
-Adopt a minimal context doctrine for AI handoffs and project-level context files.
+Adopt a folder-based workflow state standard for early-phase workflow progress and artifact organization.
 
 This is a governance and documentation improvement only. It is not a new orchestration layer, agent system, database, task queue, or execution framework.
 
 ### Why This Comes Next
 
-Recent work introduced WF-002 package folders. The next improvement is to keep task and project context minimal so those packages do not become miniature copies of the entire repository documentation set.
+Recent work introduced canonical evidence, WF-002 package folders, and a minimal context doctrine. The next improvement is to use visible workflow-state folders for simple workflows so progress is easier to review without adding heavier infrastructure.
 
-This improves Codex handoff quality without changing the existing approval model or launcher boundary.
+This improves workflow visibility without changing the existing approval model, launcher boundary, or evidence standard.
 
 ### Next Build Artifacts
 
 ```text
-Docs/Minimal_Context_Doctrine.md
-Docs/WF002_Workflow_Package_Standard.md
+Docs/Folder_Based_Workflow_State_Standard.md
 06_Automation & Workflow Catalog.md
 02_COOPER System Specification.md
+Docs/WF002_Workflow_Package_Standard.md
 ```
 
 Optional later artifacts after the standard is accepted:
@@ -143,6 +146,21 @@ Phase 7A.2 is complete when:
 - no workflow execution code is modified unless separately approved
 - no database, agent framework, task queue, or orchestration subsystem is introduced
 
+### Phase 7A.3 - Folder-Based Workflow State
+
+- Status: Current
+- Goal: Define a visible folder-based workflow state model for early-phase workflows.
+- Build Artifacts:
+  - `Docs/Folder_Based_Workflow_State_Standard.md`
+- Success Criteria:
+  - the standard folder model is defined
+  - Open and Private folder-state handling is defined
+  - WF-002 optional folder-state compatibility is defined
+  - folder state remains separate from canonical workflow evidence
+  - folder movement is not treated as approval
+  - no database, queue, event bus, or orchestration system is introduced
+  - no workflow execution code is changed
+
 ### After This, Build Next
 
 ```text
@@ -160,7 +178,8 @@ The current near-term sequence is:
 ```text
 Phase 7A   - Define workflow evidence standard                 COMPLETE
 Phase 7A.1 - Define WF-002 workflow package standard            COMPLETE
-Phase 7A.2 - Define minimal context doctrine                    CURRENT
+Phase 7A.2 - Define minimal context doctrine                    COMPLETE
+Phase 7A.3 - Define folder-based workflow state                 CURRENT
 Phase 7B   - Validate workflow evidence schemas                 NEXT TECHNICAL STEP
 Phase 7C   - Update workflows to emit canonical evidence         FUTURE
 Phase 7D   - Update WF-004 to consume canonical evidence         FUTURE
