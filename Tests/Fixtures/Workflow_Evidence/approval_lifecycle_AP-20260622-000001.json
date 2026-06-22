@@ -1,0 +1,13 @@
+{
+  "approval_id": "AP-20260622-000001",
+  "workflow_id": "WF-002",
+  "status": "completed",
+  "requested_time": "2026-06-22T00:00:00Z",
+  "approved_time": "2026-06-22T00:05:00Z",
+  "completed_time": "2026-06-22T00:10:00Z",
+  "blocked_time": "2026-06-22T00:00:00Z",
+  "stale_time": "2026-06-22T00:00:00Z",
+  "expiration_time": "2026-07-22T00:00:00Z",
+  "reason": "Sample approval lifecycle record for schema validation.",
+  "notes": "Sample approval history record used only for Phase 7B schema validation."
+}
