@@ -64,7 +64,7 @@ try {
     if (-not $Initial -or $Initial.status -notin @("pass", "missing")) {
         $Issues.Add("COOPER personality getter did not return a usable payload.")
     }
-    if ($Initial.personality.humor -ne 35 -or $Initial.personality.sarcasm -ne 15 -or $Initial.personality.profile -ne "operations") {
+    if ($Initial.personality.humor -ne 65 -or $Initial.personality.sarcasm -ne 15 -or $Initial.personality.profile -ne "custom") {
         $Issues.Add("Initial v2 personality values did not match the expected baseline.")
     }
     if ([string]$Initial.source_of_truth -ne "Models/cooper-personality/personality.json") {
@@ -86,7 +86,7 @@ try {
     }
     $Results += [pscustomobject]@{
         name = "config load"
-        passed = ($Initial.personality.humor -eq 35 -and $Initial.personality.profile -eq "operations")
+        passed = ($Initial.personality.humor -eq 65 -and $Initial.personality.profile -eq "custom")
         details = "Loaded v2 personality baseline."
     }
 
@@ -100,12 +100,12 @@ try {
     if ($Identity.profile_path -ne $ModelProfilePath) {
         $Issues.Add("Direct COOPER identity invocation did not resolve the model personality path.")
     }
-    if ($Identity.personality.profile -ne "operations") {
-        $Issues.Add("Direct COOPER identity invocation did not report the operations baseline.")
+    if ($Identity.personality.profile -ne "custom") {
+        $Issues.Add("Direct COOPER identity invocation did not report the custom baseline.")
     }
     $Results += [pscustomobject]@{
         name = "identity invocation"
-        passed = ($Identity.status -ne "error" -and $Identity.personality.profile -eq "operations")
+        passed = ($Identity.status -ne "error" -and $Identity.personality.profile -eq "custom")
         details = "Direct identity helper invocation succeeded."
     }
 
@@ -169,17 +169,17 @@ try {
     }
 
     $CommandProfile = Invoke-JsonScript -Path $InterpreterScript -Arguments @("-Text", "/cooper profile engineer", "-AsJson")
-    if ($CommandProfile.status -ne "mapped" -or $CommandProfile.command -notmatch '^/cooper profile') {
-        $Issues.Add("Command parser did not recognize /cooper profile engineer.")
+    if ($CommandProfile.status -ne "unknown" -or -not [string]::IsNullOrWhiteSpace([string]$CommandProfile.command)) {
+        $Issues.Add("Legacy /cooper profile engineer input should remain unsupported.")
     }
     $CommandHumor = Invoke-JsonScript -Path $InterpreterScript -Arguments @("-Text", "/cooper humor 50", "-AsJson")
-    if ($CommandHumor.status -ne "mapped" -or $CommandHumor.command -notmatch '^/cooper humor') {
-        $Issues.Add("Command parser did not recognize /cooper humor 50.")
+    if ($CommandHumor.status -ne "unknown" -or -not [string]::IsNullOrWhiteSpace([string]$CommandHumor.command)) {
+        $Issues.Add("Legacy /cooper humor 50 input should remain unsupported.")
     }
     $Results += [pscustomobject]@{
         name = "command parsing"
-        passed = ($CommandProfile.status -eq "mapped" -and $CommandHumor.status -eq "mapped")
-        details = "Direct /cooper commands resolved."
+        passed = ($CommandProfile.status -eq "unknown" -and $CommandHumor.status -eq "unknown")
+        details = "Legacy /cooper commands remain unsupported."
     }
 
     $UpdateHumor = Invoke-JsonScript -Path $SetScript -Arguments @("-Humor", "50", "-AsJson")

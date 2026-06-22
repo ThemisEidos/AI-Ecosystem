@@ -834,7 +834,7 @@ function Invoke-COOPERPersonalityCommand {
     return [pscustomobject]@{
         status = "fail"
         action = "unknown"
-        response_text = "Unsupported COOPER command. Use /cooper personality, /cooper profile <name>, or /cooper <setting> <0-100>."
+        response_text = "Unsupported COOPER request. Ask about personality settings, load a profile, or adjust a setting using conversational language."
         personality = $Personality.personality
         legacy_personality = $Personality.legacy_personality
         profile_definitions = Get-COOPERPersonalityProfileDefinitions -Root $Root

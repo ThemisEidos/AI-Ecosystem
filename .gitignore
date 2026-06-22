@@ -156,6 +156,8 @@ Timeline Builder*.json
 # Repository hygiene / runtime state
 Models/cooper-personality/personality.json
 Scripts/COOPER_Personality.json
+Restricted DMZ Workspace/
+State/COOPER_Skills.json
 Legacy_Docs/
 Obsidian Vault/02_Projects/opt-out/
 codex-automation-*
