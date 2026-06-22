@@ -4,54 +4,173 @@
 
 This roadmap tracks the staged implementation of the COOPER-centered AI Ecosystem.
 
+The roadmap exists to preserve sequence discipline, prevent scope creep, and identify the current build artifact before new work begins.
+
+The ecosystem should continue to prioritize:
+
+- working workflows
+- operational usefulness
+- governance compliance
+- security boundaries
+- maintainability
+- incremental implementation
+
+The roadmap should not be used to justify premature agents, new orchestration layers, databases, or tool accumulation.
+
+---
+
+## Current Project State
+
+The following phases are complete:
+
+```text
+Phase 0 - Documentation Foundation
+Phase 1 - Tool Registry Foundation
+Phase 2 - Quartermaster / Tool Router
+Phase 3 - Safety Officer / Approval Gate
+Phase 4 - First Workbench / Execution Gateway
+Phase 5 - Operational Workflows
+Phase 6 - Private Workshop Hardening
+Phase 7A - Workflow Evidence Standardization
+```
+
+Current operational model:
+
+```text
+Open Workshop   = COOPER
+Private Workshop = COOPER - Private
+```
+
+Operational workflows:
+
+```text
+WF-001 Research Summary
+WF-002 Codex Task Generator
+WF-004 Operational Status
+WF-005 Note Creation
+WF-006 Knowledge Collection Import Draft
+WF-007 Private Local Analysis
+```
+
+Operational workflow chains:
+
+```text
+WF-001 -> WF-006
+WF-001 -> WF-006 -> WF-002
+```
+
+Phase 6 conclusion:
+
+```text
+Execution capability is no longer the bottleneck.
+Operational visibility is the bottleneck.
+```
+
+Phase 7A created the canonical workflow evidence standard so future status reporting can rely on consistent file-based evidence instead of scattered artifacts and mixed state sources.
+Phase 7A.1 created the WF-002 workflow package standard so task handoffs can use structured package folders instead of a single markdown file.
+Phase 7A.2 is creating the minimal context doctrine so context files stay short, scoped, and task-relevant.
+
+---
+
 ## Current Focus
 
-- Phase 5 workflows are operational and stabilized.
-- Phase 7A Workflow Evidence Standardization is now the current documentation and governance focus.
-- Phase 6 Private Workshop Hardening remains complete and operational.
-- Workspace and Fabric integration remain deferred until evidence standardization is validated and committed.
-- Current Phase: Phase 7A - Workflow Evidence Standardization
-- Status: In Progress
-- Current Objective: Define canonical workflow completion and approval evidence so WF-004 can consume deterministic records.
-- Next Build Artifact:
-  - `Docs/Workflow_Evidence_Standard.md`
-- Why This Comes Next: Phase 1 through Phase 6 foundations are complete enough to support the first operational workflows and private-workshop containment. The remaining work is to standardize the evidence records that WF-004 and later workflow consumers rely on so reporting becomes deterministic instead of inferred from mixed runtime sources.
-- Dependencies:
-  - governed routing remains registry-driven
-  - approval gate remains required before execution
-  - review gate remains required before state updates
-  - runtime artifacts stay separated from source and docs
-  - evidence schemas remain file-based and deterministic
-- Definition of Done:
-  - canonical evidence standard is documented
-  - exact storage paths and filename patterns are defined
-  - timestamp format is defined
-  - WF-004 precedence and conflict rules are defined
-  - roadmap and workflow catalog cross-references are updated
-  - WF-001 Research Summary remains operational
-  - WF-002 Codex Task Generator remains operational
-  - WF-004 Operational Status remains operational
-  - WF-005 Note Creation remains operational
-  - WF-006 Knowledge Collection Import Draft remains operational
-  - WF-007 Private Local Analysis remains operational
-  - WF-001 -> WF-006 chain remains operational
-  - milestone status is recorded
-  - runtime noise is not treated as source of truth
+### Current Phase
 
-### Phase 7A - Workflow Evidence Standardization
+```text
+Phase 7A.2 - Minimal Context Doctrine
+```
 
-- Status: In Progress
-- Goal: define canonical workflow evidence records for WF-004 and future workflow status reporting.
-- Build Artifacts:
-  - `Docs/Workflow_Evidence_Standard.md`
-- Success Criteria:
-  - canonical workflow completion records are defined
-  - canonical approval lifecycle records are defined
-  - exact file paths and filename patterns are defined
-  - WF-004 consumption precedence is defined
-  - retention and archival rules are testable
-  - Open and Private evidence separation remains preserved
-  - Phase 7B can validate schemas before workflow emitters are modified
+### Current Objective
+
+Adopt a minimal context doctrine for AI handoffs and project-level context files.
+
+This is a governance and documentation improvement only. It is not a new orchestration layer, agent system, database, task queue, or execution framework.
+
+### Why This Comes Next
+
+Recent work introduced WF-002 package folders. The next improvement is to keep task and project context minimal so those packages do not become miniature copies of the entire repository documentation set.
+
+This improves Codex handoff quality without changing the existing approval model or launcher boundary.
+
+### Next Build Artifacts
+
+```text
+Docs/Minimal_Context_Doctrine.md
+Docs/WF002_Workflow_Package_Standard.md
+06_Automation & Workflow Catalog.md
+02_COOPER System Specification.md
+```
+
+Optional later artifacts after the standard is accepted:
+
+```text
+Templates/WF002_Workflow_Package/
+Scripts/Test-COOPERWF002WorkflowPackage.ps1
+```
+
+### Proposed WF-002 Package Structure
+
+```text
+Codex_Tasks/
+└── TASK-###_short-title/
+    ├── 00_Task.md
+    ├── 01_Context.md
+    ├── 02_Requirements.md
+    ├── 03_Acceptance_Criteria.md
+    ├── 04_Constraints.md
+    ├── 05_Review_Checklist.md
+    └── Output/
+```
+
+### Dependencies
+
+- Phase 7A Workflow Evidence Standard complete
+- WF-002 remains Open Workshop only
+- `Codex_Tasks/` remains the default Project Workspace location
+- user approval remains required for governed file writes and launcher invocation
+- Category 2 material remains prohibited from WF-002 packages unless sanitized first
+
+### Definition of Done
+
+Phase 7A.2 is complete when:
+
+- `Docs/Minimal_Context_Doctrine.md` exists
+- the doctrine defines short, scoped, task-specific context rules
+- roadmap, catalog, and spec reference the doctrine
+- WF-002 package guidance is aligned to minimal context
+- no giant global context file is created
+- no launcher behavior is changed
+- no workflow execution code is modified unless separately approved
+- no database, agent framework, task queue, or orchestration subsystem is introduced
+
+### After This, Build Next
+
+```text
+Phase 7B - Workflow Evidence Validation
+```
+
+Phase 7B should validate canonical evidence schemas before workflow emitters are modified.
+
+---
+
+## Roadmap Sequence
+
+The current near-term sequence is:
+
+```text
+Phase 7A   - Define workflow evidence standard                 COMPLETE
+Phase 7A.1 - Define WF-002 workflow package standard            COMPLETE
+Phase 7A.2 - Define minimal context doctrine                    CURRENT
+Phase 7B   - Validate workflow evidence schemas                 NEXT TECHNICAL STEP
+Phase 7C   - Update workflows to emit canonical evidence         FUTURE
+Phase 7D   - Update WF-004 to consume canonical evidence         FUTURE
+```
+
+Do not skip directly to Phase 7C or Phase 7D before validation exists.
+
+Do not expand into agents, Hermes integration, multi-intent execution, or new orchestration layers while evidence validation and WF-004 visibility remain unresolved.
+
+---
 
 ## Phase Map
 
@@ -77,7 +196,9 @@ This roadmap tracks the staged implementation of the COOPER-centered AI Ecosyste
   - storage model documented
   - workflow definition of done documented
 
-### Phase 1 - Tool Registry Inventory
+---
+
+### Phase 1 - Tool Registry Foundation
 
 - Status: Complete
 - Goal: Create runtime-readable Open and Private Tool Box inventories.
@@ -89,21 +210,28 @@ This roadmap tracks the staged implementation of the COOPER-centered AI Ecosyste
   - registries validate
   - Open and Private tools separated
   - permission levels assigned
-  - no execution was implemented at this stage
+  - Private Workshop excludes Level 3 external-service tools
+  - registry validation passes
+
+---
 
 ### Phase 2 - Quartermaster / Tool Router
 
 - Status: Complete
-- Goal: Allow COOPER to identify which tool should be used without executing it.
+- Goal: Allow COOPER to identify which approved tool or workflow should be used.
 - Build Artifacts:
-  - `Scripts/Invoke-COOPERTool.ps1`
-  - dry-run routing mode
-  - tool lookup by id, drawer, and workshop
+  - tool routing logic
+  - dry-run routing behavior
+  - workflow selection behavior
+  - workshop validation
+  - permission validation
 - Success Criteria:
-  - tool selection works
+  - approved tool selection works
   - invalid workshop/tool combinations are blocked
   - approval requirement is reported
-  - no real execution was implemented at this stage
+  - COOPER prefers approved workflows over ad hoc invention
+
+---
 
 ### Phase 3 - Safety Officer / Approval Gate
 
@@ -112,91 +240,185 @@ This roadmap tracks the staged implementation of the COOPER-centered AI Ecosyste
 - Build Artifacts:
   - approval validation logic
   - permission policy tests
+  - approval workflow tests
 - Success Criteria:
   - Level 0-1 auto-run behavior represented
   - Level 2-4 approval requirements represented
   - Level 3 blocked in Private Workshop
   - Level 5 blocked by default
+  - governed actions require explicit approval
+
+---
 
 ### Phase 4 - First Workbench / Execution Gateway
 
 - Status: Complete
-- Goal: Add one harmless execution pathway.
+- Goal: Route approved execution through a governed workbench boundary.
 - Build Artifacts:
-  - one safe local workbench
-  - dry-run first, then real execution
+  - execution gateway
+  - controlled script/workflow execution path
+  - status and approval integration
 - Success Criteria:
-  - one low-risk tool executes successfully
+  - approved low-risk execution paths operate successfully
   - output is stored correctly
   - workflow definition of done is applied
+  - execution does not bypass approval policy
 
-### Phase 5 - First Operational Workflows
+---
 
-- Status: Operational
-- Goal: Keep the first practical governed workflows stable and documented.
-- Operational:
-  - WF-001 Research Summary
-  - WF-002 Codex Task Generator
-  - WF-004 Operational Status
-  - WF-005 Note Creation
-  - WF-006 Knowledge Collection Import Draft
-  - First workflow chain: WF-001 → WF-006
-  - Confirmed chained path: WF-001 → WF-006 → WF-002
+### Phase 5 - Operational Workflows
+
+- Status: Complete
+- Goal: Implement practical user-facing workflows.
+- Operational Workflows:
+  - `WF-001 Research Summary`
+  - `WF-002 Codex Task Generator`
+  - `WF-004 Operational Status`
+  - `WF-005 Note Creation`
+  - `WF-006 Knowledge Collection Import Draft`
 - Success Criteria:
-  - each workflow has defined input/output
+  - workflows have defined input/output behavior
   - permission model enforced
   - storage boundaries enforced
   - COOPER review step included
-  - workflow outputs are recorded without conflating runtime state with source documentation
+  - operational workflow chains are supported
+
+---
 
 ### Phase 6 - Private Workshop Hardening
 
 - Status: Complete
 - Goal: Make COOPER Private safe enough for restricted DMZ workflows.
 - Build Artifacts:
-  - WF-007 Private Local Analysis
   - private registry hardening
   - Restricted DMZ path validation
   - local-only workflow checks
-  - approval lifecycle transition validation
+  - `WF-007 Private Local Analysis`
+  - Open WebUI identity persistence validation
 - Success Criteria:
   - Private Workshop uses local-only tools
   - no cloud fallback possible
   - outputs remain in Restricted DMZ Workspace
-  - Open Workshop and Private Workshop routing remain separated
-  - private-tool routing originates from the private registry only
-  - WF-007 reports completion status through WF-004
+  - Open WebUI exposes exactly one `COOPER` and one `COOPER - Private`
+  - hidden implementation models are not exposed as user-facing workshop choices
 
-### Phase 7 - PDA Evolution
+---
+
+### Phase 7A - Workflow Evidence Standardization
+
+- Status: Complete
+- Goal: Define canonical file-based workflow evidence records for workflow completion and approval lifecycle reporting.
+- Build Artifact:
+  - `Docs/Workflow_Evidence_Standard.md`
+- Success Criteria:
+  - canonical JSON serialization defined
+  - exact Open and Private evidence paths defined
+  - filename patterns defined
+  - ISO 8601 UTC timestamp format defined
+  - workflow status values defined
+  - approval status values defined
+  - WF-004 precedence and conflict rules defined
+  - retention and archival rules are testable
+  - Open/Private evidence separation preserved
+  - no database, event bus, agent framework, or orchestration layer introduced
+  - no workflow execution code changed
+
+---
+
+### Phase 7A.1 - WF-002 Workflow Package Standard
+
+- Status: Current
+- Goal: Improve WF-002 Codex handoff quality using a lightweight workflow package folder structure.
+- Build Artifacts:
+  - `Docs/WF002_Workflow_Package_Standard.md`
+  - updated WF-002 section in `06_Automation & Workflow Catalog.md`
+  - updated WF-002 section in `02_COOPER System Specification.md`
+- Success Criteria:
+  - WF-002 package structure is documented
+  - required files are defined
+  - review checklist expectations are defined
+  - `Output/` folder purpose is defined
+  - evidence compatibility is defined through artifact path references
+  - Category 2 material is prohibited unless sanitized first
+  - no execution or launcher behavior changes are made
+
+---
+
+### Phase 7B - Workflow Evidence Validation
+
+- Status: Next
+- Goal: Add tests that validate the Phase 7A evidence standard before workflows are modified to emit records.
+- Candidate Build Artifacts:
+  - `Scripts/Test-COOPERWorkflowEvidenceStandard.ps1`
+  - `Scripts/Test-COOPERWorkflowEvidenceSchemas.ps1`
+  - `Scripts/Test-COOPERApprovalLifecycleEvidence.ps1`
+- Success Criteria:
+  - required fields validate
+  - JSON record format validates
+  - filename patterns validate
+  - timestamp format validates
+  - Open/Private evidence paths validate
+  - approval and workflow record links validate
+  - invalid statuses are rejected
+  - Private evidence path violations are detected
+
+---
+
+### Phase 7C - Workflow Evidence Emitters
 
 - Status: Future
-- Goal: Expand toward richer AI-assisted project execution.
-- Build Artifacts:
-  - agentic loop experiments
-  - workflow chaining
-  - broader toolbox expansion
-  - backlog: implement governed multi-intent execution queue
+- Goal: Update operational workflows to emit canonical workflow completion and approval lifecycle evidence records.
+- Candidate Build Artifacts:
+  - workflow completion record writers
+  - approval lifecycle record writers
+  - workflow-specific evidence integration for WF-001 through WF-007
 - Success Criteria:
-  - only after core workflows are stable
-  - no premature agent complexity
+  - each operational workflow emits canonical evidence
+  - governed workflows link approval records
+  - evidence records reference output artifacts
+  - workflows fail visibly if evidence cannot be written
+  - Open and Private storage boundaries are preserved
+
+---
+
+### Phase 7D - WF-004 Canonical Evidence Consumption
+
+- Status: Future
+- Goal: Update WF-004 to consume canonical evidence records as the primary source of truth for operational status.
+- Candidate Build Artifacts:
+  - WF-004 evidence reader
+  - conflict detection logic
+  - approval/evidence mismatch reporting
+  - transition fallback labeling
+- Success Criteria:
+  - canonical evidence records are authoritative when present
+  - artifact fallback is transition-only
+  - conflicting records are surfaced instead of silently resolved
+  - approval/completion mismatches are reported
+  - workflow chain formatting is preserved
+  - WF-004 does not mutate evidence records
+
+---
 
 ### Phase 8 - Open WebUI Workspace Knowledge Layer
 
 - Status: Future
-- Goal: add an organized knowledge and reference-asset layer in Open WebUI Workspace.
+- Goal: Add organized knowledge and reference-asset collections in Open WebUI Workspace.
 - Build Artifacts:
   - governance collection
   - project documentation collections
   - technical reference collections
 - Success Criteria:
   - Workspace stays knowledge-focused
-  - no registries, approval rules, runtime state, secrets, or private data are stored there
+  - Workspace does not hold registries, approval rules, runtime state, secrets, private data, or personality state
   - cloud-connected collections stay Category 1 only
+
+---
 
 ### Phase 9 - Fabric Prompt Pattern Layer
 
 - Status: Future
-- Goal: make reusable prompt patterns available as explicit planning inputs.
+- Goal: Make reusable prompt patterns available as explicit planning inputs.
 - Build Artifacts:
   - prompt-pattern library
   - cognitive workflow patterns
@@ -205,3 +427,54 @@ This roadmap tracks the staged implementation of the COOPER-centered AI Ecosyste
   - Fabric patterns remain reusable and versionable
   - patterns do not contain secrets or runtime state
   - COOPER can consult patterns without weakening governance
+
+---
+
+### Future Backlog - Deferred Capability Expansion
+
+- Status: Deferred
+- Candidate Items:
+  - Hermes integration review
+  - agentic loop experiments
+  - multi-intent execution queue
+  - broader toolbox expansion
+  - richer workflow chaining
+- Entry Criteria:
+  - Phase 7 evidence validation is complete
+  - workflows emit canonical evidence
+  - WF-004 consumes canonical evidence reliably
+  - proposed capability has a defined workflow need
+  - security and maintenance burden are acceptable
+
+Do not promote backlog items into active build work until the current evidence and workflow-package sequence is complete.
+
+---
+
+## Operating Rules
+
+- Always identify the current phase before recommending work.
+- Do not skip phases.
+- Prefer extending existing workflows over adding tools.
+- Do not add infrastructure until a workflow justifies it.
+- Keep Private Workshop local-only.
+- Keep Category 2 material out of Open Workshop artifacts.
+- WF-002 packages are Open Workshop / Category 1 artifacts only unless sanitized.
+- Workflow evidence remains file-based.
+- WF-004 reads evidence but does not mutate it.
+- User approval remains required for governed writes and launcher execution.
+
+---
+
+## Current Next Action
+
+Create the Minimal Context Doctrine.
+
+Recommended Codex task:
+
+```text
+Create Docs/Minimal_Context_Doctrine.md and update the WF-002 references in 06_Automation & Workflow Catalog.md, 02_COOPER System Specification.md, and Docs/WF002_Workflow_Package_Standard.md.
+
+Do not modify workflow execution code or launcher behavior.
+
+Define the minimal context doctrine and align the WF-002 package standard to it.
+```

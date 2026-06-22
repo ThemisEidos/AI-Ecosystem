@@ -21,6 +21,7 @@ This is a file and folder template standard only.
 - Applies to WF-002 Codex Task Generator.
 - Applies to Open Workshop / Category 1 task packages.
 - Does not apply to Private Workshop restricted data unless the user has sanitized it before entering WF-002.
+- Context inside the package must remain minimal and task-specific per [Docs/Minimal_Context_Doctrine.md](Docs/Minimal_Context_Doctrine.md).
 
 ## Non-Goals
 
@@ -84,6 +85,9 @@ Codex_Tasks/
 - Related roadmap phase.
 - Related governing docs.
 - Known constraints or assumptions.
+- Must be scoped and minimal.
+- Should reference source docs instead of copying long governance text.
+- Should avoid full-history dumps.
 
 ### `02_Requirements.md`
 
@@ -108,6 +112,8 @@ Codex_Tasks/
 - No secrets or Category 2 material.
 - No execution or launcher changes unless explicitly approved.
 - No infrastructure expansion.
+- Should include only task-relevant constraints plus mandatory security boundaries.
+- Should avoid duplicating the full governing docs.
 
 ### `05_Review_Checklist.md`
 
@@ -181,6 +187,7 @@ These are future requirements for generator work, not implementation in this pha
 - Generator should reject or warn on Category 2 content.
 - Generator should record the package folder path as an artifact in canonical evidence when evidence emitters exist.
 - Generator changes are deferred until separately approved.
+- Generator should keep context sections minimal and reference [Docs/Minimal_Context_Doctrine.md](Docs/Minimal_Context_Doctrine.md) rather than duplicating governance.
 
 ## Definition of Done
 
@@ -198,4 +205,3 @@ Phase 7A.1 is complete when:
 - COOPER System Specification is updated.
 - No workflow execution code is changed.
 - No new infrastructure is introduced.
-

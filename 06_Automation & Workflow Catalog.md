@@ -9,6 +9,7 @@ The intent is to keep the first workflow set useful and small.
 Phase 5 workflows are operational. Phase 6 Private Workshop Hardening is complete. Phase 7A workflow evidence standardization is now the documentation focus for deterministic WF-004 reporting.
 Phase 7A workflow evidence standardization is documented in `Docs/Workflow_Evidence_Standard.md`.
 Phase 7A.1 WF-002 workflow package standard is documented in `Docs/WF002_Workflow_Package_Standard.md`.
+Phase 7A.2 minimal context doctrine is documented in `Docs/Minimal_Context_Doctrine.md`.
 WF-001 through WF-007 must eventually emit canonical workflow evidence records that conform to the Phase 7A standard.
 
 Storage rules:
@@ -68,6 +69,8 @@ Higher-risk workflows continue to require explicit confirmation. The approved lo
 - Legacy or Fallback File Format: `TASK-###_<short-title>.md`
 - Standard Reference: `Docs/WF002_Workflow_Package_Standard.md`
 - Package Structure: use the required folder layout defined in the standard
+- Context Standard: keep `01_Context.md` minimal and task-specific; reference `Docs/Minimal_Context_Doctrine.md`
+- Constraints File: keep `04_Constraints.md` limited to task-relevant constraints plus mandatory security boundaries
 
 ### WF-002 Phases
 

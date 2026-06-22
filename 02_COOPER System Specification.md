@@ -486,6 +486,9 @@ Rules:
 - Direct code editing or destructive repo actions stay blocked unless later governed
 - Approved low-risk task generation may auto-dispatch without a second confirmation step when routing policy allows it
 - Standard reference: [Docs/WF002_Workflow_Package_Standard.md](Docs/WF002_Workflow_Package_Standard.md)
+- Context rule: prefer short, task-specific context packages over giant global context files
+- Context rule: avoid duplicating roadmap or security policy content when a source document already exists
+- Context rule: security and approval rules remain authoritative even when context is minimized
 
 ## Glossary
 
