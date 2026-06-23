@@ -19,7 +19,9 @@ $WorkbenchScript = Join-Path $PSScriptRoot "Invoke-COOPERWorkbench.ps1"
 $ReviewScript = Join-Path $PSScriptRoot "Resolve-COOPERWorkflowReview.ps1"
 $MemoryScript = Join-Path $PSScriptRoot "Update-COOPERProjectMemory.ps1"
 $SkillsScript = Join-Path $PSScriptRoot "Update-COOPERWorkflowSkills.ps1"
+$EvidenceWriterScript = Join-Path $PSScriptRoot "Write-COOPERWorkflowEvidence.ps1"
 $MemoryStatePath = Join-Path $Root "State\COOPER_ProjectMemory.json"
+$EvidenceExecutionId = (Get-Date).ToUniversalTime().ToString("yyyyMMddTHHmmssfffZ")
 
 function New-COOPERNoteMarkdown {
     param(
@@ -201,11 +203,18 @@ if (Test-Path -LiteralPath $SkillsScript -PathType Leaf) {
     catch {}
 }
 
+if (-not (Test-Path -LiteralPath $EvidenceWriterScript -PathType Leaf)) {
+    throw "Workflow evidence writer is unavailable."
+}
+
+$EvidenceResult = & $EvidenceWriterScript -Root $Root -RecordType "completion" -WorkshopId "open" -WorkflowId "WF-005" -WorkflowName "Note Creation" -ExecutionId $EvidenceExecutionId -Status "pass" -CompletionTime $Now -ApprovalId "" -ArtifactPaths @($NotePath) -ReviewStatus "unknown" -UserAccepted:$false -Notes "WF-005 note creation completed; review pending."
+
 return [pscustomobject]@{
     success = $true
     workflow_id = "WF-005"
     tool_id = "obsidian_note_writer"
     note_path = $NotePath
+    evidence_path = [string]$EvidenceResult.path
     routed_tool = $RoutedTool
     approval_decision = $ApprovalDecision
     workbench_result = $WorkbenchResult

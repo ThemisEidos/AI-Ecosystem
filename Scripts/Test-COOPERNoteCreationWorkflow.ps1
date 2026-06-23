@@ -14,6 +14,7 @@ $ExpectedNotePath = [System.IO.Path]::GetFullPath((Join-Path $Root "Obsidian Vau
 $OriginalNote = if (Test-Path -LiteralPath $ExpectedNotePath -PathType Leaf) { Get-Content -LiteralPath $ExpectedNotePath -Raw } else { $null }
 $OriginalMemoryState = if (Test-Path -LiteralPath $MemoryStatePath -PathType Leaf) { Get-Content -LiteralPath $MemoryStatePath -Raw } else { $null }
 $OriginalSkillsState = if (Test-Path -LiteralPath $SkillsStatePath -PathType Leaf) { Get-Content -LiteralPath $SkillsStatePath -Raw } else { $null }
+$EvidencePath = $null
 
 . $RouterScript
 
@@ -58,6 +59,44 @@ try {
     }
     if ([string]$Result.note_path -ne $ExpectedNotePath) {
         $Issues.Add("Unexpected note path '$([string]$Result.note_path)'.")
+    }
+    if ([string]::IsNullOrWhiteSpace([string]$Result.evidence_path)) {
+        $Issues.Add("Workflow did not return an evidence path.")
+    }
+    else {
+        $EvidencePath = [System.IO.Path]::GetFullPath([string]$Result.evidence_path)
+        $ExpectedEvidenceRoot = [System.IO.Path]::GetFullPath((Join-Path $Root "State\Workflow_Evidence\completion"))
+        $ExpectedEvidencePrefix = $ExpectedEvidenceRoot.TrimEnd('\') + '\'
+        if (-not ($EvidencePath.StartsWith($ExpectedEvidencePrefix, [System.StringComparison]::OrdinalIgnoreCase))) {
+            $Issues.Add("Workflow evidence path is not inside State\\Workflow_Evidence\\completion.")
+        }
+        elseif (-not (Test-Path -LiteralPath $EvidencePath -PathType Leaf)) {
+            $Issues.Add("Workflow evidence file was not created.")
+        }
+        else {
+            $EvidenceJson = Get-Content -LiteralPath $EvidencePath -Raw | ConvertFrom-Json
+            if ([string]$EvidenceJson.workflow_id -ne "WF-005") {
+                $Issues.Add("Workflow evidence did not record WF-005.")
+            }
+            if ([string]$EvidenceJson.workflow_name -ne "Note Creation") {
+                $Issues.Add("Workflow evidence did not record the workflow name.")
+            }
+            if ([string]$EvidenceJson.status -ne "pass") {
+                $Issues.Add("Workflow evidence status was not pass.")
+            }
+            if ([string]$EvidenceJson.workshop_id -ne "open" -or [string]$EvidenceJson.workshop_name -ne "Open Workshop") {
+                $Issues.Add("Workflow evidence did not preserve Open Workshop metadata.")
+            }
+            if ([string]$EvidenceJson.review_status -ne "unknown") {
+                $Issues.Add("Workflow evidence review_status was not unknown.")
+            }
+            if ([bool]$EvidenceJson.user_accepted -ne $false) {
+                $Issues.Add("Workflow evidence user_accepted was not false.")
+            }
+            if (@($EvidenceJson.artifact_paths | ForEach-Object { [string]$_ }) -notcontains $ExpectedNotePath) {
+                $Issues.Add("Workflow evidence did not reference the created note path.")
+            }
+        }
     }
 
     if (-not (Test-Path -LiteralPath $ExpectedNotePath -PathType Leaf)) {
@@ -197,7 +236,7 @@ try {
     }
 }
 finally {
-    foreach ($Path in @($ExpectedNotePath, $MemoryStatePath, $SkillsStatePath)) {
+    foreach ($Path in @($ExpectedNotePath, $MemoryStatePath, $SkillsStatePath, $EvidencePath)) {
         if (Test-Path -LiteralPath $Path -PathType Leaf) {
             Remove-Item -LiteralPath $Path -Force
         }
