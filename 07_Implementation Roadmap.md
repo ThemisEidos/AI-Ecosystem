@@ -87,14 +87,14 @@ Phase 7A.5 is creating the lightweight workflow linting standard so packages and
 ### Current Phase
 
 ```text
-Phase 7D - WF-004 Canonical Evidence Consumption
+Phase 7E - Roadmap / Current-State Reader
 ```
 
-- Current Phase: Phase 7D - WF-004 Canonical Evidence Consumption
+- Current Phase: Phase 7E - Roadmap / Current-State Reader
 
 ### Current Objective
 
-Update WF-004 Operational Status to consume canonical workflow evidence as the primary source of truth while preserving the existing transition fallback behavior only if it is explicitly documented.
+Build a deterministic roadmap/current-state reader that reports the current phase, current objective, completed phases, and next approved step without executing tasks or advancing phases automatically.
 
 This is a workflow implementation step only. It is not a new orchestration layer, agent system, database, task queue, or execution framework.
 
@@ -106,13 +106,13 @@ This improves workflow reliability without changing the existing approval model,
 
 ### Phase 7C Exit Review
 
-The Phase 7C exit review is recorded in `Docs/Phase_7C_Exit_Review.md`.
+The Phase 7D exit review is recorded in `Docs/Phase_7D_Exit_Review.md`.
 
 ### Next Build Artifacts
 
 ```text
-Docs/Phase_7C_Exit_Review.md
-WF-004 evidence reader and conflict reporting updates
+Docs/Phase_7D_Exit_Review.md
+Roadmap/current-state reader status-only updates
 ```
 
 Optional later artifacts after the standard is accepted:
@@ -213,7 +213,7 @@ Phase 7A.2 is complete when:
 Phase 7D - WF-004 Canonical Evidence Consumption
 ```
 
-Phase 7D should update WF-004 to consume canonical evidence after Phase 7C has established the evidence standard, schema shape, link rules, and security boundaries.
+Phase 7E should update the roadmap/current-state reader after Phase 7D has established canonical evidence consumption, boundary handling, and transition fallback behavior.
 
 ---
 
@@ -230,12 +230,15 @@ Phase 7A.4 - Define AI judgment / mechanical work separation    COMPLETE
 Phase 7A.5 - Define lightweight workflow linting                 COMPLETE
 Phase 7B   - Validate workflow evidence schemas                 COMPLETE
 Phase 7C   - Update workflows to emit canonical evidence         COMPLETE
-Phase 7D   - Update WF-004 to consume canonical evidence         CURRENT
+Phase 7D   - Update WF-004 to consume canonical evidence         COMPLETE
+Phase 7E   - Roadmap / Current-State Reader                      CURRENT
 ```
 
 Do not skip directly to Phase 7D before Phase 7C emitter work is complete.
 
-Do not expand into agents, Hermes integration, multi-intent execution, or new orchestration layers while evidence validation and WF-004 visibility remain unresolved.
+Do not skip directly to Phase 7E before Phase 7D canonical evidence consumption is complete.
+
+Do not expand into agents, Hermes integration, multi-intent execution, or new orchestration layers while the roadmap/current-state reader remains unresolved.
 
 ---
 
@@ -457,11 +460,11 @@ Do not expand into agents, Hermes integration, multi-intent execution, or new or
 
 ### Phase 7D - WF-004 Canonical Evidence Consumption
 
-- Status: Current
+- Status: Complete
 - Goal: Update WF-004 to consume canonical evidence records as the primary source of truth for operational status.
 - Build Artifacts:
   - `WF-004 evidence reader`
-  - `Docs/Phase_7C_Exit_Review.md`
+  - `Docs/Phase_7D_Exit_Review.md`
 - Candidate Build Artifacts:
   - WF-004 evidence reader
   - conflict detection logic
@@ -475,6 +478,33 @@ Do not expand into agents, Hermes integration, multi-intent execution, or new or
   - workflow chain formatting is preserved
   - WF-004 does not mutate evidence records
   - do not skip Phase 7C emitter work before this stage
+
+---
+
+### Phase 7E - Roadmap / Current-State Reader
+
+- Status: Current
+- Goal: Build a deterministic roadmap/current-state reader that reports the current phase, current objective, completed phases, and next approved step without executing tasks or advancing phases automatically.
+- Build Artifacts:
+  - roadmap/current-state reader
+  - status-only output
+  - exit-review awareness
+- Candidate Build Artifacts:
+  - roadmap parsing logic
+  - phase/status summarization
+  - exit-review correlation
+  - blocked/deferred item reporting
+- Success Criteria:
+  - the current phase is derived from roadmap state
+  - completed phases are summarized accurately
+  - the current objective is readable without execution
+  - next approved step is reported without auto-advancing
+  - blocked and deferred items are identified
+  - no workflow execution is triggered
+  - no autonomous loop is introduced
+  - no dashboard or frontend is introduced
+  - no workflow emitter behavior is modified
+  - roadmap sequencing remains authoritative
 
 ---
 

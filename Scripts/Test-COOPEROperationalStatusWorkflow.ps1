@@ -134,8 +134,8 @@ try {
     if ([bool]$Result.review_passed -ne $true) {
         Add-Issue "Operational status helper did not mark the report as reviewed."
     }
-    if ([string]$Result.current_phase -ne "Phase 7D - WF-004 Canonical Evidence Consumption") {
-        Add-Issue "Operational status helper did not read the current Phase 7D roadmap entry."
+    if ([string]$Result.current_phase -ne "Phase 7E - Roadmap / Current-State Reader") {
+        Add-Issue "Operational status helper did not read the current Phase 7E roadmap entry."
     }
     if ($Result.PSObject.Properties.Name -notcontains "evidence_warnings") {
         Add-Issue "Operational status helper did not expose evidence warnings."
@@ -207,8 +207,8 @@ try {
         Add-Issue "WF-004 did not identify legacy fallback behavior."
     }
 
-    if ($Result.response_text -notmatch 'Current Phase: Phase 7D - WF-004 Canonical Evidence Consumption') {
-        Add-Issue "Operational status response text did not include the Phase 7D roadmap entry."
+    if ($Result.response_text -notmatch 'Current Phase: Phase 7E - Roadmap / Current-State Reader') {
+        Add-Issue "Operational status response text did not include the Phase 7E roadmap entry."
     }
     if ($Result.response_text -notmatch 'WF-001 Research Summary \| status: pass') {
         Add-Issue "Operational status response text did not include the canonical WF-001 status."
