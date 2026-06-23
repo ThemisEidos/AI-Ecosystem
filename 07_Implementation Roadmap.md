@@ -90,6 +90,8 @@ Phase 7A.5 is creating the lightweight workflow linting standard so packages and
 Phase 7D - WF-004 Canonical Evidence Consumption
 ```
 
+- Current Phase: Phase 7D - WF-004 Canonical Evidence Consumption
+
 ### Current Objective
 
 Update WF-004 Operational Status to consume canonical workflow evidence as the primary source of truth while preserving the existing transition fallback behavior only if it is explicitly documented.

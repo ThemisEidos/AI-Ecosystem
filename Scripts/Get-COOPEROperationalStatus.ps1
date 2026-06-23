@@ -134,6 +134,289 @@ function Get-COOPERUniqueStrings {
     return @($Unique)
 }
 
+function Get-COOPERWorkflowEvidenceRoots {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Root
+    )
+
+    return @(
+        [pscustomobject]@{
+            workshop_id   = "open"
+            workshop_name = "Open Workshop"
+            path          = Join-Path $Root "State\Workflow_Evidence\completion"
+        }
+        [pscustomobject]@{
+            workshop_id   = "private"
+            workshop_name = "Private Workshop"
+            path          = Join-Path $Root "Restricted DMZ Workspace\State\Workflow_Evidence\completion"
+        }
+    )
+}
+
+function Get-COOPERWorkflowEvidenceTimestamp {
+    param(
+        [Parameter(Mandatory = $true)]
+        [object]$Record,
+
+        [Parameter(Mandatory = $true)]
+        [System.IO.FileInfo]$File
+    )
+
+    foreach ($Field in @("completion_time", "completed_time", "recorded_at", "timestamp")) {
+        if ($Record.PSObject.Properties.Name -contains $Field -and -not [string]::IsNullOrWhiteSpace([string]$Record.$Field)) {
+            try {
+                return [datetime]::Parse([string]$Record.$Field).ToUniversalTime()
+            }
+            catch {}
+        }
+    }
+
+    if ($Record.PSObject.Properties.Name -contains "execution_id" -and -not [string]::IsNullOrWhiteSpace([string]$Record.execution_id)) {
+        foreach ($Format in @("yyyyMMddTHHmmssfffZ", "yyyyMMddTHHmmssZ")) {
+            try {
+                return [datetime]::ParseExact([string]$Record.execution_id, $Format, [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::AssumeUniversal).ToUniversalTime()
+            }
+            catch {}
+        }
+    }
+
+    return [datetime]::SpecifyKind($File.LastWriteTimeUtc, [System.DateTimeKind]::Utc)
+}
+
+function Test-COOPERWorkflowEvidenceArtifactPathSafe {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path,
+
+        [Parameter(Mandatory = $true)]
+        [string]$WorkshopId,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Root
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Path)) {
+        return $false
+    }
+
+    try {
+        $ResolvedPath = [System.IO.Path]::GetFullPath($Path)
+    }
+    catch {
+        return $false
+    }
+
+    $Normalized = ($ResolvedPath -replace '/', '\').ToLowerInvariant()
+    $RestrictedRoot = ([System.IO.Path]::GetFullPath((Join-Path $Root "Restricted DMZ Workspace")) -replace '/', '\').ToLowerInvariant()
+    $OpenWorkspaceRoot = ([System.IO.Path]::GetFullPath($Root) -replace '/', '\').ToLowerInvariant()
+
+    if ($WorkshopId -eq "open") {
+        if ($Normalized -match '(^|\\)restricted dmz workspace(\\|$)' -or
+            $Normalized -match '(^|\\)secure vault(\\|$)' -or
+            $Normalized -match '(^|\\)standardnotes(\\|$)' -or
+            $Normalized -match '(^|\\)private workshop(\\|$)') {
+            return $false
+        }
+
+        return $true
+    }
+
+    if ($WorkshopId -eq "private") {
+        if (-not $Normalized.StartsWith($RestrictedRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+            return $false
+        }
+        if ($Normalized -match '(^|\\)secure vault(\\|$)' -or
+            $Normalized -match '(^|\\)standardnotes(\\|$)' -or
+            $Normalized -match '(^|\\)obsidian(\\|$)' -or
+            $Normalized -match '^[a-z][a-z0-9+.\-]*://') {
+            return $false
+        }
+
+        return $true
+    }
+
+    return $ResolvedPath.StartsWith($OpenWorkspaceRoot, [System.StringComparison]::OrdinalIgnoreCase)
+}
+
+function Get-COOPERWorkflowEvidenceIndex {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Root
+    )
+
+    $Index = @{}
+    $Warnings = New-Object System.Collections.Generic.List[string]
+
+    foreach ($EvidenceRoot in @(Get-COOPERWorkflowEvidenceRoots -Root $Root)) {
+        if (-not (Test-Path -LiteralPath $EvidenceRoot.path -PathType Container)) {
+            continue
+        }
+
+        try {
+            $Files = Get-ChildItem -LiteralPath $EvidenceRoot.path -Recurse -File -Filter 'workflow_completion_*.json' -ErrorAction SilentlyContinue
+        }
+        catch {
+            $Warnings.Add("Evidence root could not be scanned: $([string]$EvidenceRoot.path)") | Out-Null
+            continue
+        }
+
+        foreach ($File in @($Files)) {
+            $WorkflowId = ""
+            $ExecutionId = ""
+            if ($File.Name -match '^workflow_completion_(WF-\d+)_(.+)\.json$') {
+                $WorkflowId = [string]$Matches[1]
+                $ExecutionId = [string]$Matches[2]
+            }
+            else {
+                $Warnings.Add("Ignored malformed evidence filename: $([string]$File.FullName)") | Out-Null
+                continue
+            }
+
+            $Record = $null
+            try {
+                $Record = Get-Content -LiteralPath $File.FullName -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+            }
+            catch {
+                $Warnings.Add("Ignored malformed evidence JSON: $([string]$File.FullName)") | Out-Null
+                continue
+            }
+
+            if ($Record -is [array] -or $null -eq $Record) {
+                $Warnings.Add("Ignored malformed evidence record: $([string]$File.FullName)") | Out-Null
+                continue
+            }
+
+            if (-not ($Record.PSObject.Properties.Name -contains "workflow_id") -or [string]$Record.workflow_id -ne $WorkflowId) {
+                $Warnings.Add("Ignored evidence with workflow mismatch: $([string]$File.FullName)") | Out-Null
+                continue
+            }
+
+            if (-not ($Record.PSObject.Properties.Name -contains "workflow_name") -or [string]::IsNullOrWhiteSpace([string]$Record.workflow_name)) {
+                $Warnings.Add("Ignored evidence missing workflow name: $([string]$File.FullName)") | Out-Null
+                continue
+            }
+
+            if (-not ($Record.PSObject.Properties.Name -contains "status") -or [string]::IsNullOrWhiteSpace([string]$Record.status)) {
+                $Warnings.Add("Ignored evidence missing workflow status: $([string]$File.FullName)") | Out-Null
+                continue
+            }
+
+            if ([string]$Record.status -notin @("pass", "fail", "blocked", "unknown")) {
+                $Warnings.Add("Ignored evidence with invalid workflow status: $([string]$File.FullName)") | Out-Null
+                continue
+            }
+
+            if ($Record.PSObject.Properties.Name -contains "workshop_id" -and [string]$Record.workshop_id -notin @("open", "private")) {
+                $Warnings.Add("Ignored evidence with invalid workshop id: $([string]$File.FullName)") | Out-Null
+                continue
+            }
+
+            $WorkshopId = if ($Record.PSObject.Properties.Name -contains "workshop_id" -and -not [string]::IsNullOrWhiteSpace([string]$Record.workshop_id)) { [string]$Record.workshop_id } else { [string]$EvidenceRoot.workshop_id }
+            $WorkshopName = if ($Record.PSObject.Properties.Name -contains "workshop_name" -and -not [string]::IsNullOrWhiteSpace([string]$Record.workshop_name)) { [string]$Record.workshop_name } else { [string]$EvidenceRoot.workshop_name }
+
+            if ($WorkshopId -eq "open" -and $WorkshopName -ne "Open Workshop") {
+                $Warnings.Add("Ignored evidence with mismatched workshop name: $([string]$File.FullName)") | Out-Null
+                continue
+            }
+            if ($WorkshopId -eq "private" -and $WorkshopName -ne "Private Workshop") {
+                $Warnings.Add("Ignored evidence with mismatched workshop name: $([string]$File.FullName)") | Out-Null
+                continue
+            }
+
+            $ArtifactPaths = @()
+            if ($Record.PSObject.Properties.Name -contains "artifact_paths" -and $Record.artifact_paths) {
+                $ArtifactPaths = @($Record.artifact_paths | ForEach-Object { [string]$_ })
+            }
+
+            $SafeArtifactPaths = New-Object System.Collections.Generic.List[string]
+            $ArtifactPathInvalid = $false
+            foreach ($ArtifactPath in @($ArtifactPaths)) {
+                if ([string]::IsNullOrWhiteSpace([string]$ArtifactPath)) {
+                    continue
+                }
+
+                if (-not (Test-COOPERWorkflowEvidenceArtifactPathSafe -Path ([string]$ArtifactPath) -WorkshopId $WorkshopId -Root $Root)) {
+                    $ArtifactPathInvalid = $true
+                    $Warnings.Add("Ignored evidence with unsafe artifact path: $([string]$File.FullName)") | Out-Null
+                    break
+                }
+
+                $SafeArtifactPaths.Add([string]$ArtifactPath) | Out-Null
+            }
+
+            if ($ArtifactPathInvalid) {
+                continue
+            }
+
+            if (-not ($Record.PSObject.Properties.Name -contains "completion_time") -and -not ($Record.PSObject.Properties.Name -contains "execution_id")) {
+                $Warnings.Add("Ignored evidence missing completion timestamp: $([string]$File.FullName)") | Out-Null
+                continue
+            }
+
+            $Timestamp = Get-COOPERWorkflowEvidenceTimestamp -Record $Record -File $File
+            $CanonicalRecord = [pscustomobject]@{
+                workflow_id            = [string]$Record.workflow_id
+                workflow_name          = [string]$Record.workflow_name
+                status                 = [string]$Record.status
+                review_status          = if ($Record.PSObject.Properties.Name -contains "review_status") { [string]$Record.review_status } else { "unknown" }
+                execution_id           = if ($Record.PSObject.Properties.Name -contains "execution_id") { [string]$Record.execution_id } else { [string]$ExecutionId }
+                completion_time        = if ($Record.PSObject.Properties.Name -contains "completion_time") { [string]$Record.completion_time } else { "" }
+                workshop_id            = $WorkshopId
+                workshop_name          = $WorkshopName
+                evidence_path          = [System.IO.Path]::GetFullPath($File.FullName)
+                artifact_paths         = @($SafeArtifactPaths)
+                notes                  = if ($Record.PSObject.Properties.Name -contains "notes") { [string]$Record.notes } else { "" }
+                user_accepted          = if ($Record.PSObject.Properties.Name -contains "user_accepted") { [bool]$Record.user_accepted } else { $false }
+                evidence_timestamp     = $Timestamp
+                evidence_last_modified  = [System.DateTime]::SpecifyKind($File.LastWriteTimeUtc, [System.DateTimeKind]::Utc)
+                evidence_source_root    = [System.IO.Path]::GetFullPath($EvidenceRoot.path)
+            }
+
+            if (-not $Index.ContainsKey($WorkflowId)) {
+                $Index[$WorkflowId] = $CanonicalRecord
+                continue
+            }
+
+            $CurrentRecord = $Index[$WorkflowId]
+            if ($CanonicalRecord.evidence_timestamp -gt $CurrentRecord.evidence_timestamp -or
+                ($CanonicalRecord.evidence_timestamp -eq $CurrentRecord.evidence_timestamp -and $CanonicalRecord.evidence_last_modified -gt $CurrentRecord.evidence_last_modified) -or
+                ($CanonicalRecord.evidence_timestamp -eq $CurrentRecord.evidence_timestamp -and $CanonicalRecord.evidence_last_modified -eq $CurrentRecord.evidence_last_modified -and [string]$CanonicalRecord.execution_id -gt [string]$CurrentRecord.execution_id)) {
+                $Index[$WorkflowId] = $CanonicalRecord
+            }
+        }
+    }
+
+    return [pscustomobject]@{
+        index    = $Index
+        warnings = @($Warnings)
+    }
+}
+
+function Get-COOPERWorkflowCanonicalEvidenceRecord {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$WorkflowId,
+
+        [Parameter(Mandatory = $false)]
+        $WorkflowEvidenceIndex
+    )
+
+    if ($null -eq $WorkflowEvidenceIndex) {
+        return $null
+    }
+
+    if ($WorkflowEvidenceIndex -is [System.Collections.IDictionary] -and $WorkflowEvidenceIndex.Contains($WorkflowId)) {
+        return $WorkflowEvidenceIndex[$WorkflowId]
+    }
+
+    if ($WorkflowEvidenceIndex.PSObject.Properties.Name -contains $WorkflowId) {
+        return $WorkflowEvidenceIndex.$WorkflowId
+    }
+
+    return $null
+}
+
 function Get-COOPERWorkflowStatusLabel {
     param(
         [Parameter(Mandatory = $true)]
@@ -253,9 +536,21 @@ function Get-COOPERWorkflowArtifactPath {
         [Parameter(Mandatory = $false)]
         $SkillsState,
 
+        [Parameter(Mandatory = $false)]
+        $WorkflowEvidenceIndex,
+
         [Parameter(Mandatory = $true)]
         [string]$Root
     )
+
+    $CanonicalEvidenceRecord = Get-COOPERWorkflowCanonicalEvidenceRecord -WorkflowId $WorkflowId -WorkflowEvidenceIndex $WorkflowEvidenceIndex
+    if ($CanonicalEvidenceRecord -and $CanonicalEvidenceRecord.PSObject.Properties.Name -contains "artifact_paths") {
+        foreach ($ArtifactPath in @($CanonicalEvidenceRecord.artifact_paths)) {
+            if (-not [string]::IsNullOrWhiteSpace([string]$ArtifactPath)) {
+                return [string]$ArtifactPath
+            }
+        }
+    }
 
     switch ([string]$WorkflowId) {
         "WF-001" {
@@ -419,9 +714,17 @@ function Get-COOPERWorkflowExecutionStatus {
         [Parameter(Mandatory = $false)]
         $SkillsState,
 
+        [Parameter(Mandatory = $false)]
+        $WorkflowEvidenceIndex,
+
         [Parameter(Mandatory = $true)]
         [string]$Root
     )
+
+    $CanonicalEvidenceRecord = Get-COOPERWorkflowCanonicalEvidenceRecord -WorkflowId $WorkflowId -WorkflowEvidenceIndex $WorkflowEvidenceIndex
+    if ($CanonicalEvidenceRecord -and $CanonicalEvidenceRecord.PSObject.Properties.Name -contains "status" -and -not [string]::IsNullOrWhiteSpace([string]$CanonicalEvidenceRecord.status)) {
+        return [string]$CanonicalEvidenceRecord.status
+    }
 
     switch ([string]$WorkflowId) {
         "WF-004" {
@@ -685,6 +988,9 @@ $RoadmapText = if (Test-Path -LiteralPath $RoadmapPath -PathType Leaf) { Get-Con
 $MilestoneText = if (Test-Path -LiteralPath $MilestonePath -PathType Leaf) { Get-Content -LiteralPath $MilestonePath -Raw -ErrorAction SilentlyContinue } else { "" }
 $ProjectMemory = Read-COOPERJsonFile -Path $ProjectMemoryPath
 $SkillsState = Read-COOPERJsonFile -Path $SkillsStatePath
+$WorkflowEvidenceResult = Get-COOPERWorkflowEvidenceIndex -Root $Root
+$WorkflowEvidenceIndex = if ($WorkflowEvidenceResult -and $WorkflowEvidenceResult.PSObject.Properties.Name -contains "index") { $WorkflowEvidenceResult.index } else { @{} }
+$WorkflowEvidenceWarnings = if ($WorkflowEvidenceResult -and $WorkflowEvidenceResult.PSObject.Properties.Name -contains "warnings") { @($WorkflowEvidenceResult.warnings) } else { @() }
 $WorkflowDefinitions = @()
 $ResolvedWorkflowDefinitionsPath = if ([string]::IsNullOrWhiteSpace($WorkflowDefinitionsPath)) { Join-Path $Root "Config\workflows.yaml" } else { $WorkflowDefinitionsPath }
 if (Test-Path -LiteralPath $ResolvedWorkflowDefinitionsPath -PathType Leaf) {
@@ -798,16 +1104,24 @@ $ApprovalStatusSummary = "pending: {0} | completed: {1} | stale: {2} | blocked: 
 $WorkflowStatusEntries = @(
     $OperationalWorkflowDefinitions | ForEach-Object {
         $WorkflowId = [string]$_.id
-        $WorkflowStatus = Get-COOPERWorkflowExecutionStatus -WorkflowId $WorkflowId -ProjectMemory $ProjectMemory -SkillsState $SkillsState -Root $Root
-        $ArtifactPath = Get-COOPERWorkflowArtifactPath -WorkflowId $WorkflowId -ProjectMemory $ProjectMemory -SkillsState $SkillsState -Root $Root
+        $CanonicalEvidenceRecord = Get-COOPERWorkflowCanonicalEvidenceRecord -WorkflowId $WorkflowId -WorkflowEvidenceIndex $WorkflowEvidenceIndex
+        $WorkflowStatus = Get-COOPERWorkflowExecutionStatus -WorkflowId $WorkflowId -ProjectMemory $ProjectMemory -SkillsState $SkillsState -WorkflowEvidenceIndex $WorkflowEvidenceIndex -Root $Root
+        $ArtifactPath = Get-COOPERWorkflowArtifactPath -WorkflowId $WorkflowId -ProjectMemory $ProjectMemory -SkillsState $SkillsState -WorkflowEvidenceIndex $WorkflowEvidenceIndex -Root $Root
         [pscustomobject]@{
-            workflow_id         = $WorkflowId
-            name                = [string]$_.name
-            status              = $WorkflowStatus
+            workflow_id          = $WorkflowId
+            name                 = [string]$_.name
+            status               = $WorkflowStatus
             definition_status    = [string]$_.status
-            approval_status     = if ([bool]$_.approval_required) { "approval required" } else { "approval not required" }
+            approval_status      = if ([bool]$_.approval_required) { "approval required" } else { "approval not required" }
             last_run_artifact    = $ArtifactPath
             last_run_artifact_path = $ArtifactPath
+            canonical_evidence_status   = if ($CanonicalEvidenceRecord) { [string]$CanonicalEvidenceRecord.status } else { "" }
+            canonical_evidence_path     = if ($CanonicalEvidenceRecord) { [string]$CanonicalEvidenceRecord.evidence_path } else { "" }
+            canonical_evidence_timestamp = if ($CanonicalEvidenceRecord) { [string]$CanonicalEvidenceRecord.evidence_timestamp.ToString("o") } else { "" }
+            canonical_artifact_paths    = if ($CanonicalEvidenceRecord) { @($CanonicalEvidenceRecord.artifact_paths) } else { @() }
+            canonical_workshop_id       = if ($CanonicalEvidenceRecord) { [string]$CanonicalEvidenceRecord.workshop_id } else { "" }
+            canonical_workshop_name     = if ($CanonicalEvidenceRecord) { [string]$CanonicalEvidenceRecord.workshop_name } else { "" }
+            evidence_source             = if ($CanonicalEvidenceRecord) { "canonical" } else { "legacy" }
         }
     }
 )
@@ -1012,6 +1326,7 @@ $Result = [pscustomobject]@{
     operational_workflows    = @($OperationalWorkflows)
     workflow_statuses        = @($WorkflowStatusEntries)
     operational_chains       = @($WorkflowChains)
+    evidence_warnings        = @($WorkflowEvidenceWarnings)
     known_capabilities       = @($KnownCapabilities | Select-Object -Unique)
     known_issues             = @($KnownBlockers)
     known_limitations        = @($KnownLimitations | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })

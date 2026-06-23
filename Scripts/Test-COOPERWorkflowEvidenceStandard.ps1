@@ -49,7 +49,12 @@ function Test-Iso8601Utc {
         return $false
     }
 
-    $Text = [string]$Value
+    if ($Value -is [datetime]) {
+        $Text = $Value.ToUniversalTime().ToString("o")
+    }
+    else {
+        $Text = [string]$Value
+    }
     return $Text -match '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$'
 }
 
