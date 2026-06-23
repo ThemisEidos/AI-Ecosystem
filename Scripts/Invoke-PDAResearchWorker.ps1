@@ -11,6 +11,7 @@ $ErrorActionPreference = "Stop"
 
 $Root = Split-Path -Parent $PSScriptRoot
 $ResearchSourcesScript = Join-Path $PSScriptRoot "Get-COOPERResearchSources.ps1"
+$EvidenceWriterScript = Join-Path $PSScriptRoot "Write-COOPERWorkflowEvidence.ps1"
 $ResearchOutputFolder = Join-Path $Root "Obsidian Vault\02_Projects\AI Tool Ecosystem\Agent Findings\Research"
 $ResultsFolder = Join-Path $Root "PDA-Tasks\results"
 
@@ -314,11 +315,34 @@ $ResultObject = [ordered]@{
     next_worker    = "review-worker"
     saved_path     = $MarkdownPath
     result_path    = ""
+    evidence_path  = ""
     source_of_truth = "Scripts/Invoke-PDAResearchWorker.ps1"
 }
 
 $ResultObject.result_path = Write-PDAWorkerResultArtifact -TaskId $TaskId -ResultObject $ResultObject
 Register-PDAWorkerArtifact -ArtifactPath $MarkdownPath -TaskId $TaskId -WorkerName "research-worker" -Command $TaskCommand -Category $CategoryText -ArtifactType "research_markdown" -Summary "Research worker markdown output"
 Register-PDAWorkerArtifact -ArtifactPath $ResultObject.result_path -TaskId $TaskId -WorkerName "research-worker" -Command $TaskCommand -Category $CategoryText -ArtifactType "worker_result_json" -Summary "Research worker canonical result contract"
+
+if (-not (Test-Path -LiteralPath $EvidenceWriterScript -PathType Leaf)) {
+    throw "Workflow evidence writer is unavailable."
+}
+
+$EvidenceExecutionId = (Get-Date).ToUniversalTime().ToString("yyyyMMddTHHmmssfffZ")
+$EvidenceResult = & $EvidenceWriterScript `
+    -Root $Root `
+    -RecordType "completion" `
+    -WorkshopId "open" `
+    -WorkflowId "WF-001" `
+    -WorkflowName "Research Summary" `
+    -ExecutionId $EvidenceExecutionId `
+    -Status "pass" `
+    -CompletionTime (Get-Date).ToUniversalTime().ToString("o") `
+    -ApprovalId "" `
+    -ArtifactPaths @($MarkdownPath) `
+    -ReviewStatus "unknown" `
+    -UserAccepted:$false `
+    -Notes "WF-001 research summary completed; review pending."
+
+$ResultObject.evidence_path = [string]$EvidenceResult.path
 
 $ResultObject | ConvertTo-Json -Depth 20

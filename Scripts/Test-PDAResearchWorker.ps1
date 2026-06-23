@@ -25,6 +25,17 @@ if (-not (Test-Path -LiteralPath $ReviewScript -PathType Leaf)) {
     throw "Workflow review script missing: $ReviewScript"
 }
 
+function Remove-TransientPath {
+    param([string]$Path)
+
+    if ([string]::IsNullOrWhiteSpace($Path)) {
+        return
+    }
+    if (Test-Path -LiteralPath $Path) {
+        Remove-Item -LiteralPath $Path -Force -Recurse -ErrorAction SilentlyContinue
+    }
+}
+
 function Invoke-ResearchWorker {
     param([Parameter(Mandatory = $true)][string]$TaskPath)
 
@@ -88,10 +99,12 @@ if (-not (Test-Path -LiteralPath $TempRoot -PathType Container)) {
 New-Item -ItemType Directory -Force -Path $ResultsRoot | Out-Null
 
 $Issues = New-Object System.Collections.Generic.List[string]
+$CleanupPaths = New-Object System.Collections.Generic.List[string]
 
 $OfficialRequest = "Research official Pop!_OS documentation and create a structured summary note in the Linux & Infrastructure collection."
 $OfficialTaskPath = Join-Path $TempRoot "wf001-official-task.json"
 New-ResearchTaskFile -TaskPath $OfficialTaskPath -RequestText $OfficialRequest
+$CleanupPaths.Add($OfficialTaskPath) | Out-Null
 
 $OfficialResult = $null
 try {
@@ -105,6 +118,13 @@ if ($null -eq $OfficialResult) {
     $Issues.Add("WF-001 worker did not return a result for an official Pop!_OS request.")
 }
 else {
+    if (-not [string]::IsNullOrWhiteSpace([string]$OfficialResult.result_path)) {
+        $CleanupPaths.Add([string]$OfficialResult.result_path) | Out-Null
+    }
+    if (-not [string]::IsNullOrWhiteSpace([string]$OfficialResult.saved_path)) {
+        $CleanupPaths.Add([string]$OfficialResult.saved_path) | Out-Null
+    }
+
     if ([string]$OfficialResult.status -ne "success") {
         $Issues.Add("WF-001 worker did not succeed for an official Pop!_OS request.")
     }
@@ -128,6 +148,49 @@ else {
         }
         if ([string]::IsNullOrWhiteSpace([string]$OfficialOutput.retrieved_at)) {
             $Issues.Add("WF-001 worker output is missing retrieved_at.")
+        }
+    }
+
+    if ([string]::IsNullOrWhiteSpace([string]$OfficialResult.evidence_path)) {
+        $Issues.Add("WF-001 worker did not return an evidence path.")
+    }
+    else {
+        $OfficialEvidencePath = [System.IO.Path]::GetFullPath([string]$OfficialResult.evidence_path)
+        $CleanupPaths.Add($OfficialEvidencePath) | Out-Null
+        $ExpectedEvidenceRoot = [System.IO.Path]::GetFullPath((Join-Path $Root "State\Workflow_Evidence\completion"))
+        $ExpectedEvidencePrefix = $ExpectedEvidenceRoot.TrimEnd('\') + '\'
+        if (-not ($OfficialEvidencePath.StartsWith($ExpectedEvidencePrefix, [System.StringComparison]::OrdinalIgnoreCase))) {
+            $Issues.Add("WF-001 evidence path is not inside State\\Workflow_Evidence\\completion.")
+        }
+        elseif (-not (Test-Path -LiteralPath $OfficialEvidencePath -PathType Leaf)) {
+            $Issues.Add("WF-001 evidence file was not created.")
+        }
+        else {
+            $EvidenceJson = Get-Content -LiteralPath $OfficialEvidencePath -Raw | ConvertFrom-Json
+            if ([string]$EvidenceJson.workflow_id -ne "WF-001") {
+                $Issues.Add("WF-001 evidence did not record the workflow id.")
+            }
+            if ([string]$EvidenceJson.workflow_name -ne "Research Summary") {
+                $Issues.Add("WF-001 evidence did not record the workflow name.")
+            }
+            if ([string]$EvidenceJson.status -ne "pass") {
+                $Issues.Add("WF-001 evidence status was not pass.")
+            }
+            if ([string]$EvidenceJson.workshop_id -ne "open" -or [string]$EvidenceJson.workshop_name -ne "Open Workshop") {
+                $Issues.Add("WF-001 evidence did not preserve Open Workshop metadata.")
+            }
+            if ([string]$EvidenceJson.review_status -ne "unknown") {
+                $Issues.Add("WF-001 evidence review_status was not unknown.")
+            }
+            if ([bool]$EvidenceJson.user_accepted -ne $false) {
+                $Issues.Add("WF-001 evidence user_accepted was not false.")
+            }
+            if ([string]$EvidenceJson.approval_id -ne "") {
+                $Issues.Add("WF-001 evidence should not invent an approval id.")
+            }
+            if (@($EvidenceJson.artifact_paths | ForEach-Object { [string]$_ }) -notcontains ([string]$OfficialResult.saved_path)) {
+                $Issues.Add("WF-001 evidence did not reference the generated research summary.")
+            }
         }
     }
 
@@ -171,6 +234,7 @@ else {
 $NoSourceRequest = "Research the history of tea and create a summary note."
 $NoSourceTaskPath = Join-Path $TempRoot "wf001-nosource-task.json"
 New-ResearchTaskFile -TaskPath $NoSourceTaskPath -RequestText $NoSourceRequest
+$CleanupPaths.Add($NoSourceTaskPath) | Out-Null
 $NoSourceResult = $null
 try {
     $NoSourceResult = Invoke-ResearchWorker -TaskPath $NoSourceTaskPath
@@ -183,6 +247,9 @@ if ($null -eq $NoSourceResult) {
     $Issues.Add("WF-001 worker did not return a result for a no-source request.")
 }
 else {
+    if (-not [string]::IsNullOrWhiteSpace([string]$NoSourceResult.result_path)) {
+        $CleanupPaths.Add([string]$NoSourceResult.result_path) | Out-Null
+    }
     if ([string]$NoSourceResult.status -ne "failed") {
         $Issues.Add("WF-001 worker should fail when no approved sources are collected.")
     }
@@ -195,6 +262,7 @@ else {
 }
 
 $DisclaimerPath = Join-Path $TempRoot "wf001-disclaimer.md"
+$CleanupPaths.Add($DisclaimerPath) | Out-Null
 @"
 # WF-001 Research Summary
 
@@ -249,6 +317,12 @@ else {
         $Issues.Add("Failed WF-001 review promoted the skill to operational.")
     }
 }
+
+$CleanupPaths.Add($TempSkillsState) | Out-Null
+foreach ($Path in @($CleanupPaths)) {
+    Remove-TransientPath -Path $Path
+}
+Remove-TransientPath -Path $TempRoot
 
 $Report = [pscustomobject]@{
     status = if ($Issues.Count -eq 0) { "pass" } else { "fail" }

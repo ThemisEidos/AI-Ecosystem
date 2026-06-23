@@ -156,7 +156,7 @@ function Validate-CompletionRecord {
         Add-Issue "Completion record artifact_paths must be a JSON array: $($File.FullName)"
     }
     foreach ($PropertyName in @($Record.PSObject.Properties.Name)) {
-        if ([string]$PropertyName -match '[A-Z]') {
+        if ([string]$PropertyName -cmatch '[A-Z]') {
             Add-Issue "Completion record field names must remain snake_case: $($File.FullName)"
             break
         }
@@ -230,7 +230,7 @@ function Validate-ApprovalRecord {
         }
     }
     foreach ($PropertyName in @($Record.PSObject.Properties.Name)) {
-        if ([string]$PropertyName -match '[A-Z]') {
+        if ([string]$PropertyName -cmatch '[A-Z]') {
             Add-Issue "Approval record field names must remain snake_case: $($File.FullName)"
             break
         }
