@@ -115,6 +115,18 @@ Use only these status values for backlog items:
 - Review Notes: The standard is documentation-only and intentionally deferred from execution code.
 - Related Docs: [Docs/Workflow_Linting_Standard.md](Workflow_Linting_Standard.md)
 
+### Claude Design Evaluation
+
+- Status: Evaluating
+- Category: Frontend / UI prototyping
+- Added: 2026-06-22
+- Scope: Evaluate Claude Design as an external design and prototyping aid for future COOPER dashboard or ecosystem frontend concepts.
+- Rationale: A design-focused evaluation may help with dashboard mockups, workflow status UI concepts, approval UI concepts, Open vs Private Workshop mode visualization, and presentation or briefing visuals.
+- Constraints: Backlog inclusion is not approval; this is not part of the core runtime, not a workflow engine, not an orchestration layer, not a COOPER replacement, and not authorized to access repo execution, runtime config, credentials, approval logic, or Private Workshop data.
+- Review Notes: Category 1 only; no restricted data, no client-sensitive data, no credentials or secrets, and no Private Workshop material. Evaluate later after Phase 7C/7D status evidence work is stable; likely useful for frontend/dashboard prototyping only.
+- Related Docs: [Docs/Workflow_Evidence_Standard.md](Workflow_Evidence_Standard.md), [Docs/Ecosystem_Change_Backlog.md](Ecosystem_Change_Backlog.md)
+- Next Review: After Phase 7C/7D status evidence work stabilizes.
+
 ## Change Review Guidance
 
 - Proposed: change is identified but not yet examined.
