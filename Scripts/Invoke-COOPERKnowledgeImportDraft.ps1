@@ -24,6 +24,7 @@ $WorkbenchScript = Join-Path $PSScriptRoot "Invoke-COOPERWorkbench.ps1"
 $ReviewScript = Join-Path $PSScriptRoot "Resolve-COOPERWorkflowReview.ps1"
 $MemoryScript = Join-Path $PSScriptRoot "Update-COOPERProjectMemory.ps1"
 $SkillsScript = Join-Path $PSScriptRoot "Update-COOPERWorkflowSkills.ps1"
+$EvidenceWriterScript = Join-Path $PSScriptRoot "Write-COOPERWorkflowEvidence.ps1"
 
 function ConvertTo-COOPERHashtable {
     param([Parameter(Mandatory = $true)]$Value)
@@ -316,11 +317,32 @@ if (Test-Path -LiteralPath $SkillsScript -PathType Leaf) {
     catch {}
 }
 
+if (-not (Test-Path -LiteralPath $EvidenceWriterScript -PathType Leaf)) {
+    throw "Workflow evidence writer is unavailable."
+}
+
+$EvidenceExecutionId = (Get-Date).ToUniversalTime().ToString("yyyyMMddTHHmmssfffZ")
+$EvidenceResult = & $EvidenceWriterScript `
+    -Root $Root `
+    -RecordType "completion" `
+    -WorkshopId "open" `
+    -WorkflowId "WF-006" `
+    -WorkflowName "Knowledge Collection Import Draft" `
+    -ExecutionId $EvidenceExecutionId `
+    -Status "pass" `
+    -CompletionTime (Get-Date).ToUniversalTime().ToString("o") `
+    -ApprovalId "" `
+    -ArtifactPaths @($ImportDraftPath) `
+    -ReviewStatus "pass" `
+    -UserAccepted:$false `
+    -Notes "WF-006 knowledge collection import draft completed; review passed."
+
 return [pscustomobject]@{
     success = $true
     workflow_id = "WF-006"
     research_summary_path = $ResearchSummaryPath
     import_draft_path = $ImportDraftPath
+    evidence_path = [string]$EvidenceResult.path
     routed_tool = $RoutedTool
     approval_decision = $ApprovalDecision
     workbench_result = $WorkbenchResult

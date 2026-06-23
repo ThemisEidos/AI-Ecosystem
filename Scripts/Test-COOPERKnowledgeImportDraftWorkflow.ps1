@@ -10,6 +10,18 @@ $MemoryStatePath = Join-Path $Root "State\COOPER_ProjectMemory.json"
 $SkillsStatePath = Join-Path $Root "State\COOPER_Skills.json"
 $OriginalMemoryState = if (Test-Path -LiteralPath $MemoryStatePath -PathType Leaf) { Get-Content -LiteralPath $MemoryStatePath -Raw } else { $null }
 $OriginalSkillsState = if (Test-Path -LiteralPath $SkillsStatePath -PathType Leaf) { Get-Content -LiteralPath $SkillsStatePath -Raw } else { $null }
+$CleanupPaths = New-Object System.Collections.Generic.List[string]
+
+function Remove-TransientPath {
+    param([string]$Path)
+
+    if ([string]::IsNullOrWhiteSpace($Path)) {
+        return
+    }
+    if (Test-Path -LiteralPath $Path) {
+        Remove-Item -LiteralPath $Path -Force -Recurse -ErrorAction SilentlyContinue
+    }
+}
 
 . $RouterScript
 
@@ -40,12 +52,18 @@ else {
     elseif (-not (Test-Path -LiteralPath $Result.research_summary_path -PathType Leaf)) {
         $Issues.Add("Research summary file does not exist.")
     }
+    elseif (-not [string]::IsNullOrWhiteSpace([string]$Result.research_summary_path)) {
+        $CleanupPaths.Add([string]$Result.research_summary_path) | Out-Null
+    }
 
     if ([string]::IsNullOrWhiteSpace([string]$Result.collection_import_path)) {
         $Issues.Add("Router did not return the import draft path.")
     }
     elseif (-not (Test-Path -LiteralPath $Result.collection_import_path -PathType Leaf)) {
         $Issues.Add("Import draft file does not exist.")
+    }
+    elseif (-not [string]::IsNullOrWhiteSpace([string]$Result.collection_import_path)) {
+        $CleanupPaths.Add([string]$Result.collection_import_path) | Out-Null
     }
 
     if ($null -eq $Result.workflow_review -or [string]$Result.workflow_review.status -ne "pass") {
@@ -64,6 +82,48 @@ else {
         }
         if ($Result.collection_import_result.PSObject.Properties.Name -contains "workspace_import_result") {
             $Issues.Add("WF-006 unexpectedly returned a workspace import payload.")
+        }
+        if ([string]::IsNullOrWhiteSpace([string]$Result.collection_import_result.evidence_path)) {
+            $Issues.Add("WF-006 did not return an evidence path.")
+        }
+        else {
+            $EvidencePath = [System.IO.Path]::GetFullPath([string]$Result.collection_import_result.evidence_path)
+            $CleanupPaths.Add($EvidencePath) | Out-Null
+            $ExpectedEvidenceRoot = [System.IO.Path]::GetFullPath((Join-Path $Root "State\Workflow_Evidence\completion"))
+            $ExpectedEvidencePrefix = $ExpectedEvidenceRoot.TrimEnd('\') + '\'
+            if (-not ($EvidencePath.StartsWith($ExpectedEvidencePrefix, [System.StringComparison]::OrdinalIgnoreCase))) {
+                $Issues.Add("WF-006 evidence path is not inside State\\Workflow_Evidence\\completion.")
+            }
+            elseif (-not (Test-Path -LiteralPath $EvidencePath -PathType Leaf)) {
+                $Issues.Add("WF-006 evidence file was not created.")
+            }
+            else {
+                $EvidenceJson = Get-Content -LiteralPath $EvidencePath -Raw | ConvertFrom-Json
+                if ([string]$EvidenceJson.workflow_id -ne "WF-006") {
+                    $Issues.Add("WF-006 evidence did not record the workflow id.")
+                }
+                if ([string]$EvidenceJson.workflow_name -ne "Knowledge Collection Import Draft") {
+                    $Issues.Add("WF-006 evidence did not record the workflow name.")
+                }
+                if ([string]$EvidenceJson.status -ne "pass") {
+                    $Issues.Add("WF-006 evidence status was not pass.")
+                }
+                if ([string]$EvidenceJson.workshop_id -ne "open" -or [string]$EvidenceJson.workshop_name -ne "Open Workshop") {
+                    $Issues.Add("WF-006 evidence did not preserve Open Workshop metadata.")
+                }
+                if ([string]$EvidenceJson.review_status -ne "pass") {
+                    $Issues.Add("WF-006 evidence review_status was not pass.")
+                }
+                if ([bool]$EvidenceJson.user_accepted -ne $false) {
+                    $Issues.Add("WF-006 evidence user_accepted was not false.")
+                }
+                if ([string]$EvidenceJson.approval_id -ne "") {
+                    $Issues.Add("WF-006 evidence should not invent an approval id.")
+                }
+                if (@($EvidenceJson.artifact_paths | ForEach-Object { [string]$_ }) -notcontains ([string]$Result.collection_import_path)) {
+                    $Issues.Add("WF-006 evidence did not reference the generated import draft.")
+                }
+            }
         }
     }
 
@@ -135,6 +195,9 @@ if ([bool]$FailedImport.success -ne $false) {
 if (-not [string]::IsNullOrWhiteSpace([string]$FailedImport.import_draft_path)) {
     $Issues.Add("WF-006 should not create an import draft when WF-001 fails.")
 }
+foreach ($Path in @($CleanupPaths)) {
+    Remove-TransientPath -Path $Path
+}
 
 $Report = [pscustomobject]@{
     status = if ($Issues.Count -eq 0) { "pass" } else { "fail" }
@@ -157,6 +220,10 @@ finally {
     }
     elseif (Test-Path -LiteralPath $SkillsStatePath -PathType Leaf) {
         Remove-Item -LiteralPath $SkillsStatePath -Force
+    }
+
+    foreach ($Path in @($CleanupPaths)) {
+        Remove-TransientPath -Path $Path
     }
 }
 
