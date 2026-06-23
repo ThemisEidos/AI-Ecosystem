@@ -38,6 +38,7 @@ Phase 7A.3 - Folder-Based Workflow State
 Phase 7A.4 - AI Judgment / Mechanical Work Separation
 Phase 7A.5 - Lightweight Workflow Linting
 Phase 7B - Workflow Evidence Validation
+Phase 7C - Workflow Evidence Emitters
 ```
 
 Current operational model:
@@ -86,28 +87,30 @@ Phase 7A.5 is creating the lightweight workflow linting standard so packages and
 ### Current Phase
 
 ```text
-Phase 7C - Workflow Evidence Emitters
+Phase 7D - WF-004 Canonical Evidence Consumption
 ```
 
 ### Current Objective
 
-Begin workflow evidence emitter work so operational workflows can start producing canonical completion and approval records without changing WF-004 yet.
+Update WF-004 Operational Status to consume canonical workflow evidence as the primary source of truth while preserving the existing transition fallback behavior only if it is explicitly documented.
 
 This is a workflow implementation step only. It is not a new orchestration layer, agent system, database, task queue, or execution framework.
 
 ### Why This Comes Next
 
-Recent work introduced canonical evidence, WF-002 package folders, minimal context, folder-based workflow state, AI/mechanical separation, and evidence validation. The next improvement is to add emitters that produce canonical workflow evidence records while preserving compartment boundaries.
+Recent work introduced canonical evidence, WF-002 package folders, minimal context, folder-based workflow state, AI/mechanical separation, evidence validation, and now the canonical emitters themselves. The next improvement is to let WF-004 consume those records as the primary source of truth while preserving compartment boundaries.
 
 This improves workflow reliability without changing the existing approval model, launcher boundary, or evidence standard.
+
+### Phase 7C Exit Review
+
+The Phase 7C exit review is recorded in `Docs/Phase_7C_Exit_Review.md`.
 
 ### Next Build Artifacts
 
 ```text
-Docs/Workflow_Linting_Standard.md
-06_Automation & Workflow Catalog.md
-Docs/WF002_Workflow_Package_Standard.md
-Docs/Folder_Based_Workflow_State_Standard.md
+Docs/Phase_7C_Exit_Review.md
+WF-004 evidence reader and conflict reporting updates
 ```
 
 Optional later artifacts after the standard is accepted:
@@ -205,10 +208,10 @@ Phase 7A.2 is complete when:
 ### Next Build
 
 ```text
-Phase 7C - Workflow Evidence Emitters
+Phase 7D - WF-004 Canonical Evidence Consumption
 ```
 
-Phase 7C should add canonical evidence emitters after validation has established the evidence standard, schema shape, link rules, and security boundaries.
+Phase 7D should update WF-004 to consume canonical evidence after Phase 7C has established the evidence standard, schema shape, link rules, and security boundaries.
 
 ---
 
@@ -224,8 +227,8 @@ Phase 7A.3 - Define folder-based workflow state                 COMPLETE
 Phase 7A.4 - Define AI judgment / mechanical work separation    COMPLETE
 Phase 7A.5 - Define lightweight workflow linting                 COMPLETE
 Phase 7B   - Validate workflow evidence schemas                 COMPLETE
-Phase 7C   - Update workflows to emit canonical evidence         CURRENT
-Phase 7D   - Update WF-004 to consume canonical evidence         FUTURE
+Phase 7C   - Update workflows to emit canonical evidence         COMPLETE
+Phase 7D   - Update WF-004 to consume canonical evidence         CURRENT
 ```
 
 Do not skip directly to Phase 7D before Phase 7C emitter work is complete.
@@ -431,8 +434,10 @@ Do not expand into agents, Hermes integration, multi-intent execution, or new or
 
 ### Phase 7C - Workflow Evidence Emitters
 
-- Status: Current
+- Status: Complete
 - Goal: Update operational workflows to emit canonical workflow completion and approval lifecycle evidence records.
+- Build Artifact:
+  - `Docs/Phase_7C_Exit_Review.md`
 - Candidate Build Artifacts:
   - shared evidence writer helper, if needed
   - workflow completion record writers
@@ -450,8 +455,11 @@ Do not expand into agents, Hermes integration, multi-intent execution, or new or
 
 ### Phase 7D - WF-004 Canonical Evidence Consumption
 
-- Status: Future
+- Status: Current
 - Goal: Update WF-004 to consume canonical evidence records as the primary source of truth for operational status.
+- Build Artifacts:
+  - `WF-004 evidence reader`
+  - `Docs/Phase_7C_Exit_Review.md`
 - Candidate Build Artifacts:
   - WF-004 evidence reader
   - conflict detection logic
@@ -535,14 +543,12 @@ Do not promote backlog items into active build work until the current evidence a
 
 ## Current Next Action
 
-Create the Minimal Context Doctrine.
+Update WF-004 to consume canonical workflow evidence.
 
 Recommended Codex task:
 
 ```text
-Create Docs/Minimal_Context_Doctrine.md and update the WF-002 references in 06_Automation & Workflow Catalog.md, 02_COOPER System Specification.md, and Docs/WF002_Workflow_Package_Standard.md.
+Update WF-004 Operational Status to consume canonical workflow evidence as the primary source of truth. Preserve artifact fallback only as explicitly documented transitional behavior, and preserve Open/Private evidence boundary handling.
 
-Do not modify workflow execution code or launcher behavior.
-
-Define the minimal context doctrine and align the WF-002 package standard to it.
+Do not add databases, queues, agents, event buses, orchestration, or frontend code.
 ```
