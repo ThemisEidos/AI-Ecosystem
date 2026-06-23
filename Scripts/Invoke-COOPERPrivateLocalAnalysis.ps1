@@ -24,6 +24,7 @@ $MemoryScript = Join-Path $PSScriptRoot "Update-COOPERProjectMemory.ps1"
 $SkillsScript = Join-Path $PSScriptRoot "Update-COOPERWorkflowSkills.ps1"
 $ModelRouteScript = Join-Path $PSScriptRoot "Get-PDAModelRoute.ps1"
 $IdentityScript = Join-Path $PSScriptRoot "Get-COOPERWorkshopIdentity.ps1"
+$EvidenceWriterScript = Join-Path $PSScriptRoot "Write-COOPERWorkflowEvidence.ps1"
 
 function Get-COOPERPrivateLocalAnalysisPath {
     param(
@@ -239,6 +240,26 @@ if (Test-Path -LiteralPath $SkillsScript -PathType Leaf) {
     catch {}
 }
 
+if (-not (Test-Path -LiteralPath $EvidenceWriterScript -PathType Leaf)) {
+    throw "Workflow evidence writer is unavailable."
+}
+
+$EvidenceExecutionId = (Get-Date).ToUniversalTime().ToString("yyyyMMddTHHmmssfffZ")
+$EvidenceResult = & $EvidenceWriterScript `
+    -Root $Root `
+    -RecordType "completion" `
+    -WorkshopId "private" `
+    -WorkflowId "WF-007" `
+    -WorkflowName "Private Local Analysis" `
+    -ExecutionId $EvidenceExecutionId `
+    -Status "pass" `
+    -CompletionTime (Get-Date).ToUniversalTime().ToString("o") `
+    -ApprovalId "" `
+    -ArtifactPaths @($AnalysisPath) `
+    -ReviewStatus "pass" `
+    -UserAccepted:$false `
+    -Notes "WF-007 private local analysis completed; review passed."
+
 return [pscustomobject]@{
     success = $true
     workflow_id = "WF-007"
@@ -255,6 +276,7 @@ return [pscustomobject]@{
     workflow_review = $WorkflowReview
     output_type = "markdown_file"
     result_artifact_path = $AnalysisPath
+    evidence_path = [string]$EvidenceResult.path
     response_text = "Created private local analysis at $AnalysisPath."
     reason = [string]$WorkbenchResult.reason
     source_of_truth = "Scripts/Invoke-COOPERPrivateLocalAnalysis.ps1"

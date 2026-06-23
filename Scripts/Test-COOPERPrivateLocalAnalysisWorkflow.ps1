@@ -8,6 +8,20 @@ $WorkflowScript = Join-Path $PSScriptRoot "Invoke-COOPERPrivateLocalAnalysis.ps1
 $StatusScript = Join-Path $PSScriptRoot "Get-COOPEROperationalStatus.ps1"
 $MemoryStatePath = Join-Path $Root "State\COOPER_ProjectMemory.json"
 $SkillsStatePath = Join-Path $Root "State\COOPER_Skills.json"
+$OriginalMemoryState = if (Test-Path -LiteralPath $MemoryStatePath -PathType Leaf) { Get-Content -LiteralPath $MemoryStatePath -Raw } else { $null }
+$OriginalSkillsState = if (Test-Path -LiteralPath $SkillsStatePath -PathType Leaf) { Get-Content -LiteralPath $SkillsStatePath -Raw } else { $null }
+$CleanupPaths = New-Object System.Collections.Generic.List[string]
+
+function Remove-TransientPath {
+    param([string]$Path)
+
+    if ([string]::IsNullOrWhiteSpace($Path)) {
+        return
+    }
+    if (Test-Path -LiteralPath $Path) {
+        Remove-Item -LiteralPath $Path -Force -Recurse -ErrorAction SilentlyContinue
+    }
+}
 
 foreach ($Path in @($MemoryStatePath, $SkillsStatePath)) {
     if (Test-Path -LiteralPath $Path -PathType Leaf) {
@@ -15,118 +29,206 @@ foreach ($Path in @($MemoryStatePath, $SkillsStatePath)) {
     }
 }
 
-$Issues = New-Object System.Collections.Generic.List[string]
-$Request = "Analyze the private workshop boundary, local routing, and restricted output path."
-$PrivateResult = & $WorkflowScript -Text $Request -Approved -WorkshopMode "Private Workshop" -Root $Root
+try {
+    $Issues = New-Object System.Collections.Generic.List[string]
+    $Request = "Analyze the private workshop boundary, local routing, and restricted output path."
+    $PrivateResult = & $WorkflowScript -Text $Request -Approved -WorkshopMode "Private Workshop" -Root $Root
 
-if ([bool]$PrivateResult.success -ne $true) {
-    $Issues.Add("WF-007 private local analysis did not succeed.")
-}
-if ([string]$PrivateResult.workflow_id -ne "WF-007") {
-    $Issues.Add("WF-007 workflow id mismatch.")
-}
-if ([string]$PrivateResult.output_type -ne "markdown_file") {
-    $Issues.Add("WF-007 did not report markdown output.")
-}
-
-foreach ($Field in @("analysis_tool_route", "writer_tool_route", "model_route", "analysis_path", "restricted_dmz_path", "approval_decision", "writer_approval_decision", "workbench_result", "workflow_review", "result_artifact_path")) {
-    if ($PrivateResult.PSObject.Properties.Name -notcontains $Field) {
-        $Issues.Add("WF-007 result is missing '$Field'.")
+    if ([bool]$PrivateResult.success -ne $true) {
+        $Issues.Add("WF-007 private local analysis did not succeed.")
     }
-}
-
-if ($PrivateResult.analysis_tool_route -and [string]$PrivateResult.analysis_tool_route.selected_tool -ne "qwen_local_assistant") {
-    $Issues.Add("WF-007 did not route analysis through the private qwen tool.")
-}
-if ($PrivateResult.analysis_tool_route -and [string]$PrivateResult.analysis_tool_route.registry_path -notmatch 'private_tool_registry\.yaml$') {
-    $Issues.Add("WF-007 analysis tool did not resolve from the private registry.")
-}
-if ($PrivateResult.writer_tool_route -and [string]$PrivateResult.writer_tool_route.selected_tool -ne "restricted_dmz_writer") {
-    $Issues.Add("WF-007 did not route output through the restricted DMZ writer.")
-}
-if ($PrivateResult.writer_tool_route -and [string]$PrivateResult.writer_tool_route.registry_path -notmatch 'private_tool_registry\.yaml$') {
-    $Issues.Add("WF-007 writer tool did not resolve from the private registry.")
-}
-if ($PrivateResult.model_route -and [string]$PrivateResult.model_route.selected_model -ne "local-llama") {
-    $Issues.Add("WF-007 did not resolve the local-only model route.")
-}
-if ($PrivateResult.model_route -and [bool]$PrivateResult.model_route.cloud_allowed -ne $false) {
-    $Issues.Add("WF-007 model route incorrectly allowed cloud fallback.")
-}
-
-if ($PrivateResult.approval_decision -and [bool]$PrivateResult.approval_decision.execution_authorized -ne $true) {
-    $Issues.Add("WF-007 analysis approval did not authorize execution.")
-}
-if ($PrivateResult.writer_approval_decision -and [bool]$PrivateResult.writer_approval_decision.execution_authorized -ne $true) {
-    $Issues.Add("WF-007 writer approval did not authorize execution.")
-}
-
-$AnalysisPath = [string]$PrivateResult.analysis_path
-if ([string]::IsNullOrWhiteSpace($AnalysisPath)) {
-    $Issues.Add("WF-007 did not return an analysis path.")
-}
-else {
-    $ResolvedAnalysisPath = [System.IO.Path]::GetFullPath($AnalysisPath)
-    $RestrictedRoot = [System.IO.Path]::GetFullPath((Join-Path $Root "Restricted DMZ Workspace"))
-    $RestrictedPrefix = $RestrictedRoot.TrimEnd('\') + '\'
-    if (-not ($ResolvedAnalysisPath -eq $RestrictedRoot -or $ResolvedAnalysisPath.StartsWith($RestrictedPrefix, [System.StringComparison]::OrdinalIgnoreCase))) {
-        $Issues.Add("WF-007 output path is not inside the Restricted DMZ Workspace.")
+    if ([string]$PrivateResult.workflow_id -ne "WF-007") {
+        $Issues.Add("WF-007 workflow id mismatch.")
     }
-    elseif (-not (Test-Path -LiteralPath $ResolvedAnalysisPath -PathType Leaf)) {
-        $Issues.Add("WF-007 restricted artifact does not exist.")
+    if ([string]$PrivateResult.output_type -ne "markdown_file") {
+        $Issues.Add("WF-007 did not report markdown output.")
+    }
+    if ([string]::IsNullOrWhiteSpace([string]$PrivateResult.evidence_path)) {
+        $Issues.Add("WF-007 did not return an evidence path.")
+    }
+
+    foreach ($Field in @("analysis_tool_route", "writer_tool_route", "model_route", "analysis_path", "restricted_dmz_path", "approval_decision", "writer_approval_decision", "workbench_result", "workflow_review", "result_artifact_path")) {
+        if ($PrivateResult.PSObject.Properties.Name -notcontains $Field) {
+            $Issues.Add("WF-007 result is missing '$Field'.")
+        }
+    }
+
+    if ($PrivateResult.analysis_tool_route -and [string]$PrivateResult.analysis_tool_route.selected_tool -ne "qwen_local_assistant") {
+        $Issues.Add("WF-007 did not route analysis through the private qwen tool.")
+    }
+    if ($PrivateResult.analysis_tool_route -and [string]$PrivateResult.analysis_tool_route.registry_path -notmatch 'private_tool_registry\.yaml$') {
+        $Issues.Add("WF-007 analysis tool did not resolve from the private registry.")
+    }
+    if ($PrivateResult.writer_tool_route -and [string]$PrivateResult.writer_tool_route.selected_tool -ne "restricted_dmz_writer") {
+        $Issues.Add("WF-007 did not route output through the restricted DMZ writer.")
+    }
+    if ($PrivateResult.writer_tool_route -and [string]$PrivateResult.writer_tool_route.registry_path -notmatch 'private_tool_registry\.yaml$') {
+        $Issues.Add("WF-007 writer tool did not resolve from the private registry.")
+    }
+    if ($PrivateResult.model_route -and [string]$PrivateResult.model_route.selected_model -ne "local-llama") {
+        $Issues.Add("WF-007 did not resolve the local-only model route.")
+    }
+    if ($PrivateResult.model_route -and [bool]$PrivateResult.model_route.cloud_allowed -ne $false) {
+        $Issues.Add("WF-007 model route incorrectly allowed cloud fallback.")
+    }
+
+    if ($PrivateResult.approval_decision -and [bool]$PrivateResult.approval_decision.execution_authorized -ne $true) {
+        $Issues.Add("WF-007 analysis approval did not authorize execution.")
+    }
+    if ($PrivateResult.writer_approval_decision -and [bool]$PrivateResult.writer_approval_decision.execution_authorized -ne $true) {
+        $Issues.Add("WF-007 writer approval did not authorize execution.")
+    }
+
+    $AnalysisPath = [string]$PrivateResult.analysis_path
+    if ([string]::IsNullOrWhiteSpace($AnalysisPath)) {
+        $Issues.Add("WF-007 did not return an analysis path.")
     }
     else {
-        $Content = Get-Content -LiteralPath $ResolvedAnalysisPath -Raw
-        if ($Content -notmatch '(?i)^#\s+WF-007 Private Local Analysis') {
-            $Issues.Add("WF-007 restricted artifact is missing the analysis title.")
+        $ResolvedAnalysisPath = [System.IO.Path]::GetFullPath($AnalysisPath)
+        $RestrictedRoot = [System.IO.Path]::GetFullPath((Join-Path $Root "Restricted DMZ Workspace"))
+        $RestrictedPrefix = $RestrictedRoot.TrimEnd('\') + '\'
+        if (-not ($ResolvedAnalysisPath -eq $RestrictedRoot -or $ResolvedAnalysisPath.StartsWith($RestrictedPrefix, [System.StringComparison]::OrdinalIgnoreCase))) {
+            $Issues.Add("WF-007 output path is not inside the Restricted DMZ Workspace.")
         }
-        if ($Content -notmatch '(?i)Private Workshop') {
-            $Issues.Add("WF-007 restricted artifact does not mention Private Workshop.")
+        elseif (-not (Test-Path -LiteralPath $ResolvedAnalysisPath -PathType Leaf)) {
+            $Issues.Add("WF-007 restricted artifact does not exist.")
         }
-        if ($Content -notmatch '(?i)Cloud allowed:\s*False') {
-            $Issues.Add("WF-007 restricted artifact does not record the local-only route.")
+        else {
+            $CleanupPaths.Add($ResolvedAnalysisPath) | Out-Null
+            $Content = Get-Content -LiteralPath $ResolvedAnalysisPath -Raw
+            if ($Content -notmatch '(?i)^#\s+WF-007 Private Local Analysis') {
+                $Issues.Add("WF-007 restricted artifact is missing the analysis title.")
+            }
+            if ($Content -notmatch '(?i)Private Workshop') {
+                $Issues.Add("WF-007 restricted artifact does not mention Private Workshop.")
+            }
+            if ($Content -notmatch '(?i)Cloud allowed:\s*False') {
+                $Issues.Add("WF-007 restricted artifact does not record the local-only route.")
+            }
         }
     }
-}
 
-$BlockedOpenResult = & $WorkflowScript -Text $Request -Approved -WorkshopMode "Open Workshop" -Root $Root
-if ([bool]$BlockedOpenResult.success -ne $false) {
-    $Issues.Add("WF-007 should not execute in Open Workshop.")
-}
-if ([string]$BlockedOpenResult.reason -notmatch '(?i)Private Workshop') {
-    $Issues.Add("WF-007 open-workshop rejection did not explain the private-only boundary.")
-}
+    if (-not [string]::IsNullOrWhiteSpace([string]$PrivateResult.evidence_path)) {
+        $EvidencePath = [System.IO.Path]::GetFullPath([string]$PrivateResult.evidence_path)
+        $CleanupPaths.Add($EvidencePath) | Out-Null
+        $RestrictedEvidenceRoot = [System.IO.Path]::GetFullPath((Join-Path $Root "Restricted DMZ Workspace\State\Workflow_Evidence\completion"))
+        $RestrictedPrefix = $RestrictedEvidenceRoot.TrimEnd('\') + '\'
+        $RestrictedWorkspaceRoot = [System.IO.Path]::GetFullPath((Join-Path $Root "Restricted DMZ Workspace"))
+        $RestrictedWorkspacePrefix = $RestrictedWorkspaceRoot.TrimEnd('\') + '\'
+        $OpenEvidenceRoot = [System.IO.Path]::GetFullPath((Join-Path $Root "State\Workflow_Evidence\completion"))
+        $OpenPrefix = $OpenEvidenceRoot.TrimEnd('\') + '\'
+        $OpenEquivalentPath = Join-Path $OpenEvidenceRoot ([System.IO.Path]::GetFileName($EvidencePath))
 
-$StatusResult = & $StatusScript -Root $Root -WorkshopMode "Private Workshop"
-if ([string]$StatusResult.status -ne "pass") {
-    $Issues.Add("WF-004 status helper did not pass after WF-007 execution.")
-}
-else {
-    $WF007Status = @($StatusResult.workflow_statuses | Where-Object { [string]$_.workflow_id -eq "WF-007" } | Select-Object -First 1)
-    if ($WF007Status.Count -eq 0) {
-        $Issues.Add("WF-004 did not report WF-007 in the workflow status list.")
+        if (-not ($EvidencePath.StartsWith($RestrictedPrefix, [System.StringComparison]::OrdinalIgnoreCase))) {
+            $Issues.Add("WF-007 evidence path is not inside the Restricted DMZ evidence root.")
+        }
+        if ($EvidencePath.StartsWith($OpenPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+            $Issues.Add("WF-007 evidence path incorrectly points to Open Workshop evidence.")
+        }
+        if (Test-Path -LiteralPath $OpenEquivalentPath -PathType Leaf) {
+            $Issues.Add("WF-007 created an Open Workshop evidence file for a private workflow.")
+        }
+        elseif (-not (Test-Path -LiteralPath $EvidencePath -PathType Leaf)) {
+            $Issues.Add("WF-007 evidence file was not created.")
+        }
+        else {
+            $EvidenceJson = Get-Content -LiteralPath $EvidencePath -Raw | ConvertFrom-Json
+            if ([string]$EvidenceJson.workflow_id -ne "WF-007") {
+                $Issues.Add("WF-007 evidence did not record the workflow id.")
+            }
+            if ([string]$EvidenceJson.workflow_name -ne "Private Local Analysis") {
+                $Issues.Add("WF-007 evidence did not record the workflow name.")
+            }
+            if ([string]$EvidenceJson.status -ne "pass") {
+                $Issues.Add("WF-007 evidence status was not pass.")
+            }
+            if ([string]$EvidenceJson.workshop_id -ne "private" -or [string]$EvidenceJson.workshop_name -ne "Private Workshop") {
+                $Issues.Add("WF-007 evidence did not preserve Private Workshop metadata.")
+            }
+            if ([string]$EvidenceJson.review_status -ne "pass") {
+                $Issues.Add("WF-007 evidence review_status was not pass.")
+            }
+            if ([bool]$EvidenceJson.user_accepted -ne $false) {
+                $Issues.Add("WF-007 evidence user_accepted was not false.")
+            }
+            if ([string]$EvidenceJson.approval_id -ne "") {
+                $Issues.Add("WF-007 evidence should not invent an approval id.")
+            }
+
+            $ArtifactPaths = @($EvidenceJson.artifact_paths | ForEach-Object { [string]$_ })
+            if ($ArtifactPaths -notcontains $ResolvedAnalysisPath) {
+                $Issues.Add("WF-007 evidence did not reference the restricted analysis artifact.")
+            }
+            foreach ($ArtifactPath in $ArtifactPaths) {
+                if (-not ([System.IO.Path]::GetFullPath($ArtifactPath).StartsWith($RestrictedWorkspacePrefix, [System.StringComparison]::OrdinalIgnoreCase))) {
+                    $Issues.Add("WF-007 evidence artifact_paths must remain inside the Restricted DMZ Workspace.")
+                }
+            }
+        }
+    }
+
+    $BlockedOpenResult = & $WorkflowScript -Text $Request -Approved -WorkshopMode "Open Workshop" -Root $Root
+    if ([bool]$BlockedOpenResult.success -ne $false) {
+        $Issues.Add("WF-007 should not execute in Open Workshop.")
+    }
+    if ([string]$BlockedOpenResult.reason -notmatch '(?i)Private Workshop') {
+        $Issues.Add("WF-007 open-workshop rejection did not explain the private-only boundary.")
+    }
+
+    $StatusResult = & $StatusScript -Root $Root -WorkshopMode "Private Workshop"
+    if ([string]$StatusResult.status -ne "pass") {
+        $Issues.Add("WF-004 status helper did not pass after WF-007 execution.")
     }
     else {
-        if ([string]$WF007Status[0].status -ne "pass") {
-            $Issues.Add("WF-004 did not report WF-007 as pass.")
+        $WF007Status = @($StatusResult.workflow_statuses | Where-Object { [string]$_.workflow_id -eq "WF-007" } | Select-Object -First 1)
+        if ($WF007Status.Count -eq 0) {
+            $Issues.Add("WF-004 did not report WF-007 in the workflow status list.")
         }
-        if ([string]$WF007Status[0].last_run_artifact_path -eq "") {
-            $Issues.Add("WF-004 did not report a WF-007 artifact path.")
+        else {
+            if ([string]$WF007Status[0].status -ne "pass") {
+                $Issues.Add("WF-004 did not report WF-007 as pass.")
+            }
+            if ([string]$WF007Status[0].last_run_artifact_path -eq "") {
+                $Issues.Add("WF-004 did not report a WF-007 artifact path.")
+            }
         }
     }
-}
 
-$Report = [pscustomobject]@{
-    status = if ($Issues.Count -eq 0) { "pass" } else { "fail" }
-    workflow = $PrivateResult
-    blocked_open = $BlockedOpenResult
-    status_result = $StatusResult
-    issues = @($Issues)
+    foreach ($Path in @($CleanupPaths)) {
+        Remove-TransientPath -Path $Path
+    }
+
+    $Report = [pscustomobject]@{
+        status = if ($Issues.Count -eq 0) { "pass" } else { "fail" }
+        workflow = $PrivateResult
+        blocked_open = $BlockedOpenResult
+        status_result = $StatusResult
+        issues = @($Issues)
+    }
+}
+finally {
+    if ($null -ne $OriginalMemoryState) {
+        Set-Content -LiteralPath $MemoryStatePath -Value $OriginalMemoryState -Encoding UTF8
+    }
+    elseif (Test-Path -LiteralPath $MemoryStatePath -PathType Leaf) {
+        Remove-Item -LiteralPath $MemoryStatePath -Force
+    }
+
+    if ($null -ne $OriginalSkillsState) {
+        Set-Content -LiteralPath $SkillsStatePath -Value $OriginalSkillsState -Encoding UTF8
+    }
+    elseif (Test-Path -LiteralPath $SkillsStatePath -PathType Leaf) {
+        Remove-Item -LiteralPath $SkillsStatePath -Force
+    }
+
+    foreach ($Path in @($CleanupPaths)) {
+        Remove-TransientPath -Path $Path
+    }
 }
 
 Write-Host "[*] COOPER WF-007 private local analysis workflow"
 Write-Host ("Status   : {0}" -f $Report.status)
-Write-Host ("Artifact : {0}" -f $AnalysisPath)
+Write-Host ("Artifact : {0}" -f $PrivateResult.analysis_path)
 
 if ($Report.status -ne "pass") {
     foreach ($Issue in @($Report.issues)) {
