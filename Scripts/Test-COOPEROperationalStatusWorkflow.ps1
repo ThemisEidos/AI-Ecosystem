@@ -134,8 +134,8 @@ try {
     if ([bool]$Result.review_passed -ne $true) {
         Add-Issue "Operational status helper did not mark the report as reviewed."
     }
-    if ([string]$Result.current_phase -ne "Phase 7F - Governed Codex Loop Design") {
-        Add-Issue "Operational status helper did not read the current Phase 7F roadmap entry."
+    if ([string]$Result.current_phase -ne "Phase 8 - Open WebUI Workspace Knowledge Layer") {
+        Add-Issue "Operational status helper did not read the current Phase 8 roadmap entry."
     }
     if ($Result.PSObject.Properties.Name -notcontains "evidence_warnings") {
         Add-Issue "Operational status helper did not expose evidence warnings."
@@ -216,8 +216,8 @@ try {
         Add-Issue "WF-004 did not identify legacy fallback behavior."
     }
 
-    if ($Result.response_text -notmatch 'Current Phase: Phase 7F - Governed Codex Loop Design') {
-        Add-Issue "Operational status response text did not include the Phase 7F roadmap entry."
+    if ($Result.response_text -notmatch 'Current Phase: Phase 8 - Open WebUI Workspace Knowledge Layer') {
+        Add-Issue "Operational status response text did not include the Phase 8 roadmap entry."
     }
     if ($Result.response_text -notmatch 'Roadmap State') {
         Add-Issue "Operational status response text did not include the roadmap state section."
@@ -237,8 +237,8 @@ try {
         if ([string]$RoadmapState.status -ne "pass") {
             Add-Issue "Roadmap state did not resolve successfully from the reader."
         }
-        if ([string]$RoadmapState.current_phase -ne "Phase 7F - Governed Codex Loop Design") {
-            Add-Issue "Roadmap state current phase did not resolve to Phase 7F."
+        if ([string]$RoadmapState.current_phase -ne "Phase 8 - Open WebUI Workspace Knowledge Layer") {
+            Add-Issue "Roadmap state current phase did not resolve to Phase 8."
         }
         if ([string]$RoadmapState.current_phase_status -ne "Current") {
             Add-Issue "Roadmap state current phase status was not Current."
@@ -246,7 +246,7 @@ try {
         if ([string]$RoadmapState.latest_exit_review.path -notmatch 'Docs[\\/]+Phase_7E_Exit_Review\.md$') {
             Add-Issue "Roadmap state latest exit review did not resolve to Docs/Phase_7E_Exit_Review.md."
         }
-        if ([string]$RoadmapState.next_step -notmatch '(?i)governed codex loop') {
+        if ([string]$RoadmapState.next_step -notmatch '(?i)Open WebUI Workspace knowledge') {
             Add-Issue "Roadmap state next step was missing or unexpected."
         }
         if (@($RoadmapState.source_files).Count -lt 2) {

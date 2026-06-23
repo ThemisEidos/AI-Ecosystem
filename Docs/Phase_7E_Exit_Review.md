@@ -66,7 +66,9 @@ Validation passed during Phase 7E implementation, including:
 
 ## Phase 7F Entry Criteria
 
-Phase 7F may begin when:
+Phase 7F may begin when separately approved. Until then, it remains deferred.
+
+The deferred concept should not become active until:
 
 - the roadmap state reader passes validation
 - WF-004 reports roadmap state
@@ -103,4 +105,6 @@ But Phase 7F must not implement automatic execution yet.
 
 Phase 7E is complete.
 
-The project is ready to begin Phase 7F design.
+Phase 7F Governed Codex Loop Design is deferred.
+
+The project is ready to proceed with Phase 8 Open WebUI Workspace Knowledge Layer.

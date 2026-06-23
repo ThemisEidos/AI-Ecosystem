@@ -87,32 +87,40 @@ Phase 7A.5 is creating the lightweight workflow linting standard so packages and
 ### Current Phase
 
 ```text
-Phase 7F - Governed Codex Loop Design
+Phase 8 - Open WebUI Workspace Knowledge Layer
 ```
 
-- Current Phase: Phase 7F - Governed Codex Loop Design
+- Current Phase: Phase 8 - Open WebUI Workspace Knowledge Layer
 
 ### Current Objective
 
-Design the controlled governed Codex loop that will eventually allow roadmap state review, next approved task identification, Codex task package generation, Codex result review, validation gate checking, and human approval stop points without enabling automatic execution.
+Add organized knowledge and reference-asset collections in the Open WebUI Workspace knowledge layer without bringing runtime state, approval logic, secrets, or private data into the workspace.
 
-This is a design step only. It is not a new orchestration layer, agent system, database, task queue, execution framework, or automatic runner.
+This is a knowledge-layer step only. It is not a runtime layer, orchestration layer, agent system, database, task queue, execution framework, or automatic runner.
 
 ### Why This Comes Next
 
 Recent work introduced canonical evidence, WF-002 package folders, minimal context, folder-based workflow state, AI/mechanical separation, evidence validation, canonical emitters, WF-004 evidence consumption, and the deterministic roadmap/current-state reader.
 
-The next improvement is to design the governed loop boundaries before any implementation is attempted. That keeps the approval model, launcher boundary, and evidence standard intact while clarifying what a controlled loop may and may not do.
+The next improvement is to expand Open WebUI Workspace as a knowledge-only layer while keeping governance, approval flow, and private data boundaries intact.
 
 ### Phase 7E Exit Review
 
 The Phase 7E exit review is recorded in `Docs/Phase_7E_Exit_Review.md`.
 
+### Phase 7F Status
+
+```text
+Deferred
+```
+
+Phase 7F - Governed Codex Loop Design is deferred because the user chose not to pursue Codex loop work now. It remains a future concept only and is not approved for implementation.
+
 ### Next Build Artifacts
 
 ```text
 Docs/Phase_7E_Exit_Review.md
-Governed Codex loop design notes
+Open WebUI Workspace knowledge collections
 ```
 
 Optional later artifacts after the standard is accepted:
@@ -215,10 +223,10 @@ Phase 7F is complete when:
 ### Next Build
 
 ```text
-Phase 7F - Governed Codex Loop Design
+Phase 8 - Open WebUI Workspace Knowledge Layer
 ```
 
-Phase 7F should design the governed loop after Phase 7E has established a deterministic roadmap/current-state reader and Phase 7D has established canonical evidence consumption, boundary handling, and transition fallback behavior.
+Phase 7F is deferred because the user chose not to pursue Codex loop design now. It should remain a future concept only unless separately approved.
 
 ---
 
@@ -237,7 +245,8 @@ Phase 7B   - Validate workflow evidence schemas                 COMPLETE
 Phase 7C   - Update workflows to emit canonical evidence         COMPLETE
 Phase 7D   - Update WF-004 to consume canonical evidence         COMPLETE
 Phase 7E   - Roadmap / Current-State Reader                      COMPLETE
-Phase 7F   - Governed Codex Loop Design                          CURRENT
+Phase 7F   - Governed Codex Loop Design                          DEFERRED
+Phase 8    - Open WebUI Workspace Knowledge Layer               CURRENT
 ```
 
 Do not skip directly to Phase 7D before Phase 7C emitter work is complete.
@@ -245,6 +254,8 @@ Do not skip directly to Phase 7D before Phase 7C emitter work is complete.
 Do not skip directly to Phase 7E before Phase 7D canonical evidence consumption is complete.
 
 Do not skip directly to Phase 7F before Phase 7E roadmap/current-state reader work is complete.
+
+Do not skip directly to Phase 8 before Phase 7E roadmap/current-state reader work is complete.
 
 Do not expand into agents, Hermes integration, multi-intent execution, or new orchestration layers while the roadmap/current-state reader remains unresolved.
 
@@ -518,7 +529,7 @@ Do not expand into agents, Hermes integration, multi-intent execution, or new or
 
 ### Phase 8 - Open WebUI Workspace Knowledge Layer
 
-- Status: Future
+- Status: Current
 - Goal: Add organized knowledge and reference-asset collections in Open WebUI Workspace.
 - Build Artifacts:
   - governance collection
@@ -583,10 +594,10 @@ Do not promote backlog items into active build work until the current evidence a
 
 ## Current Next Action
 
-Design the governed Codex loop.
+Build Open WebUI Workspace knowledge collections.
 
 Recommended Codex task:
 
 ```text
-Design a governed Codex loop that can review roadmap state, identify the next approved task, generate task packages, review results, apply validation gates, and stop for human approval. Do not implement autonomous execution, loop controllers, or automatic prompting yet.
+Add organized knowledge and reference-asset collections in Open WebUI Workspace. Keep workspace content knowledge-focused and exclude runtime state, approval rules, secrets, and private data.
 ```

@@ -127,6 +127,18 @@ Use only these status values for backlog items:
 - Related Docs: [Docs/Workflow_Evidence_Standard.md](Workflow_Evidence_Standard.md), [Docs/Ecosystem_Change_Backlog.md](Ecosystem_Change_Backlog.md)
 - Next Review: After Phase 7C/7D status evidence work stabilizes.
 
+### Governed Codex Loop
+
+- Status: Deferred
+- Category: Governance / Workflow design
+- Added: 2026-06-22
+- Scope: Define a controlled Codex loop concept for future roadmap-state review, next-task identification, task-package generation, result review, validation gating, and human approval stop points.
+- Rationale: The loop is a future concept only; the user chose not to pursue Codex loop design now.
+- Constraints: No autonomous execution, no Codex auto-prompting, no automatic commits, no phase advancement without human approval, and no implementation approval at this stage.
+- Review Notes: Keep this as backlog-only future design work until separately approved.
+- Related Docs: [Docs/Phase_7E_Exit_Review.md](Phase_7E_Exit_Review.md), [07_Implementation Roadmap.md](../07_Implementation%20Roadmap.md)
+- Next Review: After a separate approval to resume loop-design work.
+
 ## Change Review Guidance
 
 - Proposed: change is identified but not yet examined.

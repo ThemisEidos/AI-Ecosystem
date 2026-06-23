@@ -26,17 +26,17 @@ try {
     if ([string]$State.status -ne "pass") {
         Add-Issue "Roadmap state reader did not report pass."
     }
-    if ([string]$State.current_phase -ne "Phase 7F - Governed Codex Loop Design") {
-        Add-Issue "Current phase did not resolve to Phase 7F."
+    if ([string]$State.current_phase -ne "Phase 8 - Open WebUI Workspace Knowledge Layer") {
+        Add-Issue "Current phase did not resolve to Phase 8."
     }
     if ([string]$State.current_phase_status -ne "Current") {
         Add-Issue "Current phase status was not Current."
     }
-    if ([string]$State.current_objective -notmatch '(?i)governed codex loop') {
-        Add-Issue "Current objective did not describe the governed Codex loop design."
+    if ([string]$State.current_objective -notmatch '(?i)Open WebUI Workspace knowledge') {
+        Add-Issue "Current objective did not describe the Open WebUI Workspace knowledge layer."
     }
-    if ([string]$State.next_step -notmatch '(?i)governed codex loop') {
-        Add-Issue "Next step did not describe the governed Codex loop design work."
+    if ([string]$State.next_step -notmatch '(?i)Open WebUI Workspace knowledge') {
+        Add-Issue "Next step did not describe the Open WebUI Workspace knowledge layer work."
     }
     if ($State.PSObject.Properties.Name -notcontains "completed_phases") {
         Add-Issue "Completed phases field is missing."
