@@ -26,17 +26,17 @@ try {
     if ([string]$State.status -ne "pass") {
         Add-Issue "Roadmap state reader did not report pass."
     }
-    if ([string]$State.current_phase -ne "Phase 7E - Roadmap / Current-State Reader") {
-        Add-Issue "Current phase did not resolve to Phase 7E."
+    if ([string]$State.current_phase -ne "Phase 7F - Governed Codex Loop Design") {
+        Add-Issue "Current phase did not resolve to Phase 7F."
     }
     if ([string]$State.current_phase_status -ne "Current") {
         Add-Issue "Current phase status was not Current."
     }
-    if ([string]$State.current_objective -notmatch '(?i)roadmap/current-state reader') {
-        Add-Issue "Current objective did not describe the roadmap/current-state reader."
+    if ([string]$State.current_objective -notmatch '(?i)governed codex loop') {
+        Add-Issue "Current objective did not describe the governed Codex loop design."
     }
-    if ([string]$State.next_step -notmatch '(?i)roadmap/current-state reader') {
-        Add-Issue "Next step did not describe the roadmap/current-state reader work."
+    if ([string]$State.next_step -notmatch '(?i)governed codex loop') {
+        Add-Issue "Next step did not describe the governed Codex loop design work."
     }
     if ($State.PSObject.Properties.Name -notcontains "completed_phases") {
         Add-Issue "Completed phases field is missing."
@@ -56,9 +56,9 @@ try {
         Add-Issue "Completed phases list is empty."
     }
     else {
-        $Phase7D = @($CompletedPhases | Where-Object { [string]$_.phase -eq "Phase 7D" } | Select-Object -First 1)
-        if ($Phase7D.Count -eq 0 -or [string]$Phase7D[0].status -ne "Complete") {
-            Add-Issue "Phase 7D was not marked complete."
+        $Phase7E = @($CompletedPhases | Where-Object { [string]$_.phase -eq "Phase 7E" } | Select-Object -First 1)
+        if ($Phase7E.Count -eq 0 -or [string]$Phase7E[0].status -ne "Complete") {
+            Add-Issue "Phase 7E was not marked complete."
         }
     }
 
@@ -67,11 +67,11 @@ try {
         Add-Issue "Latest exit review was not resolved."
     }
     else {
-        if ([string]$LatestReview.path -notmatch 'Docs[\\/]+Phase_7D_Exit_Review\.md$') {
-            Add-Issue "Latest exit review did not resolve to Docs/Phase_7D_Exit_Review.md."
+        if ([string]$LatestReview.path -notmatch 'Docs[\\/]+Phase_7E_Exit_Review\.md$') {
+            Add-Issue "Latest exit review did not resolve to Docs/Phase_7E_Exit_Review.md."
         }
-        if ([string]$LatestReview.phase -ne "Phase 7D") {
-            Add-Issue "Latest exit review phase was not Phase 7D."
+        if ([string]$LatestReview.phase -ne "Phase 7E") {
+            Add-Issue "Latest exit review phase was not Phase 7E."
         }
     }
 

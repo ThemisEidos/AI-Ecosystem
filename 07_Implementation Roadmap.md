@@ -87,32 +87,32 @@ Phase 7A.5 is creating the lightweight workflow linting standard so packages and
 ### Current Phase
 
 ```text
-Phase 7E - Roadmap / Current-State Reader
+Phase 7F - Governed Codex Loop Design
 ```
 
-- Current Phase: Phase 7E - Roadmap / Current-State Reader
+- Current Phase: Phase 7F - Governed Codex Loop Design
 
 ### Current Objective
 
-Build a deterministic roadmap/current-state reader that reports the current phase, current objective, completed phases, and next approved step without executing tasks or advancing phases automatically.
+Design the controlled governed Codex loop that will eventually allow roadmap state review, next approved task identification, Codex task package generation, Codex result review, validation gate checking, and human approval stop points without enabling automatic execution.
 
-This is a workflow implementation step only. It is not a new orchestration layer, agent system, database, task queue, or execution framework.
+This is a design step only. It is not a new orchestration layer, agent system, database, task queue, execution framework, or automatic runner.
 
 ### Why This Comes Next
 
-Recent work introduced canonical evidence, WF-002 package folders, minimal context, folder-based workflow state, AI/mechanical separation, evidence validation, and now the canonical emitters themselves. The next improvement is to let WF-004 consume those records as the primary source of truth while preserving compartment boundaries.
+Recent work introduced canonical evidence, WF-002 package folders, minimal context, folder-based workflow state, AI/mechanical separation, evidence validation, canonical emitters, WF-004 evidence consumption, and the deterministic roadmap/current-state reader.
 
-This improves workflow reliability without changing the existing approval model, launcher boundary, or evidence standard.
+The next improvement is to design the governed loop boundaries before any implementation is attempted. That keeps the approval model, launcher boundary, and evidence standard intact while clarifying what a controlled loop may and may not do.
 
-### Phase 7C Exit Review
+### Phase 7E Exit Review
 
-The Phase 7D exit review is recorded in `Docs/Phase_7D_Exit_Review.md`.
+The Phase 7E exit review is recorded in `Docs/Phase_7E_Exit_Review.md`.
 
 ### Next Build Artifacts
 
 ```text
-Docs/Phase_7D_Exit_Review.md
-Roadmap/current-state reader status-only updates
+Docs/Phase_7E_Exit_Review.md
+Governed Codex loop design notes
 ```
 
 Optional later artifacts after the standard is accepted:
@@ -143,16 +143,21 @@ Codex_Tasks/
 - `Codex_Tasks/` remains the default Project Workspace location
 - user approval remains required for governed file writes and launcher invocation
 - Category 2 material remains prohibited from WF-002 packages unless sanitized first
+- deterministic roadmap/current-state reading is available
+- WF-004 reports roadmap state and workflow evidence state
 
 ### Definition of Done
 
-Phase 7A.2 is complete when:
+Phase 7F is complete when:
 
-- `Docs/Minimal_Context_Doctrine.md` exists
-- the doctrine defines short, scoped, task-specific context rules
-- roadmap, catalog, and spec reference the doctrine
-- WF-002 package guidance is aligned to minimal context
-- no giant global context file is created
+- governed loop boundaries are documented
+- roadmap state review flow is defined
+- next approved task identification flow is defined
+- Codex task package generation flow is defined
+- Codex result review flow is defined
+- validation gate flow is defined
+- human approval stop points are explicit
+- automatic execution is not introduced
 - no launcher behavior is changed
 - no workflow execution code is modified unless separately approved
 - no database, agent framework, task queue, or orchestration subsystem is introduced
@@ -210,10 +215,10 @@ Phase 7A.2 is complete when:
 ### Next Build
 
 ```text
-Phase 7D - WF-004 Canonical Evidence Consumption
+Phase 7F - Governed Codex Loop Design
 ```
 
-Phase 7E should update the roadmap/current-state reader after Phase 7D has established canonical evidence consumption, boundary handling, and transition fallback behavior.
+Phase 7F should design the governed loop after Phase 7E has established a deterministic roadmap/current-state reader and Phase 7D has established canonical evidence consumption, boundary handling, and transition fallback behavior.
 
 ---
 
@@ -231,12 +236,15 @@ Phase 7A.5 - Define lightweight workflow linting                 COMPLETE
 Phase 7B   - Validate workflow evidence schemas                 COMPLETE
 Phase 7C   - Update workflows to emit canonical evidence         COMPLETE
 Phase 7D   - Update WF-004 to consume canonical evidence         COMPLETE
-Phase 7E   - Roadmap / Current-State Reader                      CURRENT
+Phase 7E   - Roadmap / Current-State Reader                      COMPLETE
+Phase 7F   - Governed Codex Loop Design                          CURRENT
 ```
 
 Do not skip directly to Phase 7D before Phase 7C emitter work is complete.
 
 Do not skip directly to Phase 7E before Phase 7D canonical evidence consumption is complete.
+
+Do not skip directly to Phase 7F before Phase 7E roadmap/current-state reader work is complete.
 
 Do not expand into agents, Hermes integration, multi-intent execution, or new orchestration layers while the roadmap/current-state reader remains unresolved.
 
@@ -575,12 +583,10 @@ Do not promote backlog items into active build work until the current evidence a
 
 ## Current Next Action
 
-Update WF-004 to consume canonical workflow evidence.
+Design the governed Codex loop.
 
 Recommended Codex task:
 
 ```text
-Update WF-004 Operational Status to consume canonical workflow evidence as the primary source of truth. Preserve artifact fallback only as explicitly documented transitional behavior, and preserve Open/Private evidence boundary handling.
-
-Do not add databases, queues, agents, event buses, orchestration, or frontend code.
+Design a governed Codex loop that can review roadmap state, identify the next approved task, generate task packages, review results, apply validation gates, and stop for human approval. Do not implement autonomous execution, loop controllers, or automatic prompting yet.
 ```
