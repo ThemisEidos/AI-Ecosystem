@@ -143,6 +143,15 @@ try {
     elseif (@($Result.evidence_warnings).Count -lt 1) {
         Add-Issue "Malformed evidence was not reported as a warning."
     }
+    if ($Result.PSObject.Properties.Name -notcontains "roadmap_state") {
+        Add-Issue "Operational status helper did not expose roadmap_state."
+    }
+    if ($Result.PSObject.Properties.Name -notcontains "roadmap_state_status") {
+        Add-Issue "Operational status helper did not expose roadmap_state_status."
+    }
+    if ($Result.PSObject.Properties.Name -notcontains "roadmap_state_error") {
+        Add-Issue "Operational status helper did not expose roadmap_state_error."
+    }
 
     $WorkflowStatusMap = @{}
     foreach ($Entry in @($Result.workflow_statuses)) {
@@ -210,11 +219,59 @@ try {
     if ($Result.response_text -notmatch 'Current Phase: Phase 7E - Roadmap / Current-State Reader') {
         Add-Issue "Operational status response text did not include the Phase 7E roadmap entry."
     }
+    if ($Result.response_text -notmatch 'Roadmap State') {
+        Add-Issue "Operational status response text did not include the roadmap state section."
+    }
     if ($Result.response_text -notmatch 'WF-001 Research Summary \| status: pass') {
         Add-Issue "Operational status response text did not include the canonical WF-001 status."
     }
     if ($Result.response_text -notmatch 'WF-007 Private Local Analysis \| status: pass') {
         Add-Issue "Operational status response text did not include the canonical WF-007 status."
+    }
+
+    $RoadmapState = $Result.roadmap_state
+    if ($null -eq $RoadmapState) {
+        Add-Issue "Operational status helper returned a null roadmap_state."
+    }
+    else {
+        if ([string]$RoadmapState.status -ne "pass") {
+            Add-Issue "Roadmap state did not resolve successfully from the reader."
+        }
+        if ([string]$RoadmapState.current_phase -ne "Phase 7E - Roadmap / Current-State Reader") {
+            Add-Issue "Roadmap state current phase did not resolve to Phase 7E."
+        }
+        if ([string]$RoadmapState.current_phase_status -ne "Current") {
+            Add-Issue "Roadmap state current phase status was not Current."
+        }
+        if ([string]$RoadmapState.latest_exit_review.path -notmatch 'Docs[\\/]+Phase_7D_Exit_Review\.md$') {
+            Add-Issue "Roadmap state latest exit review did not resolve to Docs/Phase_7D_Exit_Review.md."
+        }
+        if ([string]$RoadmapState.next_step -notmatch '(?i)roadmap/current-state reader') {
+            Add-Issue "Roadmap state next step was missing or unexpected."
+        }
+        if (@($RoadmapState.source_files).Count -lt 2) {
+            Add-Issue "Roadmap state source files were not populated."
+        }
+    }
+
+    $MissingRoadmapPath = Join-Path $TempRoot "missing-roadmap.md"
+    $MissingRoadmapResult = & $StatusScript -Root $Root -WorkshopMode "Open Workshop" -RoadmapPath $MissingRoadmapPath
+    if ($null -eq $MissingRoadmapResult) {
+        Add-Issue "Roadmap-reader failure test returned no data."
+    }
+    else {
+        if ($MissingRoadmapResult.PSObject.Properties.Name -notcontains "roadmap_state") {
+            Add-Issue "Roadmap-reader failure test did not return roadmap_state."
+        }
+        else {
+            $BrokenRoadmapState = $MissingRoadmapResult.roadmap_state
+            if ([string]$BrokenRoadmapState.status -ne "fail") {
+                Add-Issue "Roadmap-reader failure test did not report a failed roadmap state."
+            }
+            if ([string]$BrokenRoadmapState.error -notmatch 'Roadmap not found') {
+                Add-Issue "Roadmap-reader failure test did not report the missing roadmap."
+            }
+        }
     }
 
     $Report = [pscustomobject]@{

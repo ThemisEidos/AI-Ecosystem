@@ -134,6 +134,91 @@ function Get-COOPERUniqueStrings {
     return @($Unique)
 }
 
+function Get-COOPERRoadmapStateSnapshot {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Root,
+
+        [Parameter(Mandatory = $true)]
+        [string]$RoadmapPath,
+
+        [Parameter(Mandatory = $true)]
+        [string]$DocsRoot
+    )
+
+    $ReaderScript = Join-Path $PSScriptRoot "Get-COOPERRoadmapState.ps1"
+    if (-not (Test-Path -LiteralPath $ReaderScript -PathType Leaf)) {
+        return [pscustomobject]@{
+            status              = "fail"
+            error               = "Roadmap state reader missing: $ReaderScript"
+            current_phase       = ""
+            current_phase_status = ""
+            current_objective   = ""
+            completed_phases    = @()
+            next_step           = ""
+            latest_exit_review  = $null
+            deferred_items      = @()
+            blocked_items       = @()
+            source_files        = @()
+            generated_at_utc    = [datetime]::UtcNow.ToString("o")
+        }
+    }
+
+    try {
+        $ReaderResult = & $ReaderScript -Root $Root -RoadmapPath $RoadmapPath -DocsRoot $DocsRoot
+    }
+    catch {
+        $ReaderResult = [pscustomobject]@{
+            status              = "fail"
+            error               = [string]$_.Exception.Message
+            current_phase       = ""
+            current_phase_status = ""
+            current_objective   = ""
+            completed_phases    = @()
+            next_step           = ""
+            latest_exit_review  = $null
+            deferred_items      = @()
+            blocked_items       = @()
+            source_files        = @($RoadmapPath)
+            generated_at_utc    = [datetime]::UtcNow.ToString("o")
+        }
+    }
+
+    if (-not $ReaderResult) {
+        return [pscustomobject]@{
+            status              = "fail"
+            error               = "Roadmap state reader returned no data."
+            current_phase       = ""
+            current_phase_status = ""
+            current_objective   = ""
+            completed_phases    = @()
+            next_step           = ""
+            latest_exit_review  = $null
+            deferred_items      = @()
+            blocked_items       = @()
+            source_files        = @($RoadmapPath)
+            generated_at_utc    = [datetime]::UtcNow.ToString("o")
+        }
+    }
+
+    $RoadmapState = [pscustomobject]@{
+        status              = if ($ReaderResult.PSObject.Properties.Name -contains "status") { [string]$ReaderResult.status } else { "unknown" }
+        error               = if ($ReaderResult.PSObject.Properties.Name -contains "error") { [string]$ReaderResult.error } else { "" }
+        current_phase       = if ($ReaderResult.PSObject.Properties.Name -contains "current_phase") { [string]$ReaderResult.current_phase } else { "" }
+        current_phase_status = if ($ReaderResult.PSObject.Properties.Name -contains "current_phase_status") { [string]$ReaderResult.current_phase_status } else { "" }
+        current_objective   = if ($ReaderResult.PSObject.Properties.Name -contains "current_objective") { [string]$ReaderResult.current_objective } else { "" }
+        completed_phases    = if ($ReaderResult.PSObject.Properties.Name -contains "completed_phases") { @($ReaderResult.completed_phases) } else { @() }
+        next_step           = if ($ReaderResult.PSObject.Properties.Name -contains "next_step") { [string]$ReaderResult.next_step } else { "" }
+        latest_exit_review  = if ($ReaderResult.PSObject.Properties.Name -contains "latest_exit_review") { $ReaderResult.latest_exit_review } else { $null }
+        deferred_items      = if ($ReaderResult.PSObject.Properties.Name -contains "deferred_items") { @($ReaderResult.deferred_items) } else { @() }
+        blocked_items       = if ($ReaderResult.PSObject.Properties.Name -contains "blocked_items") { @($ReaderResult.blocked_items) } else { @() }
+        source_files        = if ($ReaderResult.PSObject.Properties.Name -contains "source_files") { @($ReaderResult.source_files) } else { @($RoadmapPath) }
+        generated_at_utc    = if ($ReaderResult.PSObject.Properties.Name -contains "generated_at_utc") { [string]$ReaderResult.generated_at_utc } else { [datetime]::UtcNow.ToString("o") }
+    }
+
+    return $RoadmapState
+}
+
 function Get-COOPERWorkflowEvidenceRoots {
     param(
         [Parameter(Mandatory = $true)]
@@ -991,6 +1076,13 @@ $SkillsState = Read-COOPERJsonFile -Path $SkillsStatePath
 $WorkflowEvidenceResult = Get-COOPERWorkflowEvidenceIndex -Root $Root
 $WorkflowEvidenceIndex = if ($WorkflowEvidenceResult -and $WorkflowEvidenceResult.PSObject.Properties.Name -contains "index") { $WorkflowEvidenceResult.index } else { @{} }
 $WorkflowEvidenceWarnings = if ($WorkflowEvidenceResult -and $WorkflowEvidenceResult.PSObject.Properties.Name -contains "warnings") { @($WorkflowEvidenceResult.warnings) } else { @() }
+$ResolvedRoadmapPath = if ([string]::IsNullOrWhiteSpace($RoadmapPath)) { Join-Path $Root "07_Implementation Roadmap.md" } else { $RoadmapPath }
+$RoadmapState = Get-COOPERRoadmapStateSnapshot -Root $Root -RoadmapPath $ResolvedRoadmapPath -DocsRoot (Join-Path $Root "Docs")
+$RoadmapStateAvailable = $RoadmapState -and [string]$RoadmapState.status -eq "pass"
+$RoadmapStateWarnings = @()
+if ($RoadmapState -and [string]::IsNullOrWhiteSpace([string]$RoadmapState.error) -eq $false) {
+    $RoadmapStateWarnings += [string]$RoadmapState.error
+}
 $WorkflowDefinitions = @()
 $ResolvedWorkflowDefinitionsPath = if ([string]::IsNullOrWhiteSpace($WorkflowDefinitionsPath)) { Join-Path $Root "Config\workflows.yaml" } else { $WorkflowDefinitionsPath }
 if (Test-Path -LiteralPath $ResolvedWorkflowDefinitionsPath -PathType Leaf) {
@@ -1019,9 +1111,16 @@ $OperationalWorkflowDefinitions = @(
     $WorkflowDefinitions | Where-Object { [string]$_.status -eq "operational" }
 )
 
-$CurrentPhase = Get-COOPERFirstMatch -Text $RoadmapText -Pattern '^\s*-\s*Current Phase:\s*(.+?)\s*$'
-if ([string]::IsNullOrWhiteSpace($CurrentPhase) -and $ProjectMemory -and $ProjectMemory.PSObject.Properties.Name -contains "current_phase") {
-    $CurrentPhase = [string]$ProjectMemory.current_phase
+$LegacyCurrentPhase = Get-COOPERFirstMatch -Text $RoadmapText -Pattern '^\s*-\s*Current Phase:\s*(.+?)\s*$'
+if ([string]::IsNullOrWhiteSpace($LegacyCurrentPhase) -and $ProjectMemory -and $ProjectMemory.PSObject.Properties.Name -contains "current_phase") {
+    $LegacyCurrentPhase = [string]$ProjectMemory.current_phase
+}
+
+$CurrentPhase = if ($RoadmapStateAvailable -and -not [string]::IsNullOrWhiteSpace([string]$RoadmapState.current_phase)) {
+    [string]$RoadmapState.current_phase
+}
+else {
+    $LegacyCurrentPhase
 }
 
 $WorkflowChains = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
@@ -1197,6 +1296,18 @@ $ResponseLines.Add(("Approval / Pending Action: {0}" -f $ApprovalStatusSummary))
 $ResponseLines.Add("")
 $ResponseLines.Add(("Current Phase: {0}" -f $(if ([string]::IsNullOrWhiteSpace($CurrentPhase)) { "Unknown" } else { $CurrentPhase })))
 $ResponseLines.Add("")
+$ResponseLines.Add("Roadmap State")
+if ($RoadmapStateAvailable) {
+    $ResponseLines.Add(("- current phase: {0}" -f $(if ([string]::IsNullOrWhiteSpace([string]$RoadmapState.current_phase)) { "unknown" } else { [string]$RoadmapState.current_phase })))
+    $ResponseLines.Add(("- current objective: {0}" -f $(if ([string]::IsNullOrWhiteSpace([string]$RoadmapState.current_objective)) { "unknown" } else { [string]$RoadmapState.current_objective })))
+    $ResponseLines.Add(("- next step: {0}" -f $(if ([string]::IsNullOrWhiteSpace([string]$RoadmapState.next_step)) { "unknown" } else { [string]$RoadmapState.next_step })))
+    $ResponseLines.Add(("- latest exit review: {0}" -f $(if ($RoadmapState.latest_exit_review -and $RoadmapState.latest_exit_review.PSObject.Properties.Name -contains "path" -and -not [string]::IsNullOrWhiteSpace([string]$RoadmapState.latest_exit_review.path)) { [string]$RoadmapState.latest_exit_review.path } else { "none recorded" })))
+}
+else {
+    $RoadmapStateError = if ($RoadmapState -and $RoadmapState.PSObject.Properties.Name -contains "error" -and -not [string]::IsNullOrWhiteSpace([string]$RoadmapState.error)) { [string]$RoadmapState.error } else { "roadmap state unavailable" }
+    $ResponseLines.Add(("- unavailable: {0}" -f $RoadmapStateError))
+}
+$ResponseLines.Add("")
 $ResponseLines.Add("Operational Workflow Status")
 foreach ($Workflow in $OperationalWorkflows) {
     $ArtifactText = if (-not [string]::IsNullOrWhiteSpace([string]$Workflow.last_run_artifact)) { $Workflow.last_run_artifact } else { "unavailable" }
@@ -1320,6 +1431,10 @@ $Result = [pscustomobject]@{
     status_workflow          = "WF-004 Operational Status"
     status_source            = "Scripts/Get-COOPEROperationalStatus.ps1"
     current_phase            = $CurrentPhase
+    roadmap_state            = $RoadmapState
+    roadmap_state_status     = if ($RoadmapState) { [string]$RoadmapState.status } else { "fail" }
+    roadmap_state_error      = if ($RoadmapState -and $RoadmapState.PSObject.Properties.Name -contains "error") { [string]$RoadmapState.error } else { "" }
+    roadmap_state_warnings   = @($RoadmapStateWarnings)
     operational_workflow_count = [int]$OperationalWorkflowCount
     workflow_definition_count  = [int]$WorkflowDefinitionCount
     workflow_definitions     = @($WorkflowDefinitionSummary)
