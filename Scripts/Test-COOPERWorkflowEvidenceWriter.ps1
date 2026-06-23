@@ -151,7 +151,7 @@ try {
         ExecutionId = '20260622T010000Z-writer-open'
         Status = 'pass'
         CompletionTime = '2026-06-22T01:00:00Z'
-        ApprovalId = 'AP-20260622-010000'
+        ApprovalId = ''
         ArtifactPaths = @('Codex_Tasks/TASK-001/Output/task.md')
         ReviewStatus = 'pass'
         UserAccepted = $true

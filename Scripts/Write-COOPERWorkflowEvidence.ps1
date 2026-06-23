@@ -265,7 +265,6 @@ function New-CompletionRecord {
     Assert-RequiredString -Name 'execution_id' -Value $ExecutionId
     Assert-RequiredString -Name 'status' -Value $Status
     Assert-RequiredString -Name 'completion_time' -Value $CompletionTime
-    Assert-RequiredString -Name 'approval_id' -Value $ApprovalId
     Assert-RequiredString -Name 'review_status' -Value $ReviewStatus
     Assert-RequiredString -Name 'notes' -Value $Notes
     Assert-Condition -Condition ($UserAccepted -is [bool]) -Message 'user_accepted must be a boolean.'
@@ -306,7 +305,7 @@ function New-CompletionRecord {
         completion_time  = $CompletionTime
         workshop_id      = $WorkshopId
         workshop_name    = $CanonicalWorkshopName
-        approval_id      = $ApprovalId
+        approval_id      = if ($null -eq $ApprovalId) { "" } else { [string]$ApprovalId }
         artifact_paths   = @()
         review_status    = $ReviewStatus
         user_accepted    = [bool]$UserAccepted

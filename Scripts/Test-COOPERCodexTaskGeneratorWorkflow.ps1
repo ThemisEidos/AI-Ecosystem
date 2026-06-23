@@ -32,6 +32,8 @@ $SkillsStatePath = Join-Path $Root "State\COOPER_Skills.json"
 $TempRoot = Join-Path $Root "tmp\cooper-codex-task-generator-tests"
 $TempMemoryState = Join-Path $TempRoot "COOPER_ProjectMemory.failed-review.json"
 $TempSkillsState = Join-Path $TempRoot "COOPER_Skills.failed-review.json"
+$OriginalMemoryState = if (Test-Path -LiteralPath $MemoryStatePath -PathType Leaf) { Get-Content -LiteralPath $MemoryStatePath -Raw } else { $null }
+$OriginalSkillsState = if (Test-Path -LiteralPath $SkillsStatePath -PathType Leaf) { Get-Content -LiteralPath $SkillsStatePath -Raw } else { $null }
 
 . $RouterScript
 
@@ -224,12 +226,13 @@ $BadTaskPath = Join-Path $TempRoot "TASK-00000000-000000-bad-task.md"
     "Synthetic malformed task."
 ) | Set-Content -LiteralPath $BadTaskPath -Encoding UTF8
 
-$BadReview = & (Get-Command $ReviewScript) -WorkflowId "WF-002" -WorkflowResult ([pscustomobject]@{
-    success = $true
-    workflow_id = "WF-002"
-    result_artifact_path = $BadTaskPath
-    output_type = "markdown_file"
-}) -RequestText $Request -ExpectedOutputType "markdown_file" -ExpectedOutputPath $BadTaskPath
+try {
+    $BadReview = & (Get-Command $ReviewScript) -WorkflowId "WF-002" -WorkflowResult ([pscustomobject]@{
+        success = $true
+        workflow_id = "WF-002"
+        result_artifact_path = $BadTaskPath
+        output_type = "markdown_file"
+    }) -RequestText $Request -ExpectedOutputType "markdown_file" -ExpectedOutputPath $BadTaskPath
 
 if ([string]$BadReview.status -ne "fail") {
     $Issues.Add("WF-002 review did not fail for malformed markdown.")
@@ -238,41 +241,103 @@ if ([bool]$BadReview.review_passed -ne $false) {
     $Issues.Add("WF-002 review incorrectly passed malformed markdown.")
 }
 
-$FailedPromotion = & (Get-Command $MemoryScript) -WorkflowId "WF-002" -ReviewResult $BadReview -RequestText $Request -OutputPath $BadTaskPath -StatePath $TempMemoryState
-if ([string]$FailedPromotion.status -ne "fail") {
-    $Issues.Add("Failed review did not stay in fail status for project memory.")
-}
-if ($FailedPromotion.project_memory -and @($FailedPromotion.project_memory.operational_workflows) -contains "WF-002") {
-    $Issues.Add("Failed review incorrectly promoted WF-002 in project memory.")
-}
+    $FailedPromotion = & (Get-Command $MemoryScript) -WorkflowId "WF-002" -ReviewResult $BadReview -RequestText $Request -OutputPath $BadTaskPath -StatePath $TempMemoryState
+    if ([string]$FailedPromotion.status -ne "fail") {
+        $Issues.Add("Failed review did not stay in fail status for project memory.")
+    }
+    if ($FailedPromotion.project_memory -and @($FailedPromotion.project_memory.operational_workflows) -contains "WF-002") {
+        $Issues.Add("Failed review incorrectly promoted WF-002 in project memory.")
+    }
 
-$FailedSkillPromotion = & (Get-Command $SkillsScript) -WorkflowId "WF-002" -ReviewResult $BadReview -ExampleRequest $Request -ExampleOutput ([System.IO.Path]::GetFileName($BadTaskPath)) -SkillName "Codex Task Generator" -StatePath $TempSkillsState
-if ([string]$FailedSkillPromotion.status -ne "fail") {
-    $Issues.Add("Failed review did not stay in fail status for skills.")
-}
-if ($FailedSkillPromotion.promoted -ne $false) {
-    $Issues.Add("Failed review incorrectly promoted the skill.")
-}
+    $FailedSkillPromotion = & (Get-Command $SkillsScript) -WorkflowId "WF-002" -ReviewResult $BadReview -ExampleRequest $Request -ExampleOutput ([System.IO.Path]::GetFileName($BadTaskPath)) -SkillName "Codex Task Generator" -StatePath $TempSkillsState
+    if ([string]$FailedSkillPromotion.status -ne "fail") {
+        $Issues.Add("Failed review did not stay in fail status for skills.")
+    }
+    if ($FailedSkillPromotion.promoted -ne $false) {
+        $Issues.Add("Failed review incorrectly promoted the skill.")
+    }
 
-if (-not (Test-Path -LiteralPath $TempMemoryState -PathType Leaf)) {
-    $Issues.Add("Failed-review memory state file was not written.")
-}
-else {
-    $TempMemory = Get-Content -LiteralPath $TempMemoryState -Raw | ConvertFrom-Json
-    $TempOperational = @($TempMemory.operational_workflows | ForEach-Object { [string]$_ })
-    if ($TempOperational -contains "WF-002") {
-        $Issues.Add("Failed review promoted WF-002 in the temp project memory state.")
+    if (-not (Test-Path -LiteralPath $TempMemoryState -PathType Leaf)) {
+        $Issues.Add("Failed-review memory state file was not written.")
+    }
+    else {
+        $TempMemory = Get-Content -LiteralPath $TempMemoryState -Raw | ConvertFrom-Json
+        $TempOperational = @($TempMemory.operational_workflows | ForEach-Object { [string]$_ })
+        if ($TempOperational -contains "WF-002") {
+            $Issues.Add("Failed review promoted WF-002 in the temp project memory state.")
+        }
+    }
+
+    if (-not (Test-Path -LiteralPath $TempSkillsState -PathType Leaf)) {
+        $Issues.Add("Failed-review skills state file was not written.")
+    }
+    else {
+        $TempSkills = Get-Content -LiteralPath $TempSkillsState -Raw | ConvertFrom-Json
+        $TempSkill = @($TempSkills.skills | Where-Object { [string]$_.workflow_id -eq "WF-002" } | Select-Object -First 1)
+        if ($TempSkill.Count -gt 0 -and [string]$TempSkill[0].status -eq "operational") {
+            $Issues.Add("Failed review promoted WF-002 to operational in the temp skills state.")
+        }
+    }
+
+    if ([string]::IsNullOrWhiteSpace([string]$Result.evidence_path)) {
+        $Issues.Add("Workflow did not return an evidence path.")
+    }
+    else {
+        $EvidencePath = [System.IO.Path]::GetFullPath([string]$Result.evidence_path)
+        $ExpectedEvidenceRoot = [System.IO.Path]::GetFullPath((Join-Path $Root "State\Workflow_Evidence\completion"))
+        $ExpectedEvidencePrefix = $ExpectedEvidenceRoot.TrimEnd('\') + '\'
+        if (-not ($EvidencePath.StartsWith($ExpectedEvidencePrefix, [System.StringComparison]::OrdinalIgnoreCase))) {
+            $Issues.Add("Workflow evidence path is not inside State\\Workflow_Evidence\\completion.")
+        }
+        if (-not (Test-Path -LiteralPath $EvidencePath -PathType Leaf)) {
+            $Issues.Add("Workflow evidence file was not created.")
+        }
+        else {
+            $EvidenceJson = Get-Content -LiteralPath $EvidencePath -Raw | ConvertFrom-Json
+            if ([string]$EvidenceJson.workflow_id -ne "WF-002") {
+                $Issues.Add("Workflow evidence did not record WF-002.")
+            }
+            if ([string]$EvidenceJson.workflow_name -ne "Codex Task Generator") {
+                $Issues.Add("Workflow evidence did not record the workflow name.")
+            }
+            if ([string]$EvidenceJson.status -ne "pass") {
+                $Issues.Add("Workflow evidence status was not pass.")
+            }
+            if ([string]$EvidenceJson.workshop_id -ne "open" -or [string]$EvidenceJson.workshop_name -ne "Open Workshop") {
+                $Issues.Add("Workflow evidence did not preserve Open Workshop metadata.")
+            }
+            if ([string]$EvidenceJson.review_status -ne "unknown") {
+                $Issues.Add("Workflow evidence review_status was not unknown.")
+            }
+            if ([bool]$EvidenceJson.user_accepted -ne $false) {
+                $Issues.Add("Workflow evidence user_accepted was not false.")
+            }
+            if (@($EvidenceJson.artifact_paths | ForEach-Object { [string]$_ }) -notcontains $TaskPath) {
+                $Issues.Add("Workflow evidence did not reference the generated task path.")
+            }
+        }
     }
 }
-
-if (-not (Test-Path -LiteralPath $TempSkillsState -PathType Leaf)) {
-    $Issues.Add("Failed-review skills state file was not written.")
-}
-else {
-    $TempSkills = Get-Content -LiteralPath $TempSkillsState -Raw | ConvertFrom-Json
-    $TempSkill = @($TempSkills.skills | Where-Object { [string]$_.workflow_id -eq "WF-002" } | Select-Object -First 1)
-    if ($TempSkill.Count -gt 0 -and [string]$TempSkill[0].status -eq "operational") {
-        $Issues.Add("Failed review promoted WF-002 to operational in the temp skills state.")
+finally {
+    foreach ($Path in @($TaskPath, $BadTaskPath, $TempMemoryState, $TempSkillsState, $Result.evidence_path)) {
+        if (-not [string]::IsNullOrWhiteSpace([string]$Path) -and (Test-Path -LiteralPath $Path -PathType Leaf)) {
+            Remove-Item -LiteralPath $Path -Force
+        }
+    }
+    if (Test-Path -LiteralPath $TempRoot -PathType Container) {
+        Remove-Item -LiteralPath $TempRoot -Recurse -Force
+    }
+    if ($null -ne $OriginalMemoryState) {
+        Set-Content -LiteralPath $MemoryStatePath -Value $OriginalMemoryState -Encoding UTF8
+    }
+    elseif (Test-Path -LiteralPath $MemoryStatePath -PathType Leaf) {
+        Remove-Item -LiteralPath $MemoryStatePath -Force
+    }
+    if ($null -ne $OriginalSkillsState) {
+        Set-Content -LiteralPath $SkillsStatePath -Value $OriginalSkillsState -Encoding UTF8
+    }
+    elseif (Test-Path -LiteralPath $SkillsStatePath -PathType Leaf) {
+        Remove-Item -LiteralPath $SkillsStatePath -Force
     }
 }
 

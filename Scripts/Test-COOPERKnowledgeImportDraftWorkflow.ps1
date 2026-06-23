@@ -8,6 +8,8 @@ $RouterScript = Join-Path $PSScriptRoot "COOPER_ConversationalRouter.ps1"
 $WorkflowScript = Join-Path $PSScriptRoot "Invoke-COOPERKnowledgeImportDraft.ps1"
 $MemoryStatePath = Join-Path $Root "State\COOPER_ProjectMemory.json"
 $SkillsStatePath = Join-Path $Root "State\COOPER_Skills.json"
+$OriginalMemoryState = if (Test-Path -LiteralPath $MemoryStatePath -PathType Leaf) { Get-Content -LiteralPath $MemoryStatePath -Raw } else { $null }
+$OriginalSkillsState = if (Test-Path -LiteralPath $SkillsStatePath -PathType Leaf) { Get-Content -LiteralPath $SkillsStatePath -Raw } else { $null }
 
 . $RouterScript
 
@@ -17,6 +19,7 @@ foreach ($Path in @($MemoryStatePath, $SkillsStatePath)) {
     }
 }
 
+try {
 $Request = "Research official Pop!_OS documentation and prepare it for the Linux & Infrastructure knowledge collection."
 $Route = Resolve-PDAConversationalRoute -Text $Request -Root $Root
 $Result = Get-PDAConversationalNaturalResponse -Route $Route -ConversationId "wf006-conv" -SessionId "wf006-sess" -UserId "wf006-user" -ConversationTitle "WF-006 Test" -Text $Request -Root $Root
@@ -139,6 +142,22 @@ $Report = [pscustomobject]@{
     response = $Result
     failed_import = $FailedImport
     issues = @($Issues)
+}
+}
+finally {
+    if ($null -ne $OriginalMemoryState) {
+        Set-Content -LiteralPath $MemoryStatePath -Value $OriginalMemoryState -Encoding UTF8
+    }
+    elseif (Test-Path -LiteralPath $MemoryStatePath -PathType Leaf) {
+        Remove-Item -LiteralPath $MemoryStatePath -Force
+    }
+
+    if ($null -ne $OriginalSkillsState) {
+        Set-Content -LiteralPath $SkillsStatePath -Value $OriginalSkillsState -Encoding UTF8
+    }
+    elseif (Test-Path -LiteralPath $SkillsStatePath -PathType Leaf) {
+        Remove-Item -LiteralPath $SkillsStatePath -Force
+    }
 }
 
 Write-Host "[*] COOPER knowledge collection import workflow test"

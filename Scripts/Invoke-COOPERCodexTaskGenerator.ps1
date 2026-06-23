@@ -18,6 +18,7 @@ $WorkbenchScript = Join-Path $PSScriptRoot "Invoke-COOPERWorkbench.ps1"
 $ReviewScript = Join-Path $PSScriptRoot "Resolve-COOPERWorkflowReview.ps1"
 $MemoryScript = Join-Path $PSScriptRoot "Update-COOPERProjectMemory.ps1"
 $SkillsScript = Join-Path $PSScriptRoot "Update-COOPERWorkflowSkills.ps1"
+$EvidenceWriterScript = Join-Path $PSScriptRoot "Write-COOPERWorkflowEvidence.ps1"
 
 function Get-COOPERCodexTaskTitle {
     param([Parameter(Mandatory = $true)][string]$RequestText)
@@ -230,11 +231,19 @@ if (Test-Path -LiteralPath $SkillsScript -PathType Leaf) {
     catch {}
 }
 
+if (-not (Test-Path -LiteralPath $EvidenceWriterScript -PathType Leaf)) {
+    throw "Workflow evidence writer is unavailable."
+}
+
+$ExecutionId = (Get-Date).ToUniversalTime().ToString("yyyyMMddTHHmmssfffZ")
+$EvidenceResult = & $EvidenceWriterScript -Root $Root -RecordType "completion" -WorkshopId "open" -WorkflowId "WF-002" -WorkflowName "Codex Task Generator" -ExecutionId $ExecutionId -Status "pass" -CompletionTime ((Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")) -ApprovalId "" -ArtifactPaths @($TaskPath) -ReviewStatus "unknown" -UserAccepted:$false -Notes "WF-002 task generation completed; review pending."
+
 return [pscustomobject]@{
     success = $true
     workflow_id = "WF-002"
     tool_id = "codex_task_launcher"
     task_path = $TaskPath
+    evidence_path = [string]$EvidenceResult.path
     routed_tool = $RoutedTool
     approval_decision = $ApprovalDecision
     workbench_result = $WorkbenchResult
