@@ -94,15 +94,15 @@ Phase 8 - Open WebUI Workspace Knowledge Layer
 
 ### Current Objective
 
-Add organized knowledge and reference-asset collections in the Open WebUI Workspace knowledge layer without bringing runtime state, approval logic, secrets, or private data into the workspace.
+Define the Phase 8 scope, boundaries, security rules, and definition of done for the Open WebUI Workspace Knowledge Layer before any implementation work begins.
 
-This is a knowledge-layer step only. It is not a runtime layer, orchestration layer, agent system, database, task queue, execution framework, or automatic runner.
+This is a scope and readiness step only. It is not a runtime layer, orchestration layer, agent system, database, task queue, execution framework, or automatic runner.
 
 ### Why This Comes Next
 
 Recent work introduced canonical evidence, WF-002 package folders, minimal context, folder-based workflow state, AI/mechanical separation, evidence validation, canonical emitters, WF-004 evidence consumption, and the deterministic roadmap/current-state reader.
 
-The next improvement is to expand Open WebUI Workspace as a knowledge-only layer while keeping governance, approval flow, and private data boundaries intact.
+The next improvement is to define the Open WebUI Workspace Knowledge Layer scope before any collection or import work begins, so the knowledge layer stays bounded and reviewable.
 
 ### Phase 7E Exit Review
 
@@ -119,8 +119,8 @@ Phase 7F - Governed Codex Loop Design is deferred because the user chose not to 
 ### Next Build Artifacts
 
 ```text
-Docs/Phase_7E_Exit_Review.md
-Open WebUI Workspace knowledge collections
+Docs/Phase_8_Workspace_Knowledge_Layer_Scope.md
+Docs/Workspace_Collection_Taxonomy.md
 ```
 
 Optional later artifacts after the standard is accepted:
@@ -594,10 +594,10 @@ Do not promote backlog items into active build work until the current evidence a
 
 ## Current Next Action
 
-Build Open WebUI Workspace knowledge collections.
+Create the Phase 8 Workspace Knowledge Layer scope document.
 
 Recommended Codex task:
 
 ```text
-Add organized knowledge and reference-asset collections in Open WebUI Workspace. Keep workspace content knowledge-focused and exclude runtime state, approval rules, secrets, and private data.
+Create a scope and readiness document for the Open WebUI Workspace Knowledge Layer. Define scope, boundaries, allowed and prohibited content, import rules, WF-006 relationship, security, initial build sequence, definition of done, risks, and the recommended next artifact.
 ```
