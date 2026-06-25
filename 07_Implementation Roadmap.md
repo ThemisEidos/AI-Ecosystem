@@ -39,6 +39,8 @@ Phase 7A.4 - AI Judgment / Mechanical Work Separation
 Phase 7A.5 - Lightweight Workflow Linting
 Phase 7B - Workflow Evidence Validation
 Phase 7C - Workflow Evidence Emitters
+Phase 7D - WF-004 Canonical Evidence Consumption
+Phase 7E - Roadmap / Current-State Reader
 ```
 
 Current operational model:
@@ -78,7 +80,7 @@ Phase 7A.1 created the WF-002 workflow package standard so task handoffs can use
 Phase 7A.2 created the minimal context doctrine so context files stay short, scoped, and task-relevant.
 Phase 7A.3 created the folder-based workflow state standard so visible folders can organize early-phase workflow progress without introducing databases or orchestration layers.
 Phase 7A.4 created the AI judgment / mechanical work separation standard so scripts can handle deterministic work while AI focuses on interpretation and review.
-Phase 7A.5 is creating the lightweight workflow linting standard so packages and folders can be checked for structure, metadata, and obvious security issues before implementation.
+Phase 7A.5 created the lightweight workflow linting standard so packages and folders can be checked for structure, metadata, and obvious security issues before implementation.
 
 ---
 
@@ -94,15 +96,15 @@ Phase 8 - Open WebUI Workspace Knowledge Layer
 
 ### Current Objective
 
-Define the Phase 8 scope, boundaries, security rules, and definition of done for the Open WebUI Workspace Knowledge Layer before any implementation work begins.
+Use the completed Phase 8 Workspace governance artifacts to keep the knowledge layer accurate, bounded, and usable while reviewing the remaining narrow Private Open WebUI host-loopback question.
 
-This is a scope and readiness step only. It is not a runtime layer, orchestration layer, agent system, database, task queue, execution framework, or automatic runner.
+The Phase 8 scope, taxonomy, governance import record, and retrieval validation artifacts already exist in this repo. The remaining near-term work is refinement and validation only. It is not approval for new agents, orchestration, databases, task queues, execution frameworks, or automatic runners.
 
 ### Why This Comes Next
 
 Recent work introduced canonical evidence, WF-002 package folders, minimal context, folder-based workflow state, AI/mechanical separation, evidence validation, canonical emitters, WF-004 evidence consumption, and the deterministic roadmap/current-state reader.
 
-The next improvement is to define the Open WebUI Workspace Knowledge Layer scope before any collection or import work begins, so the knowledge layer stays bounded and reviewable.
+This repo now also contains the Phase 8 scope and taxonomy docs, the governance import record, and the retrieval validation report. The next improvement is to keep Workspace behavior grounded and review whether Private Open WebUI needs host-loopback browser access without weakening Private isolation.
 
 ### Phase 7E Exit Review
 
@@ -119,11 +121,12 @@ Phase 7F - Governed Codex Loop Design is deferred because the user chose not to 
 ### Next Build Artifacts
 
 ```text
-Docs/Phase_8_Workspace_Knowledge_Layer_Scope.md
-Docs/Workspace_Collection_Taxonomy.md
+No required new Phase 8 artifact before the Private host-loopback access review is resolved.
 ```
 
-Optional later artifacts after the standard is accepted:
+If a narrow Private host-loopback fix is approved, update only the minimum related documentation needed to reflect the final behavior.
+
+Optional later artifacts:
 
 ```text
 Templates/WF002_Workflow_Package/
@@ -156,19 +159,17 @@ Codex_Tasks/
 
 ### Definition of Done
 
-Phase 7F is complete when:
+The current Phase 8 refinement step is complete when:
 
-- governed loop boundaries are documented
-- roadmap state review flow is defined
-- next approved task identification flow is defined
-- Codex task package generation flow is defined
-- Codex result review flow is defined
-- validation gate flow is defined
-- human approval stop points are explicit
-- automatic execution is not introduced
-- no launcher behavior is changed
-- no workflow execution code is modified unless separately approved
-- no database, agent framework, task queue, or orchestration subsystem is introduced
+- the Workspace governance layer remains bounded to approved knowledge/reference content
+- retrieval behavior remains reviewable against the Phase 8 governance artifacts already in this repo
+- the Private Open WebUI host-loopback requirement is either rejected or narrowly approved
+- any approved Private host-loopback access is limited to `127.0.0.1:3001`
+- Private Ollama remains private-only
+- Private isolation is not weakened
+- Private services are not attached to Open networks
+- cloud fallback is not introduced
+- no agents, queues, databases, dashboards, MCPs, or orchestration are introduced
 
 ### Phase 7A.3 - Folder-Based Workflow State
 
@@ -223,10 +224,10 @@ Phase 7F is complete when:
 ### Next Build
 
 ```text
-Phase 8 - Open WebUI Workspace Knowledge Layer
+Phase 8 - Workspace refinement and narrow Private host-loopback review
 ```
 
-Phase 7F is deferred because the user chose not to pursue Codex loop design now. It should remain a future concept only unless separately approved.
+Phase 7F remains deferred because the user chose not to pursue Codex loop design now. It should remain a future concept only unless separately approved.
 
 ---
 
@@ -416,7 +417,7 @@ Do not expand into agents, Hermes integration, multi-intent execution, or new or
 
 ### Phase 7A.1 - WF-002 Workflow Package Standard
 
-- Status: Current
+- Status: Complete
 - Goal: Improve WF-002 Codex handoff quality using a lightweight workflow package folder structure.
 - Build Artifacts:
   - `Docs/WF002_Workflow_Package_Standard.md`
@@ -502,7 +503,7 @@ Do not expand into agents, Hermes integration, multi-intent execution, or new or
 
 ### Phase 7E - Roadmap / Current-State Reader
 
-- Status: Current
+- Status: Complete
 - Goal: Build a deterministic roadmap/current-state reader that reports the current phase, current objective, completed phases, and next approved step without executing tasks or advancing phases automatically.
 - Build Artifacts:
   - roadmap/current-state reader
@@ -594,10 +595,15 @@ Do not promote backlog items into active build work until the current evidence a
 
 ## Current Next Action
 
-Create the Phase 8 Workspace Knowledge Layer scope document.
+Review whether Private Open WebUI host-loopback access is required for user-facing Private browser use.
 
-Recommended Codex task:
+If Private browser access is required, apply only a narrow host-loopback fix:
 
 ```text
-Create a scope and readiness document for the Open WebUI Workspace Knowledge Layer. Define scope, boundaries, allowed and prohibited content, import rules, WF-006 relationship, security, initial build sequence, definition of done, risks, and the recommended next artifact.
+Allow only 127.0.0.1:3001 access for Private Open WebUI if approved.
+Keep Private Ollama private-only.
+Do not weaken Private isolation.
+Do not attach Private services to Open networks.
+Do not add cloud fallback.
+Do not introduce agents, queues, databases, dashboards, MCPs, or orchestration.
 ```
