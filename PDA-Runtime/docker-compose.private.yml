@@ -1,0 +1,45 @@
+name: pda-private
+
+services:
+  private-ollama:
+    image: ollama/ollama:latest
+    container_name: pda-private-ollama
+    labels:
+      ai.ecosystem.stack: private
+    ports:
+      - "127.0.0.1:11435:11434"
+    environment:
+      - OLLAMA_NO_CLOUD=true
+    volumes:
+      - private-ollama:/root/.ollama
+    networks:
+      - pda-private-net
+    restart: unless-stopped
+
+  private-open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: pda-private-open-webui
+    labels:
+      ai.ecosystem.stack: private
+    ports:
+      - "127.0.0.1:3001:8080"
+    environment:
+      - OLLAMA_BASE_URL=http://private-ollama:11434
+    volumes:
+      - private-open-webui-main:/app/backend/data
+    networks:
+      - pda-private-net
+    depends_on:
+      - private-ollama
+    restart: unless-stopped
+
+volumes:
+  private-ollama:
+    name: pda-private-ollama
+  private-open-webui-main:
+    name: pda-private-open-webui-main
+
+networks:
+  pda-private-net:
+    name: pda-private-net
+    internal: true
