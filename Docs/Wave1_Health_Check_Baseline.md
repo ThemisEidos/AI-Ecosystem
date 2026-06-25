@@ -107,6 +107,9 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File Scripts/Test-PDAPrivateStackHealth
 - Private health uses separate local endpoints for Private Open WebUI and Private Ollama
 - Private Open WebUI must point only to `http://private-ollama:11434`
 - WF-007 readiness remains validated through the existing workflow test rather than a new workflow implementation
+- Private Open WebUI health passes through container-local and validation-script checks even when host-loopback browser access is unavailable
+- Private Ollama remains private-only and is not exposed to the host
+- host-loopback UI access at `127.0.0.1:3001` is a deferred runtime limitation and is not currently treated as a Wave 1 validation blocker
 
 ## Logging Notes
 

@@ -199,6 +199,8 @@ Wave 1 runtime implementation now uses:
 - `PDA-Runtime/docker-compose.open.yml` as the explicit Open stack compose file
 - `PDA-Runtime/docker-compose.private.yml` as the Private stack compose file
 
+The `D:/D_Projects/01_AI_Ecosystem` repo is now the authoritative runtime source for the Wave 1 Open / Private split.
+
 Open services:
 
 - `pda-open-webui`
@@ -211,6 +213,17 @@ Private services:
 - `pda-private-ollama`
 
 Open and Private use separate Docker networks and separate writable volumes.
+
+## Validation Status
+
+Wave 1 split validation currently passes from the active `D:/D_Projects/01_AI_Ecosystem` repo:
+
+- Private stack recreation from the active repo passed
+- Private health validation passed
+- Private isolation validation passed
+- deployment validation passed
+- WF-007 readiness passed
+- Private Ollama remains unexposed to the host
 
 ## Start Commands
 
@@ -268,3 +281,5 @@ Rollback steps:
 - the Private stack now depends on separate `ghcr.io/open-webui/open-webui:main` and `ollama/ollama:latest` images being locally available
 - Private runtime implementation is intentionally narrow and does not add a Private n8n surface
 - Open and Private are separated at the Docker runtime boundary, but workflow semantics remain unchanged
+- Private Open WebUI host-loopback access at `127.0.0.1:3001` is not currently materialized by Docker Desktop even though the container is healthy internally
+- this host-loopback limitation does not weaken Private isolation because Private remains local-only, Private Ollama remains unexposed, and Private validation still passes

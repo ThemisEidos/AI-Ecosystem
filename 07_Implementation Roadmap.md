@@ -96,15 +96,15 @@ Phase 8 - Open WebUI Workspace Knowledge Layer
 
 ### Current Objective
 
-Use the completed Phase 8 Workspace governance artifacts to keep the knowledge layer accurate, bounded, and usable while reviewing the remaining narrow Private Open WebUI host-loopback question.
+Use the completed Phase 8 Workspace governance artifacts to keep the knowledge layer accurate, bounded, and usable while continuing Open Workspace refinement and retrieval-quality work.
 
-The Phase 8 scope, taxonomy, governance import record, and retrieval validation artifacts already exist in this repo. The remaining near-term work is refinement and validation only. It is not approval for new agents, orchestration, databases, task queues, execution frameworks, or automatic runners.
+The Phase 8 scope, taxonomy, governance import record, and retrieval validation artifacts already exist in this repo. The Wave 1 Open / Private runtime split is implemented and validated from this repo. The remaining near-term work is refinement and validation only. It is not approval for new agents, orchestration, databases, task queues, execution frameworks, or automatic runners.
 
 ### Why This Comes Next
 
 Recent work introduced canonical evidence, WF-002 package folders, minimal context, folder-based workflow state, AI/mechanical separation, evidence validation, canonical emitters, WF-004 evidence consumption, and the deterministic roadmap/current-state reader.
 
-This repo now also contains the Phase 8 scope and taxonomy docs, the governance import record, and the retrieval validation report. The next improvement is to keep Workspace behavior grounded and review whether Private Open WebUI needs host-loopback browser access without weakening Private isolation.
+This repo now also contains the Phase 8 scope and taxonomy docs, the governance import record, and the retrieval validation report. The next improvement is to keep Workspace behavior grounded and continue Phase 8 Open Workspace refinement. Private Open WebUI host-loopback access is now a deferred runtime limitation, not an active blocker for Phase 8 Open development.
 
 ### Phase 7E Exit Review
 
@@ -121,10 +121,10 @@ Phase 7F - Governed Codex Loop Design is deferred because the user chose not to 
 ### Next Build Artifacts
 
 ```text
-No required new Phase 8 artifact before the Private host-loopback access review is resolved.
+No required new runtime artifact before the next Phase 8 Open Workspace refinement step is selected.
 ```
 
-If a narrow Private host-loopback fix is approved, update only the minimum related documentation needed to reflect the final behavior.
+If a future Private host-loopback fix is approved, update only the minimum related documentation needed to reflect the final behavior.
 
 Optional later artifacts:
 
@@ -163,8 +163,8 @@ The current Phase 8 refinement step is complete when:
 
 - the Workspace governance layer remains bounded to approved knowledge/reference content
 - retrieval behavior remains reviewable against the Phase 8 governance artifacts already in this repo
-- the Private Open WebUI host-loopback requirement is either rejected or narrowly approved
-- any approved Private host-loopback access is limited to `127.0.0.1:3001`
+- the Private Open WebUI host-loopback limitation remains explicitly documented until separately resolved
+- any future approved Private host-loopback access is limited to `127.0.0.1:3001`
 - Private Ollama remains private-only
 - Private isolation is not weakened
 - Private services are not attached to Open networks
@@ -224,7 +224,7 @@ The current Phase 8 refinement step is complete when:
 ### Next Build
 
 ```text
-Phase 8 - Workspace refinement and narrow Private host-loopback review
+Phase 8 - Open Workspace refinement and retrieval-quality development
 ```
 
 Phase 7F remains deferred because the user chose not to pursue Codex loop design now. It should remain a future concept only unless separately approved.
@@ -595,11 +595,13 @@ Do not promote backlog items into active build work until the current evidence a
 
 ## Current Next Action
 
-Review whether Private Open WebUI host-loopback access is required for user-facing Private browser use.
+Continue Phase 8 Open Workspace refinement and retrieval-quality development.
 
-If Private browser access is required, apply only a narrow host-loopback fix:
+Deferred Private runtime limitation:
 
 ```text
+Private Open WebUI host-loopback access at 127.0.0.1:3001 is not currently materialized by Docker Desktop.
+Any future fix must be narrow.
 Allow only 127.0.0.1:3001 access for Private Open WebUI if approved.
 Keep Private Ollama private-only.
 Do not weaken Private isolation.
