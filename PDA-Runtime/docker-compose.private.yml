@@ -6,8 +6,6 @@ services:
     container_name: pda-private-ollama
     labels:
       ai.ecosystem.stack: private
-    ports:
-      - "127.0.0.1:11435:11434"
     environment:
       - OLLAMA_NO_CLOUD=true
     volumes:
