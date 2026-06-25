@@ -26,7 +26,7 @@
         0
       ],
       "parameters": {
-        "jsCode": "const body = $json.body || $json;\nconst userMessage = String(body.user_message || body.message || '').trim();\nconst confirmDispatch = body.confirm_dispatch === true || body.confirm_dispatch === 'true' || body.confirm_dispatch === 1 || body.confirm_dispatch === '1';\nconst conversationId = String(body.conversation_id || body.chat_id || (body.chat && body.chat.id) || '').trim();\nconst sessionId = String(body.session_id || '').trim();\nconst userId = String(body.user_id || (body.user && body.user.id) || '').trim();\nconst conversationTitle = String(body.conversation_title || body.title || (body.chat && body.chat.title) || '').trim();\nconst url = 'http://host.docker.internal:8788/pda-chat-bridge';\nreturn [{ json: { user_message: userMessage, confirm_dispatch: confirmDispatch, conversation_id: conversationId, session_id: sessionId, user_id: userId, conversation_title: conversationTitle, url, received_at: new Date().toISOString() } }];"
+        "jsCode": "const body = $json.body || $json;\nconst userMessage = String(body.user_message || body.message || '').trim();\nconst confirmDispatch = body.confirm_dispatch === true || body.confirm_dispatch === 'true' || body.confirm_dispatch === 1 || body.confirm_dispatch === '1';\nconst conversationId = String(body.conversation_id || body.chat_id || (body.chat && body.chat.id) || '').trim();\nconst sessionId = String(body.session_id || '').trim();\nconst userId = String(body.user_id || (body.user && body.user.id) || '').trim();\nconst conversationTitle = String(body.conversation_title || body.title || (body.chat && body.chat.title) || '').trim();\nconst workspaceContextAvailable = body.workspace_context_available === true || body.workspace_context_available === 'true' || body.workspace_context_available === 1 || body.workspace_context_available === '1';\nconst workspaceContextLabel = String(body.workspace_context_label || '').trim();\nconst workspaceContextSummary = String(body.workspace_context_summary || '').trim();\nconst url = 'http://host.docker.internal:8788/pda-chat-bridge';\nreturn [{ json: { user_message: userMessage, confirm_dispatch: confirmDispatch, conversation_id: conversationId, session_id: sessionId, user_id: userId, conversation_title: conversationTitle, workspace_context_available: workspaceContextAvailable, workspace_context_label: workspaceContextLabel, workspace_context_summary: workspaceContextSummary, url, received_at: new Date().toISOString() } }];"
       }
     },
     {
@@ -45,7 +45,7 @@
         "sendBody": true,
         "specifyBody": "json",
         "responseFormat": "json",
-        "jsonBody": "={{ { user_message: $json.user_message, confirm_dispatch: $json.confirm_dispatch, conversation_id: $json.conversation_id, session_id: $json.session_id, user_id: $json.user_id, conversation_title: $json.conversation_title } }}",
+        "jsonBody": "={{ { user_message: $json.user_message, confirm_dispatch: $json.confirm_dispatch, conversation_id: $json.conversation_id, session_id: $json.session_id, user_id: $json.user_id, conversation_title: $json.conversation_title, workspace_context_available: $json.workspace_context_available, workspace_context_label: $json.workspace_context_label, workspace_context_summary: $json.workspace_context_summary } }}",
         "options": {
           "timeout": 30000
         }

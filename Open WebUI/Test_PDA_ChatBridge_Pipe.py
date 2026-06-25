@@ -219,6 +219,41 @@ def test_completed_task_result_path_is_rendered() -> None:
     assert "Result path: `C:\\repo\\PDA-Tasks\\results\\08254f3b-result.json`." in rendered
 
 
+def test_workspace_context_is_forwarded() -> None:
+    pipe = make_pipe()
+    calls = []
+
+    async def fake_call(message, confirm_dispatch, conversation_context):
+        calls.append((message, confirm_dispatch, conversation_context))
+        return {
+            "response_text": "Current roadmap phase: Phase 8 - Open WebUI Workspace Knowledge Layer.",
+            "recommended_command": "",
+            "intent": "roadmap_state",
+            "confidence": 1,
+            "requires_confirmation": False,
+            "dispatch_status": "not_dispatched",
+            "next_action": "",
+            "bridge_status": "ready",
+        }
+
+    pipe._call_bridge = fake_call  # type: ignore[method-assign]
+    body = {
+        "messages": [{"role": "user", "content": "Using the AI Ecosystem Governance knowledge collection, what is the current roadmap phase?"}],
+        "chat_id": "chat-workspace-context",
+        "knowledge_context": {
+            "collection_name": "AI Ecosystem Governance",
+            "summary": "Phase 8 is current.",
+        },
+    }
+
+    run(pipe.pipe(body))
+
+    assert len(calls) == 1
+    assert calls[0][2]["workspace_context_available"] == "true"
+    assert calls[0][2]["workspace_context_label"] == "AI Ecosystem Governance"
+    assert "Phase 8 is current." in calls[0][2]["workspace_context_summary"]
+
+
 if __name__ == "__main__":
     test_normal_reporter_request()
     test_pipe_exposes_cooper_pipe_identity()
@@ -226,4 +261,5 @@ if __name__ == "__main__":
     test_title_generation_prompt_is_ignored()
     test_fail_closed_response_is_human_readable()
     test_completed_task_result_path_is_rendered()
+    test_workspace_context_is_forwarded()
     print("PASS")

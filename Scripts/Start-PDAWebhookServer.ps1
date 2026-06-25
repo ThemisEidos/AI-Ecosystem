@@ -305,6 +305,26 @@ try {
                 catch {}
             }
 
+            $WorkspaceContextAvailable = $false
+            if ($Body.PSObject.Properties.Name -contains "workspace_context_available") {
+                $WorkspaceContextAvailable = [bool](
+                    $Body.workspace_context_available -eq $true -or
+                    $Body.workspace_context_available -eq "true" -or
+                    $Body.workspace_context_available -eq 1 -or
+                    $Body.workspace_context_available -eq "1"
+                )
+            }
+
+            $WorkspaceContextLabel = ""
+            if ($Body.PSObject.Properties.Name -contains "workspace_context_label") {
+                $WorkspaceContextLabel = [string]$Body.workspace_context_label
+            }
+
+            $WorkspaceContextSummary = ""
+            if ($Body.PSObject.Properties.Name -contains "workspace_context_summary") {
+                $WorkspaceContextSummary = [string]$Body.workspace_context_summary
+            }
+
             if ([string]::IsNullOrWhiteSpace($Message)) {
                 Write-PDARawResponse -Stream $Stream -StatusCode 400 -Payload ([pscustomobject]@{
                     status = "fail"
@@ -338,6 +358,15 @@ try {
             }
             if (-not [string]::IsNullOrWhiteSpace($ConversationTitle)) {
                 $BridgeParams.ConversationTitle = $ConversationTitle
+            }
+            if ($WorkspaceContextAvailable) {
+                $BridgeParams.WorkspaceContextAvailable = $true
+            }
+            if (-not [string]::IsNullOrWhiteSpace($WorkspaceContextLabel)) {
+                $BridgeParams.WorkspaceContextLabel = $WorkspaceContextLabel
+            }
+            if (-not [string]::IsNullOrWhiteSpace($WorkspaceContextSummary)) {
+                $BridgeParams.WorkspaceContextSummary = $WorkspaceContextSummary
             }
 
             $Raw = & $BridgeScript @BridgeParams 2>&1

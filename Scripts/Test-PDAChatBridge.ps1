@@ -225,6 +225,17 @@ $Cases = @(
         marker = "chat-project-discussion-$([guid]::NewGuid().ToString())"
     }
     [pscustomobject]@{
+        name = "workspace roadmap state"
+        message = "Using the AI Ecosystem Governance knowledge collection, what is the current roadmap phase, and what should we do next?"
+        confirm = $false
+        expected_handoff = "roadmap_state"
+        expected_response_contains = "Current roadmap phase: Phase 8 - Open WebUI Workspace Knowledge Layer."
+        expected_dispatch_ready = $false
+        expected_dispatch = $false
+        expected_command = ""
+        marker = "chat-workspace-roadmap-$([guid]::NewGuid().ToString())"
+    }
+    [pscustomobject]@{
         name = "project assessment report"
         message = "Give me a project assessment report."
         confirm = $false

@@ -20,6 +20,15 @@ param(
 
     [Parameter(Mandatory = $false)]
     [string]$ConversationTitle
+,
+    [Parameter(Mandatory = $false)]
+    [switch]$WorkspaceContextAvailable,
+
+    [Parameter(Mandatory = $false)]
+    [string]$WorkspaceContextLabel,
+
+    [Parameter(Mandatory = $false)]
+    [string]$WorkspaceContextSummary
 )
 
 $ErrorActionPreference = "Stop"
@@ -97,6 +106,15 @@ try {
     }
     if ($ConversationTitle) {
         $BridgeArgs += @("-ConversationTitle", $ConversationTitle)
+    }
+    if ($WorkspaceContextAvailable) {
+        $BridgeArgs += "-WorkspaceContextAvailable"
+    }
+    if ($WorkspaceContextLabel) {
+        $BridgeArgs += @("-WorkspaceContextLabel", $WorkspaceContextLabel)
+    }
+    if ($WorkspaceContextSummary) {
+        $BridgeArgs += @("-WorkspaceContextSummary", $WorkspaceContextSummary)
     }
 
     $Raw = & pwsh -NoProfile -File $BridgeScript @BridgeArgs 2>&1

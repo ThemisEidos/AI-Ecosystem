@@ -82,6 +82,7 @@ class Pipe:
         workshop_mode = self._resolve_workshop_mode(selected_model_identity)
         session_key = self._get_session_key(body, __user__)
         conversation_context = self._extract_conversation_context(body, __user__, session_key)
+        conversation_context.update(self._extract_workspace_context(body))
         conversation_context.update(
             {
                 "selected_model_identity": selected_model_identity,
@@ -316,6 +317,48 @@ class Pipe:
         }
         return {key: value for key, value in context.items() if value}
 
+    def _extract_workspace_context(self, body: dict) -> Dict[str, str]:
+        candidate_keys = (
+            "knowledge",
+            "knowledge_context",
+            "retrieval_context",
+            "retrieved_context",
+            "retrievals",
+            "sources",
+            "citations",
+            "docs",
+            "documents",
+            "files",
+            "attachments",
+            "context",
+        )
+
+        labels: List[str] = []
+        snippets: List[str] = []
+        for key in candidate_keys:
+            if key not in body:
+                continue
+            value = body.get(key)
+            if value is None:
+                continue
+            labels.extend(self._collect_named_values(value))
+            snippets.extend(self._collect_text_snippets(value))
+
+        label_text = ", ".join(dict.fromkeys(label for label in labels if label))
+        snippet_text = "\n".join(dict.fromkeys(part for part in snippets if part)).strip()
+        if len(snippet_text) > 1200:
+            snippet_text = snippet_text[:1200].rstrip() + "..."
+
+        has_context = bool(label_text or snippet_text)
+        result = {
+            "workspace_context_available": "true" if has_context else "false",
+        }
+        if label_text:
+            result["workspace_context_label"] = label_text
+        if snippet_text:
+            result["workspace_context_summary"] = snippet_text
+        return result
+
     def _is_confirmation_message(self, text: str) -> bool:
         normalized = re.sub(r"[^a-z0-9]+", " ", text.lower()).strip()
         if not normalized:
@@ -506,6 +549,33 @@ class Pipe:
             else:
                 collected.append(value)
         return collected
+
+    def _collect_named_values(self, value: Any) -> List[str]:
+        names: List[str] = []
+        if isinstance(value, dict):
+            for key, item in value.items():
+                if key in {"name", "title", "collection", "collection_name", "filename", "file_name"} and isinstance(item, str) and item.strip():
+                    names.append(item.strip())
+                names.extend(self._collect_named_values(item))
+        elif isinstance(value, list):
+            for item in value:
+                names.extend(self._collect_named_values(item))
+        return names
+
+    def _collect_text_snippets(self, value: Any) -> List[str]:
+        snippets: List[str] = []
+        if isinstance(value, dict):
+            for key, item in value.items():
+                if key in {"content", "text", "snippet", "summary", "source"} and isinstance(item, str) and item.strip():
+                    snippets.append(item.strip())
+                else:
+                    snippets.extend(self._collect_text_snippets(item))
+        elif isinstance(value, list):
+            for item in value:
+                snippets.extend(self._collect_text_snippets(item))
+        elif isinstance(value, str) and value.strip():
+            snippets.append(value.strip())
+        return snippets
 
     def _append_debug_log(
         self,

@@ -42,8 +42,11 @@ const conversationId = String(body.conversation_id || body.chat_id || (body.chat
 const sessionId = String(body.session_id || '').trim();
 const userId = String(body.user_id || (body.user && body.user.id) || '').trim();
 const conversationTitle = String(body.conversation_title || body.title || (body.chat && body.chat.title) || '').trim();
+const workspaceContextAvailable = body.workspace_context_available === true || body.workspace_context_available === 'true' || body.workspace_context_available === 1 || body.workspace_context_available === '1';
+const workspaceContextLabel = String(body.workspace_context_label || '').trim();
+const workspaceContextSummary = String(body.workspace_context_summary || '').trim();
 const url = 'http://host.docker.internal:8788/pda-chat-bridge';
-return [{ json: { user_message: userMessage, confirm_dispatch: confirmDispatch, conversation_id: conversationId, session_id: sessionId, user_id: userId, conversation_title: conversationTitle, url, received_at: new Date().toISOString() } }];
+return [{ json: { user_message: userMessage, confirm_dispatch: confirmDispatch, conversation_id: conversationId, session_id: sessionId, user_id: userId, conversation_title: conversationTitle, workspace_context_available: workspaceContextAvailable, workspace_context_label: workspaceContextLabel, workspace_context_summary: workspaceContextSummary, url, received_at: new Date().toISOString() } }];
 '@
             }
         }
@@ -60,7 +63,7 @@ return [{ json: { user_message: userMessage, confirm_dispatch: confirmDispatch, 
                 sendBody = $true
                 specifyBody = "json"
                 responseFormat = "json"
-                jsonBody = '={{ { user_message: $json.user_message, confirm_dispatch: $json.confirm_dispatch, conversation_id: $json.conversation_id, session_id: $json.session_id, user_id: $json.user_id, conversation_title: $json.conversation_title } }}'
+                jsonBody = '={{ { user_message: $json.user_message, confirm_dispatch: $json.confirm_dispatch, conversation_id: $json.conversation_id, session_id: $json.session_id, user_id: $json.user_id, conversation_title: $json.conversation_title, workspace_context_available: $json.workspace_context_available, workspace_context_label: $json.workspace_context_label, workspace_context_summary: $json.workspace_context_summary } }}'
                 options = [pscustomobject]@{
                     timeout = 30000
                 }

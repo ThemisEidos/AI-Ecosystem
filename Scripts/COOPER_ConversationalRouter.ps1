@@ -23,6 +23,7 @@ $TaskResultScript = Join-Path $PSScriptRoot "Get-PDATaskResult.ps1"
 $MemoryCandidateSummaryScript = Join-Path $PSScriptRoot "Get-PDAMemoryCandidateSummary.ps1"
 $DispatchStatusScript = Join-Path $PSScriptRoot "Get-PDADispatchStatus.ps1"
 $StatusBridgeScript = Join-Path $PSScriptRoot "Invoke-COOPERStatusCommand.ps1"
+$RoadmapStateScript = Join-Path $PSScriptRoot "Get-COOPERRoadmapState.ps1"
 $EnvironmentHelperScript = Join-Path $PSScriptRoot "PDA_Environment.ps1"
 $ExecutorRegistryScript = Join-Path $PSScriptRoot "PDA_ExecutorRegistry.ps1"
 $WorkflowDefinitionsScript = Join-Path $PSScriptRoot "Get-COOPERWorkflowDefinitions.ps1"
@@ -807,12 +808,72 @@ function Test-PDAConversationalGoalPlanning {
     )
 }
 
+function Test-PDAConversationalWorkspaceKnowledgeReference {
+    param([Parameter(Mandatory = $true)][string]$NormalizedText)
+
+    return [bool](
+        $NormalizedText -match '(?i)\b(workspace|knowledge collection|governance collection|ai ecosystem governance)\b'
+    )
+}
+
+function Test-PDAConversationalRoadmapState {
+    param([Parameter(Mandatory = $true)][string]$NormalizedText)
+
+    $RoadmapTerms = $NormalizedText -match '(?i)\b(roadmap|road map|phase 8|current phase|roadmap phase|what phase are we in)\b'
+    $RoadmapNextStep = (
+        $NormalizedText -match '(?i)\b(what should we do next|what should i do next|what is next|what should happen next|next step)\b' -and
+        (
+            $NormalizedText -match '(?i)\b(roadmap|phase|workspace|knowledge collection|governance)\b'
+        )
+    )
+
+    return [bool]($RoadmapTerms -or $RoadmapNextStep)
+}
+
 function Test-PDAConversationalJudgmentAdvice {
     param([Parameter(Mandatory = $true)][string]$NormalizedText)
 
     return [bool](
         $NormalizedText -match '(?i)\b(should i|should we|would it be better|what should i do|what do you recommend|what is your recommendation|what is your opinion|what do you think|should i use|should we use|should i move|should we move|is it worth|is it better|compare|comparison|tradeoff|trade-off|pros and cons|what are the risks|biggest risk|concern|concerns|assumption|assumptions|challenge the assumption|\bvs\b|\bversus\b)\b'
     )
+}
+
+function Get-COOPERWorkspaceCollectionNextStep {
+    param(
+        [Parameter(Mandatory = $false)]
+        [string]$Root = (Split-Path -Parent $PSScriptRoot)
+    )
+
+    $CandidatePaths = @(
+        (Join-Path $Root "Docs\Workspace_Governance_Core_Import_Record.md"),
+        (Join-Path $Root "Docs\Workspace_Governance_Core_Retrieval_Validation.md")
+    )
+
+    foreach ($Path in $CandidatePaths) {
+        if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+            continue
+        }
+
+        try {
+            $Content = Get-Content -LiteralPath $Path -Raw -ErrorAction Stop
+        }
+        catch {
+            continue
+        }
+
+        if ([string]::IsNullOrWhiteSpace($Content)) {
+            continue
+        }
+
+        if ($Content -match '(?im)^Begin Phase 8 operational testing for retrieval behavior and collection usefulness validation\.$') {
+            return "Begin Phase 8 operational testing for retrieval behavior and collection usefulness validation."
+        }
+        if ($Content -match '(?im)^Begin Phase 8 refinement iteration\.$') {
+            return "Begin Phase 8 refinement iteration."
+        }
+    }
+
+    return ""
 }
 
 function Test-PDAConversationalStructuredOutputRequest {
@@ -1326,6 +1387,18 @@ function Resolve-PDAConversationalRoute {
         return [pscustomobject]$Route
     }
 
+    if (Test-PDAConversationalRoadmapState -NormalizedText $Normalized) {
+        $Route.route_type = "roadmap_state"
+        $Route.response_mode = "direct_answer"
+        $Route.recommended_command = ""
+        $Route.reason = "Roadmap or phase-state question should resolve from repository roadmap sources."
+        $Route.confidence = 1
+        $Route.intent = "roadmap_state"
+        $Route.task_type = "roadmap_state"
+        $Route.briefing_focus = "roadmap"
+        return [pscustomobject]$Route
+    }
+
     if (Test-PDAConversationalJudgmentAdvice -NormalizedText $Normalized) {
         if (Test-PDAConversationalStructuredOutputRequest -NormalizedText $Normalized) {
             $Route.route_type = "goal_planning"
@@ -1472,6 +1545,15 @@ function Get-PDAConversationalNaturalResponse {
         [string]$WorkshopMode,
 
         [Parameter(Mandatory = $false)]
+        [bool]$WorkspaceContextAvailable = $false,
+
+        [Parameter(Mandatory = $false)]
+        [string]$WorkspaceContextLabel = "",
+
+        [Parameter(Mandatory = $false)]
+        [string]$WorkspaceContextSummary = "",
+
+        [Parameter(Mandatory = $false)]
         [string]$Root = (Split-Path -Parent $PSScriptRoot)
     )
 
@@ -1565,6 +1647,38 @@ function Get-PDAConversationalNaturalResponse {
                 $BaseResponse.response_text = if ($StatusResult -and $StatusResult.PSObject.Properties.Name -contains "reason" -and -not [string]::IsNullOrWhiteSpace([string]$StatusResult.reason)) { [string]$StatusResult.reason } else { "COOPER status is unavailable because workshop mode was not selected." }
                 $BaseResponse.next_action = "Select COOPER or COOPER - Private, then ask for system status again."
                 $BaseResponse.latest_result_response_text = $BaseResponse.response_text
+            }
+        }
+        "roadmap_state" {
+            $RoadmapState = Invoke-PDAConversationalJsonScript -Path $RoadmapStateScript -Arguments @("-Root", $Root, "-AsJson") -SourceName "COOPER roadmap state"
+            $HasWorkspaceReference = Test-PDAConversationalWorkspaceKnowledgeReference -NormalizedText $NormalizedText
+            $NextStep = if ($HasWorkspaceReference) { Get-COOPERWorkspaceCollectionNextStep -Root $Root } else { "" }
+            if ([string]::IsNullOrWhiteSpace($NextStep) -and $RoadmapState -and $RoadmapState.PSObject.Properties.Name -contains "next_step") {
+                $NextStep = [string]$RoadmapState.next_step
+            }
+
+            if ($RoadmapState -and [string]$RoadmapState.status -eq "pass") {
+                $ResponseLines = New-Object System.Collections.Generic.List[string]
+                $ResponseLines.Add(("Current roadmap phase: {0}." -f [string]$RoadmapState.current_phase)) | Out-Null
+                if (-not [string]::IsNullOrWhiteSpace($NextStep)) {
+                    $ResponseLines.Add(("Next: {0}" -f $NextStep.Trim())) | Out-Null
+                }
+                if ($HasWorkspaceReference -and -not $WorkspaceContextAvailable) {
+                    $ResponseLines.Add("Workspace context was not provided to COOPER for this request, so this answer is grounded in repo roadmap and validation records rather than confirmed Workspace retrieval.") | Out-Null
+                }
+
+                $BaseResponse.response_text = ($ResponseLines -join " ")
+                $BaseResponse.next_action = if (-not [string]::IsNullOrWhiteSpace($NextStep)) { $NextStep } else { "Review the current roadmap and validation records." }
+                $BaseResponse.latest_result_response_text = $BaseResponse.response_text
+                $BaseResponse.intent = "roadmap_state"
+                $BaseResponse.confidence = 1
+                $BaseResponse.source_of_truth = "Scripts/Get-COOPERRoadmapState.ps1"
+                $BaseResponse.roadmap_state = $RoadmapState
+            }
+            else {
+                $BaseResponse.response_text = "Roadmap state is unavailable right now."
+                $BaseResponse.next_action = "Inspect Scripts/Get-COOPERRoadmapState.ps1 and the roadmap source documents."
+                $BaseResponse.source_of_truth = "Scripts/Get-COOPERRoadmapState.ps1"
             }
         }
         "tool_inventory" {
