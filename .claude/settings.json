@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd /mnt/d/D_Projects/01_AI_Ecosystem && printf '\\n=== COOPER Brain: North Star ===\\n' && cat 'Obsidian Vault/brain/North Star.md' 2>/dev/null && printf '\\n=== COOPER Brain: Gotchas ===\\n' && cat 'Obsidian Vault/brain/Gotchas.md' 2>/dev/null && printf '\\n=== Brain loaded. Use /om-review for full context. ===\\n'"
+          }
+        ]
+      }
+    ]
+  }
+}
