@@ -41,6 +41,10 @@ gemma4:12b runs extended reasoning by default (40-53s/call). `"think": False` dr
 
 Deliberate simplification for a single local user. Does not survive server restart. Will scale at Step 7.
 
+### 2026-07-01 · workshop.py: stateless enforcement layer (step 6)
+
+`workshop.py` added as a pure enforcement module — no side effects, no state, raises `WorkshopViolation` or returns `None`. Three enforcement points: (1) tool compatibility — tool's `workshop` field must match active workshop; (2) executor safety — `{browser, llm_api}` always blocked in Private Workshop; (3) backend integrity — `private + openai` hard-blocked per-request, not just at startup. `check_backend` fires in lifespan (informational print) AND in `_handle_dispatch` (conversational reply, not 500). Tool `workshop` field matched case-insensitively, " Workshop" suffix stripped — tools with no field set pass (permissive default, tighten at step 9). `GET /workshop` added for live observability.
+
 ### 2026-07-01 · executor.py: thread pool subprocess, path traversal guard
 
 asyncio subprocess broken on Windows uvicorn. Hard timeout 60s, output cap 8KB. Path traversal prevented via `candidate.relative_to(_SCRIPTS_DIR.resolve())`. Requires explicit `.ps1` filename in user message.

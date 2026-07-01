@@ -1,0 +1,435 @@
+"""
+COOPER Core — FastAPI conversational runtime.
+
+WORKSHOP env var selects the backend:
+  open    (default) — GPT-4o-mini via OpenAI API. Requires OPENAI_API_KEY.
+  private           — gemma4:12b via Ollama. Fully local.
+
+Endpoints:
+  GET  /health                — liveness + active workshop/model info
+  POST /chat                  — {message, history} -> {reply, decision, reason}
+  GET  /v1/models             — OpenAI-compatible model list (for Open WebUI)
+  POST /v1/chat/completions   — OpenAI-compatible chat; stream=true uses real streaming
+"""
+import json
+import os
+import time
+import uuid
+from contextlib import asynccontextmanager
+from pathlib import Path
+from typing import AsyncIterator, List, Optional
+
+import httpx
+from fastapi import Depends, FastAPI, HTTPException, Security
+from fastapi.responses import StreamingResponse
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from pydantic import BaseModel, Field
+
+from decision import TurnDecision, route_turn, route_turn_stream
+import registry
+import approval
+import executor
+import workshop
+
+# ── Config ─────────────────────────────────────────────────────────────────────
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+_MODELFILE  = _REPO_ROOT / "Models" / "cooper-personality" / "Modelfile"
+
+WORKSHOP = os.environ.get("WORKSHOP", "open").strip().lower()
+
+# Ollama (used by private workshop and as classifier fallback)
+OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
+
+# OpenAI (used by open workshop)
+OPENAI_BASE_URL = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
+OPENAI_API_KEY  = os.environ.get("OPENAI_API_KEY", "")
+
+# Per-workshop model and backend selection
+if WORKSHOP == "private":
+    BACKEND          = "ollama"
+    COOPER_MODEL     = os.environ.get("COOPER_MODEL", "gemma4:12b")
+    CLASSIFIER_MODEL = os.environ.get("COOPER_CLASSIFIER_MODEL", "gemma4:12b")
+    BACKEND_URL      = OLLAMA_HOST
+    BACKEND_KEY      = "ollama"
+else:  # open
+    BACKEND          = "openai"
+    COOPER_MODEL     = os.environ.get("COOPER_MODEL", "gpt-4o-mini")
+    CLASSIFIER_MODEL = os.environ.get("COOPER_CLASSIFIER_MODEL", "gpt-4o-mini")
+    BACKEND_URL      = OPENAI_BASE_URL
+    BACKEND_KEY      = OPENAI_API_KEY
+
+
+def _load_system_prompt() -> str:
+    if not _MODELFILE.exists():
+        return (
+            "You are COOPER (Command Operations Orchestrator for Planning, Execution, "
+            "and Reporting). TARS-inspired. Direct, concise, dry humor at 35%, "
+            "professionalism at 90%. Lead with the answer. Surface risks early."
+        )
+    text = _MODELFILE.read_text(encoding="utf-8")
+    start = text.find('SYSTEM """')
+    if start == -1:
+        return ""
+    start += len('SYSTEM """')
+    end = text.find('"""', start)
+    return text[start:end].strip() if end != -1 else ""
+
+
+SYSTEM_PROMPT = _load_system_prompt()
+
+# ── Auth ───────────────────────────────────────────────────────────────────────
+_bearer  = HTTPBearer(auto_error=False)
+_API_KEY = os.environ.get("COOPER_API_KEY", "")
+
+
+def _require_auth(
+    creds: Optional[HTTPAuthorizationCredentials] = Security(_bearer),
+) -> None:
+    if _API_KEY and (not creds or creds.credentials != _API_KEY):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+
+async def _handle_dispatch(message: str) -> str:
+    """
+    Quartermaster selects a tool; Safety Officer gates it; Workbench executes
+    if the gate passes. L0/L1 auto-run immediately. L2+ halts for approval.
+    """
+    # Enforce backend integrity before doing anything else
+    try:
+        workshop.check_backend(BACKEND, WORKSHOP)
+    except workshop.WorkshopViolation as exc:
+        return f"Workshop violation: {exc}"
+
+    tool = registry.select_tool(WORKSHOP, message)
+    if tool is None:
+        return (
+            "Acknowledged. No registered tool in the active workshop matches this "
+            "request. Nothing will run — check the registry or rephrase."
+        )
+
+    # Enforce workshop boundary before gating or executing
+    try:
+        workshop.check_tool(tool, WORKSHOP)
+    except workshop.WorkshopViolation as exc:
+        return f"Workshop violation: {exc}"
+
+    if approval.needs_approval(tool):
+        approval.request(WORKSHOP, tool, message)
+        return (
+            f"Halt — {tool.get('name', tool.get('id'))} "
+            f"[{tool.get('drawer', 'Uncategorized')}, permission level {tool.get('permission_level', '?')}] "
+            f"requires approval before it can proceed. Reply 'approve' or 'deny'."
+        )
+
+    # L0/L1: execute immediately
+    return await _execute(tool, message)
+
+
+async def _execute(tool: dict, message: str) -> str:
+    """Run an approved/auto-run tool through the Workbench and return its output."""
+    try:
+        return await executor.run(tool, message, WORKSHOP)
+    except executor.ExecutionError as exc:
+        return f"Workbench error: {exc}"
+
+
+async def _resolve_approval(message: str) -> str:
+    """
+    Consume the pending ticket and execute on approve, or cancel on deny.
+    Called only when approval.has_pending() and approval.is_response() are both true.
+    """
+    if approval.is_denied(message):
+        ticket = approval.consume(WORKSHOP)
+        if ticket is None:
+            return "No pending action to cancel."
+        name = ticket.tool.get("name", ticket.tool.get("id"))
+        return f"Cancelled. {name} will not run."
+
+    ticket = approval.consume(WORKSHOP)
+    if ticket is None:
+        return "No pending action to approve. Nothing queued."
+
+    return await _execute(ticket.tool, ticket.message)
+
+
+# ── Startup ────────────────────────────────────────────────────────────────────
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    print(f"\n  workshop : {WORKSHOP}")
+    print(f"  backend  : {BACKEND}")
+    print(f"  model    : {COOPER_MODEL}")
+    print(f"  classify : {CLASSIFIER_MODEL}")
+
+    if BACKEND == "ollama":
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            try:
+                resp = await client.get(f"{OLLAMA_HOST}/api/tags")
+                models = [m["name"] for m in resp.json().get("models", [])]
+                known = {m.lower() for m in models} | {m.split(":")[0].lower() for m in models}
+                for name in {COOPER_MODEL, CLASSIFIER_MODEL}:
+                    ok = name.lower() in known
+                    print(f"  {'[ok]' if ok else '[!!]'} ollama model: {name}")
+            except Exception as exc:
+                print(f"  [!!] cannot reach Ollama at {OLLAMA_HOST}: {exc}")
+    else:
+        if not OPENAI_API_KEY:
+            print("  [!!] OPENAI_API_KEY is not set - Open Workshop will fail on generation")
+        else:
+            print(f"  [ok] OPENAI_API_KEY present ({len(OPENAI_API_KEY)} chars)")
+
+    # Workshop boundary integrity check
+    try:
+        workshop.check_backend(BACKEND, WORKSHOP)
+        print(f"  [ok] workshop boundary: {WORKSHOP} -> {BACKEND}")
+    except workshop.WorkshopViolation as exc:
+        print(f"  [!!] WORKSHOP VIOLATION at startup: {exc}")
+
+    print()
+    yield
+
+
+app = FastAPI(title="COOPER Core", version="2.1.0", lifespan=lifespan)
+
+
+# ── Health ─────────────────────────────────────────────────────────────────────
+@app.get("/health")
+async def health():
+    return {
+        "status":     "ok",
+        "workshop":   WORKSHOP,
+        "backend":    BACKEND,
+        "model":      COOPER_MODEL,
+        "classifier": CLASSIFIER_MODEL,
+    }
+
+
+# ── Registry (Quartermaster) ────────────────────────────────────────────────
+@app.get("/tools", dependencies=[Depends(_require_auth)])
+async def list_tools():
+    try:
+        tools = registry.list_tools(WORKSHOP)
+    except registry.RegistryError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    return {"workshop": WORKSHOP, "count": len(tools), "tools": tools}
+
+
+# ── Approval gate (Safety Officer) ──────────────────────────────────────────
+@app.get("/pending", dependencies=[Depends(_require_auth)])
+async def pending():
+    ticket = approval.peek(WORKSHOP)
+    if ticket is None:
+        return {"workshop": WORKSHOP, "pending": None}
+    return {
+        "workshop": WORKSHOP,
+        "pending": {
+            "id":                ticket.id,
+            "tool":              ticket.tool.get("name", ticket.tool.get("id")),
+            "permission_level":  ticket.tool.get("permission_level"),
+            "requested_message": ticket.message,
+            "age_seconds":       round(time.time() - ticket.created_at, 1),
+        },
+    }
+
+
+# ── Workshop status ───────────────────────────────────────────────────────────
+@app.get("/workshop", dependencies=[Depends(_require_auth)])
+async def workshop_status():
+    violation = None
+    try:
+        workshop.check_backend(BACKEND, WORKSHOP)
+    except workshop.WorkshopViolation as exc:
+        violation = str(exc)
+    return {
+        "workshop":  WORKSHOP,
+        "backend":   BACKEND,
+        "model":     COOPER_MODEL,
+        "boundary":  "enforced" if violation is None else "VIOLATED",
+        "violation": violation,
+    }
+
+
+# ── POST /chat ────────────────────────────────────────────────────────────────
+class ChatRequest(BaseModel):
+    message: str = Field(..., min_length=1, max_length=32_000)
+    history: List[dict] = Field(default=[], max_length=50)
+
+
+class ChatResponse(BaseModel):
+    reply:    str
+    decision: str = "answer"
+    reason:   str = ""
+
+
+@app.post("/chat", response_model=ChatResponse, dependencies=[Depends(_require_auth)])
+async def chat(req: ChatRequest):
+    if registry.is_registry_query(req.message):
+        reply = registry.format_tool_list(WORKSHOP)
+        return {"reply": reply, "decision": "answer", "reason": "registry query answered directly by Quartermaster"}
+
+    if approval.has_pending(WORKSHOP) and approval.is_response(req.message):
+        reply = await _resolve_approval(req.message)
+        return {"reply": reply, "decision": "answer", "reason": "approval gate resolved"}
+
+    reply, td = await route_turn(
+        req.message,
+        req.history,
+        generate_answer=_generate,
+        base_url=BACKEND_URL,
+        api_key=BACKEND_KEY,
+        model=COOPER_MODEL,
+        classifier_model=CLASSIFIER_MODEL,
+        backend=BACKEND,
+        dispatch_handler=_handle_dispatch,
+    )
+    return {"reply": reply, "decision": td.decision, "reason": td.reason}
+
+
+# ── OpenAI-compatible endpoints ────────────────────────────────────────────────
+@app.get("/v1/models")
+async def list_models():
+    return {
+        "object": "list",
+        "data": [{
+            "id":       COOPER_MODEL,
+            "object":   "model",
+            "created":  0,
+            "owned_by": f"cooper-{WORKSHOP}",
+        }],
+    }
+
+
+class _OAIMessage(BaseModel):
+    role:    str
+    content: str
+
+
+class _OAIChatRequest(BaseModel):
+    model:       Optional[str]   = None
+    messages:    List[_OAIMessage]
+    stream:      bool            = False
+    temperature: Optional[float] = None
+    max_tokens:  Optional[int]   = None
+
+
+@app.post("/v1/chat/completions", dependencies=[Depends(_require_auth)])
+async def oai_chat(req: _OAIChatRequest):
+    if not req.messages:
+        raise HTTPException(status_code=422, detail="messages list is empty")
+
+    non_system = [m for m in req.messages if m.role != "system"]
+    if not non_system:
+        raise HTTPException(status_code=422, detail="no non-system messages")
+
+    last    = non_system[-1]
+    message = last.content if last.role == "user" else ""
+    history = [{"role": m.role, "content": m.content} for m in non_system[:-1]]
+
+    if req.stream:
+        return StreamingResponse(
+            _stream_sse(message, history),
+            media_type="text/event-stream",
+            headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"},
+        )
+
+    if registry.is_registry_query(message):
+        reply = registry.format_tool_list(WORKSHOP)
+        td = TurnDecision(decision="answer", reason="registry query answered directly by Quartermaster")
+    elif approval.has_pending(WORKSHOP) and approval.is_response(message):
+        reply = await _resolve_approval(message)
+        td = TurnDecision(decision="answer", reason="approval gate resolved")
+    else:
+        reply, td = await route_turn(
+            message,
+            history,
+            generate_answer=_generate,
+            base_url=BACKEND_URL,
+            api_key=BACKEND_KEY,
+            model=COOPER_MODEL,
+            classifier_model=CLASSIFIER_MODEL,
+            backend=BACKEND,
+            dispatch_handler=_handle_dispatch,
+        )
+    request_id = f"chatcmpl-{uuid.uuid4().hex[:8]}"
+    return {
+        "id":      request_id,
+        "object":  "chat.completion",
+        "created": int(time.time()),
+        "model":   COOPER_MODEL,
+        "choices": [{
+            "index":        0,
+            "message":      {"role": "assistant", "content": reply},
+            "finish_reason": "stop",
+        }],
+        "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+    }
+
+
+# ── SSE streaming ──────────────────────────────────────────────────────────────
+async def _stream_sse(message: str, history: List[dict]) -> AsyncIterator[str]:
+    request_id = f"chatcmpl-{uuid.uuid4().hex[:8]}"
+    created    = int(time.time())
+
+    try:
+        if registry.is_registry_query(message):
+            content_iter = _single_text_chunk(registry.format_tool_list(WORKSHOP))
+        elif approval.has_pending(WORKSHOP) and approval.is_response(message):
+            content_iter = _single_text_chunk(await _resolve_approval(message))
+        else:
+            td, content_iter = await route_turn_stream(
+                message,
+                history,
+                system_prompt=SYSTEM_PROMPT,
+                base_url=BACKEND_URL,
+                api_key=BACKEND_KEY,
+                model=COOPER_MODEL,
+                classifier_model=CLASSIFIER_MODEL,
+                backend=BACKEND,
+                dispatch_handler=_handle_dispatch,
+            )
+
+        async for chunk in content_iter:
+            data = {
+                "id":      request_id,
+                "object":  "chat.completion.chunk",
+                "created": created,
+                "model":   COOPER_MODEL,
+                "choices": [{"index": 0, "delta": {"content": chunk}, "finish_reason": None}],
+            }
+            yield f"data: {json.dumps(data)}\n\n"
+
+    except Exception as exc:
+        err = {
+            "id":      request_id,
+            "object":  "chat.completion.chunk",
+            "created": created,
+            "model":   COOPER_MODEL,
+            "choices": [{"index": 0, "delta": {"content": f"[COOPER error: {exc}]"}, "finish_reason": None}],
+        }
+        yield f"data: {json.dumps(err)}\n\n"
+
+    yield f"data: {json.dumps({'id': request_id, 'object': 'chat.completion.chunk', 'created': created, 'model': COOPER_MODEL, 'choices': [{'index': 0, 'delta': {}, 'finish_reason': 'stop'}]})}\n\n"
+    yield "data: [DONE]\n\n"
+
+
+# ── Generation helper (for blocking route_turn) ────────────────────────────────
+async def _single_text_chunk(text: str) -> AsyncIterator[str]:
+    yield text
+
+
+async def _generate(message: str, history: List[dict]) -> str:
+    msgs = _build_messages(history, message)
+    if BACKEND == "openai":
+        from decision import _openai_complete
+        return await _openai_complete(BACKEND_URL, BACKEND_KEY, COOPER_MODEL, msgs)
+    from decision import _ollama_complete
+    return await _ollama_complete(BACKEND_URL, COOPER_MODEL, msgs)
+
+
+def _build_messages(history: List[dict], user_message: str) -> List[dict]:
+    msgs: List[dict] = [{"role": "system", "content": SYSTEM_PROMPT}]
+    for turn in history:
+        if turn.get("role") != "system":
+            msgs.append({"role": turn["role"], "content": turn.get("content", "")})
+    if user_message.strip():
+        msgs.append({"role": "user", "content": user_message})
+    return msgs

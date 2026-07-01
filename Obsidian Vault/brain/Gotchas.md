@@ -40,6 +40,14 @@ Without `"think": false` in the Ollama API payload, gemma4:12b activates extende
 
 `~/.wslconfig` with `networkingMode=mirrored` is inert until WSL restarts. Run `wsl --shutdown` from Windows, wait ~8s, reopen. Confirm with `wslinfo --networking-mode` (must print `mirrored`).
 
+### 2026-07-01 · workshop.check_tool() is permissive for tools with no workshop field
+
+If a tool in the registry has no `workshop` field (or an empty string), `check_tool()` passes it through without raising. This is intentional — PS-era tools in the registry predate workshop tagging. Do not rely on `check_tool()` to enforce boundaries for untagged tools. Tighten by adding `workshop` fields to the registry in step 9.
+
+### 2026-07-01 · BACKEND is a module-level constant — restart required for WORKSHOP changes
+
+`BACKEND` is set once at startup from the `WORKSHOP` env var. `check_backend` fires per-request but compares against the startup-time value. A live env var change (without server restart) won't update `BACKEND`. If `WORKSHOP` is changed, kill python processes and run `Start-CooperCore.ps1` again.
+
 ### 2026-06-29 · ECC GateGuard blocks first Write/Edit to each new file this session
 
 GateGuard requires facts (callers, no duplicate, data schemas, verbatim instruction) before the first creation of each new file per session. Present facts inline in the message text, then retry the identical tool call.
