@@ -4,9 +4,9 @@
 
 ## Current Position
 
-**Step 6 of 9 — Workshop Enforcement**
+**Step 7 of 9 — Sub-agent Review Loop**
 
-DoD: Private Workshop refuses a cloud call at runtime; Open Workshop allows an approved one.
+DoD: a dispatched task is checked by a reviewer agent before results reach you.
 
 ## 9-Step Roadmap
 
@@ -17,8 +17,8 @@ DoD: Private Workshop refuses a cloud call at runtime; Open Workshop allows an a
 | 3 | Registry reader + router (Quartermaster) | done 2026-07-01 |
 | 4 | Approval gate (Safety Officer) | done 2026-07-01 |
 | 5 | Execution gateway + one real tool (Workbench) | done 2026-07-01 |
-| 6 | Workshop enforcement (Open vs Private boundary) | CURRENT |
-| 7 | Sub-agent review loop (worker → reviewer → governor) | pending |
+| 6 | Workshop enforcement (Open vs Private boundary) | done 2026-07-01 |
+| 7 | Sub-agent review loop (worker → reviewer → governor) | CURRENT |
 | 8 | Memory + skill loop (ChromaDB + Obsidian brain) | pending |
 | 9 | Dockerize + portability | pending |
 

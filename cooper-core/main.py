@@ -285,7 +285,7 @@ async def chat(req: ChatRequest):
 
 
 # ── OpenAI-compatible endpoints ────────────────────────────────────────────────
-@app.get("/v1/models")
+@app.get("/v1/models", dependencies=[Depends(_require_auth)])
 async def list_models():
     return {
         "object": "list",

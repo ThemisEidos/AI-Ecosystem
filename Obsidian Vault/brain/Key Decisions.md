@@ -48,3 +48,7 @@ Deliberate simplification for a single local user. Does not survive server resta
 ### 2026-07-01 · executor.py: thread pool subprocess, path traversal guard
 
 asyncio subprocess broken on Windows uvicorn. Hard timeout 60s, output cap 8KB. Path traversal prevented via `candidate.relative_to(_SCRIPTS_DIR.resolve())`. Requires explicit `.ps1` filename in user message.
+
+### 2026-07-01 · Steps 1-5 review found the blocking chat path had no LLM-failure handling
+
+`decision.py`'s `_classify()` already caught every exception and fell back to `answer`, but the `clarify` and `answer` branches of `route_turn()` (used by non-streaming `/chat` and `/v1/chat/completions`) called `_clarify()`/`generate_answer()` with no try/except at all — a backend hiccup (Ollama restart, timeout, bad response) crashed the request with a raw 500. The streaming path (`_stream_sse`) already handled this correctly, which is what exposed the asymmetry. Fixed by wrapping both branches the same way, returning `"[COOPER error: backend unavailable — {exc}]"` instead of raising. Same review pass added auth to `/v1/models` (was the only endpoint missing `_require_auth`) and wrapped `registry.py`'s YAML parsing in try/except (was the only registry failure path not raising `RegistryError`).
