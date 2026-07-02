@@ -31,6 +31,7 @@ import approval
 import executor
 import review
 import workshop
+import archivist
 
 # ── Config ─────────────────────────────────────────────────────────────────────
 _REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -78,6 +79,9 @@ def _load_system_prompt() -> str:
 
 SYSTEM_PROMPT = _load_system_prompt()
 
+# ── Archivist (Step 8) ───────────────────────────────────────────────────────────
+_ARCHIVIST_CONN = archivist.get_conn()
+
 # ── Auth ───────────────────────────────────────────────────────────────────────
 _bearer  = HTTPBearer(auto_error=False)
 _API_KEY = os.environ.get("COOPER_API_KEY", "")
@@ -114,22 +118,34 @@ async def _handle_dispatch(message: str) -> str:
     except workshop.WorkshopViolation as exc:
         return f"Workshop violation: {exc}"
 
+    skill_note = ""
+    skill = archivist.get_skill(_ARCHIVIST_CONN, tool.get("name", tool.get("id", "unknown")))
+    if skill is not None and skill.trust_score > 0.5:
+        skill_note = (
+            f" (matches a proven skill — {skill.successful_run_count} successful "
+            f"run{'s' if skill.successful_run_count != 1 else ''}, "
+            f"{skill.trust_score:.0%} trust)"
+        )
+
     if approval.needs_approval(tool):
         approval.request(WORKSHOP, tool, message)
         return (
             f"Halt — {tool.get('name', tool.get('id'))} "
             f"[{tool.get('drawer', 'Uncategorized')}, permission level {tool.get('permission_level', '?')}] "
-            f"requires approval before it can proceed. Reply 'approve' or 'deny'."
+            f"requires approval before it can proceed{skill_note}. Reply 'approve' or 'deny'."
         )
 
     # L0/L1: execute immediately
+    if skill_note:
+        print(f"  [archivist] {tool.get('name')}{skill_note}")
     return await _execute(tool, message)
 
 
 async def _execute(tool: dict, message: str) -> str:
     """
     Run an approved/auto-run tool through the Workbench (Worker), then have
-    the Reviewer check the result before it reaches the user (Step 7).
+    the Reviewer check the result (Step 7) and the Archivist remember it
+    (Step 8) before it reaches the user.
     """
     try:
         raw_output = await executor.run(tool, message, WORKSHOP)
@@ -143,6 +159,16 @@ async def _execute(tool: dict, message: str) -> str:
         model=CLASSIFIER_MODEL,
         backend=BACKEND,
     )
+
+    try:
+        await archivist.remember(
+            _ARCHIVIST_CONN, tool, message, raw_output, verdict, WORKSHOP,
+            base_url=BACKEND_URL, api_key=BACKEND_KEY,
+            model=CLASSIFIER_MODEL, backend=BACKEND,
+        )
+    except Exception as exc:
+        print(f"  [!!] archivist.remember failed (non-fatal): {exc}")
+
     return review.govern(raw_output, verdict)
 
 
@@ -196,6 +222,10 @@ async def lifespan(app: FastAPI):
         print(f"  [ok] workshop boundary: {WORKSHOP} -> {BACKEND}")
     except workshop.WorkshopViolation as exc:
         print(f"  [!!] WORKSHOP VIOLATION at startup: {exc}")
+
+    archivist.init_db(_ARCHIVIST_CONN)
+    archivist.index_brain(_ARCHIVIST_CONN)
+    print("  [ok] archivist: schema ready, brain indexed")
 
     print()
     yield
@@ -430,7 +460,10 @@ async def _single_text_chunk(text: str) -> AsyncIterator[str]:
 
 
 async def _generate(message: str, history: List[dict]) -> str:
+    recall_context = archivist.format_recall_context(archivist.recall(_ARCHIVIST_CONN, message))
     msgs = _build_messages(history, message)
+    if recall_context:
+        msgs.insert(1, {"role": "system", "content": recall_context})
     if BACKEND == "openai":
         from decision import _openai_complete
         return await _openai_complete(BACKEND_URL, BACKEND_KEY, COOPER_MODEL, msgs)
