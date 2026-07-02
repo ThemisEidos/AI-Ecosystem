@@ -1,3 +1,4 @@
+import asyncio
 import sqlite3
 
 import pytest
@@ -134,3 +135,75 @@ def test_get_skill_returns_record_when_present(conn):
     assert skill.successful_run_count == 3
     assert skill.failed_run_count == 1
     assert skill.trust_score == 0.75
+
+
+class _FakeVerdict:
+    def __init__(self, verdict):
+        self.verdict = verdict
+        self.reason = "test"
+
+
+async def _fake_extract(message, raw_output, *, base_url, api_key, model, backend):
+    return {"summary": "Did the thing successfully", "tags": "test,fake", "outcome": "success"}
+
+
+def test_remember_writes_decision_row(conn):
+    tool = {"name": "PowerShell Private Runner", "id": "ps-private"}
+    asyncio.run(archivist.remember(
+        conn, tool, "run Test-Exec.ps1", "[Test-Exec.ps1 - OK]", _FakeVerdict("pass"), "private",
+        base_url="unused", api_key="unused", model="unused", backend="ollama",
+        extract_fn=_fake_extract,
+    ))
+    row = conn.execute("SELECT * FROM decisions").fetchone()
+    assert row["tool_name"] == "PowerShell Private Runner"
+    assert row["summary"] == "Did the thing successfully"
+    assert row["outcome"] == "success"
+    assert row["review_verdict"] == "pass"
+
+    fts_row = conn.execute("SELECT * FROM decisions_fts WHERE decisions_fts MATCH 'thing'").fetchone()
+    assert fts_row is not None
+
+
+def test_remember_creates_skill_on_first_pass(conn):
+    tool = {"name": "PowerShell Private Runner", "id": "ps-private"}
+    asyncio.run(archivist.remember(
+        conn, tool, "run Test-Exec.ps1", "[Test-Exec.ps1 - OK]", _FakeVerdict("pass"), "private",
+        base_url="unused", api_key="unused", model="unused", backend="ollama",
+        extract_fn=_fake_extract,
+    ))
+    skill = archivist.get_skill(conn, "PowerShell Private Runner")
+    assert skill.successful_run_count == 1
+    assert skill.failed_run_count == 0
+    assert skill.trust_score == 1.0
+
+
+def test_remember_increments_skill_on_repeat_pass(conn):
+    tool = {"name": "PowerShell Private Runner", "id": "ps-private"}
+    for _ in range(2):
+        asyncio.run(archivist.remember(
+            conn, tool, "run Test-Exec.ps1", "[Test-Exec.ps1 - OK]", _FakeVerdict("pass"), "private",
+            base_url="unused", api_key="unused", model="unused", backend="ollama",
+            extract_fn=_fake_extract,
+        ))
+    skill = archivist.get_skill(conn, "PowerShell Private Runner")
+    assert skill.successful_run_count == 2
+    assert skill.trust_score == 1.0
+
+
+def test_remember_demotes_trust_on_flag(conn):
+    tool = {"name": "PowerShell Private Runner", "id": "ps-private"}
+    asyncio.run(archivist.remember(
+        conn, tool, "run Test-Exec.ps1", "[Test-Exec.ps1 - OK]", _FakeVerdict("pass"), "private",
+        base_url="unused", api_key="unused", model="unused", backend="ollama",
+        extract_fn=_fake_extract,
+    ))
+    asyncio.run(archivist.remember(
+        conn, tool, "run NotARealScript.ps1", "Workbench: no .ps1 script path found",
+        _FakeVerdict("flag"), "private",
+        base_url="unused", api_key="unused", model="unused", backend="ollama",
+        extract_fn=_fake_extract,
+    ))
+    skill = archivist.get_skill(conn, "PowerShell Private Runner")
+    assert skill.successful_run_count == 1
+    assert skill.failed_run_count == 1
+    assert skill.trust_score == 0.5

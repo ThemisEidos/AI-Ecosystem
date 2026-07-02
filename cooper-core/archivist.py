@@ -17,7 +17,7 @@ import sqlite3
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional, Union
+from typing import Awaitable, Callable, List, Optional, Union
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _DEFAULT_DB_PATH = Path(__file__).resolve().parent / "cooper_memory.db"
@@ -150,3 +150,69 @@ def get_skill(conn: sqlite3.Connection, tool_name: str) -> Optional[SkillRecord]
         trust_score=row["trust_score"],
         last_success=row["last_success"],
     )
+
+
+async def remember(
+    conn: sqlite3.Connection,
+    tool: dict,
+    message: str,
+    raw_output: str,
+    verdict,
+    workshop: str,
+    *,
+    base_url: str,
+    api_key: str,
+    model: str,
+    backend: str,
+    extract_fn: Optional[Callable[..., Awaitable[dict]]] = None,
+) -> None:
+    """Write path: extract a structured fact, log it to decisions, upsert the skills row."""
+    extract_fn = extract_fn or _extract
+    tool_name = tool.get("name", tool.get("id", "unknown"))
+
+    try:
+        facts = await extract_fn(
+            message, raw_output,
+            base_url=base_url, api_key=api_key, model=model, backend=backend,
+        )
+    except Exception:
+        facts = {}
+    summary = facts.get("summary") or raw_output[:200]
+    tags = facts.get("tags") or ""
+    outcome = facts.get("outcome") or ("success" if verdict.verdict == "pass" else "failure")
+
+    now = _now()
+    cur = conn.execute(
+        "INSERT INTO decisions (created_at, workshop, message, tool_name, summary, tags, outcome, review_verdict) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        (now, workshop, message, tool_name, summary, tags, outcome, verdict.verdict),
+    )
+    conn.execute(
+        "INSERT INTO decisions_fts (message, summary, tags, decision_id) VALUES (?, ?, ?, ?)",
+        (message, summary, tags, cur.lastrowid),
+    )
+
+    if verdict.verdict == "pass":
+        conn.execute(
+            "INSERT INTO skills (tool_name, tags, successful_run_count, failed_run_count, trust_score, "
+            "last_success, example_message, example_output) VALUES (?, ?, 1, 0, 1.0, ?, ?, ?) "
+            "ON CONFLICT(tool_name) DO UPDATE SET "
+            "successful_run_count = successful_run_count + 1, "
+            "tags = excluded.tags, "
+            "trust_score = CAST(successful_run_count + 1 AS REAL) / (successful_run_count + 1 + failed_run_count), "
+            "last_success = excluded.last_success, "
+            "example_message = excluded.example_message, "
+            "example_output = excluded.example_output",
+            (tool_name, tags, now, message, raw_output[:500]),
+        )
+    else:
+        conn.execute(
+            "INSERT INTO skills (tool_name, tags, successful_run_count, failed_run_count, trust_score, "
+            "last_failure, example_message, example_output) VALUES (?, ?, 0, 1, 0.0, ?, ?, ?) "
+            "ON CONFLICT(tool_name) DO UPDATE SET "
+            "failed_run_count = failed_run_count + 1, "
+            "trust_score = CAST(successful_run_count AS REAL) / (successful_run_count + failed_run_count + 1), "
+            "last_failure = excluded.last_failure",
+            (tool_name, tags, now, message, raw_output[:500]),
+        )
+    conn.commit()
