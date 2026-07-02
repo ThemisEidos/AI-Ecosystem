@@ -4,9 +4,9 @@
 
 ## Current Position
 
-**Step 7 of 9 — Sub-agent Review Loop**
+**Step 9 of 9 — Dockerize + Portability**
 
-DoD: a dispatched task is checked by a reviewer agent before results reach you.
+DoD: `docker compose up` brings COOPER fully online on a fresh checkout.
 
 ## 9-Step Roadmap
 
@@ -18,9 +18,9 @@ DoD: a dispatched task is checked by a reviewer agent before results reach you.
 | 4 | Approval gate (Safety Officer) | done 2026-07-01 |
 | 5 | Execution gateway + one real tool (Workbench) | done 2026-07-01 |
 | 6 | Workshop enforcement (Open vs Private boundary) | done 2026-07-01 |
-| 7 | Sub-agent review loop (worker → reviewer → governor) | CURRENT |
-| 8 | Memory + skill loop (ChromaDB + Obsidian brain) | pending |
-| 9 | Dockerize + portability | pending |
+| 7 | Sub-agent review loop (worker → reviewer → governor) | done 2026-07-01 |
+| 8 | Memory + skill loop (SQLite FTS5 + Obsidian brain) | done 2026-07-01 |
+| 9 | Dockerize + portability | CURRENT |
 
 ## Target Architecture (PRD §4, §9)
 
