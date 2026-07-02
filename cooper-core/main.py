@@ -370,6 +370,15 @@ class _OAIChatRequest(BaseModel):
     max_tokens:  Optional[int]   = None
 
 
+def _estimate_usage(messages: List[_OAIMessage], reply: str) -> dict:
+    prompt_chars = sum(len(m.content) for m in messages)
+    return {
+        "prompt_tokens": prompt_chars // 4,
+        "completion_tokens": len(reply) // 4,
+        "total_tokens": (prompt_chars + len(reply)) // 4,
+    }
+
+
 @app.post("/v1/chat/completions", dependencies=[Depends(_require_auth)])
 async def oai_chat(req: _OAIChatRequest):
     if not req.messages:
@@ -419,7 +428,8 @@ async def oai_chat(req: _OAIChatRequest):
             "message":      {"role": "assistant", "content": reply},
             "finish_reason": "stop",
         }],
-        "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+        # chars/4 estimate — backends don't surface real counts through this path
+        "usage": _estimate_usage(req.messages, reply),
     }
 
 
