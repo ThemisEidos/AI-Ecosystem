@@ -12,9 +12,11 @@ Read path  — recall() / get_skill(): deterministic FTS5 / exact lookup, no LLM
 Write path — remember(): one JSON-schema-constrained Ollama/OpenAI call extracts
              {summary, tags, outcome} from a completed dispatch, then writes a row.
 """
+import asyncio
 import json
 import re
 import sqlite3
+import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -25,6 +27,8 @@ from decision import _ollama_complete, _openai_complete
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _DEFAULT_DB_PATH = Path(__file__).resolve().parent / "cooper_memory.db"
 _BRAIN_DIR = _REPO_ROOT / "Obsidian Vault" / "brain"
+
+_DB_LOCK = threading.RLock()  # one connection shared across worker threads
 
 _EXTRACT_SYSTEM = """\
 You are COOPER's Archivist. A dispatched task just finished. Extract a short structured record \
@@ -69,7 +73,10 @@ CREATE VIRTUAL TABLE IF NOT EXISTS brain_fts USING fts5(
 
 
 def get_conn(db_path: Optional[Union[str, Path]] = None) -> sqlite3.Connection:
-    conn = sqlite3.connect(str(db_path) if db_path else str(_DEFAULT_DB_PATH))
+    conn = sqlite3.connect(
+        str(db_path) if db_path else str(_DEFAULT_DB_PATH),
+        check_same_thread=False,  # guarded by _DB_LOCK
+    )
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -103,14 +110,15 @@ def recall(conn: sqlite3.Connection, message: str, limit: int = 3) -> List[Recal
     if not query:
         return []
 
-    decision_rows = conn.execute(
-        "SELECT summary FROM decisions_fts WHERE decisions_fts MATCH ? ORDER BY rank LIMIT ?",
-        (query, limit),
-    ).fetchall()
-    brain_rows = conn.execute(
-        "SELECT file_name, heading, body FROM brain_fts WHERE brain_fts MATCH ? ORDER BY rank LIMIT ?",
-        (query, limit),
-    ).fetchall()
+    with _DB_LOCK:
+        decision_rows = conn.execute(
+            "SELECT summary FROM decisions_fts WHERE decisions_fts MATCH ? ORDER BY rank LIMIT ?",
+            (query, limit),
+        ).fetchall()
+        brain_rows = conn.execute(
+            "SELECT file_name, heading, body FROM brain_fts WHERE brain_fts MATCH ? ORDER BY rank LIMIT ?",
+            (query, limit),
+        ).fetchall()
 
     decision_results: List[RecallResult] = [
         RecallResult(kind="decision", text=row["summary"]) for row in decision_rows
@@ -149,11 +157,12 @@ class SkillRecord:
 
 
 def get_skill(conn: sqlite3.Connection, tool_name: str) -> Optional[SkillRecord]:
-    row = conn.execute(
-        "SELECT tool_name, successful_run_count, failed_run_count, trust_score, last_success "
-        "FROM skills WHERE tool_name = ?",
-        (tool_name,),
-    ).fetchone()
+    with _DB_LOCK:
+        row = conn.execute(
+            "SELECT tool_name, successful_run_count, failed_run_count, trust_score, last_success "
+            "FROM skills WHERE tool_name = ?",
+            (tool_name,),
+        ).fetchone()
     if row is None:
         return None
     return SkillRecord(
@@ -194,41 +203,58 @@ async def remember(
     tags = facts.get("tags") or ""
     outcome = facts.get("outcome") or ("success" if verdict.verdict == "pass" else "failure")
 
-    now = _now()
-    cur = conn.execute(
-        "INSERT INTO decisions (created_at, workshop, message, tool_name, summary, tags, outcome, review_verdict) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        (now, workshop, message, tool_name, summary, tags, outcome, verdict.verdict),
-    )
-    conn.execute(
-        "INSERT INTO decisions_fts (message, summary, tags, decision_id) VALUES (?, ?, ?, ?)",
-        (message, summary, tags, cur.lastrowid),
+    await asyncio.to_thread(
+        _write_decision, conn, tool_name, message, raw_output,
+        verdict.verdict, workshop, summary, tags, outcome,
     )
 
-    if verdict.verdict == "pass":
-        conn.execute(
-            "INSERT INTO skills (tool_name, tags, successful_run_count, failed_run_count, trust_score, "
-            "last_success, example_message, example_output) VALUES (?, ?, 1, 0, 1.0, ?, ?, ?) "
-            "ON CONFLICT(tool_name) DO UPDATE SET "
-            "successful_run_count = successful_run_count + 1, "
-            "tags = excluded.tags, "
-            "trust_score = CAST(successful_run_count + 1 AS REAL) / (successful_run_count + 1 + failed_run_count), "
-            "last_success = excluded.last_success, "
-            "example_message = excluded.example_message, "
-            "example_output = excluded.example_output",
-            (tool_name, tags, now, message, raw_output[:500]),
+
+def _write_decision(
+    conn: sqlite3.Connection,
+    tool_name: str,
+    message: str,
+    raw_output: str,
+    verdict_str: str,
+    workshop: str,
+    summary: str,
+    tags: str,
+    outcome: str,
+) -> None:
+    now = _now()
+    with _DB_LOCK:
+        cur = conn.execute(
+            "INSERT INTO decisions (created_at, workshop, message, tool_name, summary, tags, outcome, review_verdict) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (now, workshop, message, tool_name, summary, tags, outcome, verdict_str),
         )
-    else:
         conn.execute(
-            "INSERT INTO skills (tool_name, tags, successful_run_count, failed_run_count, trust_score, "
-            "last_failure, example_message, example_output) VALUES (?, ?, 0, 1, 0.0, ?, ?, ?) "
-            "ON CONFLICT(tool_name) DO UPDATE SET "
-            "failed_run_count = failed_run_count + 1, "
-            "trust_score = CAST(successful_run_count AS REAL) / (successful_run_count + failed_run_count + 1), "
-            "last_failure = excluded.last_failure",
-            (tool_name, tags, now, message, raw_output[:500]),
+            "INSERT INTO decisions_fts (message, summary, tags, decision_id) VALUES (?, ?, ?, ?)",
+            (message, summary, tags, cur.lastrowid),
         )
-    conn.commit()
+        if verdict_str == "pass":
+            conn.execute(
+                "INSERT INTO skills (tool_name, tags, successful_run_count, failed_run_count, trust_score, "
+                "last_success, example_message, example_output) VALUES (?, ?, 1, 0, 1.0, ?, ?, ?) "
+                "ON CONFLICT(tool_name) DO UPDATE SET "
+                "successful_run_count = successful_run_count + 1, "
+                "tags = excluded.tags, "
+                "trust_score = CAST(successful_run_count + 1 AS REAL) / (successful_run_count + 1 + failed_run_count), "
+                "last_success = excluded.last_success, "
+                "example_message = excluded.example_message, "
+                "example_output = excluded.example_output",
+                (tool_name, tags, now, message, raw_output[:500]),
+            )
+        else:
+            conn.execute(
+                "INSERT INTO skills (tool_name, tags, successful_run_count, failed_run_count, trust_score, "
+                "last_failure, example_message, example_output) VALUES (?, ?, 0, 1, 0.0, ?, ?, ?) "
+                "ON CONFLICT(tool_name) DO UPDATE SET "
+                "failed_run_count = failed_run_count + 1, "
+                "trust_score = CAST(successful_run_count AS REAL) / (successful_run_count + failed_run_count + 1), "
+                "last_failure = excluded.last_failure",
+                (tool_name, tags, now, message, raw_output[:500]),
+            )
+        conn.commit()
 
 
 _brain_mtime_cache: dict = {}
@@ -247,13 +273,14 @@ def index_brain(conn: sqlite3.Connection, brain_dir: Optional[Path] = None) -> N
             continue
         try:
             text = path.read_text(encoding="utf-8")
-            conn.execute("DELETE FROM brain_fts WHERE file_name = ?", (path.name,))
-            for heading, body in _chunk_by_heading(text):
-                conn.execute(
-                    "INSERT INTO brain_fts (file_name, heading, body) VALUES (?, ?, ?)",
-                    (path.name, heading, body),
-                )
-            conn.commit()
+            with _DB_LOCK:
+                conn.execute("DELETE FROM brain_fts WHERE file_name = ?", (path.name,))
+                for heading, body in _chunk_by_heading(text):
+                    conn.execute(
+                        "INSERT INTO brain_fts (file_name, heading, body) VALUES (?, ?, ?)",
+                        (path.name, heading, body),
+                    )
+                conn.commit()
         except Exception as exc:
             conn.rollback()
             print(f"  [!!] archivist.index_brain: skipping {path.name} ({exc})")

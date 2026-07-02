@@ -328,3 +328,9 @@ def test_format_recall_context_marks_untrusted_and_caps_length():
 
 def test_format_recall_context_empty_is_empty():
     assert archivist.format_recall_context([]) == ""
+
+
+def test_recall_works_from_worker_thread(conn):
+    # get_conn must allow cross-thread use (check_same_thread=False + lock)
+    result = asyncio.run(asyncio.to_thread(archivist.recall, conn, "anything at all"))
+    assert result == []

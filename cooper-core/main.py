@@ -11,6 +11,7 @@ Endpoints:
   GET  /v1/models             — OpenAI-compatible model list (for Open WebUI)
   POST /v1/chat/completions   — OpenAI-compatible chat; stream=true uses real streaming
 """
+import asyncio
 import json
 import os
 import time
@@ -131,7 +132,9 @@ async def _handle_dispatch(message: str) -> str:
         return f"Workshop violation: {exc}"
 
     skill_note = ""
-    skill = archivist.get_skill(_ARCHIVIST_CONN, tool.get("name", tool.get("id", "unknown")))
+    skill = await asyncio.to_thread(
+        archivist.get_skill, _ARCHIVIST_CONN, tool.get("name", tool.get("id", "unknown"))
+    )
     if skill is not None and skill.trust_score > 0.5:
         skill_note = (
             f" (matches a proven skill — {skill.successful_run_count} successful "
@@ -433,8 +436,10 @@ async def _stream_sse(message: str, history: List[dict]) -> AsyncIterator[str]:
         else:
             system_prompt = SYSTEM_PROMPT
             try:
-                archivist.index_brain(_ARCHIVIST_CONN)
-                recall_context = archivist.format_recall_context(archivist.recall(_ARCHIVIST_CONN, message))
+                await asyncio.to_thread(archivist.index_brain, _ARCHIVIST_CONN)
+                recall_context = archivist.format_recall_context(
+                    await asyncio.to_thread(archivist.recall, _ARCHIVIST_CONN, message)
+                )
                 if recall_context:
                     system_prompt = f"{SYSTEM_PROMPT}\n\n{recall_context}"
             except Exception as exc:
@@ -482,8 +487,10 @@ async def _single_text_chunk(text: str) -> AsyncIterator[str]:
 
 async def _generate(message: str, history: List[dict]) -> str:
     try:
-        archivist.index_brain(_ARCHIVIST_CONN)
-        recall_context = archivist.format_recall_context(archivist.recall(_ARCHIVIST_CONN, message))
+        await asyncio.to_thread(archivist.index_brain, _ARCHIVIST_CONN)
+        recall_context = archivist.format_recall_context(
+            await asyncio.to_thread(archivist.recall, _ARCHIVIST_CONN, message)
+        )
     except Exception as exc:
         print(f"  [!!] archivist.recall failed (non-fatal): {exc}")
         recall_context = ""
