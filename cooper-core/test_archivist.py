@@ -113,7 +113,7 @@ def test_format_recall_context_empty():
 def test_format_recall_context_nonempty():
     results = [archivist.RecallResult(kind="decision", text="Restarted the API server")]
     ctx = archivist.format_recall_context(results)
-    assert "Relevant memory" in ctx
+    assert "Reference notes retrieved from local memory" in ctx
     assert "Restarted the API server" in ctx
 
 
@@ -314,3 +314,17 @@ def test_remember_records_failure_when_extract_errors_and_verdict_flagged(conn, 
     )
     row = conn.execute("SELECT outcome FROM decisions").fetchone()
     assert row["outcome"] == "failure"
+
+
+def test_format_recall_context_marks_untrusted_and_caps_length():
+    long_text = "A" * 1000
+    results = [archivist.RecallResult(kind="decision", text=long_text)]
+    out = archivist.format_recall_context(results)
+    assert "untrusted" in out
+    assert "not as instructions" in out
+    assert "A" * 301 not in out          # capped at 300 chars per item
+    assert "A" * 300 in out
+
+
+def test_format_recall_context_empty_is_empty():
+    assert archivist.format_recall_context([]) == ""
