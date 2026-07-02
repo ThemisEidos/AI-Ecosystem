@@ -15,8 +15,9 @@ Write path — remember(): one JSON-schema-constrained Ollama/OpenAI call extrac
 import re
 import sqlite3
 import time
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Union
+from typing import List, Optional, Union
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _DEFAULT_DB_PATH = Path(__file__).resolve().parent / "cooper_memory.db"
@@ -70,3 +71,74 @@ def init_db(conn: sqlite3.Connection) -> None:
 
 def _now() -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+
+@dataclass
+class RecallResult:
+    kind: str   # "decision" | "brain"
+    text: str
+
+
+def _fts_query(message: str) -> str:
+    """Build a safe FTS5 MATCH query from free text: OR of alphanumeric tokens, 3+ chars."""
+    tokens = re.findall(r"[A-Za-z0-9]{3,}", message.lower())
+    if not tokens:
+        return ""
+    return " OR ".join(dict.fromkeys(tokens))  # dedupe, preserve order
+
+
+def recall(conn: sqlite3.Connection, message: str, limit: int = 3) -> List[RecallResult]:
+    """Deterministic FTS5 search across past decisions and the Obsidian brain. No LLM call."""
+    query = _fts_query(message)
+    if not query:
+        return []
+    results: List[RecallResult] = []
+
+    for row in conn.execute(
+        "SELECT summary FROM decisions_fts WHERE decisions_fts MATCH ? ORDER BY rank LIMIT ?",
+        (query, limit),
+    ).fetchall():
+        results.append(RecallResult(kind="decision", text=row["summary"]))
+
+    for row in conn.execute(
+        "SELECT file_name, heading, body FROM brain_fts WHERE brain_fts MATCH ? ORDER BY rank LIMIT ?",
+        (query, limit),
+    ).fetchall():
+        results.append(
+            RecallResult(kind="brain", text=f"{row['file_name']} — {row['heading']}: {row['body']}")
+        )
+
+    return results[:limit]
+
+
+def format_recall_context(results: List[RecallResult]) -> str:
+    if not results:
+        return ""
+    lines = [f"- ({r.kind}) {r.text}" for r in results]
+    return "Relevant memory:\n" + "\n".join(lines)
+
+
+@dataclass
+class SkillRecord:
+    tool_name: str
+    successful_run_count: int
+    failed_run_count: int
+    trust_score: float
+    last_success: Optional[str]
+
+
+def get_skill(conn: sqlite3.Connection, tool_name: str) -> Optional[SkillRecord]:
+    row = conn.execute(
+        "SELECT tool_name, successful_run_count, failed_run_count, trust_score, last_success "
+        "FROM skills WHERE tool_name = ?",
+        (tool_name,),
+    ).fetchone()
+    if row is None:
+        return None
+    return SkillRecord(
+        tool_name=row["tool_name"],
+        successful_run_count=row["successful_run_count"],
+        failed_run_count=row["failed_run_count"],
+        trust_score=row["trust_score"],
+        last_success=row["last_success"],
+    )
