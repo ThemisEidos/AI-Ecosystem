@@ -70,6 +70,9 @@ tools:
     permission_level: 4
     approval_required: true
     executor_type: powershell
+    allowed_scripts:
+      - Test-Exec.ps1
+      - Test-PDAStack.ps1
     enabled: true
     inputs:
       - script_path

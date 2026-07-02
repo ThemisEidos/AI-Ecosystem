@@ -59,6 +59,28 @@ def _resolve_script(message: str) -> Optional[Path]:
     return None
 
 
+def _authorize_script(script: Path, tool: dict) -> Optional[str]:
+    """
+    Check the resolved script against the tool's registry allowlist.
+    Returns None when authorized, or a user-facing denial string.
+    Fail-closed: a powershell tool with no allowed_scripts list runs nothing.
+    """
+    allowed = tool.get("allowed_scripts") or []
+    if not allowed:
+        return (
+            f"Workbench: tool '{tool.get('name', tool.get('id', 'unknown'))}' has no "
+            "allowed_scripts list in its registry entry. Execution is fail-closed — "
+            "add the script filenames this tool may run to allowed_scripts in the "
+            "registry YAML."
+        )
+    if script.name not in allowed:
+        return (
+            f"Workbench: '{script.name}' is not in this tool's allowed_scripts. "
+            f"Allowed: {', '.join(sorted(allowed))}."
+        )
+    return None
+
+
 def _stub(executor_type: str, tool_name: str) -> str:
     return (
         f"Tool selected: {tool_name} (executor_type: {executor_type}). "
@@ -79,12 +101,12 @@ async def run(tool: dict, message: str, workshop: str) -> str:
     tool_name     = tool.get("name", tool.get("id", "unknown"))
 
     if executor_type == "powershell":
-        return await _run_powershell(tool_name, message)
+        return await _run_powershell(tool, message)
 
     return _stub(executor_type, tool_name)
 
 
-async def _run_powershell(tool_name: str, message: str) -> str:
+async def _run_powershell(tool: dict, message: str) -> str:
     script = _resolve_script(message)
 
     if script is None:
@@ -93,6 +115,10 @@ async def _run_powershell(tool_name: str, message: str) -> str:
             "script does not exist in Scripts/. "
             "Rephrase with the script filename (e.g. 'run Test-PDAStack.ps1')."
         )
+
+    denial = _authorize_script(script, tool)
+    if denial is not None:
+        return denial
 
     loop = asyncio.get_running_loop()
 
