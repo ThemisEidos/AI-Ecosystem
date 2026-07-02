@@ -255,3 +255,32 @@ def test_index_brain_skips_unchanged_files(conn, tmp_path, monkeypatch):
     second_count = conn.execute("SELECT COUNT(*) AS c FROM brain_fts").fetchone()["c"]
 
     assert first_count == second_count
+
+
+def test_index_brain_bad_file_does_not_poison_earlier_files_cache(conn, tmp_path):
+    brain_dir = tmp_path / "brain"
+    brain_dir.mkdir()
+    # "Good.md" sorts before "Invalid.md" alphabetically, so it is processed
+    # (and committed) first in the same index_brain() call.
+    (brain_dir / "Good.md").write_text(
+        "### valid heading\n\nvalid body content\n", encoding="utf-8",
+    )
+    (brain_dir / "Invalid.md").write_bytes(
+        b"### heading\n\n\xff\xfe invalid utf-8 bytes"
+    )
+
+    archivist.index_brain(conn, brain_dir=brain_dir)  # must not raise
+
+    rows = conn.execute(
+        "SELECT heading, body FROM brain_fts WHERE file_name = 'Good.md'"
+    ).fetchall()
+    assert any(r["heading"] == "valid heading" for r in rows)
+
+    # Second call: the bad file's cache entry was never set, so it is retried
+    # again — and must still not raise, and the good file's row must survive.
+    archivist.index_brain(conn, brain_dir=brain_dir)
+
+    rows_after = conn.execute(
+        "SELECT heading, body FROM brain_fts WHERE file_name = 'Good.md'"
+    ).fetchall()
+    assert any(r["heading"] == "valid heading" for r in rows_after)

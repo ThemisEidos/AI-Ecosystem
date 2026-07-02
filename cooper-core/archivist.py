@@ -232,14 +232,20 @@ def index_brain(conn: sqlite3.Connection, brain_dir: Optional[Path] = None) -> N
         cache_key = str(path)
         if _brain_mtime_cache.get(cache_key) == mtime:
             continue
-        conn.execute("DELETE FROM brain_fts WHERE file_name = ?", (path.name,))
-        for heading, body in _chunk_by_heading(path.read_text(encoding="utf-8")):
-            conn.execute(
-                "INSERT INTO brain_fts (file_name, heading, body) VALUES (?, ?, ?)",
-                (path.name, heading, body),
-            )
+        try:
+            text = path.read_text(encoding="utf-8")
+            conn.execute("DELETE FROM brain_fts WHERE file_name = ?", (path.name,))
+            for heading, body in _chunk_by_heading(text):
+                conn.execute(
+                    "INSERT INTO brain_fts (file_name, heading, body) VALUES (?, ?, ?)",
+                    (path.name, heading, body),
+                )
+            conn.commit()
+        except Exception as exc:
+            conn.rollback()
+            print(f"  [!!] archivist.index_brain: skipping {path.name} ({exc})")
+            continue  # don't cache this file — retry it on the next call
         _brain_mtime_cache[cache_key] = mtime
-    conn.commit()
 
 
 def _chunk_by_heading(text: str) -> List[Tuple[str, str]]:
