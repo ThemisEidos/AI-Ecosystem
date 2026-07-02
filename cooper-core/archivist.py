@@ -12,6 +12,7 @@ Read path  — recall() / get_skill(): deterministic FTS5 / exact lookup, no LLM
 Write path — remember(): one JSON-schema-constrained Ollama/OpenAI call extracts
              {summary, tags, outcome} from a completed dispatch, then writes a row.
 """
+import json
 import re
 import sqlite3
 import time
@@ -19,9 +20,18 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Awaitable, Callable, List, Optional, Tuple, Union
 
+from decision import _ollama_complete, _openai_complete
+
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _DEFAULT_DB_PATH = Path(__file__).resolve().parent / "cooper_memory.db"
 _BRAIN_DIR = _REPO_ROOT / "Obsidian Vault" / "brain"
+
+_EXTRACT_SYSTEM = """\
+You are COOPER's Archivist. A dispatched task just finished. Extract a short structured record \
+of what happened. Output JSON only — no other text.
+
+{"summary":"<one sentence, what was done and the result>","tags":"<comma-separated keywords>","outcome":"success"|"failure"}\
+"""
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS decisions (
@@ -261,3 +271,59 @@ def _chunk_by_heading(text: str) -> List[Tuple[str, str]]:
         body = parts[i + 1].strip() if i + 1 < len(parts) else ""
         chunks.append((heading, body))
     return chunks
+
+
+async def _extract(
+    message: str,
+    raw_output: str,
+    *,
+    base_url: str,
+    api_key: str,
+    model: str,
+    backend: str,
+) -> dict:
+    """Production extractor: one JSON-schema-constrained LLM call. Fails safe on error."""
+    messages = [
+        {"role": "system", "content": _EXTRACT_SYSTEM},
+        {"role": "user", "content": f"Request: {message}\n\nResult:\n{raw_output[:2000]}"},
+    ]
+    try:
+        if backend == "openai":
+            raw = await _openai_complete(
+                base_url, api_key, model, messages,
+                temperature=0,
+                response_format={
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "extraction",
+                        "strict": True,
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "summary": {"type": "string"},
+                                "tags":    {"type": "string"},
+                                "outcome": {"type": "string", "enum": ["success", "failure"]},
+                            },
+                            "required": ["summary", "tags", "outcome"],
+                            "additionalProperties": False,
+                        },
+                    },
+                },
+            )
+        else:
+            raw = await _ollama_complete(
+                base_url, model, messages,
+                options={"temperature": 0},
+                fmt={
+                    "type": "object",
+                    "properties": {
+                        "summary": {"type": "string"},
+                        "tags":    {"type": "string"},
+                        "outcome": {"type": "string", "enum": ["success", "failure"]},
+                    },
+                    "required": ["summary", "tags", "outcome"],
+                },
+            )
+        return json.loads(raw)
+    except Exception:
+        return {"summary": raw_output[:200], "tags": "", "outcome": "success"}
