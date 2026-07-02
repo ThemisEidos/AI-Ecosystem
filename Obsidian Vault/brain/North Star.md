@@ -8,6 +8,10 @@
 
 DoD: `docker compose up` brings COOPER fully online on a fresh checkout.
 
+**Design spec written, NOT yet implemented:** `Docs/superpowers/specs/2026-07-01-cooper-dockerize-portability-design.md`. Session paused here 2026-07-02 — next session should confirm the spec (esp. §4, a network-security tradeoff made under a response timeout) before invoking writing-plans.
+
+**⚠️ BRANCH CHECK FIRST:** the branch this project's code lived on (`codex/nightly-task-002-20260606-165602`) was discarded 2026-07-01/02. All work (Steps 1-9) now lives on **`step-9-dockerize`**, recovered from the same tip commit. `main` does not have this code. Run `git branch --show-current` before doing anything — do not assume.
+
 ## 9-Step Roadmap
 
 | # | Name | Status |
