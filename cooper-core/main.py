@@ -460,7 +460,11 @@ async def _single_text_chunk(text: str) -> AsyncIterator[str]:
 
 
 async def _generate(message: str, history: List[dict]) -> str:
-    recall_context = archivist.format_recall_context(archivist.recall(_ARCHIVIST_CONN, message))
+    try:
+        recall_context = archivist.format_recall_context(archivist.recall(_ARCHIVIST_CONN, message))
+    except Exception as exc:
+        print(f"  [!!] archivist.recall failed (non-fatal): {exc}")
+        recall_context = ""
     msgs = _build_messages(history, message)
     if recall_context:
         msgs.insert(1, {"role": "system", "content": recall_context})
