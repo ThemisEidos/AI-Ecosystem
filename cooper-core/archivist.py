@@ -326,4 +326,6 @@ async def _extract(
             )
         return json.loads(raw)
     except Exception:
-        return {"summary": raw_output[:200], "tags": "", "outcome": "success"}
+        # Empty dict lets remember() fall back to the reviewer's verdict instead
+        # of fabricating a success record.
+        return {}

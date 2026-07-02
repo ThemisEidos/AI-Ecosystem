@@ -284,3 +284,33 @@ def test_index_brain_bad_file_does_not_poison_earlier_files_cache(conn, tmp_path
         "SELECT heading, body FROM brain_fts WHERE file_name = 'Good.md'"
     ).fetchall()
     assert any(r["heading"] == "valid heading" for r in rows_after)
+
+
+def test_extract_returns_empty_dict_on_llm_failure(monkeypatch):
+    async def boom(*args, **kwargs):
+        raise RuntimeError("llm down")
+
+    monkeypatch.setattr(archivist, "_ollama_complete", boom)
+    facts = asyncio.run(
+        archivist._extract("msg", "output", base_url="", api_key="", model="m", backend="ollama")
+    )
+    assert facts == {}
+
+
+def test_remember_records_failure_when_extract_errors_and_verdict_flagged(conn, monkeypatch):
+    async def boom(*args, **kwargs):
+        raise RuntimeError("llm down")
+
+    monkeypatch.setattr(archivist, "_ollama_complete", boom)
+
+    class Verdict:
+        verdict = "flag"
+
+    asyncio.run(
+        archivist.remember(
+            conn, {"name": "T"}, "run thing", "[exit 1] boom", Verdict(), "private",
+            base_url="", api_key="", model="m", backend="ollama",
+        )
+    )
+    row = conn.execute("SELECT outcome FROM decisions").fetchone()
+    assert row["outcome"] == "failure"
