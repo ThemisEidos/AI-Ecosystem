@@ -105,6 +105,7 @@ async def review(
             verdict = "pass"
         return ReviewVerdict(verdict=verdict, reason=data.get("reason", ""))
     except Exception as exc:
+        print(f"  [!!] reviewer fail-open: {exc}")
         return ReviewVerdict(verdict="pass", reason=f"reviewer error (fail-open): {exc}")
 
 
