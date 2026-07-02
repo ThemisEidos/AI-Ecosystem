@@ -93,25 +93,30 @@ def recall(conn: sqlite3.Connection, message: str, limit: int = 3) -> List[Recal
     if not query:
         return []
 
-    per_source = -(-limit // 2)  # ceil(limit / 2) so both sources get a fair share
+    decision_rows = conn.execute(
+        "SELECT summary FROM decisions_fts WHERE decisions_fts MATCH ? ORDER BY rank LIMIT ?",
+        (query, limit),
+    ).fetchall()
+    brain_rows = conn.execute(
+        "SELECT file_name, heading, body FROM brain_fts WHERE brain_fts MATCH ? ORDER BY rank LIMIT ?",
+        (query, limit),
+    ).fetchall()
 
     decision_results: List[RecallResult] = [
-        RecallResult(kind="decision", text=row["summary"])
-        for row in conn.execute(
-            "SELECT summary FROM decisions_fts WHERE decisions_fts MATCH ? ORDER BY rank LIMIT ?",
-            (query, per_source),
-        ).fetchall()
+        RecallResult(kind="decision", text=row["summary"]) for row in decision_rows
     ]
-
     brain_results: List[RecallResult] = [
         RecallResult(kind="brain", text=f"{row['file_name']} — {row['heading']}: {row['body']}")
-        for row in conn.execute(
-            "SELECT file_name, heading, body FROM brain_fts WHERE brain_fts MATCH ? ORDER BY rank LIMIT ?",
-            (query, per_source),
-        ).fetchall()
+        for row in brain_rows
     ]
 
-    return (decision_results + brain_results)[:limit]
+    per_source = -(-limit // 2)  # ceil(limit / 2): each source's guaranteed share
+    combined = decision_results[:per_source] + brain_results[:per_source]
+    if len(combined) < limit:
+        # one source under-supplied its share — top up from the other source's leftovers
+        leftover = decision_results[per_source:] + brain_results[per_source:]
+        combined += leftover[: limit - len(combined)]
+    return combined[:limit]
 
 
 def format_recall_context(results: List[RecallResult]) -> str:

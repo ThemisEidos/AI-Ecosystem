@@ -86,6 +86,25 @@ def test_recall_returns_empty_list_when_message_has_no_searchable_tokens(conn):
     assert archivist.recall(conn, "") == []
 
 
+def test_recall_backfills_from_decisions_when_brain_has_no_matches(conn):
+    for i in range(1, 6):
+        conn.execute(
+            "INSERT INTO decisions (created_at, workshop, message, tool_name, summary, tags, outcome, review_verdict) "
+            "VALUES ('2026-07-01T00:00:00Z', 'private', 'restart the gadget server', 'PowerShell Private Runner', "
+            "'Restarted the gadget server successfully', 'restart,gadget,server', 'success', 'pass')"
+        )
+        conn.execute(
+            "INSERT INTO decisions_fts (message, summary, tags, decision_id) VALUES "
+            "('restart the gadget server', 'Restarted the gadget server successfully', 'restart,gadget,server', ?)",
+            (i,),
+        )
+    conn.commit()
+
+    results = archivist.recall(conn, "restart the gadget server", limit=3)
+    assert len(results) == 3
+    assert all(r.kind == "decision" for r in results)
+
+
 def test_format_recall_context_empty():
     assert archivist.format_recall_context([]) == ""
 
