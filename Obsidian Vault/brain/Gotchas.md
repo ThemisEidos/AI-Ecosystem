@@ -51,3 +51,7 @@ If a tool in the registry has no `workshop` field (or an empty string), `check_t
 ### 2026-06-29 · ECC GateGuard blocks first Write/Edit to each new file this session
 
 GateGuard requires facts (callers, no duplicate, data schemas, verbatim instruction) before the first creation of each new file per session. Present facts inline in the message text, then retry the identical tool call.
+
+### 2026-07-02 · check_tool() is now FAIL-CLOSED for untagged tools
+
+Supersedes the 2026-07-01 entry "workshop.check_tool() is permissive for tools with no workshop field". As of the audit-remediation branch, a tool without a `workshop:` field raises WorkshopViolation. Every tool in both registry YAMLs must carry a workshop tag or it will not run.

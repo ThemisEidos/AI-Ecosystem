@@ -45,7 +45,15 @@ def check_tool(tool: dict, active_workshop: str) -> None:
     tool_workshop = tool.get("workshop", "").lower().replace(" workshop", "").strip()
     active = active_workshop.lower().strip()
 
-    if tool_workshop and tool_workshop != active:
+    if not tool_workshop:
+        raise WorkshopViolation(
+            f"Tool '{tool.get('name', tool.get('id'))}' has no workshop field in "
+            f"its registry entry. Enforcement is fail-closed: tag the tool with "
+            f"'workshop: Open Workshop' or 'workshop: Private Workshop' in the "
+            f"registry YAML."
+        )
+
+    if tool_workshop != active:
         raise WorkshopViolation(
             f"Tool '{tool.get('name', tool.get('id'))}' is registered for the "
             f"{tool.get('workshop')} but the active workshop is {active_workshop}. "
