@@ -14,11 +14,14 @@ effect immediately under `--reload` without a server restart.
 This module only reads and selects. It does not execute anything — the
 approval gate (step 4) and execution gateway (step 5) are not wired yet.
 """
+import json
 import re
 from pathlib import Path
 from typing import Dict, List, Optional
 
 import yaml
+
+from decision import _ollama_complete, _openai_complete
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _REGISTRY_PATHS: Dict[str, Path] = {
@@ -146,3 +149,74 @@ def select_tool(workshop: str, message: str) -> Optional[dict]:
         if score > best_score:
             best, best_score = t, score
     return best
+
+
+# ── LLM-backed selection (audit F2) ─────────────────────────────────────────
+_SELECT_SYSTEM_TMPL = """\
+You are COOPER's Quartermaster. Pick the single best tool for the user's task, \
+or "none" if no tool fits. Output JSON only — no other text.
+
+{{"tool_id":"<one of the ids below, or 'none'>"}}
+
+Available tools:
+{catalog}\
+"""
+
+
+async def select_tool_llm(
+    workshop: str,
+    message: str,
+    *,
+    base_url: str,
+    api_key: str,
+    model: str,
+    backend: str,
+) -> Optional[dict]:
+    """Schema-constrained LLM pick from the registry; keyword fallback on any error."""
+    try:
+        tools = list_tools(workshop)
+    except RegistryError:
+        return None
+    if not tools:
+        return None
+
+    ids = [t["id"] for t in tools if t.get("id")]
+    catalog = "\n".join(
+        f"- {t.get('id')}: {t.get('name', '')} — {t.get('description', '')}"
+        for t in tools
+    )
+    messages = [
+        {"role": "system", "content": _SELECT_SYSTEM_TMPL.format(catalog=catalog)},
+        {"role": "user", "content": message},
+    ]
+    schema = {
+        "type": "object",
+        "properties": {"tool_id": {"type": "string", "enum": ids + ["none"]}},
+        "required": ["tool_id"],
+    }
+    try:
+        if backend == "openai":
+            raw = await _openai_complete(
+                base_url, api_key, model, messages,
+                temperature=0,
+                response_format={
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "tool_selection",
+                        "strict": True,
+                        "schema": {**schema, "additionalProperties": False},
+                    },
+                },
+            )
+        else:
+            raw = await _ollama_complete(
+                base_url, model, messages,
+                options={"temperature": 0},
+                fmt=schema,
+            )
+        tool_id = json.loads(raw).get("tool_id", "none")
+        if tool_id == "none":
+            return None
+        return get_tool(workshop, tool_id)
+    except Exception:
+        return select_tool(workshop, message)

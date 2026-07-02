@@ -118,7 +118,11 @@ async def _handle_dispatch(message: str) -> str:
     except workshop.WorkshopViolation as exc:
         return f"Workshop violation: {exc}"
 
-    tool = registry.select_tool(WORKSHOP, message)
+    tool = await registry.select_tool_llm(
+        WORKSHOP, message,
+        base_url=BACKEND_URL, api_key=BACKEND_KEY,
+        model=CLASSIFIER_MODEL, backend=BACKEND,
+    )
     if tool is None:
         return (
             "Acknowledged. No registered tool in the active workshop matches this "
