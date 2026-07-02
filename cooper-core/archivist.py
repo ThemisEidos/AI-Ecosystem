@@ -257,12 +257,19 @@ def _write_decision(
         conn.commit()
 
 
+_INDEX_MIN_INTERVAL = 60.0  # seconds between full brain re-index scans
+_last_index_at = 0.0
 _brain_mtime_cache: dict = {}
 
 
-def index_brain(conn: sqlite3.Connection, brain_dir: Optional[Path] = None) -> None:
+def index_brain(conn: sqlite3.Connection, brain_dir: Optional[Path] = None, force: bool = False) -> None:
     """Mirror Obsidian Vault/brain/*.md into brain_fts, chunked by ### heading. Mtime-cached —
-    matches registry.py's existing cache-by-mtime pattern for the YAML tool registry."""
+    matches registry.py's existing cache-by-mtime pattern for the YAML tool registry.
+    Debounced to one scan per _INDEX_MIN_INTERVAL unless force=True."""
+    global _last_index_at
+    if not force and time.time() - _last_index_at < _INDEX_MIN_INTERVAL:
+        return
+    _last_index_at = time.time()
     directory = brain_dir or _BRAIN_DIR
     if not directory.exists():
         return

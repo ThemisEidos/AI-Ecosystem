@@ -251,7 +251,7 @@ def test_index_brain_skips_unchanged_files(conn, tmp_path, monkeypatch):
     archivist.index_brain(conn, brain_dir=brain_dir)
     first_count = conn.execute("SELECT COUNT(*) AS c FROM brain_fts").fetchone()["c"]
 
-    archivist.index_brain(conn, brain_dir=brain_dir)  # same mtime, must not duplicate rows
+    archivist.index_brain(conn, brain_dir=brain_dir, force=True)  # same mtime, must not duplicate rows
     second_count = conn.execute("SELECT COUNT(*) AS c FROM brain_fts").fetchone()["c"]
 
     assert first_count == second_count
@@ -278,7 +278,7 @@ def test_index_brain_bad_file_does_not_poison_earlier_files_cache(conn, tmp_path
 
     # Second call: the bad file's cache entry was never set, so it is retried
     # again — and must still not raise, and the good file's row must survive.
-    archivist.index_brain(conn, brain_dir=brain_dir)
+    archivist.index_brain(conn, brain_dir=brain_dir, force=True)
 
     rows_after = conn.execute(
         "SELECT heading, body FROM brain_fts WHERE file_name = 'Good.md'"
@@ -334,3 +334,24 @@ def test_recall_works_from_worker_thread(conn):
     # get_conn must allow cross-thread use (check_same_thread=False + lock)
     result = asyncio.run(asyncio.to_thread(archivist.recall, conn, "anything at all"))
     assert result == []
+
+
+@pytest.fixture(autouse=True)
+def _reset_archivist_module_state():
+    archivist._last_index_at = 0.0
+    archivist._brain_mtime_cache.clear()
+    yield
+
+
+def test_index_brain_is_debounced(tmp_path, conn):
+    (tmp_path / "one.md").write_text("### H1\nfirst body", encoding="utf-8")
+    archivist.index_brain(conn, brain_dir=tmp_path, force=True)
+
+    (tmp_path / "two.md").write_text("### H2\nsecond body", encoding="utf-8")
+    archivist.index_brain(conn, brain_dir=tmp_path)  # inside 60s window -> no-op
+    count = conn.execute("SELECT count(*) AS c FROM brain_fts").fetchone()["c"]
+    assert count == 1
+
+    archivist.index_brain(conn, brain_dir=tmp_path, force=True)  # force bypasses
+    count = conn.execute("SELECT count(*) AS c FROM brain_fts").fetchone()["c"]
+    assert count == 2

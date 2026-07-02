@@ -240,7 +240,7 @@ async def lifespan(app: FastAPI):
         print(f"  [!!] WORKSHOP VIOLATION at startup: {exc}")
 
     archivist.init_db(_ARCHIVIST_CONN)
-    archivist.index_brain(_ARCHIVIST_CONN)
+    archivist.index_brain(_ARCHIVIST_CONN, force=True)
     print("  [ok] archivist: schema ready, brain indexed")
 
     print()
