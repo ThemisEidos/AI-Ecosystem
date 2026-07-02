@@ -69,8 +69,9 @@ def peek(workshop: str) -> Optional[ApprovalTicket]:
     return _get_live(workshop)
 
 
-_APPROVE_RE = re.compile(r"^\s*(yes|y|approve[d]?|confirm(ed)?|go ahead|do it|proceed)\b", re.IGNORECASE)
-_DENY_RE    = re.compile(r"^\s*(no|n|deny|denied|cancel|stop|don'?t|abort)\b", re.IGNORECASE)
+# Full-match only: "yes, but first…" must NOT consume a ticket as approval.
+_APPROVE_RE = re.compile(r"^\s*(yes|y|approve[d]?|confirm(ed)?|go ahead|do it|proceed)\s*[.!]*\s*$", re.IGNORECASE)
+_DENY_RE    = re.compile(r"^\s*(no|n|deny|denied|cancel|stop|don'?t|abort)\s*[.!]*\s*$", re.IGNORECASE)
 
 
 def is_response(message: str) -> bool:
