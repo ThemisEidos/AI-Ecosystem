@@ -56,3 +56,16 @@ def test_llm_select_falls_back_to_keywords_on_error(monkeypatch):
         base_url="", api_key="", model="m", backend="ollama",
     ))
     assert tool is not None and tool["id"] == "status_summary_private"
+
+
+def test_llm_select_falls_back_on_unregistered_tool_id(monkeypatch):
+    async def fake_complete(*args, **kwargs):
+        return '{"tool_id": "not_a_real_tool"}'
+
+    monkeypatch.setattr(registry, "_ollama_complete", fake_complete)
+    tool = _run(registry.select_tool_llm(
+        "private", "run a status summary",
+        base_url="", api_key="", model="m", backend="ollama",
+    ))
+    assert tool is not None
+    assert tool["id"] == "status_summary_private"

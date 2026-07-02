@@ -217,6 +217,10 @@ async def select_tool_llm(
         tool_id = json.loads(raw).get("tool_id", "none")
         if tool_id == "none":
             return None
-        return get_tool(workshop, tool_id)
+        selected = get_tool(workshop, tool_id)
+        if selected is None:
+            # model named an id outside the registry — fall back to keywords
+            return select_tool(workshop, message)
+        return selected
     except Exception:
         return select_tool(workshop, message)
