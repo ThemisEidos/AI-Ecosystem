@@ -5,7 +5,10 @@ param(
 
     [Parameter(Mandatory = $false)]
     [ValidateSet("open", "private")]
-    [string]$Workshop = "private"
+    [string]$Workshop = "private",
+
+    [Parameter(Mandatory = $false)]
+    [string]$ApiKey = "cooper-local"
 )
 
 # Start-CooperCore.ps1
@@ -30,7 +33,7 @@ $logOut = Join-Path $PSScriptRoot "cooper-core.out.log"
 $logErr = Join-Path $PSScriptRoot "cooper-core.err.log"
 
 # Use quoted set syntax to avoid trailing-space in the env var value.
-$cmdLine = "/c set `"WORKSHOP=$Workshop`" && `"$uvicorn`" main:app --host 0.0.0.0 --port $Port --reload >`"$logOut`" 2>`"$logErr`""
+$cmdLine = "/c set `"WORKSHOP=$Workshop`" && set `"COOPER_API_KEY=$ApiKey`" && `"$uvicorn`" main:app --host 0.0.0.0 --port $Port --reload >`"$logOut`" 2>`"$logErr`""
 
 $psi = New-Object System.Diagnostics.ProcessStartInfo
 $psi.FileName        = "cmd.exe"
@@ -41,4 +44,4 @@ $psi.CreateNoWindow   = $true
 [System.Diagnostics.Process]::Start($psi) | Out-Null
 
 Start-Sleep -Seconds 3
-Write-Output "COOPER Core started (workshop=$Workshop) on port $Port. Logs: cooper-core.out.log / cooper-core.err.log"
+Write-Output "COOPER Core started (workshop=$Workshop, apikey=$ApiKey) on port $Port. Logs: cooper-core.out.log / cooper-core.err.log"

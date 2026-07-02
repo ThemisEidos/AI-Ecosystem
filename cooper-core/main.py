@@ -83,8 +83,20 @@ SYSTEM_PROMPT = _load_system_prompt()
 _ARCHIVIST_CONN = archivist.get_conn()
 
 # ── Auth ───────────────────────────────────────────────────────────────────────
-_bearer  = HTTPBearer(auto_error=False)
-_API_KEY = os.environ.get("COOPER_API_KEY", "")
+_bearer     = HTTPBearer(auto_error=False)
+_API_KEY    = os.environ.get("COOPER_API_KEY", "")
+_ALLOW_ANON = os.environ.get("COOPER_ALLOW_ANON", "").strip() == "1"
+
+
+def _check_auth_config(api_key: str, allow_anon: bool) -> None:
+    """Startup gate: anonymous auth on a network-exposed port must be explicit."""
+    if not api_key and not allow_anon:
+        raise RuntimeError(
+            "COOPER_API_KEY is not set and COOPER_ALLOW_ANON != 1. Refusing to "
+            "start with anonymous auth. Set COOPER_API_KEY (Start-CooperCore.ps1 "
+            "defaults it to 'cooper-local'), or export COOPER_ALLOW_ANON=1 to "
+            "accept anonymous access explicitly."
+        )
 
 
 def _require_auth(
@@ -194,6 +206,7 @@ async def _resolve_approval(message: str) -> str:
 # ── Startup ────────────────────────────────────────────────────────────────────
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    _check_auth_config(_API_KEY, _ALLOW_ANON)
     print(f"\n  workshop : {WORKSHOP}")
     print(f"  backend  : {BACKEND}")
     print(f"  model    : {COOPER_MODEL}")
