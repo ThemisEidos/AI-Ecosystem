@@ -17,7 +17,7 @@ import sqlite3
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Awaitable, Callable, List, Optional, Union
+from typing import Awaitable, Callable, List, Optional, Tuple, Union
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _DEFAULT_DB_PATH = Path(__file__).resolve().parent / "cooper_memory.db"
@@ -216,3 +216,42 @@ async def remember(
             (tool_name, tags, now, message, raw_output[:500]),
         )
     conn.commit()
+
+
+_brain_mtime_cache: dict = {}
+
+
+def index_brain(conn: sqlite3.Connection, brain_dir: Optional[Path] = None) -> None:
+    """Mirror Obsidian Vault/brain/*.md into brain_fts, chunked by ### heading. Mtime-cached —
+    matches registry.py's existing cache-by-mtime pattern for the YAML tool registry."""
+    directory = brain_dir or _BRAIN_DIR
+    if not directory.exists():
+        return
+    for path in sorted(directory.glob("*.md")):
+        mtime = path.stat().st_mtime
+        cache_key = str(path)
+        if _brain_mtime_cache.get(cache_key) == mtime:
+            continue
+        conn.execute("DELETE FROM brain_fts WHERE file_name = ?", (path.name,))
+        for heading, body in _chunk_by_heading(path.read_text(encoding="utf-8")):
+            conn.execute(
+                "INSERT INTO brain_fts (file_name, heading, body) VALUES (?, ?, ?)",
+                (path.name, heading, body),
+            )
+        _brain_mtime_cache[cache_key] = mtime
+    conn.commit()
+
+
+def _chunk_by_heading(text: str) -> List[Tuple[str, str]]:
+    """Split markdown into (heading, body) chunks on ### headings; whole doc if none found."""
+    parts = re.split(r"^###\s+(.+)$", text, flags=re.MULTILINE)
+    if len(parts) == 1:
+        return [("(document)", text.strip())]
+    chunks: List[Tuple[str, str]] = []
+    if parts[0].strip():
+        chunks.append(("(preamble)", parts[0].strip()))
+    for i in range(1, len(parts), 2):
+        heading = parts[i].strip()
+        body = parts[i + 1].strip() if i + 1 < len(parts) else ""
+        chunks.append((heading, body))
+    return chunks

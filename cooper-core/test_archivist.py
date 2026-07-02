@@ -207,3 +207,51 @@ def test_remember_demotes_trust_on_flag(conn):
     assert skill.successful_run_count == 1
     assert skill.failed_run_count == 1
     assert skill.trust_score == 0.5
+
+
+def test_index_brain_chunks_by_heading(conn, tmp_path):
+    brain_dir = tmp_path / "brain"
+    brain_dir.mkdir()
+    (brain_dir / "Gotchas.md").write_text(
+        "# Gotchas\n\n"
+        "### 2026-07-01 · asyncio subprocess broken on Windows\n\n"
+        "Use run_in_executor instead.\n\n"
+        "### 2026-07-01 · Unicode crash on Windows startup\n\n"
+        "Use ASCII only in print statements.\n",
+        encoding="utf-8",
+    )
+
+    archivist.index_brain(conn, brain_dir=brain_dir)
+
+    rows = conn.execute("SELECT heading, body FROM brain_fts WHERE file_name = 'Gotchas.md'").fetchall()
+    headings = {r["heading"] for r in rows}
+    assert "2026-07-01 · asyncio subprocess broken on Windows" in headings
+    assert "2026-07-01 · Unicode crash on Windows startup" in headings
+
+
+def test_index_brain_is_searchable(conn, tmp_path):
+    brain_dir = tmp_path / "brain"
+    brain_dir.mkdir()
+    (brain_dir / "Gotchas.md").write_text(
+        "### 2026-07-01 · Unicode crash on Windows startup\n\nUse ASCII only.\n",
+        encoding="utf-8",
+    )
+    archivist.index_brain(conn, brain_dir=brain_dir)
+
+    results = archivist.recall(conn, "unicode crash windows")
+    assert any(r.kind == "brain" and "Unicode crash" in r.text for r in results)
+
+
+def test_index_brain_skips_unchanged_files(conn, tmp_path, monkeypatch):
+    brain_dir = tmp_path / "brain"
+    brain_dir.mkdir()
+    f = brain_dir / "Gotchas.md"
+    f.write_text("### heading one\n\nbody one\n", encoding="utf-8")
+
+    archivist.index_brain(conn, brain_dir=brain_dir)
+    first_count = conn.execute("SELECT COUNT(*) AS c FROM brain_fts").fetchone()["c"]
+
+    archivist.index_brain(conn, brain_dir=brain_dir)  # same mtime, must not duplicate rows
+    second_count = conn.execute("SELECT COUNT(*) AS c FROM brain_fts").fetchone()["c"]
+
+    assert first_count == second_count
