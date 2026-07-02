@@ -92,23 +92,26 @@ def recall(conn: sqlite3.Connection, message: str, limit: int = 3) -> List[Recal
     query = _fts_query(message)
     if not query:
         return []
-    results: List[RecallResult] = []
 
-    for row in conn.execute(
-        "SELECT summary FROM decisions_fts WHERE decisions_fts MATCH ? ORDER BY rank LIMIT ?",
-        (query, limit),
-    ).fetchall():
-        results.append(RecallResult(kind="decision", text=row["summary"]))
+    per_source = -(-limit // 2)  # ceil(limit / 2) so both sources get a fair share
 
-    for row in conn.execute(
-        "SELECT file_name, heading, body FROM brain_fts WHERE brain_fts MATCH ? ORDER BY rank LIMIT ?",
-        (query, limit),
-    ).fetchall():
-        results.append(
-            RecallResult(kind="brain", text=f"{row['file_name']} — {row['heading']}: {row['body']}")
-        )
+    decision_results: List[RecallResult] = [
+        RecallResult(kind="decision", text=row["summary"])
+        for row in conn.execute(
+            "SELECT summary FROM decisions_fts WHERE decisions_fts MATCH ? ORDER BY rank LIMIT ?",
+            (query, per_source),
+        ).fetchall()
+    ]
 
-    return results[:limit]
+    brain_results: List[RecallResult] = [
+        RecallResult(kind="brain", text=f"{row['file_name']} — {row['heading']}: {row['body']}")
+        for row in conn.execute(
+            "SELECT file_name, heading, body FROM brain_fts WHERE brain_fts MATCH ? ORDER BY rank LIMIT ?",
+            (query, per_source),
+        ).fetchall()
+    ]
+
+    return (decision_results + brain_results)[:limit]
 
 
 def format_recall_context(results: List[RecallResult]) -> str:

@@ -56,6 +56,36 @@ def test_recall_returns_empty_list_for_no_matches(conn):
     assert archivist.recall(conn, "completely unrelated query xyz") == []
 
 
+def test_recall_includes_both_decision_and_brain_results(conn):
+    for i in range(1, 4):
+        conn.execute(
+            "INSERT INTO decisions (created_at, workshop, message, tool_name, summary, tags, outcome, review_verdict) "
+            "VALUES ('2026-07-01T00:00:00Z', 'private', 'restart the widget server', 'PowerShell Private Runner', "
+            "'Restarted the widget server successfully', 'restart,widget,server', 'success', 'pass')"
+        )
+        conn.execute(
+            "INSERT INTO decisions_fts (message, summary, tags, decision_id) VALUES "
+            "('restart the widget server', 'Restarted the widget server successfully', 'restart,widget,server', ?)",
+            (i,),
+        )
+    conn.execute(
+        "INSERT INTO brain_fts (file_name, heading, body) VALUES "
+        "('Gotchas.md', 'Widget restarts', 'Always restart the widget server after a config change')"
+    )
+    conn.commit()
+
+    results = archivist.recall(conn, "restart the widget server", limit=3)
+    kinds = {r.kind for r in results}
+    assert "decision" in kinds
+    assert "brain" in kinds
+
+
+def test_recall_returns_empty_list_when_message_has_no_searchable_tokens(conn):
+    assert archivist.recall(conn, "hi") == []
+    assert archivist.recall(conn, "???") == []
+    assert archivist.recall(conn, "") == []
+
+
 def test_format_recall_context_empty():
     assert archivist.format_recall_context([]) == ""
 
