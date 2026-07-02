@@ -29,6 +29,7 @@ from decision import TurnDecision, route_turn, route_turn_stream
 import registry
 import approval
 import executor
+import review
 import workshop
 
 # ── Config ─────────────────────────────────────────────────────────────────────
@@ -126,11 +127,23 @@ async def _handle_dispatch(message: str) -> str:
 
 
 async def _execute(tool: dict, message: str) -> str:
-    """Run an approved/auto-run tool through the Workbench and return its output."""
+    """
+    Run an approved/auto-run tool through the Workbench (Worker), then have
+    the Reviewer check the result before it reaches the user (Step 7).
+    """
     try:
-        return await executor.run(tool, message, WORKSHOP)
+        raw_output = await executor.run(tool, message, WORKSHOP)
     except executor.ExecutionError as exc:
         return f"Workbench error: {exc}"
+
+    verdict = await review.review(
+        tool, message, raw_output,
+        base_url=BACKEND_URL,
+        api_key=BACKEND_KEY,
+        model=CLASSIFIER_MODEL,
+        backend=BACKEND,
+    )
+    return review.govern(raw_output, verdict)
 
 
 async def _resolve_approval(message: str) -> str:
