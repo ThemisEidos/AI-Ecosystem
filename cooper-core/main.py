@@ -418,10 +418,18 @@ async def _stream_sse(message: str, history: List[dict]) -> AsyncIterator[str]:
         elif approval.has_pending(WORKSHOP) and approval.is_response(message):
             content_iter = _single_text_chunk(await _resolve_approval(message))
         else:
+            system_prompt = SYSTEM_PROMPT
+            try:
+                archivist.index_brain(_ARCHIVIST_CONN)
+                recall_context = archivist.format_recall_context(archivist.recall(_ARCHIVIST_CONN, message))
+                if recall_context:
+                    system_prompt = f"{SYSTEM_PROMPT}\n\n{recall_context}"
+            except Exception as exc:
+                print(f"  [!!] archivist.recall failed (non-fatal): {exc}")
             td, content_iter = await route_turn_stream(
                 message,
                 history,
-                system_prompt=SYSTEM_PROMPT,
+                system_prompt=system_prompt,
                 base_url=BACKEND_URL,
                 api_key=BACKEND_KEY,
                 model=COOPER_MODEL,
@@ -461,6 +469,7 @@ async def _single_text_chunk(text: str) -> AsyncIterator[str]:
 
 async def _generate(message: str, history: List[dict]) -> str:
     try:
+        archivist.index_brain(_ARCHIVIST_CONN)
         recall_context = archivist.format_recall_context(archivist.recall(_ARCHIVIST_CONN, message))
     except Exception as exc:
         print(f"  [!!] archivist.recall failed (non-fatal): {exc}")
