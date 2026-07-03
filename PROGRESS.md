@@ -107,6 +107,15 @@
   2. `Obsidian Vault/brain/North Star.md` had drifted — still listed step 6 as CURRENT after step 6 shipped (commit `a592714`). Updated to step 7 CURRENT, matching this file and the git log.
   3. `GET /v1/models` was missing `dependencies=[Depends(_require_auth)]`, present on every other endpoint (`/chat`, `/tools`, `/pending`, `/workshop`, `/v1/chat/completions`). Added for consistency; no-op today since `COOPER_API_KEY` is unset (open/dev mode), and Open WebUI already sends its configured key on this connection once a key is set. Verified `/v1/models` still returns 200 after the change.
   4. `registry.py _load()` let `yaml.YAMLError` propagate uncaught on malformed registry YAML, bypassing the `RegistryError` wrapper every other registry failure path uses. Now caught and re-raised as `RegistryError`. Verified `/tools` still returns the 7-tool private registry unchanged after the fix.
+- 2026-07-02 — Audit remediation (branch audit-remediation): auth required at startup
+  (COOPER_API_KEY, default cooper-local via launcher); executor fail-closed
+  allowed_scripts per registry tool; workshop enforcement fail-closed for untagged
+  tools; approval approve/deny full-match only; archivist extract fail-safe +
+  untrusted-marked recall context + thread-safe SQLite + 60s index debounce;
+  LLM-backed tool selection with keyword fallback; CI workflow added; harness
+  permissions moved to acceptEdits + deny list; ECC plugin trimmed to user-level
+  keep-list. Live-verified: auth 401/200, allowlisted dispatch runs, unlisted
+  script refused.
 
 ---
 
