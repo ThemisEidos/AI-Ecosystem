@@ -12,6 +12,62 @@ services:
       - private-ollama:/root/.ollama
     networks:
       - pda-private-net
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
+  model-init:
+    image: ollama/ollama:latest
+    container_name: pda-private-model-init
+    labels:
+      ai.ecosystem.stack: private
+    environment:
+      - OLLAMA_HOST=http://private-ollama:11434
+    entrypoint: ["ollama", "pull", "gemma4:12b"]
+    networks:
+      - pda-private-net
+    depends_on:
+      private-ollama:
+        condition: service_healthy
+    restart: "no"
+
+  cooper-core:
+    build:
+      context: ..
+      dockerfile: cooper-core/Dockerfile
+    container_name: pda-private-cooper-core
+    labels:
+      ai.ecosystem.stack: private
+    ports:
+      - "8000:8000"
+    environment:
+      - WORKSHOP=private
+      - OLLAMA_HOST=http://private-ollama:11434
+      - COOPER_DB_PATH=/app/data/cooper_memory.db
+      - COOPER_API_KEY=${COOPER_API_KEY:-cooper-local}
+    volumes:
+      - cooper-core-data:/app/data
+      - type: bind
+        source: "../Obsidian Vault/brain"
+        target: "/app/Obsidian Vault/brain"
+        read_only: true
+    networks:
+      - pda-private-net
+    depends_on:
+      private-ollama:
+        condition: service_healthy
+      model-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
     restart: unless-stopped
 
   private-open-webui:
@@ -36,8 +92,12 @@ volumes:
     name: pda-private-ollama
   private-open-webui-main:
     name: pda-private-open-webui-main
+  cooper-core-data:
+    name: pda-private-cooper-core-data
 
 networks:
   pda-private-net:
     name: pda-private-net
-    internal: true
+    # internal: true removed — see spec §4 (confirmed 2026-07-02): it blocked
+    # `ollama pull` AND silently disabled the stack's published ports. The
+    # Private/Open boundary is enforced at the app layer (workshop.py + auth).
