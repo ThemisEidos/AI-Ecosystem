@@ -14,6 +14,7 @@ Write path — remember(): one JSON-schema-constrained Ollama/OpenAI call extrac
 """
 import asyncio
 import json
+import os
 import re
 import sqlite3
 import threading
@@ -25,7 +26,7 @@ from typing import Awaitable, Callable, List, Optional, Tuple, Union
 from decision import _ollama_complete, _openai_complete
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
-_DEFAULT_DB_PATH = Path(__file__).resolve().parent / "cooper_memory.db"
+_DEFAULT_DB_PATH = Path(os.environ.get("COOPER_DB_PATH") or (Path(__file__).resolve().parent / "cooper_memory.db"))
 _BRAIN_DIR = _REPO_ROOT / "Obsidian Vault" / "brain"
 
 _DB_LOCK = threading.RLock()  # one connection shared across worker threads

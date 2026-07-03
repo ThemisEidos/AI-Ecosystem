@@ -355,3 +355,28 @@ def test_index_brain_is_debounced(tmp_path, conn):
     archivist.index_brain(conn, brain_dir=tmp_path, force=True)  # force bypasses
     count = conn.execute("SELECT count(*) AS c FROM brain_fts").fetchone()["c"]
     assert count == 2
+
+
+def test_default_db_path_honors_env_override(monkeypatch, tmp_path):
+    """COOPER_DB_PATH env var must redirect the default DB location (spec §5)."""
+    import importlib
+    import archivist as archivist_mod
+
+    target = tmp_path / "data" / "cooper_memory.db"
+    monkeypatch.setenv("COOPER_DB_PATH", str(target))
+    importlib.reload(archivist_mod)
+    try:
+        assert archivist_mod._DEFAULT_DB_PATH == target
+    finally:
+        monkeypatch.delenv("COOPER_DB_PATH")
+        importlib.reload(archivist_mod)
+
+
+def test_default_db_path_falls_back_without_env(monkeypatch):
+    import importlib
+    import archivist as archivist_mod
+
+    monkeypatch.delenv("COOPER_DB_PATH", raising=False)
+    importlib.reload(archivist_mod)
+    assert archivist_mod._DEFAULT_DB_PATH.name == "cooper_memory.db"
+    assert archivist_mod._DEFAULT_DB_PATH.parent == archivist_mod.Path(archivist_mod.__file__).resolve().parent
