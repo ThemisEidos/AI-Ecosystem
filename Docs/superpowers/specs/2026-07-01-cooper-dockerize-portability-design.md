@@ -56,6 +56,17 @@ explicitly in case it should be revisited. The alternative considered was baking
 a custom Ollama image at build time, keeping `internal: true` intact at the cost of a multi-GB
 custom image and losing the ability to update the model without a rebuild.)*
 
+**Re-reviewed and CONFIRMED 2026-07-02** (post audit-remediation), with two additional findings
+that strengthen the decision:
+1. Docker does not publish container ports on `internal: true` networks — so the existing
+   `private-open-webui` `127.0.0.1:3001` publish (and the planned `cooper-core` `8000`) never
+   worked through this network as configured. The flag wasn't just blocking `ollama pull`; it
+   was silently breaking the stack's own port publishing.
+2. The audit made API auth mandatory at startup (`COOPER_API_KEY`, fail-closed —
+   `main.py:_check_auth_config`), so the exposure surface argument for keeping the network
+   internal is weaker than when this spec was written: the app layer now enforces both the
+   workshop boundary *and* authentication.
+
 ## 5. Components
 
 ### `cooper-core/Dockerfile` (new)
@@ -181,3 +192,29 @@ end-to-end, matching this project's established convention (every prior step ver
   working on WSL2 now)
 - Any change to `private-open-webui`'s existing direct-to-Ollama wiring
 - Rewriting `Start-CooperCore.ps1` or removing the `.venv-win` dev-mode path
+
+## 8. Post-audit amendments (2026-07-02 review — required before implementation)
+
+The 2026-07-02 audit remediation landed after this spec was written and invalidates three
+details above. Verified against the code as of commit `134c702`:
+
+1. **`COOPER_API_KEY` must be set in the `cooper-core` service env.** `main.py` now refuses to
+   start without it (`_check_auth_config`, audit S1) unless `COOPER_ALLOW_ANON=1`. The §5
+   compose env block predates this and would crash-loop the container. Add
+   `COOPER_API_KEY=${COOPER_API_KEY:-cooper-local}` (overridable via `.env`, matching the
+   launcher's default).
+
+2. **The image must contain `Config/` (registry YAMLs).** `registry.py` resolves
+   `_REPO_ROOT/Config/{general,private}_tool_registry.yaml`. §5's Dockerfile copies only
+   `cooper-core/` + the Modelfile — without `Config/`, `list_tools()` raises `RegistryError`
+   and every dispatch degrades to "no registered tool matches". `COPY` both registry YAMLs to
+   `/app/Config/` (same `_REPO_ROOT`-relative trick as the Modelfile).
+
+3. **The image needs PowerShell (`pwsh`) and `Scripts/` for the §6 round-trip test.**
+   `executor.py` tries `powershell.exe` then `pwsh` and resolves scripts from
+   `_REPO_ROOT/Scripts/`; `python:3.12-slim` has neither. Install `powershell` from the
+   Microsoft Debian 12 repo (~180 MB) and `COPY Scripts/Test-Exec.ps1` (the allowlisted
+   smoke script) to `/app/Scripts/`. `Test-PDAStack.ps1` stays allowlisted but is expected to
+   fail in-container (needs Docker CLI) — the §6 step 4 round trip targets `Test-Exec.ps1`.
+   Note: build context must widen from `../cooper-core` to the repo root (with a
+   `.dockerignore`) so `Config/`, `Scripts/`, and the Modelfile are all reachable by `COPY`.
