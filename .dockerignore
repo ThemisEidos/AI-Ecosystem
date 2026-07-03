@@ -1,0 +1,11 @@
+*
+!cooper-core
+!Models/cooper-personality/Modelfile
+!Config
+!Scripts/Test-Exec.ps1
+cooper-core/.venv
+cooper-core/.venv-win
+cooper-core/__pycache__
+cooper-core/*.log
+cooper-core/cooper_memory.db
+cooper-core/Dockerfile
