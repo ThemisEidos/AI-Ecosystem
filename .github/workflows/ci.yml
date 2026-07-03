@@ -1,0 +1,19 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "step-*", "audit-*"]
+  pull_request:
+
+jobs:
+  cooper-core-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install -r cooper-core/requirements.txt pytest pyyaml
+      - name: Run tests
+        run: python -m pytest cooper-core/ -v
