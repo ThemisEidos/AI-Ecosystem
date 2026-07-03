@@ -3,7 +3,7 @@ COOPER decision layer — classify each turn before generating a reply.
 
 Supports two backends selected by WORKSHOP env var:
   open    → OpenAI API (gpt-4o-mini). Classify via json_schema, generate via /v1 streaming.
-  private → Ollama native (gemma4:12b). Classify via format+schema, generate via /api/chat streaming.
+  private → Ollama native (COOPER-Private). Classify via format+schema, generate via /api/chat streaming.
 
 Public API
 ----------

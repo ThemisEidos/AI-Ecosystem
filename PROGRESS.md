@@ -131,6 +131,42 @@
   orphaned Windows worker still serving :8000, so Docker's port publish silently
   didn't bind — early "container" checks were actually hitting the old Windows
   server (exposed by `Host : ID6` + skill history a fresh DB couldn't have).
+- **2026-07-02 · First real front-door verification found `cooper-core` was never actually
+  reachable through the UI** — every prior "live-verified" claim across all 9 steps was
+  `curl` against a known endpoint with a Bearer token; nobody had opened Open WebUI and
+  picked a model by name. When the user did, the "COOPER - Private" entry in the dropdown
+  turned out to be a decoy: `litellm/litellm_config.yaml` had a `model_name: COOPER - Private`
+  alias routing straight to raw `ollama/qwen2.5:7b` — no system prompt, no classifier,
+  no approval gate, no registry, no memory, none of the 9-step pipeline. Open WebUI's
+  SQLite-persisted Connections had a LiteLLM (port 4000) entry sitting alongside the
+  correct `cooper-core` (port 8000) one, indistinguishable by name. Root cause fixed:
+  removed the decoy alias from `litellm_config.yaml`. Discovered en route: `docker restart`
+  served a stale cached copy of the edited config file (Docker Desktop's WSL2 bind-mount
+  layer, same class of issue as the documented DrvFs `--reload` gotcha) — required
+  `docker compose up -d --force-recreate` to actually pick up the change, verified via
+  `docker exec ... cat /app/config.yaml`.
+- **2026-07-02 · Renamed the Private Workshop model end-to-end: `gemma4:12b` → `COOPER-Private`**
+  — user asked for the "gemma4:12b" showing in the Open WebUI dropdown to be identifiable
+  as COOPER, not a raw base-model tag. Ollama tag renamed via `ollama cp gemma4:12b
+  COOPER-Private` (old tag removed; blobs shared, no re-download). `cooper-core/main.py`:
+  `COOPER_MODEL`/`CLASSIFIER_MODEL` private defaults now `COOPER-Private`; added a
+  `DISPLAY_MODEL = f"COOPER-{WORKSHOP.capitalize()}"` constant used only in client-facing
+  "model"/"id" fields (`/v1/models`, `/v1/chat/completions`, SSE chunks) — decoupled from
+  `COOPER_MODEL` so Open Workshop's real backend model (`gpt-4o-mini`) never has to leak
+  into the UI once that workshop is stood up. `/health` and `/workshop` still report the
+  real backend tag on purpose (diagnostic, not branding). `docker-compose.private.yml`
+  `model-init` now pulls `gemma4:12b` then `ollama cp`s it to `COOPER-Private` inside the
+  container so the containerized stack matches (not yet live-tested in-container). Verified
+  live in both `curl` and the Open WebUI browser after a stale-process restart (see gotcha
+  below) — dropdown now shows `COOPER-Private` and answers in character.
+- **2026-07-02 · `Start-CooperCore.ps1`'s "restart" didn't kill the old worker** — after the
+  rename, `/health` kept reporting the old model even after re-running the launcher, and
+  `/chat` 404'd against Ollama because the old tag no longer existed. The previous process
+  (a zombie left over from an earlier session, `StartTime` ~90 min stale) was still holding
+  port 8000 and never got killed by the script's port-clearing step. Fixed by manually
+  `Get-Process python | Stop-Process -Force`, confirming the port was free via
+  `Get-NetTCPConnection`, then relaunching. Same failure mode as the documented "dead
+  uvicorn reloader" Docker gotcha, just on the bare-Windows dev path instead of in-container.
 
 ---
 

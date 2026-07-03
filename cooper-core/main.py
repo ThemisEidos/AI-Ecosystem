@@ -3,7 +3,7 @@ COOPER Core — FastAPI conversational runtime.
 
 WORKSHOP env var selects the backend:
   open    (default) — GPT-4o-mini via OpenAI API. Requires OPENAI_API_KEY.
-  private           — gemma4:12b via Ollama. Fully local.
+  private           — COOPER-Private (Ollama, local gemma4:12b weights). Fully local.
 
 Endpoints:
   GET  /health                — liveness + active workshop/model info
@@ -50,8 +50,8 @@ OPENAI_API_KEY  = os.environ.get("OPENAI_API_KEY", "")
 # Per-workshop model and backend selection
 if WORKSHOP == "private":
     BACKEND          = "ollama"
-    COOPER_MODEL     = os.environ.get("COOPER_MODEL", "gemma4:12b")
-    CLASSIFIER_MODEL = os.environ.get("COOPER_CLASSIFIER_MODEL", "gemma4:12b")
+    COOPER_MODEL     = os.environ.get("COOPER_MODEL", "COOPER-Private")
+    CLASSIFIER_MODEL = os.environ.get("COOPER_CLASSIFIER_MODEL", "COOPER-Private")
     BACKEND_URL      = OLLAMA_HOST
     BACKEND_KEY      = "ollama"
 else:  # open
@@ -60,6 +60,11 @@ else:  # open
     CLASSIFIER_MODEL = os.environ.get("COOPER_CLASSIFIER_MODEL", "gpt-4o-mini")
     BACKEND_URL      = OPENAI_BASE_URL
     BACKEND_KEY      = OPENAI_API_KEY
+
+# Branded id reported to OpenAI-compatible clients (Open WebUI's model dropdown, etc.)
+# — decoupled from COOPER_MODEL so Open Workshop's real backend model (e.g. gpt-4o-mini)
+# never has to leak into the UI.
+DISPLAY_MODEL = f"COOPER-{WORKSHOP.capitalize()}"
 
 
 def _load_system_prompt() -> str:
@@ -353,7 +358,7 @@ async def list_models():
     return {
         "object": "list",
         "data": [{
-            "id":       COOPER_MODEL,
+            "id":       DISPLAY_MODEL,
             "object":   "model",
             "created":  0,
             "owned_by": f"cooper-{WORKSHOP}",
@@ -426,7 +431,7 @@ async def oai_chat(req: _OAIChatRequest):
         "id":      request_id,
         "object":  "chat.completion",
         "created": int(time.time()),
-        "model":   COOPER_MODEL,
+        "model":   DISPLAY_MODEL,
         "choices": [{
             "index":        0,
             "message":      {"role": "assistant", "content": reply},
@@ -475,7 +480,7 @@ async def _stream_sse(message: str, history: List[dict]) -> AsyncIterator[str]:
                 "id":      request_id,
                 "object":  "chat.completion.chunk",
                 "created": created,
-                "model":   COOPER_MODEL,
+                "model":   DISPLAY_MODEL,
                 "choices": [{"index": 0, "delta": {"content": chunk}, "finish_reason": None}],
             }
             yield f"data: {json.dumps(data)}\n\n"
@@ -485,12 +490,12 @@ async def _stream_sse(message: str, history: List[dict]) -> AsyncIterator[str]:
             "id":      request_id,
             "object":  "chat.completion.chunk",
             "created": created,
-            "model":   COOPER_MODEL,
+            "model":   DISPLAY_MODEL,
             "choices": [{"index": 0, "delta": {"content": f"[COOPER error: {exc}]"}, "finish_reason": None}],
         }
         yield f"data: {json.dumps(err)}\n\n"
 
-    yield f"data: {json.dumps({'id': request_id, 'object': 'chat.completion.chunk', 'created': created, 'model': COOPER_MODEL, 'choices': [{'index': 0, 'delta': {}, 'finish_reason': 'stop'}]})}\n\n"
+    yield f"data: {json.dumps({'id': request_id, 'object': 'chat.completion.chunk', 'created': created, 'model': DISPLAY_MODEL, 'choices': [{'index': 0, 'delta': {}, 'finish_reason': 'stop'}]})}\n\n"
     yield "data: [DONE]\n\n"
 
 

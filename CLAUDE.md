@@ -95,9 +95,9 @@ docker compose -f PDA-Runtime/docker-compose.private.yml down
 
 ```powershell
 # OPTIONAL — legacy. cooper-core does NOT use the built COOPER model at runtime:
-# main.py extracts the SYSTEM prompt from the Modelfile and calls gemma4:12b
-# (COOPER_MODEL env var) directly. Build only if you want `ollama run COOPER`
-# for manual testing.
+# main.py extracts the SYSTEM prompt from the Modelfile and calls COOPER-Private
+# (COOPER_MODEL env var; an Ollama alias of the gemma4:12b weights) directly.
+# Build only if you want `ollama run COOPER` for manual testing.
 ollama create COOPER -f Models/cooper-personality/Modelfile
 ```
 
@@ -114,7 +114,7 @@ python -m venv .venv-win
 .venv-win\Scripts\pip install -r requirements.txt
 
 # OPTIONAL — legacy; the server reads the Modelfile's SYSTEM prompt directly
-# and calls gemma4:12b. Skip unless you want `ollama run COOPER` manually.
+# and calls COOPER-Private. Skip unless you want `ollama run COOPER` manually.
 cd D:\D_Projects\01_AI_Ecosystem
 ollama create COOPER -f Models\cooper-personality\Modelfile
 
