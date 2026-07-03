@@ -15,9 +15,9 @@
 - [x] **Step 6 — Workshop enforcement.** Open vs Private boundary enforced at the routing layer. DoD: Private Workshop refuses a cloud call at runtime; Open Workshop allows an approved one. ✓ 2026-07-01
 - [x] **Step 7 — Sub-agent review loop.** Worker → reviewer → governor. DoD: a dispatched task is checked by a reviewer agent before results reach you. ✓ 2026-07-01
 - [x] **Step 8 — Memory + skill loop.** ChromaDB + Obsidian brain read each turn; successful tasks abstracted into scored, versioned skills. DoD: COOPER recalls a prior decision and reuses a saved skill at runtime. ✓ 2026-07-01
-- [ ] **Step 9 — Dockerize + portability.** DoD: `docker compose up` brings COOPER fully online on a fresh checkout.
+- [x] **Step 9 — Dockerize + portability.** DoD: `docker compose up` brings COOPER fully online on a fresh checkout. ✓ 2026-07-02
 
-**Current step: 9 — Dockerize + portability**
+**Current step: all 9 steps complete (2026-07-02)**
 
 ---
 
@@ -116,6 +116,21 @@
   permissions moved to acceptEdits + deny list; ECC plugin trimmed to user-level
   keep-list. Live-verified: auth 401/200, allowlisted dispatch runs, unlisted
   script refused.
+- 2026-07-02 — Step 9 (Dockerize) shipped and DoD-verified live: cooper-core +
+  model-init containers added to docker-compose.private.yml; cooper-core reaches
+  Ollama via container DNS. `pda-private-net` `internal: true` dropped (spec §4,
+  confirmed post-audit — it blocked `ollama pull` AND silently disabled published
+  ports). pwsh installed from GitHub release tarball (Microsoft apt repo signs
+  SHA1, rejected by apt since 2026-02); COOPER_DB_PATH env override moves the
+  memory DB to a named volume. GPU reservation added to private-ollama after CPU
+  inference proved too slow (>5 min/turn; with RTX 3050 Ti partial offload:
+  ~90 s/turn warm — functional, slower than Windows-host Ollama's ~30 s).
+  In-container verification: health ok, 401 without key, chat classifies,
+  /tools lists 7, /workshop enforced, dispatch→approve→Test-Exec.ps1 executes
+  under Linux pwsh. Gotcha fixed en route: a dead uvicorn reloader left an
+  orphaned Windows worker still serving :8000, so Docker's port publish silently
+  didn't bind — early "container" checks were actually hitting the old Windows
+  server (exposed by `Host : ID6` + skill history a fresh DB couldn't have).
 
 ---
 

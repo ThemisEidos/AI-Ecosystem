@@ -4,11 +4,17 @@
 
 ## Current Position
 
-**Step 9 of 9 — Dockerize + Portability**
+**All 9 steps COMPLETE (2026-07-02).** Step 9 shipped and DoD-verified live: the private
+compose stack (`PDA-Runtime/docker-compose.private.yml`) brings cooper-core + Ollama +
+Open WebUI fully online — health, auth, classify, dispatch→approve→execute all verified
+in-container. Spec §4 (drop `internal: true`) was re-reviewed and confirmed post-audit;
+spec §8 lists the post-audit amendments that were applied. GPU reservation on
+private-ollama is required for usable inference (~90 s/turn warm vs >5 min on CPU).
+The `.venv-win` dev-mode path (`Start-CooperCore.ps1`) remains the faster daily driver
+(~30 s/turn via Windows-host Ollama).
 
-DoD: `docker compose up` brings COOPER fully online on a fresh checkout.
-
-**Design spec written, NOT yet implemented:** `Docs/superpowers/specs/2026-07-01-cooper-dockerize-portability-design.md`. Session paused here 2026-07-02 — next session should confirm the spec (esp. §4, a network-security tradeoff made under a response timeout) before invoking writing-plans.
+Next horizon (not yet scoped): Open Workshop containerization, Pop!_OS deployment test,
+approval-ticket session binding before any multi-client exposure (see audit deferred list).
 
 **⚠️ BRANCH CHECK FIRST:** the branch this project's code lived on (`codex/nightly-task-002-20260606-165602`) was discarded 2026-07-01/02. All work (Steps 1-9) now lives on **`step-9-dockerize`**, recovered from the same tip commit. `main` does not have this code. Run `git branch --show-current` before doing anything — do not assume.
 
@@ -24,7 +30,7 @@ DoD: `docker compose up` brings COOPER fully online on a fresh checkout.
 | 6 | Workshop enforcement (Open vs Private boundary) | done 2026-07-01 |
 | 7 | Sub-agent review loop (worker → reviewer → governor) | done 2026-07-01 |
 | 8 | Memory + skill loop (SQLite FTS5 + Obsidian brain) | done 2026-07-01 |
-| 9 | Dockerize + portability | CURRENT |
+| 9 | Dockerize + portability | done 2026-07-02 |
 
 ## Target Architecture (PRD §4, §9)
 

@@ -55,3 +55,30 @@ GateGuard requires facts (callers, no duplicate, data schemas, verbatim instruct
 ### 2026-07-02 · check_tool() is now FAIL-CLOSED for untagged tools
 
 Supersedes the 2026-07-01 entry "workshop.check_tool() is permissive for tools with no workshop field". As of the audit-remediation branch, a tool without a `workshop:` field raises WorkshopViolation. Every tool in both registry YAMLs must carry a workshop tag or it will not run.
+
+### 2026-07-02 · Dead uvicorn reloader leaves an orphaned worker serving :8000 — Docker publish silently loses
+
+Killing the uvicorn --reload parent (or it dying) does NOT stop the worker child, which
+inherited the socket and keeps serving. Get-NetTCPConnection then shows the LISTEN owned by a
+nonexistent PID. Worse: if a container publishing 8000 starts while this zombie holds the port,
+Docker Desktop's proxy fails to bind WITHOUT any compose error — your "container" requests hit
+the old Windows server. Detection: response contained Windows-only state (Host: ID6, skill
+history a fresh container DB couldn't have). Fix: `Get-Process python | Stop-Process -Force`,
+then `docker restart pda-private-cooper-core` to rebind. Always verify which backend answered
+via `docker logs` before trusting container test results.
+
+### 2026-07-02 · Microsoft apt repo unusable on Debian 12+ images — SHA1 signature rejected since 2026-02
+
+apt now hard-rejects SHA1 release signatures ("SHA1 is not considered secure since
+2026-02-01"), and packages.microsoft.com/debian still signs with SHA1. Installing pwsh via the
+packages-microsoft-prod.deb route fails with exit 100 regardless of gnupg. Use the official
+GitHub release tarball + `DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1` (skips libicu). See
+cooper-core/Dockerfile.
+
+### 2026-07-02 · gemma4:12b in containerized Ollama needs the GPU reservation block
+
+Without `deploy.resources.reservations.devices` on private-ollama, inference runs CPU-only:
+>5 min per /chat turn (classifier times out → "classifier error (safe fallback)"). With the
+nvidia block + RTX 3050 Ti (4 GB, partial offload of the 7.6 GB model): ~3 min cold load,
+~90 s warm. First request after container start will likely still hit the classifier timeout —
+treat the first turn as a warmup.
