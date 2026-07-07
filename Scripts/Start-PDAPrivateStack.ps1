@@ -6,9 +6,44 @@ param(
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
 $ComposeFile = Join-Path $Root "PDA-Runtime\docker-compose.private.yml"
+$DockerDesktop = "$env:ProgramFiles\Docker\Docker\Docker Desktop.exe"
 
 if (-not (Test-Path -LiteralPath $ComposeFile -PathType Leaf)) {
     throw "Private compose file not found: $ComposeFile"
+}
+
+Write-Host "[*] Checking Docker daemon..."
+try {
+    docker info *> $null
+    $DockerReady = ($LASTEXITCODE -eq 0)
+}
+catch {
+    $DockerReady = $false
+}
+
+if (-not $DockerReady) {
+    Write-Host "[*] Docker daemon not running. Starting Docker Desktop..."
+
+    if (-not (Test-Path $DockerDesktop)) {
+        throw "Docker Desktop not found at: $DockerDesktop"
+    }
+
+    Start-Process $DockerDesktop
+
+    for ($i = 1; $i -le 60; $i++) {
+        docker info *> $null
+        if ($LASTEXITCODE -eq 0) {
+            $DockerReady = $true
+            break
+        }
+
+        Write-Host "[*] Waiting for Docker daemon... $i/60"
+        Start-Sleep -Seconds 3
+    }
+}
+
+if (-not $DockerReady) {
+    throw "Docker daemon did not become ready."
 }
 
 function Get-HttpStatusCode {
@@ -83,7 +118,13 @@ Push-Location $Root
 try {
     Write-Host ""
     Write-Host "=== STARTING PRIVATE STACK ===" -ForegroundColor Cyan
+    # docker compose writes benign warnings (e.g. volume/project-name mismatches) to stderr;
+    # with $ErrorActionPreference = "Stop", merging that into the success stream via 2>&1 would
+    # turn each warning line into a terminating error regardless of exit code. Relax locally.
+    $PreviousErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
     $Output = & docker compose -f $ComposeFile up -d 2>&1
+    $ErrorActionPreference = $PreviousErrorActionPreference
     if ($LASTEXITCODE -ne 0) {
         throw ("docker compose failed for private stack:`n{0}" -f (($Output | Out-String).Trim()))
     }
