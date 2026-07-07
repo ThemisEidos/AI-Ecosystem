@@ -1,9 +1,12 @@
 """Open-workshop routing must default through LiteLLM, not directly to OpenAI."""
+import pathlib
 import subprocess
 import sys
 import textwrap
 
 import main  # ambient import — WORKSHOP is unset in the test environment, defaults to "open"
+
+_COOPER_CORE_DIR = pathlib.Path(__file__).resolve().parent
 
 
 def test_open_workshop_defaults_to_litellm_base_url():
@@ -30,7 +33,7 @@ def _run_main_import_with_env(env_overrides: dict) -> dict:
     env = {"COOPER_API_KEY": "test-key", **env_overrides}
     result = subprocess.run(
         [sys.executable, "-c", script],
-        cwd=".", env=env, capture_output=True, text=True, timeout=30,
+        cwd=_COOPER_CORE_DIR, env=env, capture_output=True, text=True, timeout=30,
     )
     assert result.returncode == 0, result.stderr
     return dict(line.split("=", 1) for line in result.stdout.strip().splitlines())
