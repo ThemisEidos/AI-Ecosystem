@@ -167,6 +167,21 @@
   `Get-Process python | Stop-Process -Force`, confirming the port was free via
   `Get-NetTCPConnection`, then relaunching. Same failure mode as the documented "dead
   uvicorn reloader" Docker gotcha, just on the bare-Windows dev path instead of in-container.
+- **2026-07-07 · `COOPER-Private` rename verified in-container (was still open from 07-02)**
+  — the running `pda-private-cooper-core` image was built 2026-07-02 18:39, *before* the
+  rename commit (`9303387`, later that evening), so `/health` still reported
+  `"model":"gemma4:12b"` despite the source and `model-init` container correctly using
+  `COOPER-Private`. Rebuilt the image (`docker compose ... build cooper-core`) and
+  `--force-recreate`d the container; `/health`, `/v1/models`, and `/chat` all then reported
+  `COOPER-Private` correctly. Separately discovered the private stack's Open WebUI
+  (`pda-private-open-webui`, port 3001) had an empty `user` table despite its volume dating
+  to June 25 — nobody had ever completed the browser setup wizard for this instance; every
+  prior "verification" of the private stack was `curl` directly against `cooper-core`,
+  never through Open WebUI's own UI. Created the admin account and confirmed the model
+  dropdown shows `COOPER-Private`. Confirmed by design: port 3001 (private) and port 3000
+  (open) are fully separate Open WebUI containers/volumes/databases — LiteLLM and
+  OpenRouter only exist in the Open Stack; the private stack showing only `COOPER-Private`
+  is correct, not a misconfiguration.
 
 ---
 

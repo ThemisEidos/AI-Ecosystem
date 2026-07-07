@@ -6,6 +6,11 @@ services:
       ai.ecosystem.stack: open
     ports:
       - "3000:8080"
+    environment:
+      # Fallback for fresh installs only — v0.9.6 SQLite takes precedence after first run.
+      # Add the connection manually via Settings → Connections in the UI (see CLAUDE.md).
+      - OPENAI_API_BASE_URL=http://host.docker.internal:8000/v1
+      - OPENAI_API_KEY=cooper-local
     volumes:
       - open-webui:/app/backend/data
     networks:
