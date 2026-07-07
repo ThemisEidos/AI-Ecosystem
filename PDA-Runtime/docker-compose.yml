@@ -62,6 +62,13 @@ services:
     environment:
       - WORKSHOP=open
       - OPENAI_BASE_URL=http://litellm:4000/v1
+      # LITELLM_MASTER_KEY here is resolved from the shell env or a PDA-Runtime/.env file
+      # (Compose-level interpolation) — NOT from litellm/.env.local, which only populates the
+      # litellm service's own container env. The two files must be kept in sync manually:
+      # whatever LITELLM_MASTER_KEY is set to in litellm/.env.local must also be set as
+      # LITELLM_MASTER_KEY in PDA-Runtime/.env (copy from .env.example), or this falls back to
+      # the literal "cooper-local" and every /chat call gets rejected by LiteLLM with a 401
+      # unless its real master key also happens to be "cooper-local".
       - OPENAI_API_KEY=${LITELLM_MASTER_KEY:-cooper-local}
       - COOPER_DB_PATH=/app/data/cooper_memory.db
       - COOPER_API_KEY=${COOPER_API_KEY:-cooper-local}

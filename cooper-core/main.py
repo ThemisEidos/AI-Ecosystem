@@ -2,7 +2,8 @@
 COOPER Core — FastAPI conversational runtime.
 
 WORKSHOP env var selects the backend:
-  open    (default) — GPT-4o-mini via OpenAI API. Requires OPENAI_API_KEY.
+  open    (default) — GPT-4o-mini via LiteLLM's governed gateway (the "openai" alias).
+                       Requires OPENAI_API_KEY to hold LiteLLM's master key, not a raw OpenAI key.
   private           — COOPER-Private (Ollama, local gemma4:12b weights). Fully local.
 
 Endpoints:
@@ -63,8 +64,8 @@ else:  # open
     BACKEND_KEY      = OPENAI_API_KEY
 
 # Branded id reported to OpenAI-compatible clients (Open WebUI's model dropdown, etc.)
-# — decoupled from COOPER_MODEL so Open Workshop's real backend model (e.g. gpt-4o-mini)
-# never has to leak into the UI.
+# — decoupled from COOPER_MODEL so Open Workshop's real backend model (the "openai" LiteLLM
+# alias, itself resolving to gpt-4o-mini) never has to leak into the UI.
 DISPLAY_MODEL = f"COOPER-{WORKSHOP.capitalize()}"
 
 
