@@ -1,0 +1,61 @@
+{
+  "status": "pass",
+  "evidence_path": "D:\\D_Projects\\01_AI_Ecosystem\\State\\Wave1_Runtime_Split\\private-isolation-20260625-111909.json",
+  "open_networks": [
+    "pda-open-net"
+  ],
+  "private_networks": [
+    "pda-private-net"
+  ],
+  "shared_networks": [],
+  "open_volumes": [
+    "open-webui",
+    "pda-runtime_n8n-data"
+  ],
+  "private_volumes": [
+    "pda-private-open-webui-main",
+    "pda-private-ollama"
+  ],
+  "shared_volumes": [],
+  "no_outbound_internet": {
+    "ok": true,
+    "detail": "<urlopen error [Errno -3] Temporary failure in name resolution>"
+  },
+  "no_external_dns": {
+    "ok": true,
+    "detail": "[Errno -3] Temporary failure in name resolution"
+  },
+  "no_openrouter_access": {
+    "ok": true,
+    "detail": "<urlopen error [Errno -3] Temporary failure in name resolution>"
+  },
+  "no_cloud_env_dependency": {
+    "ok": true,
+    "disallowed_env": []
+  },
+  "open_to_private_probe": {
+    "ok": true,
+    "results": [
+      {
+        "target": "http://pda-private-open-webui:8080",
+        "blocked": true,
+        "detail": "<urlopen error [Errno -2] Name or service not known>"
+      },
+      {
+        "target": "http://pda-private-ollama:11434/api/tags",
+        "blocked": true,
+        "detail": "<urlopen error [Errno -2] Name or service not known>"
+      },
+      {
+        "target": "http://host.docker.internal:5679/webhook-test/private",
+        "blocked": true,
+        "detail": "<urlopen error [Errno 111] Connection refused>"
+      }
+    ]
+  },
+  "wf_007": {
+    "exit_code": 0,
+    "output": []
+  },
+  "issues": []
+}
