@@ -193,6 +193,25 @@
   resident model — it was swapping to disk (196 GB block I/O), not compute-bound. See
   `Gotchas.md` 2026-07-07 entry. No code or config fix applied or needed; this was environmental
   contention, not a regression in the stack itself.
+- **2026-07-07 · Open Workshop containerization complete and DoD-verified live.** Closes the gap
+  Step 9 explicitly left open (Private Workshop only). `cooper-core` (WORKSHOP=open) now runs
+  as a container in `docker-compose.yml` on host port 8001, routed through the existing
+  `pda-litellm` gateway (`openai` alias) instead of talking to OpenAI directly, with a new
+  `openai -> claude -> gemini` fallback chain. Six-task plan executed via subagent-driven
+  development (`Docs/superpowers/plans/2026-07-07-open-workshop-containerization.md`); every
+  task reviewed, one fix round on Task 1 (a subprocess-isolation test helper that broke under
+  CI's actual repo-root pytest invocation). Live verification: `/health` and `/v1/models` both
+  correct in-container; a real `/chat` call traversed cooper-core → LiteLLM → OpenAI end to
+  end; the fallback chain was proven to actually engage (broke `OPENAI_API_KEY`, response came
+  back from `claude-sonnet-4-5-20250929` instead, then restored and reconfirmed the primary
+  path); Open WebUI's stale SQLite connection (pointed at a pre-existing
+  `host.docker.internal:8000` from before `cooper-core` existed) was patched to `cooper-core:8000`
+  and the dropdown/chat confirmed working live in the browser. Two real infrastructure bugs
+  found and fixed along the way (not part of the original plan): LiteLLM's proxy needed
+  `general_settings.allow_requests_on_db_unavailable: true` (no DB configured for this
+  single-user deployment, otherwise intermittently rejected valid master-key auth), and
+  `docker compose up -d --force-recreate` does not reliably re-read an external `env_file` —
+  a full `stop`+`rm -f`+`up` is required. Both documented in `Gotchas.md`.
 
 ---
 
