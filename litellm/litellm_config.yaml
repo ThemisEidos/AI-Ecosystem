@@ -42,3 +42,6 @@ router_settings:
         - local-llama
     - gemini:
         - gemini-pro
+    - openai:
+        - claude
+        - gemini
