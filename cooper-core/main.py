@@ -43,8 +43,9 @@ WORKSHOP = os.environ.get("WORKSHOP", "open").strip().lower()
 # Ollama (used by private workshop and as classifier fallback)
 OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
 
-# OpenAI (used by open workshop)
-OPENAI_BASE_URL = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
+# OpenAI (used by open workshop, routed through LiteLLM's governed gateway rather
+# than directly — see Docs/superpowers/specs/2026-07-07-open-workshop-containerization-design.md §2)
+OPENAI_BASE_URL = os.environ.get("OPENAI_BASE_URL", "http://litellm:4000/v1")
 OPENAI_API_KEY  = os.environ.get("OPENAI_API_KEY", "")
 
 # Per-workshop model and backend selection
@@ -56,8 +57,8 @@ if WORKSHOP == "private":
     BACKEND_KEY      = "ollama"
 else:  # open
     BACKEND          = "openai"
-    COOPER_MODEL     = os.environ.get("COOPER_MODEL", "gpt-4o-mini")
-    CLASSIFIER_MODEL = os.environ.get("COOPER_CLASSIFIER_MODEL", "gpt-4o-mini")
+    COOPER_MODEL     = os.environ.get("COOPER_MODEL", "openai")
+    CLASSIFIER_MODEL = os.environ.get("COOPER_CLASSIFIER_MODEL", "openai")
     BACKEND_URL      = OPENAI_BASE_URL
     BACKEND_KEY      = OPENAI_API_KEY
 
