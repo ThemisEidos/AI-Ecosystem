@@ -212,6 +212,22 @@
   single-user deployment, otherwise intermittently rejected valid master-key auth), and
   `docker compose up -d --force-recreate` does not reliably re-read an external `env_file` —
   a full `stop`+`rm -f`+`up` is required. Both documented in `Gotchas.md`.
+- **2026-07-07 · Final whole-branch review fix + one-click start buttons for both stacks.**
+  Opus-reviewed the full Open Workshop containerization range and found one Important,
+  cross-task-only gap: `docker-compose.yml`'s `OPENAI_API_KEY=${LITELLM_MASTER_KEY:-cooper-local}`
+  for `cooper-core` resolves from Compose-level interpolation (shell env / `PDA-Runtime/.env`),
+  **not** from `litellm/.env.local` — a latent fresh-clone auth failure that only worked here
+  because both files happened to hold the same value. Documented in `docker-compose.yml` and
+  `.env.example` (which already anticipated the requirement) rather than restructuring the
+  mechanism. Separately, built desktop shortcuts for both stacks — `PDA-Runtime/Start COOPER
+  Private.lnk` (amber icon) and `Start COOPER Open.lnk` (teal icon), both visible-console,
+  `-NoExit`, ready to pin to Start/taskbar. Building the Open shortcut surfaced a real bug in
+  `Scripts/Start-PDA.ps1`: it used `docker start <container>` against a hardcoded name list with
+  no knowledge of the new `cooper-core` service (never started it) and still checked for a
+  `pda-ollama` container that isn't part of the current `docker-compose.yml` at all. Replaced
+  with `docker compose up -d` (matching `Start-PDAPrivateStack.ps1`'s approach) plus the same
+  stderr/`$ErrorActionPreference` fix from Task 5. Also stopped auto-opening n8n's browser tab
+  on Open stack startup (Open WebUI still opens). All work pushed to `origin/step-9-dockerize`.
 
 ---
 
