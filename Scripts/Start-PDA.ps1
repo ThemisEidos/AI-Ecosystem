@@ -174,7 +174,6 @@ catch {
 Write-Host ""
 Write-Host "[*] Opening interfaces..."
 Start-Process "http://localhost:3000"
-Start-Process "http://localhost:5678"
 
 Write-Host ""
 Write-Host "[OK] PDA Ecosystem ready."
