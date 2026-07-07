@@ -45,3 +45,9 @@ router_settings:
     - openai:
         - claude
         - gemini
+
+general_settings:
+  # No database configured for this deployment (single-user, local-only) — without this,
+  # some litellm proxy builds intermittently reject master-key auth with "no_db_connection"
+  # since virtual-key lookups normally hit a DB. Master-key-only auth still applies.
+  allow_requests_on_db_unavailable: true
