@@ -182,6 +182,17 @@
   (open) are fully separate Open WebUI containers/volumes/databases — LiteLLM and
   OpenRouter only exist in the Open Stack; the private stack showing only `COOPER-Private`
   is correct, not a misconfiguration.
+- **2026-07-07 · Private-stack "not responding" traced to host memory pressure, not the model.**
+  A `/chat` call was timing out (2-4+ min, ending in the classifier-error fallback), and
+  `docker logs pda-private-ollama` showing only 7/49 GPU layers offloaded at 0.19 tok/s first
+  looked like `gemma4:12b` not fitting the 4 GB GPU. User pushed back — cooper-private had
+  worked fine earlier that same session — which prompted a proper recheck instead of accepting
+  the first hypothesis. Actual cause: Windows had 1.2 GB free of 15.7 GB total, `vmmemWSL` alone
+  used 6.5 GB, and two extra background Claude Code subagent processes plus a second full
+  session were running concurrently in the same WSL2 VM, leaving no headroom for the 8.9 GB
+  resident model — it was swapping to disk (196 GB block I/O), not compute-bound. See
+  `Gotchas.md` 2026-07-07 entry. No code or config fix applied or needed; this was environmental
+  contention, not a regression in the stack itself.
 
 ---
 

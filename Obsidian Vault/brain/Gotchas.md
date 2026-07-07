@@ -82,3 +82,21 @@ Without `deploy.resources.reservations.devices` on private-ollama, inference run
 nvidia block + RTX 3050 Ti (4 GB, partial offload of the 7.6 GB model): ~3 min cold load,
 ~90 s warm. First request after container start will likely still hit the classifier timeout —
 treat the first turn as a warmup.
+
+### 2026-07-07 · Private-stack timeouts traced to host-wide memory pressure, not model/GPU sizing
+
+A live `/chat` test appeared to hang/error (2-4+ min, ending in `"classifier error (safe
+fallback)"`), and `docker logs pda-private-ollama` showed only 7/49 model layers offloaded to
+the GPU at 0.19 tokens/sec — this initially looked like `gemma4:12b` (7.6 GB) simply not fitting
+the RTX 3050 Ti's 4 GB VRAM. **That diagnosis was wrong, corrected after user pushback** ("I was
+talking to cooper-private fine earlier, my hardware is fine — what changed?"). The actual cause:
+Windows had only 1.2 GB free out of 15.7 GB total at the time, `vmmemWSL` (Docker Desktop's
+WSL2 VM) alone was using 6.5 GB, and WSL2's own internal memory was full (7.6 GB total, swap
+100% used) — root-caused to two extra background `claude` CLI subagent processes plus a second
+full Claude Code CLI session running concurrently in the same WSL2 VM. The 8.9 GB-resident model
+was swapping to disk for lack of headroom (196 GB of block I/O on the container), not failing to
+fit on the GPU. The ~90s warm figure above may still be accurate under normal memory
+conditions — it was never actually invalidated, the test environment was just abnormally
+memory-starved. Lesson: before concluding a performance regression is architectural (model size,
+GPU capacity), check host-wide resource pressure first, especially when other heavy sessions
+(other Claude Code instances, other Docker stacks) may be running concurrently.
