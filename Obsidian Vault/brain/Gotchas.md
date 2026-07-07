@@ -100,3 +100,33 @@ conditions — it was never actually invalidated, the test environment was just 
 memory-starved. Lesson: before concluding a performance regression is architectural (model size,
 GPU capacity), check host-wide resource pressure first, especially when other heavy sessions
 (other Claude Code instances, other Docker stacks) may be running concurrently.
+
+### 2026-07-07 · `docker compose up -d --force-recreate <service>` doesn't reliably re-read an external `env_file`
+
+Editing `litellm/.env.local` (referenced via `env_file:` in `docker-compose.yml`, not a bind
+mount) and then running `docker compose up -d --force-recreate litellm` did not pick up the
+change — `docker exec pda-litellm printenv OPENAI_API_KEY` still showed the pre-edit value.
+Compose appears to decide whether to recreate a service based on its own config hash, which
+doesn't change when only an externally-referenced env file changes, so `--force-recreate`
+recreated the container but reused a cached environment resolution. Fix: a full teardown —
+`docker compose stop <service>` then `docker compose rm -f <service>` then `docker compose up -d
+<service>` — forces a fresh `env_file` read every time. `--force-recreate` is not equivalent to
+this for env-file-only changes, even though it destroys and recreates the container. Same class
+of staleness as the documented Docker Desktop/WSL2 bind-mount caching gotcha (2026-07-02), but a
+different mechanism (compose-level recreate logic, not the container filesystem layer) — don't
+assume `--force-recreate` alone is sufficient after any external-file edit; verify the loaded
+value directly (`docker exec <container> printenv <VAR>`) before trusting a restart worked.
+
+### 2026-07-07 · LiteLLM `main-latest` proxy needs `allow_requests_on_db_unavailable: true` with no DB configured
+
+Without a database configured, this project's LiteLLM proxy image intermittently rejected valid
+master-key Bearer auth with `{"type":"no_db_connection","message":"No connected db."}` — not
+consistently reproducible on every request, which made it look like a race condition before the
+actual mechanism (DB-backed virtual-key lookup with no DB present) was identified. Fixed by
+adding to `litellm_config.yaml`:
+```yaml
+general_settings:
+  allow_requests_on_db_unavailable: true
+```
+After adding this, 3/3 consecutive requests succeeded where before it failed unpredictably.
+Master-key-only auth (the only auth mode this single-user local deployment uses) is unaffected.
