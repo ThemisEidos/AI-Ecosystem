@@ -137,29 +137,20 @@ Write-Host "[OK] Docker daemon running."
 Write-Host ""
 Write-Host "[*] Starting containers..."
 
-function Resolve-ContainerName {
-    param([string[]]$Candidates)
+$ComposeFile = Join-Path $PSScriptRoot "..\PDA-Runtime\docker-compose.yml"
 
-    $AllContainers = @(& docker ps -a --format "{{.Names}}" 2>$null)
-    foreach ($Candidate in $Candidates) {
-        if ($AllContainers -contains $Candidate) {
-            return $Candidate
-        }
-    }
-
-    return $null
-}
-
-foreach ($CandidateSet in @(
-    @("pda-open-webui", "open-webui"),
-    @("pda-n8n", "n8n"),
-    @("pda-litellm", "litellm"),
-    @("pda-ollama", "ollama")
-)) {
-    $ContainerName = Resolve-ContainerName -Candidates $CandidateSet
-    if ($ContainerName) {
-        docker start $ContainerName *> $null
-    }
+# docker compose writes benign warnings (e.g. volume/project-name mismatches) to stderr;
+# with a caller that has $ErrorActionPreference = "Stop", merging that into the success
+# stream via 2>&1 would turn each warning line into a terminating error regardless of
+# exit code. Relax locally around just this call.
+$PreviousErrorActionPreference = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
+$ComposeOutput = & docker compose -f $ComposeFile up -d 2>&1
+$ErrorActionPreference = $PreviousErrorActionPreference
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "[ERROR] docker compose failed:"
+    Write-Host ($ComposeOutput | Out-String).Trim()
+    exit 1
 }
 
 Write-Host ""
@@ -167,7 +158,7 @@ Write-Host "[*] Waiting for service readiness..."
 Wait-ForService -Name "Open WebUI" -Urls @("http://localhost:3000/health", "http://localhost:3000/api/models", "http://localhost:3000") -ContainerNames @("open-webui", "pda-open-webui") | Out-Null
 Wait-ForService -Name "LiteLLM" -Urls @("http://localhost:4000/v1/models") -ContainerNames @("litellm", "pda-litellm") | Out-Null
 Wait-ForService -Name "n8n" -Urls @("http://localhost:5678/healthz", "http://localhost:5678/rest/settings", "http://localhost:5678") -ContainerNames @("n8n", "pda-n8n") | Out-Null
-Wait-ForService -Name "Ollama" -Urls @("http://localhost:11434/api/tags") -ContainerNames @("ollama", "pda-ollama") | Out-Null
+Wait-ForService -Name "COOPER Core (Open)" -Urls @("http://localhost:8001/health") -ContainerNames @("pda-open-cooper-core") | Out-Null
 
 Write-Host ""
 Write-Host "[*] Container status:"
