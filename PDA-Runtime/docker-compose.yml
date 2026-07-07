@@ -9,7 +9,8 @@ services:
     environment:
       # Fallback for fresh installs only — v0.9.6 SQLite takes precedence after first run.
       # Add the connection manually via Settings → Connections in the UI (see CLAUDE.md).
-      - OPENAI_API_BASE_URL=http://host.docker.internal:8000/v1
+      # Container DNS, not host.docker.internal — cooper-core is a real container on this network.
+      - OPENAI_API_BASE_URL=http://cooper-core:8000/v1
       - OPENAI_API_KEY=cooper-local
     volumes:
       - open-webui:/app/backend/data
@@ -49,11 +50,46 @@ services:
       - pda-open-net
     restart: unless-stopped
 
+  cooper-core:
+    build:
+      context: ..
+      dockerfile: cooper-core/Dockerfile
+    container_name: pda-open-cooper-core
+    labels:
+      ai.ecosystem.stack: open
+    ports:
+      - "8001:8000"
+    environment:
+      - WORKSHOP=open
+      - OPENAI_BASE_URL=http://litellm:4000/v1
+      - OPENAI_API_KEY=${LITELLM_MASTER_KEY:-cooper-local}
+      - COOPER_DB_PATH=/app/data/cooper_memory.db
+      - COOPER_API_KEY=${COOPER_API_KEY:-cooper-local}
+    volumes:
+      - cooper-core-data:/app/data
+      - type: bind
+        source: "../Obsidian Vault/brain"
+        target: "/app/Obsidian Vault/brain"
+        read_only: true
+    networks:
+      - pda-open-net
+    depends_on:
+      - litellm
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    restart: unless-stopped
+
 volumes:
   open-webui:
     external: true
     name: open-webui
   n8n-data:
+  cooper-core-data:
+    name: pda-open-cooper-core-data
 
 networks:
   pda-open-net:
