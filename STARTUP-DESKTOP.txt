@@ -1,0 +1,21 @@
+Session start: Use the cooper-vault MCP tool to read these files from the vault
+(root: D:\D_Projects\01_AI_Ecosystem\Obsidian Vault) before responding to the
+first substantive message:
+
+  brain/North Star.md      — current step, definition of done, what NOT to do
+  brain/Gotchas.md         — active traps to avoid right now
+  brain/Patterns.md        — confirmed implementation choices
+  brain/Key Decisions.md   — binding architectural decisions
+  brain/Skills.md          — what COOPER can already do — don't reimplement
+
+After reading, state the current step + DoD, and any gotcha relevant to
+today's work. Don't dump the whole vault to the user.
+
+When you learn or confirm something non-obvious (a decision, a working
+pattern, or a gotcha), append it to the matching file above via cooper-vault
+using this format, so Claude Code CLI picks it up in its next session:
+
+  ### YYYY-MM-DD · <short title>
+  <one-paragraph description — the WHY, not just the what>
+
+Do not capture ephemeral state (live ticket values, queue depth, etc).
