@@ -34,6 +34,7 @@ import executor
 import review
 import workshop
 import archivist
+import skills
 
 # ── Config ─────────────────────────────────────────────────────────────────────
 _REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -283,6 +284,23 @@ async def list_tools():
     return {"workshop": WORKSHOP, "count": len(tools), "tools": tools}
 
 
+# ── Skills (Step 10) ─────────────────────────────────────────────────────────
+@app.get("/skills", dependencies=[Depends(_require_auth)])
+async def list_skill_registry():
+    entries = skills.load_manifest()
+    report = []
+    for e in entries:
+        if str(e.get("workshop", "open")).lower() != WORKSHOP:
+            continue
+        report.append({
+            "id":               e.get("id"),
+            "path":             e.get("path"),
+            "permission_level": e.get("permission_level"),
+            "status":           skills.skill_status(e),
+        })
+    return {"workshop": WORKSHOP, "count": len(report), "skills": report}
+
+
 # ── Approval gate (Safety Officer) ──────────────────────────────────────────
 @app.get("/pending", dependencies=[Depends(_require_auth)])
 async def pending():
@@ -335,6 +353,10 @@ async def chat(req: ChatRequest):
     if registry.is_registry_query(req.message):
         reply = registry.format_tool_list(WORKSHOP)
         return {"reply": reply, "decision": "answer", "reason": "registry query answered directly by Quartermaster"}
+
+    if skills.is_skill_query(req.message):
+        reply = skills.format_skill_list(WORKSHOP)
+        return {"reply": reply, "decision": "answer", "reason": "skill catalog answered directly"}
 
     if approval.has_pending(WORKSHOP) and approval.is_response(req.message):
         reply = await _resolve_approval(req.message)
@@ -413,6 +435,9 @@ async def oai_chat(req: _OAIChatRequest):
     if registry.is_registry_query(message):
         reply = registry.format_tool_list(WORKSHOP)
         td = TurnDecision(decision="answer", reason="registry query answered directly by Quartermaster")
+    elif skills.is_skill_query(message):
+        reply = skills.format_skill_list(WORKSHOP)
+        td = TurnDecision(decision="answer", reason="skill catalog answered directly")
     elif approval.has_pending(WORKSHOP) and approval.is_response(message):
         reply = await _resolve_approval(message)
         td = TurnDecision(decision="answer", reason="approval gate resolved")
@@ -452,6 +477,8 @@ async def _stream_sse(message: str, history: List[dict]) -> AsyncIterator[str]:
     try:
         if registry.is_registry_query(message):
             content_iter = _single_text_chunk(registry.format_tool_list(WORKSHOP))
+        elif skills.is_skill_query(message):
+            content_iter = _single_text_chunk(skills.format_skill_list(WORKSHOP))
         elif approval.has_pending(WORKSHOP) and approval.is_response(message):
             content_iter = _single_text_chunk(await _resolve_approval(message))
         else:
@@ -465,6 +492,9 @@ async def _stream_sse(message: str, history: List[dict]) -> AsyncIterator[str]:
                     system_prompt = f"{SYSTEM_PROMPT}\n\n{recall_context}"
             except Exception as exc:
                 print(f"  [!!] archivist.recall failed (non-fatal): {exc}")
+            skill_ctx = skills.skill_context_for(WORKSHOP, message)
+            if skill_ctx:
+                system_prompt = f"{system_prompt}\n\n{skill_ctx}"
             td, content_iter = await route_turn_stream(
                 message,
                 history,
@@ -515,9 +545,12 @@ async def _generate(message: str, history: List[dict]) -> str:
     except Exception as exc:
         print(f"  [!!] archivist.recall failed (non-fatal): {exc}")
         recall_context = ""
+    skill_ctx = skills.skill_context_for(WORKSHOP, message)
     msgs = _build_messages(history, message)
     if recall_context:
         msgs.insert(1, {"role": "system", "content": recall_context})
+    if skill_ctx:
+        msgs.insert(1, {"role": "system", "content": skill_ctx})
     if BACKEND == "openai":
         from decision import _openai_complete
         return await _openai_complete(BACKEND_URL, BACKEND_KEY, COOPER_MODEL, msgs)
