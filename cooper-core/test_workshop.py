@@ -38,3 +38,10 @@ def test_check_backend_blocks_openai_in_private():
 
 def test_check_backend_allows_ollama_in_private():
     workshop.check_backend("ollama", "private")  # must not raise
+
+
+def test_skill_import_blocked_in_private():
+    tool = {"id": "import_skill", "name": "Import Skill",
+            "workshop": "Private Workshop", "executor_type": "skill_import"}
+    with pytest.raises(workshop.WorkshopViolation):
+        workshop.check_tool(tool, "private")

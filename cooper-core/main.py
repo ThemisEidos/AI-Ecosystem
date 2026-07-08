@@ -155,11 +155,19 @@ async def _handle_dispatch(message: str) -> str:
         )
 
     if approval.needs_approval(tool):
+        preview = ""
+        if tool.get("executor_type") == "skill_import":
+            try:
+                text = await asyncio.to_thread(skills.preview_import, message)
+                preview = f"\n\nSKILL.md under review:\n---\n{text}\n---"
+            except skills.SkillError as exc:
+                return f"Skill import rejected before approval: {exc}"
         approval.request(WORKSHOP, tool, message)
         return (
             f"Halt — {tool.get('name', tool.get('id'))} "
             f"[{tool.get('drawer', 'Uncategorized')}, permission level {tool.get('permission_level', '?')}] "
             f"requires approval before it can proceed{skill_note}. Reply 'approve' or 'deny'."
+            f"{preview}"
         )
 
     # L0/L1: execute immediately

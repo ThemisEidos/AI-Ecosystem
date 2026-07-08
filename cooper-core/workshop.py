@@ -14,12 +14,12 @@ This module is stateless and has no side effects. It only raises or returns.
 It is called by main.py before any tool runs and before any LLM call is made.
 
 Cloud-calling executor types (blocked in Private Workshop):
-  browser, llm_api — these reach external services by definition.
+  browser, llm_api, skill_import — these reach external services by definition.
   All others (powershell, python, filesystem, local_llm, workflow_engine,
   cli_launcher, local_read, informational, note_editor) are local-only.
 """
 
-_CLOUD_EXECUTORS = frozenset({"browser", "llm_api"})
+_CLOUD_EXECUTORS = frozenset({"browser", "llm_api", "skill_import"})
 
 _LOCAL_EXECUTORS = frozenset({
     "powershell", "python", "filesystem", "local_llm",

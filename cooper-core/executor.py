@@ -15,8 +15,9 @@ Design constraints:
     It trusts that the caller (main.py) enforced approval; it does not re-check.
   - stdout + stderr are merged and returned as the result artifact.
 
-Supported executor_types (step 5):
-  powershell — invokes powershell.exe / pwsh via a thread-pool subprocess
+Supported executor_types:
+  powershell   — invokes powershell.exe / pwsh via a thread-pool subprocess (step 5)
+  skill_import — post-approval tap registration via skills.register_import (step 10)
 
 Not yet wired (return stubs):
   informational, local_read, browser, llm_api, note_editor, python,
@@ -26,6 +27,8 @@ import asyncio
 import subprocess
 from pathlib import Path
 from typing import Optional
+
+import skills
 
 _REPO_ROOT   = Path(__file__).resolve().parent.parent
 _SCRIPTS_DIR = _REPO_ROOT / "Scripts"
@@ -103,6 +106,9 @@ async def run(tool: dict, message: str, workshop: str) -> str:
     if executor_type == "powershell":
         return await _run_powershell(tool, message)
 
+    if executor_type == "skill_import":
+        return await _run_skill_import(message)
+
     return _stub(executor_type, tool_name)
 
 
@@ -155,3 +161,21 @@ async def _run_powershell(tool: dict, message: str) -> str:
         raise
     except Exception as exc:
         raise ExecutionError(f"executor error ({type(exc).__name__}): {exc}")
+
+
+async def _run_skill_import(message: str) -> str:
+    """Post-approval skill registration. Network + filesystem work off-loop."""
+    loop = asyncio.get_running_loop()
+
+    def _sync() -> str:
+        entry = skills.register_import(message)
+        return (
+            f"Skill '{entry['id']}' imported and registered for the "
+            f"{entry['workshop']} workshop (hash {entry['content_hash'][:12]}…). "
+            f"It is now live. Promote to Private only via a separate approval."
+        )
+
+    try:
+        return await loop.run_in_executor(None, _sync)
+    except skills.SkillError as exc:
+        return f"Workbench: skill import failed — {exc}"

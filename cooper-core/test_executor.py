@@ -2,6 +2,7 @@ import asyncio
 from pathlib import Path
 
 import executor
+import skills as skills_mod
 
 ALLOWED_TOOL = {
     "id": "powershell_private",
@@ -65,3 +66,27 @@ def test_run_returns_stub_for_unwired_executor():
         executor.run({"executor_type": "browser", "name": "B"}, "x", "open")
     )
     assert "not yet wired" in result
+
+
+def test_skill_import_executor(monkeypatch):
+    monkeypatch.setattr(
+        skills_mod, "register_import",
+        lambda message, **kw: {"id": "tap-skill", "workshop": "open",
+                               "content_hash": "ab" * 32},
+    )
+    tool = {"id": "import_skill", "name": "Import Skill", "executor_type": "skill_import"}
+    out = asyncio.run(
+        executor.run(tool, "import skill tap-skill from https://x/y", "open")
+    )
+    assert "tap-skill" in out and "imported" in out.lower()
+
+
+def test_skill_import_executor_reports_failure(monkeypatch):
+    def boom(message, **kw):
+        raise skills_mod.SkillError("bad tap")
+    monkeypatch.setattr(skills_mod, "register_import", boom)
+    tool = {"id": "import_skill", "name": "Import Skill", "executor_type": "skill_import"}
+    out = asyncio.run(
+        executor.run(tool, "import skill x from https://x/y", "open")
+    )
+    assert "failed" in out.lower() and "bad tap" in out
