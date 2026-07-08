@@ -315,8 +315,8 @@ async def lifespan(app: FastAPI):
                     "closed). Reduce SIGNAL_ALLOWED_SENDERS to a single number until Step 13 lands."
                 )
             else:
-                async def _gateway_handler(text: str) -> str:
-                    reply, _td = await _chat_core(text, [], session_id="local")
+                async def _gateway_handler(text: str, sender: str) -> str:
+                    reply, _td = await _chat_core(text, [], session_id=f"signal:{sender}")
                     return reply
                 gateway_task = asyncio.create_task(gateway.run_loop(gw_cfg, _gateway_handler))
 

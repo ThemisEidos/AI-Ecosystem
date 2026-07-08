@@ -82,14 +82,14 @@ def test_poll_once_replies_to_allowed_and_ignores_others():
     sent: list = []
     replies: list = []
 
-    async def fake_handler(text: str) -> str:
-        replies.append(text)
+    async def fake_handler(text: str, sender: str) -> str:
+        replies.append((sender, text))
         return f"echo: {text}"
 
     client = make_mock_client(ENVELOPES, sent)
     handled = run(gateway.poll_once(cfg(), client, fake_handler))
     assert handled == 1                      # only the allowlisted sender
-    assert replies == ["hello cooper"]
+    assert replies == [("+15551230001", "hello cooper")]
     assert len(sent) == 1
     assert sent[0]["recipients"] == ["+15551230001"]
     assert sent[0]["message"] == "echo: hello cooper"
@@ -99,7 +99,7 @@ def test_poll_once_replies_to_allowed_and_ignores_others():
 def test_poll_once_survives_handler_error():
     sent: list = []
 
-    async def broken(text: str) -> str:
+    async def broken(text: str, sender: str) -> str:
         raise RuntimeError("pipeline down")
 
     client = make_mock_client(ENVELOPES[:1], sent)
@@ -111,7 +111,7 @@ def test_poll_once_survives_handler_error():
 def test_run_loop_bounded_iterations():
     sent: list = []
 
-    async def fake_handler(text: str) -> str:
+    async def fake_handler(text: str, sender: str) -> str:
         return "ok"
 
     client = make_mock_client([], sent)

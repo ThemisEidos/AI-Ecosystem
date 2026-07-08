@@ -70,7 +70,7 @@ async def send(cfg: GatewayConfig, client: httpx.AsyncClient, recipient: str, te
 async def poll_once(
     cfg: GatewayConfig,
     client: httpx.AsyncClient,
-    handler: Callable[[str], Awaitable[str]],
+    handler: Callable[[str, str], Awaitable[str]],
 ) -> int:
     """One receive→filter→handle→reply pass. Returns messages handled."""
     resp = await client.get(
@@ -86,7 +86,7 @@ async def poll_once(
             continue
         handled += 1
         try:
-            reply = await handler(text)
+            reply = await handler(text, sender)
         except Exception as exc:
             print(f"  [!!] gateway: handler failed: {exc}")
             reply = f"COOPER gateway error — the message was received but processing failed: {exc}"
@@ -99,7 +99,7 @@ async def poll_once(
 
 async def run_loop(
     cfg: GatewayConfig,
-    handler: Callable[[str], Awaitable[str]],
+    handler: Callable[[str, str], Awaitable[str]],
     *,
     client: Optional[httpx.AsyncClient] = None,
     max_iterations: Optional[int] = None,
