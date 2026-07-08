@@ -118,40 +118,44 @@ def skill_status(entry: dict, repo_root: Optional[Path] = None) -> str:
 
 
 def _load_skill(entry: dict, repo_root: Path) -> Optional[Skill]:
-    status = skill_status(entry, repo_root)
-    if status != "ok":
-        print(f"  [!!] skill '{entry.get('id')}' disabled ({status}) — re-approve to enable")
-        return None
-    skill_dir = _entry_dir(entry, repo_root)
     try:
-        meta, body = parse_skill_md((skill_dir / "SKILL.md").read_text(encoding="utf-8"))
-    except (OSError, SkillError) as exc:
-        print(f"  [!!] skill '{entry.get('id')}' unreadable — disabled: {exc}")
+        status = skill_status(entry, repo_root)
+        if status != "ok":
+            print(f"  [!!] skill '{entry.get('id')}' disabled ({status}) — re-approve to enable")
+            return None
+        skill_dir = _entry_dir(entry, repo_root)
+        try:
+            meta, body = parse_skill_md((skill_dir / "SKILL.md").read_text(encoding="utf-8"))
+        except (OSError, SkillError) as exc:
+            print(f"  [!!] skill '{entry.get('id')}' unreadable — disabled: {exc}")
+            return None
+        if meta["name"] != skill_dir.name:
+            print(f"  [!!] skill '{entry.get('id')}' frontmatter name != directory name — disabled")
+            return None
+        has_scripts = (skill_dir / "scripts").is_dir()
+        permission_level = int(entry.get("permission_level", 1))
+        if has_scripts and permission_level < 2:
+            # Spec §3: script-bearing skills are Level 2+ by definition. Fail closed.
+            print(f"  [!!] skill '{entry.get('id')}' is script-bearing but registered "
+                  f"at L{permission_level} — disabled (script-bearing requires L2+)")
+            return None
+        truncated = len(body) > _MAX_BODY_CHARS
+        if truncated:
+            print(f"  [!!] skill '{entry.get('id')}' body exceeds {_MAX_BODY_CHARS} chars — truncated")
+        return Skill(
+            id=str(entry.get("id", meta["name"])),
+            name=meta["name"],
+            description=str(meta["description"]),
+            body=body[:_MAX_BODY_CHARS],
+            workshop=str(entry.get("workshop", "open")),
+            permission_level=permission_level,
+            path=skill_dir,
+            has_scripts=has_scripts,
+            truncated=truncated,
+        )
+    except Exception as exc:
+        print(f"  [!!] skill '{entry.get('id')}' failed to load — isolated and skipped: {exc}")
         return None
-    if meta["name"] != skill_dir.name:
-        print(f"  [!!] skill '{entry.get('id')}' frontmatter name != directory name — disabled")
-        return None
-    has_scripts = (skill_dir / "scripts").is_dir()
-    permission_level = int(entry.get("permission_level", 1))
-    if has_scripts and permission_level < 2:
-        # Spec §3: script-bearing skills are Level 2+ by definition. Fail closed.
-        print(f"  [!!] skill '{entry.get('id')}' is script-bearing but registered "
-              f"at L{permission_level} — disabled (script-bearing requires L2+)")
-        return None
-    truncated = len(body) > _MAX_BODY_CHARS
-    if truncated:
-        print(f"  [!!] skill '{entry.get('id')}' body exceeds {_MAX_BODY_CHARS} chars — truncated")
-    return Skill(
-        id=str(entry.get("id", meta["name"])),
-        name=meta["name"],
-        description=str(meta["description"]),
-        body=body[:_MAX_BODY_CHARS],
-        workshop=str(entry.get("workshop", "open")),
-        permission_level=permission_level,
-        path=skill_dir,
-        has_scripts=has_scripts,
-        truncated=truncated,
-    )
 
 
 def list_skills(

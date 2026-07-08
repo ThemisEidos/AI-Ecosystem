@@ -171,3 +171,45 @@ def test_script_bearing_skill_requires_level_2(tmp_path, capsys):
     manifest = write_manifest(tmp_path, [approved_entry(tmp_path, d, permission_level=2)])
     loaded = skills.list_skills("open", manifest_path=manifest, repo_root=tmp_path)
     assert loaded[0].has_scripts is True
+
+
+def test_malformed_permission_level_isolated_from_sibling(tmp_path, capsys):
+    """Prove exception isolation: one bad entry must not crash evaluation of siblings."""
+    # Create two skills on disk with correct frontmatter names
+    good_md = """\
+---
+name: skill-good
+description: A valid skill for isolation testing.
+---
+
+## When to use
+Testing.
+"""
+    bad_md = """\
+---
+name: skill-bad
+description: A skill with malformed permission_level.
+---
+
+## When to use
+Testing with bad data.
+"""
+    d_good = make_skill_dir(tmp_path, name="skill-good", body=good_md)
+    d_bad = make_skill_dir(tmp_path, name="skill-bad", body=bad_md)
+
+    # Register both: good one valid, bad one with malformed permission_level
+    entries = [
+        approved_entry(tmp_path, d_good, id="skill-good"),
+        approved_entry(tmp_path, d_bad, id="skill-bad", permission_level="high"),  # not an int!
+    ]
+    manifest = write_manifest(tmp_path, entries)
+
+    # list_skills must NOT raise — it must load the good one and skip the bad one
+    loaded = skills.list_skills("open", manifest_path=manifest, repo_root=tmp_path)
+    assert len(loaded) == 1
+    assert loaded[0].id == "skill-good"
+
+    # Verify the bad one triggered the isolation warning
+    output = capsys.readouterr().out
+    assert "skill-bad" in output
+    assert "failed to load" in output
