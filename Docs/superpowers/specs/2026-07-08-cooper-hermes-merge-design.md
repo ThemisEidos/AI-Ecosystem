@@ -154,14 +154,22 @@ Hermes's learning loop, governed:
 
 ## 5. Step 12 — Messaging gateway (`gateway.py`)
 
-- **One channel first: Telegram** (simplest bot API; long-polling, so no inbound port
-  opened on the home network).
-- **Classification ruling baked in:** messages traverse third-party servers, so the
-  gateway binds to the **Open workshop only**. The Private workshop remains reachable
-  exclusively from localhost Open WebUI.
-- Gateway auth: allowlist of Telegram user IDs (initially the owner's). Pairing a new
-  user is itself an approval-gated action.
-- Approval tickets over Telegram reuse the existing conversational yes/no next-message
+- **One channel first: Signal** (owner does not use Telegram). Signal has no bot API;
+  the gateway talks to a local **signal-cli-rest-api container**
+  (`bbernhard/signal-cli-rest-api`) added to the Open compose stack. `gateway.py`
+  receives via the container's local REST/websocket interface — outbound-only from
+  the home network, no inbound port.
+- **Human prerequisite (pre-clearable in parallel with the build):** a Signal account
+  for COOPER — either a dedicated phone number registered through signal-cli, or the
+  container linked as a secondary device to an existing account.
+- E2E note: Signal messages are end-to-end encrypted, a better privacy posture than a
+  Telegram bot. The classification ruling **still stands**: the gateway binds to the
+  **Open workshop only** — it is a remotely reachable channel and the signal-cli
+  container holds keys outside cooper-core's trust boundary. The Private workshop
+  remains reachable exclusively from localhost Open WebUI.
+- Gateway auth: allowlist of Signal sender numbers/UUIDs (initially the owner's).
+  Pairing a new sender is itself an approval-gated action.
+- Approval tickets over Signal reuse the existing conversational yes/no next-message
   flow, but multi-client exposure requires Step 13's session binding first.
 
 ---
