@@ -90,3 +90,32 @@ def test_skill_import_executor_reports_failure(monkeypatch):
         executor.run(tool, "import skill x from https://x/y", "open")
     )
     assert "failed" in out.lower() and "bad tap" in out
+
+
+def test_skill_import_executor_degrades_on_unexpected_exception(monkeypatch):
+    # register_import() can hit a raw subprocess/network/IO exception that
+    # skills.py never wraps in SkillError. The executor must still never raise
+    # — it degrades to a chat-facing string, same contract as _run_powershell's
+    # broad except Exception fallback.
+    def boom(message, **kw):
+        raise RuntimeError("connection reset by peer")
+    monkeypatch.setattr(skills_mod, "register_import", boom)
+    tool = {"id": "import_skill", "name": "Import Skill", "executor_type": "skill_import"}
+    out = asyncio.run(
+        executor.run(tool, "import skill x from https://x/y", "open")
+    )
+    assert isinstance(out, str)
+    assert "unexpectedly" in out.lower()
+    assert "connection reset by peer" in out
+
+
+def test_skill_import_executor_defends_malformed_entry_shape(monkeypatch):
+    # register_import() returning a dict missing expected keys must not raise
+    # KeyError inside the executor's success path — .get(..., "?") fallback.
+    monkeypatch.setattr(skills_mod, "register_import", lambda message, **kw: {})
+    tool = {"id": "import_skill", "name": "Import Skill", "executor_type": "skill_import"}
+    out = asyncio.run(
+        executor.run(tool, "import skill x from https://x/y", "open")
+    )
+    assert isinstance(out, str)
+    assert "?" in out

@@ -1,4 +1,5 @@
 """main.py skill wiring: catalog query short-circuit + GET /skills (Step 10)."""
+import asyncio
 import os
 
 os.environ.setdefault("WORKSHOP", "open")
@@ -8,6 +9,17 @@ os.environ.pop("COOPER_API_KEY", None)
 from fastapi.testclient import TestClient  # noqa: E402
 
 import main  # noqa: E402
+import skills  # noqa: E402
+
+_IMPORT_SKILL_TOOL = {
+    "id": "import_skill",
+    "name": "Import Skill",
+    "drawer": "Skills",
+    "workshop": "Open Workshop",
+    "permission_level": 2,
+    "approval_required": True,
+    "executor_type": "skill_import",
+}
 
 
 def test_chat_answers_skill_query_without_llm(monkeypatch):
@@ -70,3 +82,36 @@ def test_get_skills_endpoint_isolates_per_entry_status_failure(monkeypatch):
     by_id = {s["id"]: s["status"] for s in data["skills"]}
     assert by_id["good-skill"] == "ok"
     assert by_id["bad-skill"] == "error"
+
+
+def test_rejected_preview_never_opens_an_approval_ticket(monkeypatch):
+    # Core security property of Step 10: if skills.preview_import() raises before
+    # approval.request() is ever called, _handle_dispatch() must return the
+    # rejection immediately and MUST NOT leave a dangling approval ticket behind.
+    # Previously verified only by a manual live-curl transcript — this pins it down.
+    monkeypatch.setattr(main, "_API_KEY", "")
+    monkeypatch.setattr(main, "_ALLOW_ANON", True)
+
+    async def _select_import_skill(*args, **kwargs):
+        return dict(_IMPORT_SKILL_TOOL)
+
+    monkeypatch.setattr(main.registry, "select_tool_llm", _select_import_skill)
+
+    def _boom(message):
+        raise skills.SkillError("bad tap")
+
+    monkeypatch.setattr(main.skills, "preview_import", _boom)
+
+    approval_calls = []
+    monkeypatch.setattr(
+        main.approval, "request",
+        lambda *args, **kwargs: approval_calls.append((args, kwargs)),
+    )
+
+    reply = asyncio.run(
+        main._handle_dispatch("import skill tap-skill from https://x/y")
+    )
+
+    assert "rejected" in reply.lower()
+    assert "bad tap" in reply
+    assert approval_calls == []

@@ -162,6 +162,8 @@ async def _handle_dispatch(message: str) -> str:
                 preview = f"\n\nSKILL.md under review:\n---\n{text}\n---"
             except skills.SkillError as exc:
                 return f"Skill import rejected before approval: {exc}"
+            except Exception as exc:
+                return f"Skill import rejected before approval (unexpected error): {exc}"
         approval.request(WORKSHOP, tool, message)
         return (
             f"Halt — {tool.get('name', tool.get('id'))} "

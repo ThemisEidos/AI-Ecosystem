@@ -169,9 +169,11 @@ async def _run_skill_import(message: str) -> str:
 
     def _sync() -> str:
         entry = skills.register_import(message)
+        content_hash = entry.get("content_hash", "?")
         return (
-            f"Skill '{entry['id']}' imported and registered for the "
-            f"{entry['workshop']} workshop (hash {entry['content_hash'][:12]}…). "
+            f"Skill '{entry.get('id', '?')}' imported and registered for the "
+            f"{entry.get('workshop', '?')} workshop "
+            f"(hash {content_hash[:12] if content_hash != '?' else '?'}…). "
             f"It is now live. Promote to Private only via a separate approval."
         )
 
@@ -179,3 +181,5 @@ async def _run_skill_import(message: str) -> str:
         return await loop.run_in_executor(None, _sync)
     except skills.SkillError as exc:
         return f"Workbench: skill import failed — {exc}"
+    except Exception as exc:
+        return f"Workbench: skill import failed unexpectedly — {exc}"
