@@ -42,3 +42,31 @@ def test_get_skills_endpoint(monkeypatch):
     data = resp.json()
     assert data["workshop"] == "open"
     assert data["skills"][0]["status"] == "hash_mismatch"
+
+
+def test_get_skills_endpoint_isolates_per_entry_status_failure(monkeypatch):
+    # skill_status() has no internal guard (unlike _load_skill), so GET /skills
+    # must catch per-entry to avoid one bad entry 500-ing the whole response.
+    monkeypatch.setattr(main, "_API_KEY", "")
+    monkeypatch.setattr(main, "_ALLOW_ANON", True)
+    monkeypatch.setattr(main.skills, "load_manifest", lambda: [
+        {"id": "good-skill", "path": "Skills/examples/good-skill",
+         "workshop": "open", "permission_level": 1, "content_hash": "dead"},
+        {"id": "bad-skill", "path": "Skills/examples/bad-skill",
+         "workshop": "open", "permission_level": 1, "content_hash": "beef"},
+    ])
+
+    def _skill_status(e):
+        if e.get("id") == "bad-skill":
+            raise PermissionError("simulated unreadable skill file")
+        return "ok"
+
+    monkeypatch.setattr(main.skills, "skill_status", _skill_status)
+    with TestClient(main.app) as client:
+        resp = client.get("/skills")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["count"] == 2
+    by_id = {s["id"]: s["status"] for s in data["skills"]}
+    assert by_id["good-skill"] == "ok"
+    assert by_id["bad-skill"] == "error"

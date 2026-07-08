@@ -292,11 +292,16 @@ async def list_skill_registry():
     for e in entries:
         if str(e.get("workshop", "open")).lower() != WORKSHOP:
             continue
+        try:
+            status = skills.skill_status(e)
+        except Exception as exc:
+            print(f"  [!!] skill status check failed for '{e.get('id')}': {exc}")
+            status = "error"
         report.append({
             "id":               e.get("id"),
             "path":             e.get("path"),
             "permission_level": e.get("permission_level"),
-            "status":           skills.skill_status(e),
+            "status":           status,
         })
     return {"workshop": WORKSHOP, "count": len(report), "skills": report}
 
@@ -492,7 +497,11 @@ async def _stream_sse(message: str, history: List[dict]) -> AsyncIterator[str]:
                     system_prompt = f"{SYSTEM_PROMPT}\n\n{recall_context}"
             except Exception as exc:
                 print(f"  [!!] archivist.recall failed (non-fatal): {exc}")
-            skill_ctx = skills.skill_context_for(WORKSHOP, message)
+            try:
+                skill_ctx = skills.skill_context_for(WORKSHOP, message)
+            except Exception as exc:
+                print(f"  [!!] skill context injection failed (non-fatal): {exc}")
+                skill_ctx = ""
             if skill_ctx:
                 system_prompt = f"{system_prompt}\n\n{skill_ctx}"
             td, content_iter = await route_turn_stream(
@@ -545,7 +554,11 @@ async def _generate(message: str, history: List[dict]) -> str:
     except Exception as exc:
         print(f"  [!!] archivist.recall failed (non-fatal): {exc}")
         recall_context = ""
-    skill_ctx = skills.skill_context_for(WORKSHOP, message)
+    try:
+        skill_ctx = skills.skill_context_for(WORKSHOP, message)
+    except Exception as exc:
+        print(f"  [!!] skill context injection failed (non-fatal): {exc}")
+        skill_ctx = ""
     msgs = _build_messages(history, message)
     if recall_context:
         msgs.insert(1, {"role": "system", "content": recall_context})
