@@ -5,6 +5,8 @@ import pytest
 
 import skills
 
+import subprocess
+
 
 VALID_SKILL_MD = """\
 ---
@@ -269,3 +271,56 @@ def test_skill_context_for_handles_format_skill_context_exception(tmp_path, monk
     output = capsys.readouterr().out
     assert "[!!]" in output
     assert "non-fatal" in output
+
+
+def make_tap_repo(tmp_path: Path, skill_name: str = "tap-skill") -> str:
+    """A local git repo laid out like a Hermes tap: skills/<name>/SKILL.md."""
+    repo = tmp_path / "tap-src"
+    d = repo / "skills" / skill_name
+    d.mkdir(parents=True)
+    (d / "SKILL.md").write_text(
+        f"---\nname: {skill_name}\ndescription: Imported test skill.\n---\n\nBody.\n",
+        encoding="utf-8",
+    )
+    for cmd in (
+        ["git", "init", "-q"],
+        ["git", "add", "-A"],
+        ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "seed"],
+    ):
+        subprocess.run(cmd, cwd=repo, check=True)
+    return repo.as_uri()  # file:// URL
+
+
+def test_parse_import_request():
+    name, url = skills.parse_import_request(
+        "import skill weekly-review from https://github.com/x/taps"
+    )
+    assert name == "weekly-review" and url == "https://github.com/x/taps"
+    with pytest.raises(skills.SkillError):
+        skills.parse_import_request("import something vague")
+
+
+def test_fetch_tap_rejects_non_https():
+    with pytest.raises(skills.SkillError):
+        skills.fetch_tap("http://evil.example/repo", "x")
+    with pytest.raises(skills.SkillError):
+        skills.fetch_tap("file:///tmp/whatever", "x")
+
+
+def test_import_flow_end_to_end(tmp_path, monkeypatch):
+    url = make_tap_repo(tmp_path)
+    monkeypatch.setattr(skills, "_ALLOWED_SCHEMES", ("https://", "file://"))
+    manifest = write_manifest(tmp_path, [])
+    msg = f"import skill tap-skill from {url}"
+
+    preview = skills.preview_import(msg, repo_root=tmp_path)
+    assert "Imported test skill" in preview
+    # staged in _incoming — still inert
+    assert skills.list_skills("open", manifest_path=manifest, repo_root=tmp_path) == []
+
+    entry = skills.register_import(msg, repo_root=tmp_path, manifest_path=manifest)
+    assert entry["id"] == "tap-skill"
+    assert entry["workshop"] == "open"
+    assert (tmp_path / "Skills" / "imported" / "tap-skill" / "SKILL.md").exists()
+    loaded = skills.list_skills("open", manifest_path=manifest, repo_root=tmp_path)
+    assert [s.name for s in loaded] == ["tap-skill"]

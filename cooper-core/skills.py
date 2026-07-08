@@ -11,6 +11,9 @@ Spec: Docs/superpowers/specs/2026-07-08-cooper-hermes-merge-design.md §3.
 """
 import hashlib
 import re
+import shutil
+import subprocess
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, Tuple
@@ -264,3 +267,118 @@ def format_skill_list(
         else:
             lines.append(f"- {e.get('id')} [DISABLED: {status}] — re-approve to enable")
     return "\n".join(lines)
+
+
+# ── Tap importer (approval-gated via the import_skill registry tool) ─────────
+_ALLOWED_SCHEMES  = ("https://",)
+_IMPORT_RE        = re.compile(
+    r"import\s+skill\s+([a-z0-9][a-z0-9-]*)\s+from\s+(\S+)", re.IGNORECASE
+)
+_CLONE_TIMEOUT    = 60
+_PREVIEW_MAX      = 3_500
+
+
+def parse_import_request(message: str) -> Tuple[str, str]:
+    """Extract (skill_name, url) from 'import skill <name> from <url>'."""
+    m = _IMPORT_RE.search(message)
+    if not m:
+        raise SkillError(
+            'could not parse import request — use: import skill <name> from <https url>'
+        )
+    return m.group(1).lower(), m.group(2)
+
+
+def fetch_tap(url: str, skill_name: str, *, repo_root: Optional[Path] = None) -> Path:
+    """Clone a tap repo and stage skills/<name>/ under Skills/_incoming/<name>/.
+    Staged skills are inert (reserved dir). Returns the staged path."""
+    if not url.startswith(_ALLOWED_SCHEMES):
+        raise SkillError(f"tap URL must use https:// — got scheme '{url.split(':', 1)[0]}'")
+    root = repo_root or _REPO_ROOT
+    incoming = root / "Skills" / "_incoming"
+    incoming.mkdir(parents=True, exist_ok=True)
+    clone_dir = incoming / f"_clone-{uuid.uuid4().hex[:8]}"
+    dest = incoming / skill_name
+    try:
+        try:
+            subprocess.run(
+                ["git", "clone", "--depth", "1", url, str(clone_dir)],
+                check=True, capture_output=True, timeout=_CLONE_TIMEOUT,
+            )
+        except subprocess.CalledProcessError as exc:
+            raise SkillError(f"git clone failed: {exc.stderr.decode(errors='replace')[:300]}")
+        except subprocess.TimeoutExpired:
+            raise SkillError(f"git clone timed out after {_CLONE_TIMEOUT}s")
+        src = clone_dir / "skills" / skill_name
+        if not (src / "SKILL.md").exists():
+            raise SkillError(f"tap has no skills/{skill_name}/SKILL.md")
+        meta, _body = parse_skill_md((src / "SKILL.md").read_text(encoding="utf-8"))
+        if meta["name"] != skill_name:
+            raise SkillError(
+                f"frontmatter name '{meta['name']}' != requested skill '{skill_name}'"
+            )
+        if dest.exists():
+            shutil.rmtree(dest)
+        shutil.copytree(src, dest)
+        return dest
+    finally:
+        shutil.rmtree(clone_dir, ignore_errors=True)
+
+
+def preview_import(message: str, *, repo_root: Optional[Path] = None) -> str:
+    """Fetch + stage the skill, return its SKILL.md text for the approval question."""
+    name, url = parse_import_request(message)
+    staged = fetch_tap(url, name, repo_root=repo_root)
+    text = (staged / "SKILL.md").read_text(encoding="utf-8")
+    if len(text) > _PREVIEW_MAX:
+        text = text[:_PREVIEW_MAX] + "\n[... preview truncated]"
+    return text
+
+
+def register_import(
+    message: str,
+    *,
+    repo_root: Optional[Path] = None,
+    manifest_path: Optional[Path] = None,
+) -> dict:
+    """Post-approval: promote _incoming/<name> to Skills/imported/<name>, hash it,
+    append the manifest entry (workshop: open — Private promotion is a separate
+    approval, spec §3). Re-fetches if staging is missing (e.g. ticket expired)."""
+    name, url = parse_import_request(message)
+    root = repo_root or _REPO_ROOT
+    staged = root / "Skills" / "_incoming" / name
+    if not (staged / "SKILL.md").exists():
+        staged = fetch_tap(url, name, repo_root=repo_root)
+    final = root / "Skills" / "imported" / name
+    final.parent.mkdir(parents=True, exist_ok=True)
+    if final.exists():
+        shutil.rmtree(final)
+    shutil.move(str(staged), str(final))
+    entry = {
+        "id": name,
+        "path": str(final.relative_to(root)).replace("\\", "/"),
+        "workshop": "open",
+        "permission_level": 1,
+        "approval_required": False,
+        "content_hash": compute_content_hash(final),
+    }
+    _append_manifest_entry(entry, manifest_path)
+    return entry
+
+
+def _append_manifest_entry(entry: dict, manifest_path: Optional[Path] = None) -> None:
+    p = manifest_path or MANIFEST_PATH
+    data = {}
+    if p.exists():
+        data = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+    # Dedupe by (id, workshop): the same skill may legitimately hold one entry
+    # per workshop (Open import later promoted to Private — spec §3).
+    entries = [
+        e for e in (data.get("skills") or [])
+        if not (e.get("id") == entry["id"]
+                and str(e.get("workshop", "open")) == str(entry.get("workshop", "open")))
+    ]
+    entries.append(entry)
+    data["skills"] = entries
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+    _manifest_cache.clear()  # force reload on next read
