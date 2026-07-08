@@ -36,10 +36,13 @@ if [[ -f "$ENV_FILE" ]]; then
 else
     cp PDA-Runtime/.env.example "$ENV_FILE"
     KEY="cooper-$(head -c16 /dev/urandom | od -An -tx1 | tr -d ' \n')"
-    printf '\nCOOPER_API_KEYS=%s\n' "$KEY" >> "$ENV_FILE"
+    printf '\nCOOPER_API_KEY=\nCOOPER_API_KEYS=%s\n' "$KEY" >> "$ENV_FILE"
     say "Seeded $ENV_FILE with a generated client key:"
     say "    $KEY"
     say "Use it as the Bearer token / Open WebUI connection key."
+    say "Note: the old shared default key ('cooper-local') no longer works once this"
+    say ".env exists — reconfigure Open WebUI's connection manually (Settings ->"
+    say "Connections, see CLAUDE.md) with the key above."
 fi
 
 # 4. Up

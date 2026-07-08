@@ -11,7 +11,7 @@ services:
       # Add the connection manually via Settings → Connections in the UI (see CLAUDE.md).
       # Container DNS, not host.docker.internal — cooper-core is a real container on this network.
       - OPENAI_API_BASE_URL=http://cooper-core:8000/v1
-      - OPENAI_API_KEY=cooper-local
+      - OPENAI_API_KEY=${COOPER_API_KEY-cooper-local}
     volumes:
       - open-webui:/app/backend/data
     networks:
@@ -86,7 +86,7 @@ services:
       # unless its real master key also happens to be "cooper-local".
       - OPENAI_API_KEY=${LITELLM_MASTER_KEY:-cooper-local}
       - COOPER_DB_PATH=/app/data/cooper_memory.db
-      - COOPER_API_KEY=${COOPER_API_KEY:-cooper-local}
+      - COOPER_API_KEY=${COOPER_API_KEY-cooper-local}
       - GATEWAY_ENABLED=${GATEWAY_ENABLED:-0}
       - SIGNAL_API_URL=http://signal-cli:8080
       - SIGNAL_NUMBER=${SIGNAL_NUMBER:-}
