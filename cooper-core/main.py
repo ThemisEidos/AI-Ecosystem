@@ -281,6 +281,13 @@ async def lifespan(app: FastAPI):
             gw_cfg = gateway.load_config()
             if gw_cfg is None:
                 print("  [!!] gateway enabled but SIGNAL_API_URL/SIGNAL_NUMBER/SIGNAL_ALLOWED_SENDERS incomplete — not started (fail closed)")
+            elif len(gw_cfg.allowed_senders) > 1:
+                print(
+                    "  [!!] gateway: more than one SIGNAL_ALLOWED_SENDERS entry configured, but "
+                    "approval tickets are not yet session-scoped (Step 13) — a second sender "
+                    "could approve a first sender's pending action. Refusing to start (fail "
+                    "closed). Reduce SIGNAL_ALLOWED_SENDERS to a single number until Step 13 lands."
+                )
             else:
                 async def _gateway_handler(text: str) -> str:
                     reply, _td = await _chat_core(text, [])
