@@ -121,6 +121,12 @@ Skills join the same LLM-backed selection flow as tools (the `select_tool_llm`
 pattern: schema-constrained catalog pick, keyword-overlap fallback on any error),
 scoped per workshop.
 
+**v1 implementation ruling (2026-07-08):** knowledge-skill selection at turn time
+uses the keyword-overlap path only. Tools keep LLM-backed selection because it runs
+only on dispatch turns; skills are matched on *every* conversational turn, where an
+extra classifier call would add per-turn latency for marginal gain. Revisit if
+keyword matching proves too coarse once the registry grows.
+
 ### Importer
 
 New registry tool `import_skill` (Level 2, `approval_required: true`):
@@ -169,6 +175,10 @@ Hermes's learning loop, governed:
   remains reachable exclusively from localhost Open WebUI.
 - Gateway auth: allowlist of Signal sender numbers/UUIDs (initially the owner's).
   Pairing a new sender is itself an approval-gated action.
+  **v1 implementation ruling (2026-07-08):** pairing = the operator edits
+  `SIGNAL_ALLOWED_SENDERS` in `.env` and restarts — operator-level approval with
+  fail-closed default (empty list admits nobody). A chat-dispatched `pair_sender`
+  tool is deferred until after Step 13's session binding is live.
 - Approval tickets over Signal reuse the existing conversational yes/no next-message
   flow, but multi-client exposure requires Step 13's session binding first.
 
