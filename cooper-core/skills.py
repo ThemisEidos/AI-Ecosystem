@@ -174,3 +174,93 @@ def list_skills(
         if s is not None:
             out.append(s)
     return out
+
+
+# ── Selection (mirrors registry.select_tool's keyword-overlap approach) ─────
+_STOPWORDS = {
+    "the", "a", "an", "of", "to", "for", "and", "or", "in", "on", "at",
+    "is", "are", "please", "can", "you", "me", "my", "it", "this", "that",
+}
+
+_SKILL_QUERY_RE = re.compile(
+    r"\b(what|which|list|show)\b.{0,20}\bskills?\b"
+    r"|\bskills?\b.{0,25}\b(available|do you have|learned|registered)\b",
+    re.IGNORECASE,
+)
+
+
+def is_skill_query(message: str) -> bool:
+    """Heuristic: does this message ask what skills exist?"""
+    return bool(_SKILL_QUERY_RE.search(message))
+
+
+def select_skill(
+    workshop: str,
+    message: str,
+    *,
+    manifest_path: Optional[Path] = None,
+    repo_root: Optional[Path] = None,
+) -> Optional[Skill]:
+    """Best keyword-overlap match against name/description. None if no overlap."""
+    loadable = list_skills(workshop, manifest_path=manifest_path, repo_root=repo_root)
+    words = {w for w in re.findall(r"[a-z]+", message.lower()) if w not in _STOPWORDS}
+    if not loadable or not words:
+        return None
+    best, best_score = None, 0
+    for s in loadable:
+        hay = set(re.findall(r"[a-z]+", f"{s.name} {s.description}".lower()))
+        score = len(words & hay)
+        if score > best_score:
+            best, best_score = s, score
+    return best
+
+
+def format_skill_context(skill: Skill) -> str:
+    """System-prompt block for an activated knowledge skill (approved content)."""
+    return (
+        f"Activated skill: {skill.name} — {skill.description}\n"
+        f"Follow this approved procedure where it applies:\n{skill.body}"
+    )
+
+
+def skill_context_for(
+    workshop: str,
+    message: str,
+    *,
+    manifest_path: Optional[Path] = None,
+    repo_root: Optional[Path] = None,
+) -> str:
+    """The one call main.py makes per turn. '' when nothing matches or on any error."""
+    try:
+        s = select_skill(workshop, message, manifest_path=manifest_path, repo_root=repo_root)
+    except Exception as exc:
+        print(f"  [!!] skill selection failed (non-fatal): {exc}")
+        return ""
+    return format_skill_context(s) if s is not None else ""
+
+
+def format_skill_list(
+    workshop: str,
+    *,
+    manifest_path: Optional[Path] = None,
+    repo_root: Optional[Path] = None,
+) -> str:
+    """Human-readable catalog including DISABLED entries with their reason."""
+    root = repo_root or _REPO_ROOT
+    entries = [
+        e for e in load_manifest(manifest_path)
+        if str(e.get("workshop", "open")).lower() == workshop.lower()
+    ]
+    if not entries:
+        return f"No skills registered for the {workshop} workshop."
+    lines = [f"{workshop.capitalize()} workshop skill registry — {len(entries)} skill(s):", ""]
+    for e in sorted(entries, key=lambda e: str(e.get("id", ""))):
+        status = skill_status(e, root)
+        if status == "ok":
+            s = _load_skill(e, root)
+            desc = s.description if s else ""
+            kind = "script-bearing" if (s and s.has_scripts) else "knowledge"
+            lines.append(f"- {e.get('id')} [L{e.get('permission_level', '?')}, {kind}] — {desc}")
+        else:
+            lines.append(f"- {e.get('id')} [DISABLED: {status}] — re-approve to enable")
+    return "\n".join(lines)

@@ -213,3 +213,34 @@ Testing with bad data.
     output = capsys.readouterr().out
     assert "skill-bad" in output
     assert "failed to load" in output
+
+
+def test_select_skill_keyword_match(tmp_path):
+    d = make_skill_dir(tmp_path)
+    manifest = write_manifest(tmp_path, [approved_entry(tmp_path, d)])
+    got = skills.select_skill("open", "greet the operator please",
+                              manifest_path=manifest, repo_root=tmp_path)
+    assert got is not None and got.name == "hello-cooper"
+    assert skills.select_skill("open", "zzz qqq unrelated",
+                               manifest_path=manifest, repo_root=tmp_path) is None
+
+
+def test_is_skill_query():
+    assert skills.is_skill_query("what skills do you have?")
+    assert skills.is_skill_query("list your skills")
+    assert not skills.is_skill_query("how skilled are you at chess?")
+
+
+def test_format_skill_list_shows_disabled_with_reason(tmp_path):
+    d = make_skill_dir(tmp_path)
+    entry = approved_entry(tmp_path, d)
+    (d / "SKILL.md").write_text(VALID_SKILL_MD + "\ntampered", encoding="utf-8")
+    manifest = write_manifest(tmp_path, [entry])
+    listing = skills.format_skill_list("open", manifest_path=manifest, repo_root=tmp_path)
+    assert "DISABLED" in listing and "hash_mismatch" in listing
+
+
+def test_skill_context_for_returns_empty_on_no_match(tmp_path):
+    manifest = write_manifest(tmp_path, [])
+    assert skills.skill_context_for("open", "anything",
+                                    manifest_path=manifest, repo_root=tmp_path) == ""
