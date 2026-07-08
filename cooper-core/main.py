@@ -34,6 +34,7 @@ import executor
 import review
 import workshop
 import archivist
+import gateway
 
 # ── Config ─────────────────────────────────────────────────────────────────────
 _REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -272,8 +273,29 @@ async def lifespan(app: FastAPI):
     archivist.index_brain(_ARCHIVIST_CONN, force=True)
     print("  [ok] archivist: schema ready, brain indexed")
 
+    gateway_task = None
+    if os.environ.get("GATEWAY_ENABLED", "").strip() == "1":
+        if WORKSHOP != "open":
+            print("  [!!] GATEWAY_ENABLED=1 but workshop is not 'open' — gateway refused (spec §5)")
+        else:
+            gw_cfg = gateway.load_config()
+            if gw_cfg is None:
+                print("  [!!] gateway enabled but SIGNAL_API_URL/SIGNAL_NUMBER/SIGNAL_ALLOWED_SENDERS incomplete — not started (fail closed)")
+            else:
+                async def _gateway_handler(text: str) -> str:
+                    reply, _td = await _chat_core(text, [])
+                    return reply
+                gateway_task = asyncio.create_task(gateway.run_loop(gw_cfg, _gateway_handler))
+
     print()
     yield
+
+    if gateway_task is not None:
+        gateway_task.cancel()
+        try:
+            await gateway_task
+        except asyncio.CancelledError:
+            pass
 
 
 app = FastAPI(title="COOPER Core", version="2.1.0", lifespan=lifespan)
