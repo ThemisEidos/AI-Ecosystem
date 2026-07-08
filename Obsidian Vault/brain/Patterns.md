@@ -4,6 +4,35 @@
 
 ---
 
+### 2026-07-08 · Session identity = derived from the credential, never client-supplied
+
+`_derive_session_id(token)` in `cooper-core/main.py` is `sha256(token)[:12]`, `"anon"` for
+none — never accepted as client input, always computed server-side from the already-authenticated
+bearer token. This is what makes session-scoped approval tickets (`approval.py`'s `_pending`
+keyed on `(workshop, session_id)`) actually safe: a client can't spoof another session's id
+without possessing that session's actual credential. Same identity function reused for the
+Signal gateway (`signal:<sender>`) — one function, one derivation rule, no matter which
+transport carried the request in.
+
+### 2026-07-08 · `${VAR-default}` vs `${VAR:-default}` in Docker Compose / bash — the distinction matters for "kill a default credential"
+
+`${VAR:-default}` substitutes `default` when VAR is unset **or empty**. `${VAR-default}`
+(no colon) substitutes `default` **only when VAR is completely absent** — an explicitly-empty
+value is honored as real. Use the single-dash form whenever a bootstrap/install script needs to
+write an empty value to `.env` specifically to suppress a compose-level default (e.g. retiring
+a shared default API key once a real one is generated) — the colon form would silently keep
+falling back to the old default forever, defeating the point of writing the empty override.
+
+### 2026-07-08 · Deferred-task plan items need a freshness check before executing, not just before writing
+
+When a plan defers a task with "do X after Y merges" (Step 13's Task 4, gated on Step 12), treat
+that as a live precondition to re-check at execution time, not a fact fixed when the plan was
+written — especially in a parallel-worktree setup where Y is being built concurrently by another
+in-flight session. `git log --oneline <base>..<sibling-branch>` immediately before starting the
+deferred task tells you whether the gate has actually opened, cheaply, before you commit to
+either skipping the task or (worse) executing it against a base that's already moved out from
+under you. See `Gotchas.md`'s matching entry for what happens when this check is skipped.
+
 ### 2026-07-01 · Windows subprocess from FastAPI: thread pool, not asyncio
 
 Use `loop.run_in_executor(None, _sync_run)` with `subprocess.run` inside a thread pool instead of `asyncio.create_subprocess_exec`. The asyncio subprocess protocol is unreliable in uvicorn's ProactorEventLoop on Windows. Try `powershell.exe` first (always present), then `pwsh` as fallback. See `cooper-core/executor.py`.

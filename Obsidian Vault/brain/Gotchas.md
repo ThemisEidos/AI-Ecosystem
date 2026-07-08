@@ -130,3 +130,60 @@ general_settings:
 ```
 After adding this, 3/3 consecutive requests succeeded where before it failed unpredictably.
 Master-key-only auth (the only auth mode this single-user local deployment uses) is unaffected.
+
+### 2026-07-08 · `docker compose up -d` silently reuses a stale built image after source changes
+
+Rebuilding cooper-core's session-binding code and running `docker compose up -d cooper-core`
+against an already-built image does NOT rebuild it — Compose only rebuilds on an explicit
+`docker compose build` (or `up --build`), never automatically just because the build context's
+source files changed. A running container kept serving pre-Task-2 code (old single-key auth,
+old error message) for several minutes after the code changed, with `up -d` reporting success
+each time. Caught only because a live two-client test produced the OLD `_check_auth_config`
+error text instead of the new one. Always `docker compose build <service>` (or `up -d --build`)
+after editing anything under a service's build context before trusting a live test against it —
+`up -d` alone is not evidence the running container reflects current source.
+
+### 2026-07-08 · `git diff`'s mode-conflict display under DrvFs is noise, not a real conflict
+
+Mid-rebase, `git diff` on an unmerged path showed `mode 100644,100644..100755` for a file
+neither side actually changed the mode of. `git ls-files -s <path>` confirmed all three merge
+stages were genuinely `100644` — the `755` was `git diff` reflecting the *working tree* file's
+apparent executable bit, and every file on this repo's `/mnt/d` DrvFs mount reports `777` to
+Linux regardless of real Windows permissions (`stat -c "%a"` on totally ordinary files showed
+`777`). `core.fileMode=false` is already set in this repo specifically to make git ignore this
+noise for diffing/staging — so a real `git add` on such a conflict does NOT pick up a mode
+change, only the display did. Don't chase a "mode conflict" on this repo without first checking
+`git ls-files -s` for the actual staged modes; if `core.fileMode` is `false`, filesystem-reported
+permissions are cosmetic only.
+
+### 2026-07-08 · Parallel worktree's base branch can move while you're mid-task — check before assuming your rebase is a no-op
+
+A plan built for a parallel-worktree task (Step 13, branched from `step-9-dockerize`) explicitly
+deferred one of its own tasks "until Step 12 merges" — but nothing re-checked whether that had
+actually happened by the time execution reached that point. It had: Step 12 (built in a sibling
+worktree) merged into `step-9-dockerize`'s tip mid-session, refactoring shared code
+(`main.py`'s `chat()`/`oai_chat()`/`_stream_sse()` into one `_chat_core()`) that the in-flight
+branch's own already-committed, already-reviewed work then conflicted with on rebase. Lesson:
+when a plan says "do X after branch/step Y merges" and Y is being built concurrently in a
+sibling worktree, re-check `git log --oneline <base>..<sibling-branch>` (or just `git branch -a`
++ `git log <base> -1`) immediately before executing that deferred task — don't assume the base
+you originally branched from is still the tip of the integration branch. The conflict itself was
+mechanical to resolve once found, but discovering it required noticing the mismatch, not just
+trusting the plan's own "not yet merged" framing written before either branch existed.
+
+### 2026-07-08 · A "well-known default key" left valid after a real key is generated defeats per-client isolation
+
+`install-cooper.sh` generated a real per-install `COOPER_API_KEYS` value, but both compose files
+still defaulted the legacy singular `COOPER_API_KEY` to the literal `cooper-local` via
+`${COOPER_API_KEY:-cooper-local}` — and `${VAR:-default}` treats an *explicitly empty* value the
+same as *unset*, so simply having the bootstrap script write `COOPER_API_KEY=` (empty) would NOT
+have suppressed the fallback. Fixed by switching to the single-dash `${VAR-default}` form (only
+defaults when the var is truly absent, not when present-but-empty) in both compose files' `
+COOPER_API_KEY` line AND in `open-webui`'s own hardcoded `OPENAI_API_KEY=cooper-local` fallback
+(which needed to become `${COOPER_API_KEY-cooper-local}` too — otherwise Open WebUI's own
+fresh-install connection stays wired to the now-dead literal). A whole-branch review is what
+caught this, not the per-task reviews — each task's diff looked correct in isolation; the gap
+only existed at the intersection of "script generates a key" + "compose still defaults to the
+old one" + "a second service hardcodes that same old default independently." Worth checking for
+this pattern (a new credential mechanism added alongside an old one that was never actually
+retired) whenever a bootstrap/install script's whole point is to replace a shared default.

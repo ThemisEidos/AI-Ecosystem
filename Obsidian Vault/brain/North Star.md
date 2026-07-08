@@ -14,7 +14,26 @@ The `.venv-win` dev-mode path (`Start-CooperCore.ps1`) remains the faster daily 
 (~30 s/turn via Windows-host Ollama).
 
 Next horizon (not yet scoped): Pop!_OS deployment test, merge `step-9-dockerize` → `main`.
-(Open Workshop containerization done 2026-07-07; session binding is now Step 13 below.)
+(Open Workshop containerization done 2026-07-07; Steps 12 and 13 now done — see below. Step 10
+in progress on `step-10-skills`, Step 11 not started.)
+
+### 2026-07-08 · Step 13 complete (session-bound approvals + install-cooper.sh)
+
+Built on `step-13-sessions` (from `step-9-dockerize`) via subagent-driven-development; merged
+(fast-forward) back into `step-9-dockerize`, branch/worktree cleaned up. Full detail in
+`PROGRESS.md`'s decision log. Highlights for next session:
+- Approval tickets now key on `(workshop, session_id)`, not just `workshop` — client A can
+  never see/consume client B's pending ticket.
+- `COOPER_API_KEYS` (comma-separated multi-key auth) + `install-cooper.sh` one-command bootstrap
+  now exist. `cooper-local` (the old universal default key) is retired the moment
+  `install-cooper.sh` seeds a real `.env` — see `Gotchas.md` for the mechanism if touching auth
+  config again.
+- Step 12 (Signal gateway) merged into `step-9-dockerize` **mid-branch**, forcing a rebase —
+  see `Gotchas.md`'s "parallel worktree base moved" entry before starting Step 11 in a worktree
+  branched from a still-moving integration branch.
+- **Not done, flagged not claimed:** Open WebUI browser click-through (no browser tool in that
+  session) and live Signal-phone approval test (no physical device). Do these before treating
+  Steps 12/13 as fully DoD-closed if a phone/browser becomes available.
 
 ### 2026-07-08 · Steps 10–13 scoped: COOPER × Hermes merge
 
@@ -24,12 +43,12 @@ Hermes's ecosystem (skills are portable data, so the 90K-skill hub stays reachab
 Spec: `Docs/superpowers/specs/2026-07-08-cooper-hermes-merge-design.md`. Plans (commit
 50de439, `Docs/superpowers/plans/2026-07-08-step-1*.md`):
 
-| # | Name | Order |
-|---|------|-------|
-| 10 | Governed skills subsystem (hash-pinned manifest) | BLOCKER — first |
-| 11 | Self-improvement loop (draft → approve → promote) | after 10 |
-| 12 | Signal gateway (signal-cli-rest-api, Open only) | parallel worktree |
-| 13 | Session-bound approvals + install-cooper.sh | parallel worktree |
+| # | Name | Order | Status |
+|---|------|-------|--------|
+| 10 | Governed skills subsystem (hash-pinned manifest) | BLOCKER — first | in progress (`step-10-skills`) |
+| 11 | Self-improvement loop (draft → approve → promote) | after 10 | not started |
+| 12 | Signal gateway (signal-cli-rest-api, Open only) | parallel worktree | done, merged 2026-07-08 (live phone test pending) |
+| 13 | Session-bound approvals + install-cooper.sh | parallel worktree | done, merged 2026-07-08 |
 
 Execute on **Sonnet** (user cost decision); plans carry complete code + tests, follow
 superpowers:subagent-driven-development. Human prereq: Signal account registration/linking
