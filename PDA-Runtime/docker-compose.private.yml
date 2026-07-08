@@ -56,6 +56,7 @@ services:
       - OLLAMA_HOST=http://private-ollama:11434
       - COOPER_DB_PATH=/app/data/cooper_memory.db
       - COOPER_API_KEY=${COOPER_API_KEY:-cooper-local}
+      - COOPER_API_KEYS=${COOPER_API_KEYS:-}
     volumes:
       - cooper-core-data:/app/data
       - type: bind
