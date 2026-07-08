@@ -1,6 +1,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
+import approval
 import main
 
 
@@ -55,3 +56,37 @@ def test_parse_api_keys_multi_and_legacy():
     assert main._parse_api_keys("", "legacy") == {"legacy"}
     assert main._parse_api_keys("k1", "legacy") == {"k1", "legacy"}
     assert main._parse_api_keys("", "") == set()
+
+
+def test_pending_and_chat_are_isolated_per_bearer_token(monkeypatch):
+    """HTTP-level regression test (Step 13): two different bearer tokens must never
+    see or consume each other's approval tickets. Seeds a ticket directly via
+    approval.request() for key-a's derived session, then drives /pending and /chat
+    over the real FastAPI app with key-a and key-b — no live LLM backend needed."""
+    monkeypatch.setattr(main, "_API_KEYS", {"key-a", "key-b"})
+    approval._pending.clear()
+
+    session_a = main._derive_session_id("key-a")
+    tool = {"id": "t", "name": "T", "permission_level": 2}
+    approval.request(main.WORKSHOP, tool, "do the thing", session_id=session_a)
+
+    client = TestClient(main.app)  # no `with` -> lifespan does not run
+
+    resp_a = client.get("/pending", headers={"Authorization": "Bearer key-a"})
+    assert resp_a.status_code == 200
+    assert resp_a.json()["pending"] is not None
+
+    resp_b = client.get("/pending", headers={"Authorization": "Bearer key-b"})
+    assert resp_b.status_code == 200
+    assert resp_b.json()["pending"] is None
+
+    # key-b's "approve" must not consume key-a's ticket.
+    resp_chat_b = client.post(
+        "/chat", json={"message": "approve"},
+        headers={"Authorization": "Bearer key-b"},
+    )
+    assert resp_chat_b.status_code == 200
+
+    resp_a_again = client.get("/pending", headers={"Authorization": "Bearer key-a"})
+    assert resp_a_again.status_code == 200
+    assert resp_a_again.json()["pending"] is not None
