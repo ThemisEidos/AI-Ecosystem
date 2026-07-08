@@ -45,10 +45,50 @@ Spec: `Docs/superpowers/specs/2026-07-08-cooper-hermes-merge-design.md`. Plans (
 
 | # | Name | Order | Status |
 |---|------|-------|--------|
-| 10 | Governed skills subsystem (hash-pinned manifest) | BLOCKER — first | in progress (`step-10-skills`) |
+| 10 | Governed skills subsystem (hash-pinned manifest) | BLOCKER — first | **All 6 tasks DONE** on `step-10-skills` (commits a0b0ad5..193cdcb). Final whole-branch review NOT yet run — that's the resume point. |
 | 11 | Self-improvement loop (draft → approve → promote) | after 10 | not started |
 | 12 | Signal gateway (signal-cli-rest-api, Open only) | parallel worktree | done, merged 2026-07-08 (live phone test pending) |
 | 13 | Session-bound approvals + install-cooper.sh | parallel worktree | done, merged 2026-07-08 |
+
+### 2026-07-08 · Step 10 paused mid-session (all 6 tasks done, final review pending)
+
+Session A (this thread) executed Step 10's plan via subagent-driven-development, Sonnet
+throughout. All 6 tasks complete and individually reviewed (several needed one fix round
+each — see `.superpowers/sdd/progress.md` for full detail). **Paused here at the user's
+request before the Step 10 final whole-branch review and before starting Step 11.**
+
+**To resume:**
+1. `git checkout step-10-skills` (or re-enter its worktree if one was set up).
+2. **Rebase/merge first** — `step-9-dockerize` moved forward while this session ran
+   (Steps 12 + 13 both merged into it same-day). `step-10-skills` still branches from
+   the OLD `step-9-dockerize` tip (`a0b0ad5`). Merge/rebase `step-9-dockerize`'s current
+   tip into `step-10-skills` before the final review or before merging Step 10 back —
+   otherwise Steps 12/13's work silently vanishes from Step 10's perspective on merge.
+3. **Known git hygiene wrinkle**: commit `a4f672c` ("docs: record Step 13 completion")
+   sits on `step-10-skills`' lineage but is NOT an ancestor of `step-9-dockerize`'s own
+   Step 13 commits — a concurrent-session artifact (another session's doc-commit landed
+   here because this repo checkout was shared, not worktree-isolated, at that moment).
+   It's real, correct content (PROGRESS.md/Gotchas/Patterns Step 13 writeup) that just
+   needs to end up on `step-9-dockerize` too — check whether the rebase naturally carries
+   it over correctly or whether it needs a manual cherry-pick.
+4. Dispatch the Step 10 final whole-branch review (`superpowers:requesting-code-review`'s
+   template, most capable model, range after rebase) before touching Step 11.
+5. Then start Step 11 per `Docs/superpowers/plans/2026-07-08-step-11-self-improvement-loop.md`.
+
+**Carry forward, not yet actioned:** a real throwaway public GitHub repo
+(`https://github.com/ThemisEidos/cooper-skill-tap-test`, created during Task 6's live
+verification of the tap importer) needs manual deletion by the user — the `gh` token used
+lacks `delete_repo` scope. Inert (README + one SKILL.md, self-labeled "safe to delete"),
+no secrets.
+
+**Notable findings from Step 10's review cycle** (full detail in the ledger): a Critical
+security bug in the tap importer — `shutil.copytree`'s default symlink-dereferencing let
+a malicious tap exfiltrate arbitrary local file content (`.env`, SSH keys) past the
+human-visible approval preview — was caught and fixed (symlink rejection, name validation,
+10MB size cap all added to `fetch_tap`). This was a bug in the plan's own given code, not
+an implementer deviation — worth remembering when trusting "plan gives the code verbatim"
+tasks: the plan author (a prior session) can introduce real bugs too, review catches them
+the same as any other code.
 
 Execute on **Sonnet** (user cost decision); plans carry complete code + tests, follow
 superpowers:subagent-driven-development. Human prereq: Signal account registration/linking
