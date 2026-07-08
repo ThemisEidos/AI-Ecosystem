@@ -13,6 +13,7 @@ Endpoints:
   POST /v1/chat/completions   — OpenAI-compatible chat; stream=true uses real streaming
 """
 import asyncio
+import hashlib
 import json
 import os
 import time
@@ -35,6 +36,7 @@ import review
 import workshop
 import archivist
 import skills
+import gateway
 
 # ── Config ─────────────────────────────────────────────────────────────────────
 _REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -93,29 +95,54 @@ _ARCHIVIST_CONN = archivist.get_conn()
 
 # ── Auth ───────────────────────────────────────────────────────────────────────
 _bearer     = HTTPBearer(auto_error=False)
-_API_KEY    = os.environ.get("COOPER_API_KEY", "")
 _ALLOW_ANON = os.environ.get("COOPER_ALLOW_ANON", "").strip() == "1"
 
 
-def _check_auth_config(api_key: str, allow_anon: bool) -> None:
+def _parse_api_keys(keys_env: str, legacy_key: str) -> set:
+    """COOPER_API_KEYS (comma-separated, one per client) + legacy COOPER_API_KEY."""
+    keys = {k.strip() for k in keys_env.split(",") if k.strip()}
+    if legacy_key.strip():
+        keys.add(legacy_key.strip())
+    return keys
+
+
+_API_KEYS = _parse_api_keys(
+    os.environ.get("COOPER_API_KEYS", ""),
+    os.environ.get("COOPER_API_KEY", ""),
+)
+
+
+def _check_auth_config(api_keys: set, allow_anon: bool) -> None:
     """Startup gate: anonymous auth on a network-exposed port must be explicit."""
-    if not api_key and not allow_anon:
+    if not api_keys and not allow_anon:
         raise RuntimeError(
-            "COOPER_API_KEY is not set and COOPER_ALLOW_ANON != 1. Refusing to "
-            "start with anonymous auth. Set COOPER_API_KEY (Start-CooperCore.ps1 "
-            "defaults it to 'cooper-local'), or export COOPER_ALLOW_ANON=1 to "
-            "accept anonymous access explicitly."
+            "No COOPER_API_KEYS/COOPER_API_KEY set and COOPER_ALLOW_ANON != 1. "
+            "Refusing to start with anonymous auth."
         )
 
 
 def _require_auth(
     creds: Optional[HTTPAuthorizationCredentials] = Security(_bearer),
 ) -> None:
-    if _API_KEY and (not creds or creds.credentials != _API_KEY):
+    if _API_KEYS and (not creds or creds.credentials not in _API_KEYS):
         raise HTTPException(status_code=401, detail="Unauthorized")
 
 
-async def _handle_dispatch(message: str) -> str:
+def _derive_session_id(token: Optional[str]) -> str:
+    """Session identity = the credential presented (Step 13). Each client key is
+    its own approval domain; anonymous clients share the 'anon' domain."""
+    if not token:
+        return "anon"
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()[:12]
+
+
+def _session_id(
+    creds: Optional[HTTPAuthorizationCredentials] = Security(_bearer),
+) -> str:
+    return _derive_session_id(creds.credentials if creds else None)
+
+
+async def _handle_dispatch(message: str, session_id: str = "local") -> str:
     """
     Quartermaster selects a tool; Safety Officer gates it; Workbench executes
     if the gate passes. L0/L1 auto-run immediately. L2+ halts for approval.
@@ -164,7 +191,7 @@ async def _handle_dispatch(message: str) -> str:
                 return f"Skill import rejected before approval: {exc}"
             except Exception as exc:
                 return f"Skill import rejected before approval (unexpected error): {exc}"
-        approval.request(WORKSHOP, tool, message)
+        approval.request(WORKSHOP, tool, message, session_id)
         return (
             f"Halt — {tool.get('name', tool.get('id'))} "
             f"[{tool.get('drawer', 'Uncategorized')}, permission level {tool.get('permission_level', '?')}] "
@@ -209,29 +236,50 @@ async def _execute(tool: dict, message: str) -> str:
     return review.govern(raw_output, verdict)
 
 
-async def _resolve_approval(message: str) -> str:
+async def _resolve_approval(message: str, session_id: str = "local") -> str:
     """
     Consume the pending ticket and execute on approve, or cancel on deny.
     Called only when approval.has_pending() and approval.is_response() are both true.
     """
     if approval.is_denied(message):
-        ticket = approval.consume(WORKSHOP)
+        ticket = approval.consume(WORKSHOP, session_id)
         if ticket is None:
             return "No pending action to cancel."
         name = ticket.tool.get("name", ticket.tool.get("id"))
         return f"Cancelled. {name} will not run."
 
-    ticket = approval.consume(WORKSHOP)
+    ticket = approval.consume(WORKSHOP, session_id)
     if ticket is None:
         return "No pending action to approve. Nothing queued."
 
     return await _execute(ticket.tool, ticket.message)
 
 
+async def _chat_core(message: str, history: List[dict], session_id: str = "local") -> tuple:
+    """One routing path for every front door (HTTP endpoints + gateway):
+    registry/skill catalog queries, approval responses, then route_turn."""
+    if registry.is_registry_query(message):
+        return registry.format_tool_list(WORKSHOP), TurnDecision(
+            decision="answer", reason="registry query answered directly by Quartermaster")
+    if skills.is_skill_query(message):
+        return skills.format_skill_list(WORKSHOP), TurnDecision(
+            decision="answer", reason="skill catalog answered directly")
+    if approval.has_pending(WORKSHOP, session_id) and approval.is_response(message):
+        return await _resolve_approval(message, session_id), TurnDecision(
+            decision="answer", reason="approval gate resolved")
+    return await route_turn(
+        message, history,
+        generate_answer=_generate,
+        base_url=BACKEND_URL, api_key=BACKEND_KEY,
+        model=COOPER_MODEL, classifier_model=CLASSIFIER_MODEL,
+        backend=BACKEND, dispatch_handler=lambda m: _handle_dispatch(m, session_id),
+    )
+
+
 # ── Startup ────────────────────────────────────────────────────────────────────
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    _check_auth_config(_API_KEY, _ALLOW_ANON)
+    _check_auth_config(_API_KEYS, _ALLOW_ANON)
     print(f"\n  workshop : {WORKSHOP}")
     print(f"  backend  : {BACKEND}")
     print(f"  model    : {COOPER_MODEL}")
@@ -265,8 +313,29 @@ async def lifespan(app: FastAPI):
     archivist.index_brain(_ARCHIVIST_CONN, force=True)
     print("  [ok] archivist: schema ready, brain indexed")
 
+    gateway_task = None
+    if os.environ.get("GATEWAY_ENABLED", "").strip() == "1":
+        if WORKSHOP != "open":
+            print("  [!!] GATEWAY_ENABLED=1 but workshop is not 'open' — gateway refused (spec §5)")
+        else:
+            gw_cfg = gateway.load_config()
+            if gw_cfg is None:
+                print("  [!!] gateway enabled but SIGNAL_API_URL/SIGNAL_NUMBER/SIGNAL_ALLOWED_SENDERS incomplete — not started (fail closed)")
+            else:
+                async def _gateway_handler(text: str, sender: str) -> str:
+                    reply, _td = await _chat_core(text, [], session_id=f"signal:{sender}")
+                    return reply
+                gateway_task = asyncio.create_task(gateway.run_loop(gw_cfg, _gateway_handler))
+
     print()
     yield
+
+    if gateway_task is not None:
+        gateway_task.cancel()
+        try:
+            await gateway_task
+        except asyncio.CancelledError:
+            pass
 
 
 app = FastAPI(title="COOPER Core", version="2.1.0", lifespan=lifespan)
@@ -318,8 +387,8 @@ async def list_skill_registry():
 
 # ── Approval gate (Safety Officer) ──────────────────────────────────────────
 @app.get("/pending", dependencies=[Depends(_require_auth)])
-async def pending():
-    ticket = approval.peek(WORKSHOP)
+async def pending(session_id: str = Depends(_session_id)):
+    ticket = approval.peek(WORKSHOP, session_id)
     if ticket is None:
         return {"workshop": WORKSHOP, "pending": None}
     return {
@@ -364,30 +433,8 @@ class ChatResponse(BaseModel):
 
 
 @app.post("/chat", response_model=ChatResponse, dependencies=[Depends(_require_auth)])
-async def chat(req: ChatRequest):
-    if registry.is_registry_query(req.message):
-        reply = registry.format_tool_list(WORKSHOP)
-        return {"reply": reply, "decision": "answer", "reason": "registry query answered directly by Quartermaster"}
-
-    if skills.is_skill_query(req.message):
-        reply = skills.format_skill_list(WORKSHOP)
-        return {"reply": reply, "decision": "answer", "reason": "skill catalog answered directly"}
-
-    if approval.has_pending(WORKSHOP) and approval.is_response(req.message):
-        reply = await _resolve_approval(req.message)
-        return {"reply": reply, "decision": "answer", "reason": "approval gate resolved"}
-
-    reply, td = await route_turn(
-        req.message,
-        req.history,
-        generate_answer=_generate,
-        base_url=BACKEND_URL,
-        api_key=BACKEND_KEY,
-        model=COOPER_MODEL,
-        classifier_model=CLASSIFIER_MODEL,
-        backend=BACKEND,
-        dispatch_handler=_handle_dispatch,
-    )
+async def chat(req: ChatRequest, session_id: str = Depends(_session_id)):
+    reply, td = await _chat_core(req.message, req.history, session_id)
     return {"reply": reply, "decision": td.decision, "reason": td.reason}
 
 
@@ -428,7 +475,7 @@ def _estimate_usage(messages: List[_OAIMessage], reply: str) -> dict:
 
 
 @app.post("/v1/chat/completions", dependencies=[Depends(_require_auth)])
-async def oai_chat(req: _OAIChatRequest):
+async def oai_chat(req: _OAIChatRequest, session_id: str = Depends(_session_id)):
     if not req.messages:
         raise HTTPException(status_code=422, detail="messages list is empty")
 
@@ -442,32 +489,12 @@ async def oai_chat(req: _OAIChatRequest):
 
     if req.stream:
         return StreamingResponse(
-            _stream_sse(message, history),
+            _stream_sse(message, history, session_id),
             media_type="text/event-stream",
             headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"},
         )
 
-    if registry.is_registry_query(message):
-        reply = registry.format_tool_list(WORKSHOP)
-        td = TurnDecision(decision="answer", reason="registry query answered directly by Quartermaster")
-    elif skills.is_skill_query(message):
-        reply = skills.format_skill_list(WORKSHOP)
-        td = TurnDecision(decision="answer", reason="skill catalog answered directly")
-    elif approval.has_pending(WORKSHOP) and approval.is_response(message):
-        reply = await _resolve_approval(message)
-        td = TurnDecision(decision="answer", reason="approval gate resolved")
-    else:
-        reply, td = await route_turn(
-            message,
-            history,
-            generate_answer=_generate,
-            base_url=BACKEND_URL,
-            api_key=BACKEND_KEY,
-            model=COOPER_MODEL,
-            classifier_model=CLASSIFIER_MODEL,
-            backend=BACKEND,
-            dispatch_handler=_handle_dispatch,
-        )
+    reply, td = await _chat_core(message, history, session_id)
     request_id = f"chatcmpl-{uuid.uuid4().hex[:8]}"
     return {
         "id":      request_id,
@@ -485,7 +512,7 @@ async def oai_chat(req: _OAIChatRequest):
 
 
 # ── SSE streaming ──────────────────────────────────────────────────────────────
-async def _stream_sse(message: str, history: List[dict]) -> AsyncIterator[str]:
+async def _stream_sse(message: str, history: List[dict], session_id: str = "local") -> AsyncIterator[str]:
     request_id = f"chatcmpl-{uuid.uuid4().hex[:8]}"
     created    = int(time.time())
 
@@ -494,8 +521,8 @@ async def _stream_sse(message: str, history: List[dict]) -> AsyncIterator[str]:
             content_iter = _single_text_chunk(registry.format_tool_list(WORKSHOP))
         elif skills.is_skill_query(message):
             content_iter = _single_text_chunk(skills.format_skill_list(WORKSHOP))
-        elif approval.has_pending(WORKSHOP) and approval.is_response(message):
-            content_iter = _single_text_chunk(await _resolve_approval(message))
+        elif approval.has_pending(WORKSHOP, session_id) and approval.is_response(message):
+            content_iter = _single_text_chunk(await _resolve_approval(message, session_id))
         else:
             system_prompt = SYSTEM_PROMPT
             try:
@@ -523,7 +550,7 @@ async def _stream_sse(message: str, history: List[dict]) -> AsyncIterator[str]:
                 model=COOPER_MODEL,
                 classifier_model=CLASSIFIER_MODEL,
                 backend=BACKEND,
-                dispatch_handler=_handle_dispatch,
+                dispatch_handler=lambda m: _handle_dispatch(m, session_id),
             )
 
         async for chunk in content_iter:

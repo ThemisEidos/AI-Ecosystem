@@ -27,9 +27,10 @@ class ApprovalTicket:
     tool: dict
     message: str
     created_at: float
+    session_id: str = "local"
 
 
-_pending: Dict[str, ApprovalTicket] = {}  # workshop -> ticket
+_pending: Dict[tuple, ApprovalTicket] = {}  # (workshop, session_id) -> ticket
 
 
 def needs_approval(tool: dict) -> bool:
@@ -37,36 +38,40 @@ def needs_approval(tool: dict) -> bool:
     return bool(tool.get("approval_required")) or tool.get("permission_level", 0) >= 2
 
 
-def request(workshop: str, tool: dict, message: str) -> ApprovalTicket:
-    """Open a pending ticket for this workshop, replacing any prior pending ticket."""
+def request(workshop: str, tool: dict, message: str, session_id: str = "local") -> ApprovalTicket:
+    """Open a pending ticket for this (workshop, session), replacing any prior one.
+    Session binding (Step 13): only the session that opened a ticket can see or
+    consume it — client A can never approve client B's action."""
     ticket = ApprovalTicket(
         id=uuid.uuid4().hex[:8],
         workshop=workshop,
         tool=tool,
         message=message,
         created_at=time.time(),
+        session_id=session_id,
     )
-    _pending[workshop] = ticket
+    _pending[(workshop, session_id)] = ticket
     return ticket
 
 
-def _get_live(workshop: str) -> Optional[ApprovalTicket]:
-    ticket = _pending.get(workshop)
+def _get_live(workshop: str, session_id: str = "local") -> Optional[ApprovalTicket]:
+    key = (workshop, session_id)
+    ticket = _pending.get(key)
     if ticket is None:
         return None
     if time.time() - ticket.created_at > _TICKET_TTL_SECONDS:
-        _pending.pop(workshop, None)
+        _pending.pop(key, None)
         return None
     return ticket
 
 
-def has_pending(workshop: str) -> bool:
-    return _get_live(workshop) is not None
+def has_pending(workshop: str, session_id: str = "local") -> bool:
+    return _get_live(workshop, session_id) is not None
 
 
-def peek(workshop: str) -> Optional[ApprovalTicket]:
-    """Read the pending ticket without consuming it (used by GET /pending)."""
-    return _get_live(workshop)
+def peek(workshop: str, session_id: str = "local") -> Optional[ApprovalTicket]:
+    """Read the session's pending ticket without consuming it (GET /pending)."""
+    return _get_live(workshop, session_id)
 
 
 # Full-match only: "yes, but first…" must NOT consume a ticket as approval.
@@ -79,13 +84,10 @@ def is_response(message: str) -> bool:
     return bool(_APPROVE_RE.match(stripped) or _DENY_RE.match(stripped))
 
 
-def consume(workshop: str) -> Optional[ApprovalTicket]:
-    """
-    Consume and return the live ticket for this workshop, or None if none exists.
-    Used by main.py to get the approved (tool, message) pair for execution.
-    """
-    ticket = _get_live(workshop)
-    _pending.pop(workshop, None)
+def consume(workshop: str, session_id: str = "local") -> Optional[ApprovalTicket]:
+    """Consume and return this session's live ticket, or None."""
+    ticket = _get_live(workshop, session_id)
+    _pending.pop((workshop, session_id), None)
     return ticket
 
 

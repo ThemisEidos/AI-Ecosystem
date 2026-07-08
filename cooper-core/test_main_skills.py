@@ -28,7 +28,7 @@ def test_chat_answers_skill_query_without_llm(monkeypatch):
     # env-var-driven globals below are already frozen by the time this file's
     # os.environ.setdefault() calls run. Force them directly so lifespan's
     # _check_auth_config() gate passes regardless of import order.
-    monkeypatch.setattr(main, "_API_KEY", "")
+    monkeypatch.setattr(main, "_API_KEYS", set())
     monkeypatch.setattr(main, "_ALLOW_ANON", True)
     monkeypatch.setattr(main.skills, "format_skill_list",
                         lambda workshop: f"SKILL-LIST[{workshop}]")
@@ -41,7 +41,7 @@ def test_chat_answers_skill_query_without_llm(monkeypatch):
 
 
 def test_get_skills_endpoint(monkeypatch):
-    monkeypatch.setattr(main, "_API_KEY", "")
+    monkeypatch.setattr(main, "_API_KEYS", set())
     monkeypatch.setattr(main, "_ALLOW_ANON", True)
     monkeypatch.setattr(main.skills, "load_manifest", lambda: [
         {"id": "hello-cooper", "path": "Skills/examples/hello-cooper",
@@ -59,7 +59,7 @@ def test_get_skills_endpoint(monkeypatch):
 def test_get_skills_endpoint_isolates_per_entry_status_failure(monkeypatch):
     # skill_status() has no internal guard (unlike _load_skill), so GET /skills
     # must catch per-entry to avoid one bad entry 500-ing the whole response.
-    monkeypatch.setattr(main, "_API_KEY", "")
+    monkeypatch.setattr(main, "_API_KEYS", set())
     monkeypatch.setattr(main, "_ALLOW_ANON", True)
     monkeypatch.setattr(main.skills, "load_manifest", lambda: [
         {"id": "good-skill", "path": "Skills/examples/good-skill",
@@ -89,7 +89,7 @@ def test_rejected_preview_never_opens_an_approval_ticket(monkeypatch):
     # approval.request() is ever called, _handle_dispatch() must return the
     # rejection immediately and MUST NOT leave a dangling approval ticket behind.
     # Previously verified only by a manual live-curl transcript — this pins it down.
-    monkeypatch.setattr(main, "_API_KEY", "")
+    monkeypatch.setattr(main, "_API_KEYS", set())
     monkeypatch.setattr(main, "_ALLOW_ANON", True)
 
     async def _select_import_skill(*args, **kwargs):

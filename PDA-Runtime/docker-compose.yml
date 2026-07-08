@@ -11,7 +11,7 @@ services:
       # Add the connection manually via Settings → Connections in the UI (see CLAUDE.md).
       # Container DNS, not host.docker.internal — cooper-core is a real container on this network.
       - OPENAI_API_BASE_URL=http://cooper-core:8000/v1
-      - OPENAI_API_KEY=cooper-local
+      - OPENAI_API_KEY=${COOPER_API_KEY-cooper-local}
     volumes:
       - open-webui:/app/backend/data
     networks:
@@ -50,6 +50,21 @@ services:
       - pda-open-net
     restart: unless-stopped
 
+  signal-cli:
+    image: bbernhard/signal-cli-rest-api:0.100
+    container_name: pda-open-signal-cli
+    labels:
+      ai.ecosystem.stack: open
+    restart: unless-stopped
+    environment:
+      - MODE=native
+    volumes:
+      - ./data/signal:/home/.local/share/signal-cli
+    ports:
+      - "127.0.0.1:8080:8080"   # loopback only — registration/linking via localhost
+    networks:
+      - pda-open-net
+
   cooper-core:
     build:
       context: ..
@@ -71,7 +86,12 @@ services:
       # unless its real master key also happens to be "cooper-local".
       - OPENAI_API_KEY=${LITELLM_MASTER_KEY:-cooper-local}
       - COOPER_DB_PATH=/app/data/cooper_memory.db
-      - COOPER_API_KEY=${COOPER_API_KEY:-cooper-local}
+      - COOPER_API_KEY=${COOPER_API_KEY-cooper-local}
+      - GATEWAY_ENABLED=${GATEWAY_ENABLED:-0}
+      - SIGNAL_API_URL=http://signal-cli:8080
+      - SIGNAL_NUMBER=${SIGNAL_NUMBER:-}
+      - SIGNAL_ALLOWED_SENDERS=${SIGNAL_ALLOWED_SENDERS:-}
+      - COOPER_API_KEYS=${COOPER_API_KEYS:-}
     volumes:
       - cooper-core-data:/app/data
       - type: bind
