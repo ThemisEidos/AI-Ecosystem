@@ -59,3 +59,115 @@ def test_content_hash_covers_nested_files(tmp_path):
     (d / "scripts").mkdir()
     (d / "scripts" / "run.ps1").write_text("Write-Output hi", encoding="utf-8")
     assert skills.compute_content_hash(d) != h1
+
+
+def write_manifest(root: Path, entries: list) -> Path:
+    cfg = root / "Config"
+    cfg.mkdir(exist_ok=True)
+    p = cfg / "skills_registry.yaml"
+    import yaml as _yaml
+    p.write_text(_yaml.safe_dump({"skills": entries}), encoding="utf-8")
+    return p
+
+
+def approved_entry(root: Path, d: Path, **over) -> dict:
+    entry = {
+        "id": d.name,
+        "path": str(d.relative_to(root)),
+        "workshop": "open",
+        "permission_level": 1,
+        "approval_required": False,
+        "content_hash": skills.compute_content_hash(d),
+    }
+    entry.update(over)
+    return entry
+
+
+def test_unregistered_skill_is_inert(tmp_path):
+    make_skill_dir(tmp_path)
+    manifest = write_manifest(tmp_path, [])  # skill on disk, not in manifest
+    assert skills.list_skills("open", manifest_path=manifest, repo_root=tmp_path) == []
+
+
+def test_registered_skill_loads(tmp_path):
+    d = make_skill_dir(tmp_path)
+    manifest = write_manifest(tmp_path, [approved_entry(tmp_path, d)])
+    loaded = skills.list_skills("open", manifest_path=manifest, repo_root=tmp_path)
+    assert len(loaded) == 1
+    assert loaded[0].name == "hello-cooper"
+    assert loaded[0].has_scripts is False
+
+
+def test_hash_mismatch_disables_skill(tmp_path, capsys):
+    d = make_skill_dir(tmp_path)
+    entry = approved_entry(tmp_path, d)
+    (d / "SKILL.md").write_text(VALID_SKILL_MD + "\ninjected", encoding="utf-8")
+    manifest = write_manifest(tmp_path, [entry])
+    assert skills.list_skills("open", manifest_path=manifest, repo_root=tmp_path) == []
+    assert "hash_mismatch" in capsys.readouterr().out
+
+
+def test_drafts_never_load_even_if_registered(tmp_path):
+    d = tmp_path / "Skills" / "_drafts" / "sneaky"
+    d.mkdir(parents=True)
+    (d / "SKILL.md").write_text(VALID_SKILL_MD.replace("hello-cooper", "sneaky"), encoding="utf-8")
+    manifest = write_manifest(tmp_path, [approved_entry(tmp_path, d)])
+    assert skills.list_skills("open", manifest_path=manifest, repo_root=tmp_path) == []
+
+
+def test_path_outside_skills_dir_rejected(tmp_path):
+    d = tmp_path / "Scripts"
+    d.mkdir()
+    (d / "SKILL.md").write_text(VALID_SKILL_MD, encoding="utf-8")
+    entry = {
+        "id": "escape", "path": "Scripts", "workshop": "open",
+        "permission_level": 1, "content_hash": skills.compute_content_hash(d),
+    }
+    manifest = write_manifest(tmp_path, [entry])
+    assert skills.list_skills("open", manifest_path=manifest, repo_root=tmp_path) == []
+
+
+def test_workshop_scoping(tmp_path):
+    d = make_skill_dir(tmp_path)
+    manifest = write_manifest(tmp_path, [approved_entry(tmp_path, d, workshop="private")])
+    assert skills.list_skills("open", manifest_path=manifest, repo_root=tmp_path) == []
+    assert len(skills.list_skills("private", manifest_path=manifest, repo_root=tmp_path)) == 1
+
+
+def test_malformed_manifest_loads_zero_skills(tmp_path, capsys):
+    make_skill_dir(tmp_path)
+    cfg = tmp_path / "Config"
+    cfg.mkdir()
+    p = cfg / "skills_registry.yaml"
+    p.write_text("skills: {not: [valid", encoding="utf-8")
+    assert skills.list_skills("open", manifest_path=p, repo_root=tmp_path) == []
+    assert "fail closed" in capsys.readouterr().out
+
+
+def test_name_directory_mismatch_disables(tmp_path):
+    d = make_skill_dir(tmp_path, name="wrong-dir-name")
+    manifest = write_manifest(tmp_path, [approved_entry(tmp_path, d)])
+    assert skills.list_skills("open", manifest_path=manifest, repo_root=tmp_path) == []
+
+
+def test_oversize_body_truncated(tmp_path):
+    big = VALID_SKILL_MD + ("x" * 30_000)
+    d = make_skill_dir(tmp_path, body=big)
+    manifest = write_manifest(tmp_path, [approved_entry(tmp_path, d)])
+    loaded = skills.list_skills("open", manifest_path=manifest, repo_root=tmp_path)
+    assert loaded[0].truncated is True
+    assert len(loaded[0].body) == skills._MAX_BODY_CHARS
+
+
+def test_script_bearing_skill_requires_level_2(tmp_path, capsys):
+    d = make_skill_dir(tmp_path)
+    (d / "scripts").mkdir()
+    (d / "scripts" / "run.ps1").write_text("Write-Output hi", encoding="utf-8")
+    # registered at L1 — spec §3: script-bearing skills are Level 2+ by definition
+    manifest = write_manifest(tmp_path, [approved_entry(tmp_path, d, permission_level=1)])
+    assert skills.list_skills("open", manifest_path=manifest, repo_root=tmp_path) == []
+    assert "script-bearing" in capsys.readouterr().out
+    # at L2 it loads
+    manifest = write_manifest(tmp_path, [approved_entry(tmp_path, d, permission_level=2)])
+    loaded = skills.list_skills("open", manifest_path=manifest, repo_root=tmp_path)
+    assert loaded[0].has_scripts is True

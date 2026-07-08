@@ -69,3 +69,104 @@ def compute_content_hash(skill_dir: Path) -> str:
         h.update(f.read_bytes())
         h.update(b"\0")
     return h.hexdigest()
+
+
+_manifest_cache: dict = {}
+
+
+def load_manifest(manifest_path: Optional[Path] = None) -> list:
+    """Read Config/skills_registry.yaml (mtime-cached, matching registry.py's
+    pattern). FAIL CLOSED: any read/parse error returns [] — zero skills load."""
+    p = manifest_path or MANIFEST_PATH
+    if not p.exists():
+        return []
+    try:
+        mtime = p.stat().st_mtime
+        if _manifest_cache.get("key") == (str(p), mtime):
+            return _manifest_cache["entries"]
+        data = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+        entries = data.get("skills") or []
+        if not isinstance(entries, list):
+            raise SkillError("'skills' key must be a list")
+        _manifest_cache.update({"key": (str(p), mtime), "entries": entries})
+        return entries
+    except Exception as exc:
+        print(f"  [!!] skills manifest unreadable — zero skills loaded (fail closed): {exc}")
+        return []
+
+
+def _entry_dir(entry: dict, repo_root: Path) -> Path:
+    return (repo_root / str(entry.get("path", ""))).resolve()
+
+
+def skill_status(entry: dict, repo_root: Optional[Path] = None) -> str:
+    """Governance check for one manifest entry. Anything but 'ok' means disabled."""
+    root = repo_root or _REPO_ROOT
+    skills_dir = (root / "Skills").resolve()
+    skill_dir = _entry_dir(entry, root)
+    try:
+        rel = skill_dir.relative_to(skills_dir)
+    except ValueError:
+        return "outside_skills_dir"
+    if _RESERVED_DIRS & set(rel.parts):
+        return "draft_path"
+    if not (skill_dir / "SKILL.md").exists():
+        return "missing"
+    if compute_content_hash(skill_dir) != entry.get("content_hash"):
+        return "hash_mismatch"
+    return "ok"
+
+
+def _load_skill(entry: dict, repo_root: Path) -> Optional[Skill]:
+    status = skill_status(entry, repo_root)
+    if status != "ok":
+        print(f"  [!!] skill '{entry.get('id')}' disabled ({status}) — re-approve to enable")
+        return None
+    skill_dir = _entry_dir(entry, repo_root)
+    try:
+        meta, body = parse_skill_md((skill_dir / "SKILL.md").read_text(encoding="utf-8"))
+    except (OSError, SkillError) as exc:
+        print(f"  [!!] skill '{entry.get('id')}' unreadable — disabled: {exc}")
+        return None
+    if meta["name"] != skill_dir.name:
+        print(f"  [!!] skill '{entry.get('id')}' frontmatter name != directory name — disabled")
+        return None
+    has_scripts = (skill_dir / "scripts").is_dir()
+    permission_level = int(entry.get("permission_level", 1))
+    if has_scripts and permission_level < 2:
+        # Spec §3: script-bearing skills are Level 2+ by definition. Fail closed.
+        print(f"  [!!] skill '{entry.get('id')}' is script-bearing but registered "
+              f"at L{permission_level} — disabled (script-bearing requires L2+)")
+        return None
+    truncated = len(body) > _MAX_BODY_CHARS
+    if truncated:
+        print(f"  [!!] skill '{entry.get('id')}' body exceeds {_MAX_BODY_CHARS} chars — truncated")
+    return Skill(
+        id=str(entry.get("id", meta["name"])),
+        name=meta["name"],
+        description=str(meta["description"]),
+        body=body[:_MAX_BODY_CHARS],
+        workshop=str(entry.get("workshop", "open")),
+        permission_level=permission_level,
+        path=skill_dir,
+        has_scripts=has_scripts,
+        truncated=truncated,
+    )
+
+
+def list_skills(
+    workshop: str,
+    *,
+    manifest_path: Optional[Path] = None,
+    repo_root: Optional[Path] = None,
+) -> list:
+    """All loadable (approved, hash-valid) skills for a workshop."""
+    root = repo_root or _REPO_ROOT
+    out = []
+    for entry in load_manifest(manifest_path):
+        if str(entry.get("workshop", "open")).lower() != workshop.lower():
+            continue
+        s = _load_skill(entry, root)
+        if s is not None:
+            out.append(s)
+    return out
