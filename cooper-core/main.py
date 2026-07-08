@@ -217,6 +217,24 @@ async def _resolve_approval(message: str) -> str:
     return await _execute(ticket.tool, ticket.message)
 
 
+async def _chat_core(message: str, history: List[dict]) -> tuple:
+    """One routing path for every front door (HTTP endpoints + gateway):
+    registry/skill catalog queries, approval responses, then route_turn."""
+    if registry.is_registry_query(message):
+        return registry.format_tool_list(WORKSHOP), TurnDecision(
+            decision="answer", reason="registry query answered directly by Quartermaster")
+    if approval.has_pending(WORKSHOP) and approval.is_response(message):
+        return await _resolve_approval(message), TurnDecision(
+            decision="answer", reason="approval gate resolved")
+    return await route_turn(
+        message, history,
+        generate_answer=_generate,
+        base_url=BACKEND_URL, api_key=BACKEND_KEY,
+        model=COOPER_MODEL, classifier_model=CLASSIFIER_MODEL,
+        backend=BACKEND, dispatch_handler=_handle_dispatch,
+    )
+
+
 # ── Startup ────────────────────────────────────────────────────────────────────
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -332,25 +350,7 @@ class ChatResponse(BaseModel):
 
 @app.post("/chat", response_model=ChatResponse, dependencies=[Depends(_require_auth)])
 async def chat(req: ChatRequest):
-    if registry.is_registry_query(req.message):
-        reply = registry.format_tool_list(WORKSHOP)
-        return {"reply": reply, "decision": "answer", "reason": "registry query answered directly by Quartermaster"}
-
-    if approval.has_pending(WORKSHOP) and approval.is_response(req.message):
-        reply = await _resolve_approval(req.message)
-        return {"reply": reply, "decision": "answer", "reason": "approval gate resolved"}
-
-    reply, td = await route_turn(
-        req.message,
-        req.history,
-        generate_answer=_generate,
-        base_url=BACKEND_URL,
-        api_key=BACKEND_KEY,
-        model=COOPER_MODEL,
-        classifier_model=CLASSIFIER_MODEL,
-        backend=BACKEND,
-        dispatch_handler=_handle_dispatch,
-    )
+    reply, td = await _chat_core(req.message, req.history)
     return {"reply": reply, "decision": td.decision, "reason": td.reason}
 
 
@@ -410,24 +410,7 @@ async def oai_chat(req: _OAIChatRequest):
             headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"},
         )
 
-    if registry.is_registry_query(message):
-        reply = registry.format_tool_list(WORKSHOP)
-        td = TurnDecision(decision="answer", reason="registry query answered directly by Quartermaster")
-    elif approval.has_pending(WORKSHOP) and approval.is_response(message):
-        reply = await _resolve_approval(message)
-        td = TurnDecision(decision="answer", reason="approval gate resolved")
-    else:
-        reply, td = await route_turn(
-            message,
-            history,
-            generate_answer=_generate,
-            base_url=BACKEND_URL,
-            api_key=BACKEND_KEY,
-            model=COOPER_MODEL,
-            classifier_model=CLASSIFIER_MODEL,
-            backend=BACKEND,
-            dispatch_handler=_handle_dispatch,
-        )
+    reply, td = await _chat_core(message, history)
     request_id = f"chatcmpl-{uuid.uuid4().hex[:8]}"
     return {
         "id":      request_id,
