@@ -274,8 +274,10 @@ _ALLOWED_SCHEMES  = ("https://",)
 _IMPORT_RE        = re.compile(
     r"import\s+skill\s+([a-z0-9][a-z0-9-]*)\s+from\s+(\S+)", re.IGNORECASE
 )
+_SAFE_NAME_RE     = re.compile(r"\A[a-z0-9][a-z0-9-]*\Z")
 _CLONE_TIMEOUT    = 60
 _PREVIEW_MAX      = 3_500
+_MAX_TAP_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB — generous for a skill dir, caps disk use
 
 
 def parse_import_request(message: str) -> Tuple[str, str]:
@@ -288,9 +290,27 @@ def parse_import_request(message: str) -> Tuple[str, str]:
     return m.group(1).lower(), m.group(2)
 
 
+def _reject_symlinks(src: Path) -> None:
+    """Fail closed if any entry under src is a symlink (spec: no symlink dereference
+    exfiltration via shutil.copytree). Rejects the whole import — never sanitizes."""
+    for p in src.rglob("*"):
+        if p.is_symlink():
+            raise SkillError(
+                f"tap contains a symlink ('{p.relative_to(src)}') — rejected for safety"
+            )
+
+
+def _dir_size_bytes(src: Path) -> int:
+    return sum(f.stat().st_size for f in src.rglob("*") if f.is_file())
+
+
 def fetch_tap(url: str, skill_name: str, *, repo_root: Optional[Path] = None) -> Path:
     """Clone a tap repo and stage skills/<name>/ under Skills/_incoming/<name>/.
     Staged skills are inert (reserved dir). Returns the staged path."""
+    if not _SAFE_NAME_RE.match(skill_name):
+        raise SkillError(
+            f"unsafe skill name '{skill_name}' — must match [a-z0-9][a-z0-9-]*"
+        )
     if not url.startswith(_ALLOWED_SCHEMES):
         raise SkillError(f"tap URL must use https:// — got scheme '{url.split(':', 1)[0]}'")
     root = repo_root or _REPO_ROOT
@@ -315,6 +335,12 @@ def fetch_tap(url: str, skill_name: str, *, repo_root: Optional[Path] = None) ->
         if meta["name"] != skill_name:
             raise SkillError(
                 f"frontmatter name '{meta['name']}' != requested skill '{skill_name}'"
+            )
+        _reject_symlinks(src)
+        size = _dir_size_bytes(src)
+        if size > _MAX_TAP_SIZE_BYTES:
+            raise SkillError(
+                f"tap skill directory too large ({size} bytes > {_MAX_TAP_SIZE_BYTES} cap)"
             )
         if dest.exists():
             shutil.rmtree(dest)
@@ -347,6 +373,7 @@ def register_import(
     root = repo_root or _REPO_ROOT
     staged = root / "Skills" / "_incoming" / name
     if not (staged / "SKILL.md").exists():
+        print(f"  [!!] skill '{name}' staged copy missing at registration — re-fetching from {url}")
         staged = fetch_tap(url, name, repo_root=repo_root)
     final = root / "Skills" / "imported" / name
     final.parent.mkdir(parents=True, exist_ok=True)

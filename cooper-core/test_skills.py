@@ -307,6 +307,81 @@ def test_fetch_tap_rejects_non_https():
         skills.fetch_tap("file:///tmp/whatever", "x")
 
 
+def test_fetch_tap_rejects_symlink_and_copies_nothing(tmp_path, monkeypatch):
+    """Fix 1: a symlink inside the tap's skill dir must fail closed, and nothing
+    should land in Skills/_incoming/ (no partial copy that could hide exfiltrated
+    content from the SKILL.md-only preview)."""
+    secret = tmp_path / "sensitive.txt"
+    secret.write_text("super-secret-content", encoding="utf-8")
+
+    url = make_tap_repo(tmp_path, skill_name="tap-skill")
+    monkeypatch.setattr(skills, "_ALLOWED_SCHEMES", ("https://", "file://"))
+
+    # Re-create the repo with a symlink added after the initial commit isn't
+    # necessary — git doesn't need to track the symlink target's content for
+    # this test since fetch_tap inspects the checked-out working tree directly.
+    # Add the symlink straight into the already-cloned-from source repo tree.
+    repo = tmp_path / "tap-src"
+    skill_dir = repo / "skills" / "tap-skill"
+    (skill_dir / "leak.txt").symlink_to(secret)
+    subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
+    subprocess.run(
+        ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "add symlink"],
+        cwd=repo, check=True,
+    )
+
+    with pytest.raises(skills.SkillError, match="symlink"):
+        skills.fetch_tap(url, "tap-skill", repo_root=tmp_path)
+
+    dest = tmp_path / "Skills" / "_incoming" / "tap-skill"
+    assert not dest.exists() or not any(dest.iterdir())
+
+
+def test_fetch_tap_rejects_unsafe_skill_name(tmp_path, monkeypatch):
+    """Fix 2: fetch_tap must independently validate skill_name, not trust the
+    caller — a path-traversal payload must be rejected before any subprocess call."""
+    def _spy_run(*a, **k):
+        raise AssertionError("subprocess.run should not be called — name check must fail first")
+
+    monkeypatch.setattr(subprocess, "run", _spy_run)
+    with pytest.raises(skills.SkillError, match="unsafe skill name"):
+        skills.fetch_tap("https://example.com/whatever", "../../Config", repo_root=tmp_path)
+
+
+def test_fetch_tap_rejects_oversized_tap(tmp_path, monkeypatch):
+    """Fix 3: a tap whose skill directory exceeds the size cap must be rejected."""
+    url = make_tap_repo(tmp_path, skill_name="tap-skill")
+    monkeypatch.setattr(skills, "_ALLOWED_SCHEMES", ("https://", "file://"))
+    monkeypatch.setattr(skills, "_MAX_TAP_SIZE_BYTES", 100)  # tiny cap for the test
+
+    repo = tmp_path / "tap-src"
+    skill_dir = repo / "skills" / "tap-skill"
+    (skill_dir / "big.bin").write_bytes(b"x" * 1000)
+    subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
+    subprocess.run(
+        ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "add big file"],
+        cwd=repo, check=True,
+    )
+
+    with pytest.raises(skills.SkillError, match="too large"):
+        skills.fetch_tap(url, "tap-skill", repo_root=tmp_path)
+
+
+def test_register_import_logs_refetch_when_staging_missing(tmp_path, monkeypatch, capsys):
+    """Fix 4: registration re-fetching due to missing staged copy must be logged."""
+    url = make_tap_repo(tmp_path)
+    monkeypatch.setattr(skills, "_ALLOWED_SCHEMES", ("https://", "file://"))
+    manifest = write_manifest(tmp_path, [])
+    msg = f"import skill tap-skill from {url}"
+
+    # Skip preview_import (which would stage it) and register directly —
+    # staged dir is missing, forcing the re-fetch path.
+    entry = skills.register_import(msg, repo_root=tmp_path, manifest_path=manifest)
+    assert entry["id"] == "tap-skill"
+    output = capsys.readouterr().out
+    assert "[!!]" in output and "re-fetching" in output
+
+
 def test_import_flow_end_to_end(tmp_path, monkeypatch):
     url = make_tap_repo(tmp_path)
     monkeypatch.setattr(skills, "_ALLOWED_SCHEMES", ("https://", "file://"))
