@@ -19,6 +19,21 @@
 
 **Current step: all 9 steps complete (2026-07-02)**
 
+## Roadmap — Steps 10-13 (COOPER × Hermes merge, post-PRD, scoped 2026-07-08)
+
+Native port of Hermes Agent's capability patterns into `cooper-core`, SKILL.md-format-compatible,
+zero vendored code. Spec: `Docs/superpowers/specs/2026-07-08-cooper-hermes-merge-design.md`.
+Plans: `Docs/superpowers/plans/2026-07-08-step-1{0,1,2,3}-*.md` (commit 50de439).
+
+- [ ] **Step 10 — Governed skills subsystem (hash-pinned manifest).** BLOCKER — first. In progress
+      on `step-10-skills` (Task 1 SKILL.md parsing/hash, Task 2 manifest loading, tap importer all
+      committed as of 2026-07-08; not yet fully DoD-verified/merged).
+- [ ] **Step 11 — Self-improvement loop (draft → approve → promote).** After Step 10.
+- [x] **Step 12 — Signal gateway (signal-cli-rest-api, Open only).** Built in parallel worktree
+      `step-12-gateway`; merged into `step-9-dockerize` 2026-07-08. Live Signal-phone verification
+      not yet performed (needs a physical Signal-registered device).
+- [x] **Step 13 — Session-bound approvals + install-cooper.sh.** ✓ 2026-07-08. See decision log.
+
 ---
 
 ## What actually runs today
@@ -228,6 +243,47 @@
   with `docker compose up -d` (matching `Start-PDAPrivateStack.ps1`'s approach) plus the same
   stderr/`$ErrorActionPreference` fix from Task 5. Also stopped auto-opening n8n's browser tab
   on Open stack startup (Open WebUI still opens). All work pushed to `origin/step-9-dockerize`.
+- **2026-07-08 · Step 13 complete: session-bound approvals + install-cooper.sh.** Built on
+  `step-13-sessions` (branched from `step-9-dockerize`) via subagent-driven-development, plan
+  `Docs/superpowers/plans/2026-07-08-step-13-packaging-session-binding.md`. Four tasks: (1)
+  `approval.py`'s `_pending` ticket store re-keyed `workshop` → `(workshop, session_id)`; (2)
+  `main.py` multi-key auth (`COOPER_API_KEYS`, comma-separated, + legacy `COOPER_API_KEY`
+  fallback), `_derive_session_id` (sha256(token)[:12], `"anon"` for none), threaded through
+  every chat/dispatch/approval/`/pending` call site; (3) `install-cooper.sh` — one-command
+  bootstrap (prereqs, idempotent `.env` seeding with a generated key, `docker compose up -d`,
+  stack-aware health poll: 8001 open / 8000 private); (4) Signal gateway made per-sender
+  session-aware (`session_id=f"signal:{sender}"`) — this task was originally deferred pending
+  Step 12's merge, which happened *mid-branch*, requiring a rebase (see below).
+  **Mid-flight complication:** Step 12 (Signal gateway) merged into `step-9-dockerize`'s tip
+  after this branch had already forked from it, so `step-13-sessions` had to be rebased onto
+  the new tip — conflicting with Task 2's session-threading (Step 12 had refactored
+  `chat()`/`oai_chat()`/`_stream_sse()` into one shared `_chat_core()`) and with Task 3's
+  compose-file edit (Step 12 added Signal env vars at the same insertion point `COOPER_API_KEYS`
+  landed on). Both resolved cleanly (re-threaded `session_id` through the merged `_chat_core`;
+  kept both sibling env lines in the compose file) — full suite green after (82/82, then 83/83
+  after the final-review test addition).
+  **Live-verified** (not just curl-tested-once): Docker Desktop cold-started, open stack brought
+  up via `install-cooper.sh`, and in the process caught a stale pre-Task-2 cached `cooper-core`
+  image that `docker compose up -d` had silently reused (rebuilt with `docker compose build`).
+  Ran the plan's exact two-client scenario against an isolated instance
+  (`COOPER_API_KEYS=key-a,key-b`): client A's dispatch halted for approval; client B's `approve`
+  did NOT consume it (fell through as an ordinary reply — no cross-session leakage); client A's
+  own `approve` consumed its ticket and attempted execution; `/pending` for A was empty after.
+  **Whole-branch review (opus) caught a real security gap post-implementation:** the well-known
+  default key `cooper-local` (used both by the legacy `COOPER_API_KEY` compose fallback and by
+  Open WebUI's own hardcoded fresh-install connection credential) remained valid forever, so any
+  two clients using the *documented* default landed on the identical derived session and could
+  still cross-approve each other's tickets — defeating this step's entire purpose for anyone who
+  hadn't rotated the default. Fixed by switching the compose files' `${VAR:-default}` to
+  `${VAR-default}` (single-dash — treats an explicitly-empty value as intentional, not "unset")
+  and having `install-cooper.sh` write `COOPER_API_KEY=` (empty) alongside the generated
+  `COOPER_API_KEYS`; a fresh checkout with no `.env` is unaffected (unchanged zero-config
+  solo-dev fallback). Also added an HTTP-level (`TestClient`) regression test for the isolation
+  guarantee itself — prior coverage was pure-function/store-level only. Final state: 83/83
+  tests passing, merged (fast-forward) into `step-9-dockerize`, `step-13-sessions` branch and
+  worktree cleaned up. **Known, disclosed gaps, not done:** Open WebUI browser click-through (no
+  browser-automation tool in this environment) and Task 4's live Signal-phone verification (no
+  physical Signal-registered device available) — both explicitly flagged rather than claimed.
 
 ---
 
