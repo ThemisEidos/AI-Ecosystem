@@ -13,8 +13,28 @@ private-ollama is required for usable inference (~90 s/turn warm vs >5 min on CP
 The `.venv-win` dev-mode path (`Start-CooperCore.ps1`) remains the faster daily driver
 (~30 s/turn via Windows-host Ollama).
 
-Next horizon (not yet scoped): Open Workshop containerization, Pop!_OS deployment test,
-approval-ticket session binding before any multi-client exposure (see audit deferred list).
+Next horizon (not yet scoped): Pop!_OS deployment test, merge `step-9-dockerize` → `main`.
+(Open Workshop containerization done 2026-07-07; session binding is now Step 13 below.)
+
+### 2026-07-08 · Steps 10–13 scoped: COOPER × Hermes merge
+
+Decision: native port of Hermes Agent's capability patterns into cooper-core,
+SKILL.md-format-compatible, **zero vendored code** — COOPER keeps its governance, gains
+Hermes's ecosystem (skills are portable data, so the 90K-skill hub stays reachable).
+Spec: `Docs/superpowers/specs/2026-07-08-cooper-hermes-merge-design.md`. Plans (commit
+50de439, `Docs/superpowers/plans/2026-07-08-step-1*.md`):
+
+| # | Name | Order |
+|---|------|-------|
+| 10 | Governed skills subsystem (hash-pinned manifest) | BLOCKER — first |
+| 11 | Self-improvement loop (draft → approve → promote) | after 10 |
+| 12 | Signal gateway (signal-cli-rest-api, Open only) | parallel worktree |
+| 13 | Session-bound approvals + install-cooper.sh | parallel worktree |
+
+Execute on **Sonnet** (user cost decision); plans carry complete code + tests, follow
+superpowers:subagent-driven-development. Human prereq: Signal account registration/linking
+before Step 12 Task 4. Note: `~/.claude/agents/planner.md` pins opus — avoid or override
+during Sonnet execution.
 
 **⚠️ BRANCH CHECK FIRST:** the branch this project's code lived on (`codex/nightly-task-002-20260606-165602`) was discarded 2026-07-01/02. All work (Steps 1-9) now lives on **`step-9-dockerize`**, recovered from the same tip commit. `main` does not have this code. Run `git branch --show-current` before doing anything — do not assume.
 
