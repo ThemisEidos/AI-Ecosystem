@@ -233,10 +233,10 @@ def skill_context_for(
     """The one call main.py makes per turn. '' when nothing matches or on any error."""
     try:
         s = select_skill(workshop, message, manifest_path=manifest_path, repo_root=repo_root)
+        return format_skill_context(s) if s is not None else ""
     except Exception as exc:
-        print(f"  [!!] skill selection failed (non-fatal): {exc}")
+        print(f"  [!!] skill selection/formatting failed (non-fatal): {exc}")
         return ""
-    return format_skill_context(s) if s is not None else ""
 
 
 def format_skill_list(

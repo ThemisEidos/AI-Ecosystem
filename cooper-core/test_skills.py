@@ -244,3 +244,28 @@ def test_skill_context_for_returns_empty_on_no_match(tmp_path):
     manifest = write_manifest(tmp_path, [])
     assert skills.skill_context_for("open", "anything",
                                     manifest_path=manifest, repo_root=tmp_path) == ""
+
+
+def test_skill_context_for_handles_format_skill_context_exception(tmp_path, monkeypatch, capsys):
+    """Prove that if format_skill_context raises, skill_context_for catches it and returns ''."""
+    # Set up a skill that will match the query
+    d = make_skill_dir(tmp_path)
+    manifest = write_manifest(tmp_path, [approved_entry(tmp_path, d)])
+
+    # Monkeypatch format_skill_context to raise an exception
+    def failing_format(skill):
+        raise RuntimeError("simulated format_skill_context failure")
+
+    monkeypatch.setattr(skills, "format_skill_context", failing_format)
+
+    # Call skill_context_for with a message that matches the skill
+    # (select_skill will find it via keyword match)
+    result = skills.skill_context_for("open", "greet the operator",
+                                      manifest_path=manifest, repo_root=tmp_path)
+
+    # Must return "" instead of raising
+    assert result == ""
+    # And must print a warning
+    output = capsys.readouterr().out
+    assert "[!!]" in output
+    assert "non-fatal" in output
