@@ -192,6 +192,14 @@ async def _handle_dispatch(message: str, session_id: str = "local") -> str:
                 return f"Skill import rejected before approval: {exc}"
             except Exception as exc:
                 return f"Skill import rejected before approval (unexpected error): {exc}"
+        elif tool.get("executor_type") == "skill_promote":
+            try:
+                text = await asyncio.to_thread(skills.preview_promote, message)
+                preview = f"\n\nDraft SKILL.md under review:\n---\n{text}\n---"
+            except skills.SkillError as exc:
+                return f"Skill promotion rejected before approval: {exc}"
+            except Exception as exc:
+                return f"Skill promotion rejected before approval (unexpected error): {exc}"
         approval.request(WORKSHOP, tool, message, session_id)
         return (
             f"Halt — {tool.get('name', tool.get('id'))} "

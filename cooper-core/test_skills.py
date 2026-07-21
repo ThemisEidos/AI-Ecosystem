@@ -399,3 +399,54 @@ def test_import_flow_end_to_end(tmp_path, monkeypatch):
     assert (tmp_path / "Skills" / "imported" / "tap-skill" / "SKILL.md").exists()
     loaded = skills.list_skills("open", manifest_path=manifest, repo_root=tmp_path)
     assert [s.name for s in loaded] == ["tap-skill"]
+
+
+def make_draft(root: Path, name: str = "stack-health-check") -> Path:
+    d = root / "Skills" / "_drafts" / name
+    d.mkdir(parents=True)
+    (d / "SKILL.md").write_text(
+        f"---\nname: {name}\ndescription: Drafted procedure.\n---\n\n## Procedure\nDo it.\n",
+        encoding="utf-8",
+    )
+    return d
+
+
+def test_parse_promote_request():
+    assert skills.parse_promote_request("promote skill stack-health-check") == "stack-health-check"
+    with pytest.raises(skills.SkillError):
+        skills.parse_promote_request("promote something")
+
+
+def test_promotion_flow(tmp_path):
+    make_draft(tmp_path)
+    manifest = write_manifest(tmp_path, [])
+    preview = skills.preview_promote("promote skill stack-health-check", repo_root=tmp_path)
+    assert "Drafted procedure" in preview
+    entry = skills.register_promotion(
+        "promote skill stack-health-check",
+        workshop="open", repo_root=tmp_path, manifest_path=manifest,
+    )
+    assert entry["id"] == "stack-health-check"
+    assert (tmp_path / "Skills" / "learned" / "stack-health-check" / "SKILL.md").exists()
+    assert not (tmp_path / "Skills" / "_drafts" / "stack-health-check").exists()
+    loaded = skills.list_skills("open", manifest_path=manifest, repo_root=tmp_path)
+    assert [s.name for s in loaded] == ["stack-health-check"]
+
+
+def test_promote_missing_draft_raises(tmp_path):
+    with pytest.raises(skills.SkillError):
+        skills.preview_promote("promote skill ghost", repo_root=tmp_path)
+
+
+def test_promote_registered_open_skill_into_private(tmp_path):
+    # no draft — the skill is already live in Open; promotion adds a Private entry
+    d = make_skill_dir(tmp_path, name="hello-cooper")
+    manifest = write_manifest(tmp_path, [approved_entry(tmp_path, d)])
+    entry = skills.register_promotion(
+        "promote skill hello-cooper",
+        workshop="private", repo_root=tmp_path, manifest_path=manifest,
+    )
+    assert entry["workshop"] == "private"
+    # both workshops now load it — the Open entry survived the append
+    assert len(skills.list_skills("open", manifest_path=manifest, repo_root=tmp_path)) == 1
+    assert len(skills.list_skills("private", manifest_path=manifest, repo_root=tmp_path)) == 1

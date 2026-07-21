@@ -392,6 +392,101 @@ def register_import(
     return entry
 
 
+# ── Draft promotion (Step 11; approval-gated via the promote_skill tool) ─────
+_PROMOTE_RE = re.compile(r"promote\s+skill\s+([a-z0-9][a-z0-9-]*)", re.IGNORECASE)
+
+
+def parse_promote_request(message: str) -> str:
+    m = _PROMOTE_RE.search(message)
+    if not m:
+        raise SkillError("could not parse — use: promote skill <name>")
+    return m.group(1).lower()
+
+
+def _draft_dir(name: str, repo_root: Optional[Path] = None) -> Path:
+    root = repo_root or _REPO_ROOT
+    d = root / "Skills" / "_drafts" / name
+    if not (d / "SKILL.md").exists():
+        raise SkillError(f"no draft named '{name}' in Skills/_drafts/")
+    return d
+
+
+def preview_promote(
+    message: str,
+    *,
+    repo_root: Optional[Path] = None,
+    manifest_path: Optional[Path] = None,
+) -> str:
+    """SKILL.md text for the approval question — from the draft, or (fallback,
+    matching register_promotion) from an already-registered skill being
+    promoted into another workshop."""
+    name = parse_promote_request(message)
+    root = repo_root or _REPO_ROOT
+    try:
+        d = _draft_dir(name, repo_root)
+    except SkillError:
+        existing = next(
+            (e for e in load_manifest(manifest_path) if str(e.get("id")) == name), None
+        )
+        if existing is None:
+            raise
+        d = (root / str(existing["path"])).resolve()
+        if not (d / "SKILL.md").exists():
+            raise SkillError(f"registered skill '{name}' has no SKILL.md on disk")
+    text = (d / "SKILL.md").read_text(encoding="utf-8")
+    return text[:_PREVIEW_MAX] + ("\n[... preview truncated]" if len(text) > _PREVIEW_MAX else "")
+
+
+def register_promotion(
+    message: str,
+    *,
+    workshop: str = "open",
+    repo_root: Optional[Path] = None,
+    manifest_path: Optional[Path] = None,
+) -> dict:
+    """Post-approval: move the draft to Skills/learned/<name>, hash, register.
+    Fallback (spec §3 'promoting a skill to Private is a second explicit
+    approval'): when no draft exists but the skill is already registered for
+    another workshop, add an entry for the ACTIVE workshop instead — this is
+    how an imported Open skill gets promoted into Private."""
+    name = parse_promote_request(message)
+    root = repo_root or _REPO_ROOT
+    try:
+        src = _draft_dir(name, repo_root)
+    except SkillError:
+        existing = next(
+            (e for e in load_manifest(manifest_path) if str(e.get("id")) == name), None
+        )
+        if existing is None:
+            raise
+        skill_dir = (root / str(existing["path"])).resolve()
+        entry = {
+            "id": name,
+            "path": existing["path"],
+            "workshop": workshop,
+            "permission_level": int(existing.get("permission_level", 1)),
+            "approval_required": bool(existing.get("approval_required", False)),
+            "content_hash": compute_content_hash(skill_dir),
+        }
+        _append_manifest_entry(entry, manifest_path)
+        return entry
+    final = root / "Skills" / "learned" / name
+    final.parent.mkdir(parents=True, exist_ok=True)
+    if final.exists():
+        shutil.rmtree(final)
+    shutil.move(str(src), str(final))
+    entry = {
+        "id": name,
+        "path": str(final.relative_to(root)).replace("\\", "/"),
+        "workshop": workshop,
+        "permission_level": 1,
+        "approval_required": False,
+        "content_hash": compute_content_hash(final),
+    }
+    _append_manifest_entry(entry, manifest_path)
+    return entry
+
+
 def _append_manifest_entry(entry: dict, manifest_path: Optional[Path] = None) -> None:
     p = manifest_path or MANIFEST_PATH
     data = {}

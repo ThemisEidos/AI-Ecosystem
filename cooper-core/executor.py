@@ -16,8 +16,9 @@ Design constraints:
   - stdout + stderr are merged and returned as the result artifact.
 
 Supported executor_types:
-  powershell   — invokes powershell.exe / pwsh via a thread-pool subprocess (step 5)
-  skill_import — post-approval tap registration via skills.register_import (step 10)
+  powershell    — invokes powershell.exe / pwsh via a thread-pool subprocess (step 5)
+  skill_import  — post-approval tap registration via skills.register_import (step 10)
+  skill_promote — post-approval draft activation via skills.register_promotion (step 11)
 
 Not yet wired (return stubs):
   informational, local_read, browser, llm_api, note_editor, python,
@@ -109,6 +110,9 @@ async def run(tool: dict, message: str, workshop: str) -> str:
     if executor_type == "skill_import":
         return await _run_skill_import(message)
 
+    if executor_type == "skill_promote":
+        return await _run_skill_promote(message, workshop)
+
     return _stub(executor_type, tool_name)
 
 
@@ -183,3 +187,27 @@ async def _run_skill_import(message: str) -> str:
         return f"Workbench: skill import failed — {exc}"
     except Exception as exc:
         return f"Workbench: skill import failed unexpectedly — {exc}"
+
+
+async def _run_skill_promote(message: str, workshop: str) -> str:
+    """Post-approval draft activation. Filesystem work off-loop, same
+    degrade-gracefully contract as _run_skill_import (matches the Step 10
+    review finding: a broad Exception fallback so unwrapped OS/IO errors
+    never propagate out of the executor)."""
+    loop = asyncio.get_running_loop()
+
+    def _sync() -> str:
+        entry = skills.register_promotion(message, workshop=workshop)
+        content_hash = entry.get("content_hash", "?")
+        return (
+            f"Skill '{entry.get('id', '?')}' promoted from draft and registered for the "
+            f"{entry.get('workshop', '?')} workshop "
+            f"(hash {content_hash[:12] if content_hash != '?' else '?'}…)."
+        )
+
+    try:
+        return await loop.run_in_executor(None, _sync)
+    except skills.SkillError as exc:
+        return f"Workbench: skill promotion failed — {exc}"
+    except Exception as exc:
+        return f"Workbench: skill promotion failed unexpectedly — {exc}"
