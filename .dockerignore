@@ -3,8 +3,10 @@
 !Models/cooper-personality/Modelfile
 !Config
 !Scripts/Test-Exec.ps1
+!Skills
 cooper-core/.venv
 cooper-core/.venv-win
+cooper-core/venv
 cooper-core/__pycache__
 cooper-core/*.log
 cooper-core/cooper_memory.db

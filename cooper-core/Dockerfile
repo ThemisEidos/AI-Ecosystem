@@ -26,8 +26,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY cooper-core/ .
 # _REPO_ROOT resolves to /app — these paths must mirror the repo layout (spec §5, §8.2-8.3)
 COPY Models/cooper-personality/Modelfile /app/Models/cooper-personality/Modelfile
-COPY Config/general_tool_registry.yaml Config/private_tool_registry.yaml /app/Config/
+COPY Config/general_tool_registry.yaml Config/private_tool_registry.yaml Config/skills_registry.yaml /app/Config/
 COPY Scripts/Test-Exec.ps1 /app/Scripts/Test-Exec.ps1
+COPY Skills/ /app/Skills/
 
 EXPOSE 8000
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
