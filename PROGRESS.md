@@ -25,10 +25,11 @@ Native port of Hermes Agent's capability patterns into `cooper-core`, SKILL.md-f
 zero vendored code. Spec: `Docs/superpowers/specs/2026-07-08-cooper-hermes-merge-design.md`.
 Plans: `Docs/superpowers/plans/2026-07-08-step-1{0,1,2,3}-*.md` (commit 50de439).
 
-- [ ] **Step 10 — Governed skills subsystem (hash-pinned manifest).** BLOCKER — first. In progress
-      on `step-10-skills` (Task 1 SKILL.md parsing/hash, Task 2 manifest loading, tap importer all
-      committed as of 2026-07-08; not yet fully DoD-verified/merged).
-- [ ] **Step 11 — Self-improvement loop (draft → approve → promote).** After Step 10.
+- [x] **Step 10 — Governed skills subsystem (hash-pinned manifest).** ✓ 2026-07-20. Built on
+      `step-10-skills` via subagent-driven-development; whole-branch review found the skills
+      subsystem was inert under `docker compose up` (Skills/ and the manifest never reached the
+      container) — fixed and live-verified in real containers. Merged into `step-9-dockerize`.
+- [x] **Step 11 — Self-improvement loop (draft → approve → promote).** ✓ 2026-07-21. See decision log.
 - [x] **Step 12 — Signal gateway (signal-cli-rest-api, Open only).** Built in parallel worktree
       `step-12-gateway`; merged into `step-9-dockerize` 2026-07-08. Live Signal-phone verification
       not yet performed (needs a physical Signal-registered device).
@@ -284,6 +285,59 @@ Plans: `Docs/superpowers/plans/2026-07-08-step-1{0,1,2,3}-*.md` (commit 50de439)
   worktree cleaned up. **Known, disclosed gaps, not done:** Open WebUI browser click-through (no
   browser-automation tool in this environment) and Task 4's live Signal-phone verification (no
   physical Signal-registered device available) — both explicitly flagged rather than claimed.
+
+- **2026-07-20 · Step 10 closed: whole-branch review + Docker deployment fix.** Resumed a
+  2026-07-08 pause (all 6 tasks done, final review pending). `step-10-skills` already had
+  `step-9-dockerize`'s Steps 12/13 merged in. Ran the deferred whole-branch review
+  (`superpowers:requesting-code-review`, opus) — independently verified: the earlier
+  symlink-exfiltration fix actually blocks the attack, the Step 12/13 merge conflict resolution
+  in `main.py` is correct, 120/120 tests pass. One Critical finding, fixed same session: the
+  skills subsystem was inert under `docker compose up` — `Skills/` and `Config/skills_registry.yaml`
+  were never copied into the `cooper-core` image or bind-mounted, so `GET /skills` was permanently
+  empty and `import_skill` wrote into the container's ephemeral layer (lost on restart). This
+  slipped through per-task review because Step 10's live verification used the bare-metal
+  `.venv-win` path, not Docker. Fixed: Dockerfile now seeds `Skills/` + the manifest, both compose
+  files bind-mount them read-write. Verified live in real containers: built and ran both open and
+  private `cooper-core` images, confirmed `GET /skills` returns the seed skill through the open
+  container. Also excluded `cooper-core/venv` (a stray local venv, unrelated to Skills) from the
+  Docker build context — a broken symlink inside it was failing the build outright. Merged
+  `step-10-skills` into `step-9-dockerize`.
+
+- **2026-07-21 · Step 11 complete: self-improvement loop (draft → approve → promote).** Built on
+  `step-11-proposer` (worktree, off `step-9-dockerize`) via subagent-driven-development, 4 tasks:
+  (1) `proposer.py`'s `draft_skill()` drafts a candidate SKILL.md into `Skills/_drafts/<name>/`
+  after a successful dispatch, inert by Step 10's `_RESERVED_DIRS` mechanism; (2) wired into
+  `main.py`'s `_execute()` — on a passing review verdict, drafts a skill and appends a one-line
+  promotion offer, wrapped in defense-in-depth try/except; (3) `promote_skill` tool —
+  approval-gated (permission_level 2), previews the draft's SKILL.md before approval, then moves
+  it to `Skills/learned/<name>` and registers it, mirroring Step 10's `import_skill` governance
+  pattern; (4) `skillmd_stats` SQLite table counting activations at both of Step 10's injection
+  call sites.
+  **Bugs caught during task review, all fixed same session:** a plan-authored
+  `asyncio.get_event_loop()` test bug that only broke under the full suite, not in isolation
+  (switched to `asyncio.run()`); a test that didn't actually exercise the `_RESERVED_DIRS`
+  inertness guarantee (strengthened to register a manifest entry pointing straight at a draft
+  and confirm it's still refused); a duplicate `notes:` YAML key in
+  `Config/private_tool_registry.yaml` that silently dropped an unrelated tool's governance note
+  (fixed; added a duplicate-key-detecting regression test for the whole bug class, verified
+  load-bearing).
+  **Whole-branch review (opus) caught a real cross-task interaction** invisible to any single
+  task's review: `draft_skill()` accepted a `tool` param but never used it, so approving a
+  `promote_skill` or `skill_import` dispatch (itself a passing run) immediately drafted a
+  self-referential meta-skill about promoting/importing and offered it for promotion — bounded
+  and inert, but unintended operator-facing noise. Fixed with an early-return guard before any
+  LLM call, verified load-bearing.
+  **Live-verified against a real running server** (bare-metal, this branch's own code, port 8010
+  to avoid disturbing the already-running dev stack on 8000): full round trip of
+  dispatch → draft offer → promote → approve → register → `GET /skills` shows `ok` → conversational
+  use → `skillmd_stats` activation count incremented, all genuine, all passed first attempt. Test
+  artifacts from this run were reverted afterward (not intended permanent content). 139/139 tests
+  passing. Merged into `step-9-dockerize`, worktree and branch cleaned up.
+  **Known, disclosed, not done:** Open WebUI browser click-through (no browser-automation tool in
+  this environment, and Open WebUI isn't wired to the verification server's port) — reviewer
+  agreed this doesn't materially affect merge-readiness since the offer line is a plain string
+  appended server-side to the same bytes the browser would render, already exercised by the API-level
+  DoD check.
 
 ---
 

@@ -14,8 +14,43 @@ The `.venv-win` dev-mode path (`Start-CooperCore.ps1`) remains the faster daily 
 (~30 s/turn via Windows-host Ollama).
 
 Next horizon (not yet scoped): Pop!_OS deployment test, merge `step-9-dockerize` → `main`.
-(Open Workshop containerization done 2026-07-07; Steps 12 and 13 now done — see below. Step 10
-**DONE 2026-07-20** — whole-branch review passed with fixes (see below). Step 11 starting now.)
+(Open Workshop containerization done 2026-07-07; Steps 10, 12, and 13 now done. Step 11
+**DONE 2026-07-21** — see below. All of Steps 10-13 are now merged into `step-9-dockerize`.
+Next: decide on Step 11's Docker deployment gap check — same class of bug Step 10 had —
+before treating the merge as fully closed, then scope whatever comes after Step 11.)
+
+### 2026-07-21 · Step 11 complete — self-improvement loop (draft → approve → promote)
+
+Built on `step-11-proposer` (git worktree at `.worktrees/step-11-proposer`, off
+`step-9-dockerize`) via subagent-driven-development, 4 tasks — full detail in
+`PROGRESS.md`'s decision log and `.superpowers/sdd/progress.md` (worktree removed after
+merge; ledger history survives in git). Highlights for next session:
+- `proposer.py`'s `draft_skill()` drafts a candidate SKILL.md into `Skills/_drafts/<name>/`
+  after any successful dispatch; `promote_skill` (approval-gated, permission_level 2)
+  activates one. `skillmd_stats` counts activations.
+- **Whole-branch review caught a cross-task bug invisible to any single task's review:**
+  `draft_skill()` took a `tool` param but never used it, so approving a `promote_skill` or
+  `skill_import` dispatch (itself a passing run) immediately drafted a self-referential
+  meta-skill about promoting/importing. Fixed with an early-return guard
+  (`_UNDRAFTABLE_EXECUTOR_TYPES`) before any LLM call — worth remembering: task-level
+  reviews catch what's wrong within a task, but only a whole-branch pass catches what
+  happens when independently-correct tasks compose.
+- **Live-verified against a real running server**, not just curl-tested-once: bare-metal
+  on port 8010 (deliberately not 8000, to avoid disturbing the already-running dev stack),
+  this branch's own code, real Windows-host Ollama. Full round trip — dispatch → draft
+  offer → promote → approve → register → `GET /skills` shows `ok` → conversational use →
+  activation count incremented — all passed first attempt. Test artifacts (the promoted
+  skill + manifest entry) were reverted afterward; they were proof-of-pipeline, not
+  intended permanent content.
+- **Known, disclosed, not done:** Open WebUI browser click-through (no browser-automation
+  tool in this environment). Reviewer judged this doesn't block merge-readiness since the
+  offer line is a plain string appended server-side to the same bytes the browser renders,
+  already covered by the API-level check — but flag it if a browser becomes available.
+- **Not yet checked:** whether Step 11 has the same Docker-deployment gap Step 10 had (code
+  paths worked in bare-metal live verification only, not confirmed against
+  `docker compose up`). `proposer.py`/`promote_skill` don't need new Docker wiring beyond
+  what Step 10's fix already added (same `Skills/` + manifest mount), so this is likely
+  fine, but hasn't been explicitly re-verified in containers the way Step 10's fix was.
 
 ### 2026-07-20 · Step 10 fully closed — whole-branch review + Docker wiring fix
 
@@ -75,7 +110,7 @@ Spec: `Docs/superpowers/specs/2026-07-08-cooper-hermes-merge-design.md`. Plans (
 | # | Name | Order | Status |
 |---|------|-------|--------|
 | 10 | Governed skills subsystem (hash-pinned manifest) | BLOCKER — first | **DONE 2026-07-20** on `step-10-skills` (a0b0ad5..f18b6c1), merged into `step-9-dockerize`. Whole-branch review passed; Docker deployment gap found and fixed. |
-| 11 | Self-improvement loop (draft → approve → promote) | after 10 | in progress — starting 2026-07-20 |
+| 11 | Self-improvement loop (draft → approve → promote) | after 10 | **DONE 2026-07-21** on `step-11-proposer` (worktree, 051df4c..dca241f), merged into `step-9-dockerize`. Whole-branch review caught and fixed a cross-task self-referential-draft bug; live-verified end-to-end. |
 | 12 | Signal gateway (signal-cli-rest-api, Open only) | parallel worktree | done, merged 2026-07-08 (live phone test pending) |
 | 13 | Session-bound approvals + install-cooper.sh | parallel worktree | done, merged 2026-07-08 |
 
