@@ -23,7 +23,7 @@ def fake_extract(*args, **kwargs):
 
 
 def run(coro):
-    return asyncio.get_event_loop().run_until_complete(coro)
+    return asyncio.run(coro)
 
 
 def _draft(tmp_path, extract=fake_extract, manifest_entries=None):
