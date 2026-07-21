@@ -35,6 +35,7 @@ import executor
 import review
 import workshop
 import archivist
+import proposer
 import skills
 import gateway
 
@@ -191,6 +192,14 @@ async def _handle_dispatch(message: str, session_id: str = "local") -> str:
                 return f"Skill import rejected before approval: {exc}"
             except Exception as exc:
                 return f"Skill import rejected before approval (unexpected error): {exc}"
+        elif tool.get("executor_type") == "skill_promote":
+            try:
+                text = await asyncio.to_thread(skills.preview_promote, message)
+                preview = f"\n\nDraft SKILL.md under review:\n---\n{text}\n---"
+            except skills.SkillError as exc:
+                return f"Skill promotion rejected before approval: {exc}"
+            except Exception as exc:
+                return f"Skill promotion rejected before approval (unexpected error): {exc}"
         approval.request(WORKSHOP, tool, message, session_id)
         return (
             f"Halt — {tool.get('name', tool.get('id'))} "
@@ -233,7 +242,19 @@ async def _execute(tool: dict, message: str) -> str:
     except Exception as exc:
         print(f"  [!!] archivist.remember failed (non-fatal): {exc}")
 
-    return review.govern(raw_output, verdict)
+    draft_offer = ""
+    if verdict.verdict == "pass":
+        try:
+            draft_dir = await proposer.draft_skill(
+                tool, message, raw_output,
+                base_url=BACKEND_URL, api_key=BACKEND_KEY,
+                model=CLASSIFIER_MODEL, backend=BACKEND,
+            )
+            draft_offer = proposer.offer_line(draft_dir)
+        except Exception as exc:
+            print(f"  [!!] proposer failed (non-fatal): {exc}")
+
+    return review.govern(raw_output, verdict) + draft_offer
 
 
 async def _resolve_approval(message: str, session_id: str = "local") -> str:
@@ -534,8 +555,12 @@ async def _stream_sse(message: str, history: List[dict], session_id: str = "loca
                     system_prompt = f"{SYSTEM_PROMPT}\n\n{recall_context}"
             except Exception as exc:
                 print(f"  [!!] archivist.recall failed (non-fatal): {exc}")
+            skill_ctx = ""
             try:
-                skill_ctx = skills.skill_context_for(WORKSHOP, message)
+                matched = skills.select_skill(WORKSHOP, message)
+                if matched is not None:
+                    skill_ctx = skills.format_skill_context(matched)
+                    await asyncio.to_thread(skills.record_activation, _ARCHIVIST_CONN, matched.id)
             except Exception as exc:
                 print(f"  [!!] skill context injection failed (non-fatal): {exc}")
                 skill_ctx = ""
@@ -591,8 +616,12 @@ async def _generate(message: str, history: List[dict]) -> str:
     except Exception as exc:
         print(f"  [!!] archivist.recall failed (non-fatal): {exc}")
         recall_context = ""
+    skill_ctx = ""
     try:
-        skill_ctx = skills.skill_context_for(WORKSHOP, message)
+        matched = skills.select_skill(WORKSHOP, message)
+        if matched is not None:
+            skill_ctx = skills.format_skill_context(matched)
+            await asyncio.to_thread(skills.record_activation, _ARCHIVIST_CONN, matched.id)
     except Exception as exc:
         print(f"  [!!] skill context injection failed (non-fatal): {exc}")
         skill_ctx = ""

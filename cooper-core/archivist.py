@@ -70,6 +70,11 @@ CREATE TABLE IF NOT EXISTS skills (
 CREATE VIRTUAL TABLE IF NOT EXISTS brain_fts USING fts5(
     file_name, heading, body
 );
+CREATE TABLE IF NOT EXISTS skillmd_stats (
+    skill_id         TEXT PRIMARY KEY,
+    activation_count INTEGER NOT NULL DEFAULT 0,
+    last_activated   TEXT
+);
 """
 
 

@@ -155,3 +155,17 @@ tools:
     outputs:
       - manifest_entry
     notes: Fetches stage to Skills/_incoming (inert) at preview time; registration happens only after approval. Open Workshop only — skill_import is classified cloud-calling.
+  - id: promote_skill
+    name: Promote Skill
+    drawer: Skills
+    workshop: Open Workshop
+    description: Promote a drafted skill from Skills/_drafts into the live registry. Usage — promote skill <name>. Shows the draft SKILL.md for review before approval.
+    permission_level: 2
+    approval_required: true
+    executor_type: skill_promote
+    enabled: true
+    inputs:
+      - skill_name
+    outputs:
+      - manifest_entry
+    notes: Local filesystem only. Drafts are created by the Proposer after successful runs.

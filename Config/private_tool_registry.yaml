@@ -110,3 +110,17 @@ tools:
     outputs:
       - workflow_result
     notes: Local only. Forbidden to call cloud services or third-party providers.
+  - id: promote_skill
+    name: Promote Skill
+    drawer: Skills
+    workshop: Private Workshop
+    description: Promote a drafted skill from Skills/_drafts into the live registry. Usage — promote skill <name>. Shows the draft SKILL.md for review before approval.
+    permission_level: 2
+    approval_required: true
+    executor_type: skill_promote
+    enabled: true
+    inputs:
+      - skill_name
+    outputs:
+      - manifest_entry
+    notes: Local filesystem only. Registers the skill for the private workshop.

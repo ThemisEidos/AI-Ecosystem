@@ -115,3 +115,37 @@ def test_rejected_preview_never_opens_an_approval_ticket(monkeypatch):
     assert "rejected" in reply.lower()
     assert "bad tap" in reply
     assert approval_calls == []
+
+
+def test_execute_reply_unchanged_when_proposer_raises(monkeypatch):
+    # Step 11's core fail-safety property: proposer.draft_skill sits in every
+    # successful dispatch's hot path now. If it (or offer_line) raises, the
+    # governed reply must reach the user completely unchanged — not 500,
+    # not truncated, not silently missing content.
+    tool = {"id": "stack_test", "name": "Stack Test", "executor_type": "noop"}
+
+    async def _run(*args, **kwargs):
+        return "[Test-PDAStack.ps1 — OK]\nall green"
+
+    monkeypatch.setattr(main.executor, "run", _run)
+
+    verdict = main.review.ReviewVerdict(verdict="pass", reason="looked fine")
+
+    async def _review(*args, **kwargs):
+        return verdict
+
+    monkeypatch.setattr(main.review, "review", _review)
+
+    async def _remember(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(main.archivist, "remember", _remember)
+
+    async def _boom(*args, **kwargs):
+        raise RuntimeError("llm down")
+
+    monkeypatch.setattr(main.proposer, "draft_skill", _boom)
+
+    expected = main.review.govern("[Test-PDAStack.ps1 — OK]\nall green", verdict)
+    reply = asyncio.run(main._execute(tool, "check the stack health"))
+    assert reply == expected

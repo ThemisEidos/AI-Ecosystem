@@ -119,3 +119,68 @@ def test_skill_import_executor_defends_malformed_entry_shape(monkeypatch):
     )
     assert isinstance(out, str)
     assert "?" in out
+
+
+def test_skill_promote_executor(monkeypatch):
+    monkeypatch.setattr(
+        skills_mod, "register_promotion",
+        lambda message, **kw: {"id": "stack-health-check", "workshop": kw.get("workshop", "open"),
+                               "content_hash": "cd" * 32},
+    )
+    tool = {"id": "promote_skill", "name": "Promote Skill", "executor_type": "skill_promote"}
+    out = asyncio.run(
+        executor.run(tool, "promote skill stack-health-check", "open")
+    )
+    assert "stack-health-check" in out and "promoted" in out.lower()
+
+
+def test_skill_promote_executor_reports_failure(monkeypatch):
+    def boom(message, **kw):
+        raise skills_mod.SkillError("no draft named 'x'")
+    monkeypatch.setattr(skills_mod, "register_promotion", boom)
+    tool = {"id": "promote_skill", "name": "Promote Skill", "executor_type": "skill_promote"}
+    out = asyncio.run(
+        executor.run(tool, "promote skill x", "open")
+    )
+    assert "failed" in out.lower() and "no draft named" in out
+
+
+def test_skill_promote_executor_degrades_on_unexpected_exception(monkeypatch):
+    # register_promotion() can hit a raw OS/IO exception that skills.py never
+    # wraps in SkillError. The executor must still never raise — it degrades
+    # to a chat-facing string, same contract as _run_skill_import.
+    def boom(message, **kw):
+        raise RuntimeError("disk full")
+    monkeypatch.setattr(skills_mod, "register_promotion", boom)
+    tool = {"id": "promote_skill", "name": "Promote Skill", "executor_type": "skill_promote"}
+    out = asyncio.run(
+        executor.run(tool, "promote skill x", "open")
+    )
+    assert isinstance(out, str)
+    assert "unexpectedly" in out.lower()
+    assert "disk full" in out
+
+
+def test_skill_promote_executor_defends_malformed_entry_shape(monkeypatch):
+    # register_promotion() returning a dict missing expected keys must not raise
+    # KeyError inside the executor's success path — .get(..., "?") fallback.
+    monkeypatch.setattr(skills_mod, "register_promotion", lambda message, **kw: {})
+    tool = {"id": "promote_skill", "name": "Promote Skill", "executor_type": "skill_promote"}
+    out = asyncio.run(
+        executor.run(tool, "promote skill x", "open")
+    )
+    assert isinstance(out, str)
+    assert "?" in out
+
+
+def test_skill_promote_executor_passes_active_workshop(monkeypatch):
+    # Promotion registers for the ACTIVE workshop — the executor must forward
+    # the workshop argument it was called with, not hardcode "open".
+    seen = {}
+    def spy(message, **kw):
+        seen["workshop"] = kw.get("workshop")
+        return {"id": "x", "workshop": kw.get("workshop"), "content_hash": "ef" * 32}
+    monkeypatch.setattr(skills_mod, "register_promotion", spy)
+    tool = {"id": "promote_skill", "name": "Promote Skill", "executor_type": "skill_promote"}
+    asyncio.run(executor.run(tool, "promote skill x", "private"))
+    assert seen["workshop"] == "private"
