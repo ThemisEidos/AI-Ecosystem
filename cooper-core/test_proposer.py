@@ -1,8 +1,6 @@
 """Tests for the self-improvement draft loop (Step 11)."""
 import asyncio
-from pathlib import Path
 
-import pytest
 import yaml
 
 import proposer
@@ -49,8 +47,21 @@ def test_draft_written_to_drafts_dir(tmp_path):
 
 
 def test_draft_is_not_loadable(tmp_path):
-    _draft(tmp_path)
+    """Even if a manifest entry pointed straight at the draft (e.g. a stale
+    or hand-edited entry), Step 10's _RESERVED_DIRS check must still refuse
+    to load it — proves _drafts/ is inert by mechanism, not just by omission
+    from the manifest."""
+    path = _draft(tmp_path)
     manifest = tmp_path / "Config" / "skills_registry.yaml"
+    entry = {
+        "id": "stack-health-check",
+        "path": str(path.relative_to(tmp_path)).replace("\\", "/"),
+        "workshop": "open",
+        "permission_level": 1,
+        "content_hash": skills.compute_content_hash(path),
+    }
+    manifest.write_text(yaml.safe_dump({"skills": [entry]}), encoding="utf-8")
+    assert skills.skill_status(entry, repo_root=tmp_path) == "draft_path"
     assert skills.list_skills("open", manifest_path=manifest, repo_root=tmp_path) == []
 
 
