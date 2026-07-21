@@ -35,6 +35,7 @@ import executor
 import review
 import workshop
 import archivist
+import skills
 import gateway
 
 # ── Config ─────────────────────────────────────────────────────────────────────
@@ -181,11 +182,21 @@ async def _handle_dispatch(message: str, session_id: str = "local") -> str:
         )
 
     if approval.needs_approval(tool):
+        preview = ""
+        if tool.get("executor_type") == "skill_import":
+            try:
+                text = await asyncio.to_thread(skills.preview_import, message)
+                preview = f"\n\nSKILL.md under review:\n---\n{text}\n---"
+            except skills.SkillError as exc:
+                return f"Skill import rejected before approval: {exc}"
+            except Exception as exc:
+                return f"Skill import rejected before approval (unexpected error): {exc}"
         approval.request(WORKSHOP, tool, message, session_id)
         return (
             f"Halt — {tool.get('name', tool.get('id'))} "
             f"[{tool.get('drawer', 'Uncategorized')}, permission level {tool.get('permission_level', '?')}] "
             f"requires approval before it can proceed{skill_note}. Reply 'approve' or 'deny'."
+            f"{preview}"
         )
 
     # L0/L1: execute immediately
@@ -250,6 +261,9 @@ async def _chat_core(message: str, history: List[dict], session_id: str = "local
     if registry.is_registry_query(message):
         return registry.format_tool_list(WORKSHOP), TurnDecision(
             decision="answer", reason="registry query answered directly by Quartermaster")
+    if skills.is_skill_query(message):
+        return skills.format_skill_list(WORKSHOP), TurnDecision(
+            decision="answer", reason="skill catalog answered directly")
     if approval.has_pending(WORKSHOP, session_id) and approval.is_response(message):
         return await _resolve_approval(message, session_id), TurnDecision(
             decision="answer", reason="approval gate resolved")
@@ -347,6 +361,28 @@ async def list_tools():
     except registry.RegistryError as exc:
         raise HTTPException(status_code=500, detail=str(exc))
     return {"workshop": WORKSHOP, "count": len(tools), "tools": tools}
+
+
+# ── Skills (Step 10) ─────────────────────────────────────────────────────────
+@app.get("/skills", dependencies=[Depends(_require_auth)])
+async def list_skill_registry():
+    entries = skills.load_manifest()
+    report = []
+    for e in entries:
+        if str(e.get("workshop", "open")).lower() != WORKSHOP:
+            continue
+        try:
+            status = skills.skill_status(e)
+        except Exception as exc:
+            print(f"  [!!] skill status check failed for '{e.get('id')}': {exc}")
+            status = "error"
+        report.append({
+            "id":               e.get("id"),
+            "path":             e.get("path"),
+            "permission_level": e.get("permission_level"),
+            "status":           status,
+        })
+    return {"workshop": WORKSHOP, "count": len(report), "skills": report}
 
 
 # ── Approval gate (Safety Officer) ──────────────────────────────────────────
@@ -483,6 +519,8 @@ async def _stream_sse(message: str, history: List[dict], session_id: str = "loca
     try:
         if registry.is_registry_query(message):
             content_iter = _single_text_chunk(registry.format_tool_list(WORKSHOP))
+        elif skills.is_skill_query(message):
+            content_iter = _single_text_chunk(skills.format_skill_list(WORKSHOP))
         elif approval.has_pending(WORKSHOP, session_id) and approval.is_response(message):
             content_iter = _single_text_chunk(await _resolve_approval(message, session_id))
         else:
@@ -496,6 +534,13 @@ async def _stream_sse(message: str, history: List[dict], session_id: str = "loca
                     system_prompt = f"{SYSTEM_PROMPT}\n\n{recall_context}"
             except Exception as exc:
                 print(f"  [!!] archivist.recall failed (non-fatal): {exc}")
+            try:
+                skill_ctx = skills.skill_context_for(WORKSHOP, message)
+            except Exception as exc:
+                print(f"  [!!] skill context injection failed (non-fatal): {exc}")
+                skill_ctx = ""
+            if skill_ctx:
+                system_prompt = f"{system_prompt}\n\n{skill_ctx}"
             td, content_iter = await route_turn_stream(
                 message,
                 history,
@@ -546,9 +591,16 @@ async def _generate(message: str, history: List[dict]) -> str:
     except Exception as exc:
         print(f"  [!!] archivist.recall failed (non-fatal): {exc}")
         recall_context = ""
+    try:
+        skill_ctx = skills.skill_context_for(WORKSHOP, message)
+    except Exception as exc:
+        print(f"  [!!] skill context injection failed (non-fatal): {exc}")
+        skill_ctx = ""
     msgs = _build_messages(history, message)
     if recall_context:
         msgs.insert(1, {"role": "system", "content": recall_context})
+    if skill_ctx:
+        msgs.insert(1, {"role": "system", "content": skill_ctx})
     if BACKEND == "openai":
         from decision import _openai_complete
         return await _openai_complete(BACKEND_URL, BACKEND_KEY, COOPER_MODEL, msgs)

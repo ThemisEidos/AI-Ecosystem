@@ -140,3 +140,18 @@ tools:
     outputs:
       - launch_status
     notes: Used by WF-002 to write governed Codex task files. Launcher handoff remains optional.
+  - id: import_skill
+    name: Import Skill
+    drawer: Skills
+    workshop: Open Workshop
+    description: Import a community SKILL.md skill from a tap repository into the Open workshop. Usage — import skill <name> from <https url>. Shows the SKILL.md for review before approval.
+    permission_level: 2
+    approval_required: true
+    executor_type: skill_import
+    enabled: true
+    inputs:
+      - skill_name
+      - tap_url
+    outputs:
+      - manifest_entry
+    notes: Fetches stage to Skills/_incoming (inert) at preview time; registration happens only after approval. Open Workshop only — skill_import is classified cloud-calling.

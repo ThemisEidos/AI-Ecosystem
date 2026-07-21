@@ -15,8 +15,37 @@ The `.venv-win` dev-mode path (`Start-CooperCore.ps1`) remains the faster daily 
 
 Next horizon (not yet scoped): Pop!_OS deployment test, merge `step-9-dockerize` → `main`.
 (Open Workshop containerization done 2026-07-07; Steps 12 and 13 now done — see below. Step 10
-in progress on `step-10-skills`, Step 11 not started.)
+**DONE 2026-07-20** — whole-branch review passed with fixes (see below). Step 11 starting now.)
 
+### 2026-07-20 · Step 10 fully closed — whole-branch review + Docker wiring fix
+
+Resumed the 2026-07-08 pause: `step-10-skills` already had `step-9-dockerize`'s Steps 12/13
+merged in (`a4a5ca0`). Ran the deferred final whole-branch review
+(`superpowers:requesting-code-review`, range `a0b0ad5..a4a5ca0`) — verified independently
+(not taken on faith): the earlier symlink-exfiltration fix actually blocks the attack,
+the Step 12/13 merge conflict resolution in `main.py` is correct (`session_id` traced by
+hand through every path), and 120/120 tests pass.
+
+**One Critical finding, fixed same session:** the skills subsystem was inert under
+`docker compose up` — `Skills/` and `Config/skills_registry.yaml` were never copied into
+the `cooper-core` image or bind-mounted, so `GET /skills` was permanently empty and
+`import_skill` wrote into the ephemeral container layer (lost on restart). This slipped
+through per-task review because Step 10's live verification used the bare-metal
+`.venv-win` path, not Docker. Fixed (commit `f18b6c1`): Dockerfile now seeds `Skills/` +
+the manifest, both compose files bind-mount them read-write (same pattern as the existing
+`Obsidian Vault/brain` mount). **Verified live in real containers**, not just compose
+config parsing: built both open and private `cooper-core` images, confirmed
+`GET /skills` returns the seed skill through the open container and correctly returns
+empty for private (skill is scoped `workshop: open`). Also had to exclude
+`cooper-core/venv` (a stray local venv, not `.venv`/`.venv-win`) from the Docker build
+context — a broken symlink inside it was failing the build outright, unrelated to Skills
+but blocking verification.
+
+**Known, disclosed, deferred as follow-ups** (not blocking, real but lower-urgency):
+`fetch_tap`'s 10MB cap only bounds the final `skills/<name>` subdir, not the full clone;
+no cleanup of orphaned `Skills/_incoming/<name>` staging dirs on denial/expiry (and that
+path isn't gitignored); minor prompt-ordering inconsistency between the blocking and
+streaming chat paths' skill/recall context order.
 ### 2026-07-08 · Step 13 complete (session-bound approvals + install-cooper.sh)
 
 Built on `step-13-sessions` (from `step-9-dockerize`) via subagent-driven-development; merged
@@ -45,10 +74,27 @@ Spec: `Docs/superpowers/specs/2026-07-08-cooper-hermes-merge-design.md`. Plans (
 
 | # | Name | Order | Status |
 |---|------|-------|--------|
-| 10 | Governed skills subsystem (hash-pinned manifest) | BLOCKER — first | in progress (`step-10-skills`) |
-| 11 | Self-improvement loop (draft → approve → promote) | after 10 | not started |
+| 10 | Governed skills subsystem (hash-pinned manifest) | BLOCKER — first | **DONE 2026-07-20** on `step-10-skills` (a0b0ad5..f18b6c1), merged into `step-9-dockerize`. Whole-branch review passed; Docker deployment gap found and fixed. |
+| 11 | Self-improvement loop (draft → approve → promote) | after 10 | in progress — starting 2026-07-20 |
 | 12 | Signal gateway (signal-cli-rest-api, Open only) | parallel worktree | done, merged 2026-07-08 (live phone test pending) |
 | 13 | Session-bound approvals + install-cooper.sh | parallel worktree | done, merged 2026-07-08 |
+
+**Carry forward, not yet actioned:** a real throwaway public GitHub repo
+(`https://github.com/ThemisEidos/cooper-skill-tap-test`, created during Task 6's live
+verification of the tap importer) needs manual deletion by the user — the `gh` token used
+lacks `delete_repo` scope. Inert (README + one SKILL.md, self-labeled "safe to delete"),
+no secrets. User has acknowledged, will delete when they have time.
+
+**Notable findings from Step 10's review cycle** (full detail in the ledger): a Critical
+security bug in the tap importer — `shutil.copytree`'s default symlink-dereferencing let
+a malicious tap exfiltrate arbitrary local file content (`.env`, SSH keys) past the
+human-visible approval preview — was caught and fixed (symlink rejection, name validation,
+10MB size cap all added to `fetch_tap`). This was a bug in the plan's own given code, not
+an implementer deviation — worth remembering when trusting "plan gives the code verbatim"
+tasks: the plan author (a prior session) can introduce real bugs too, review catches them
+the same as any other code. A second, similar lesson from the same day: the plan's own
+Docker deployment wiring was also incomplete (see the 2026-07-20 entry above) — treat a
+plan's infrastructure/deployment sections with the same scrutiny as its logic.
 
 Execute on **Sonnet** (user cost decision); plans carry complete code + tests, follow
 superpowers:subagent-driven-development. Human prereq: Signal account registration/linking

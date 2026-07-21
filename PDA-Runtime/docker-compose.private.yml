@@ -63,6 +63,12 @@ services:
         source: "../Obsidian Vault/brain"
         target: "/app/Obsidian Vault/brain"
         read_only: true
+      - type: bind
+        source: "../Skills"
+        target: "/app/Skills"
+      - type: bind
+        source: "../Config/skills_registry.yaml"
+        target: "/app/Config/skills_registry.yaml"
     networks:
       - pda-private-net
     depends_on:
