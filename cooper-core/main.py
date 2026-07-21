@@ -35,6 +35,7 @@ import executor
 import review
 import workshop
 import archivist
+import proposer
 import skills
 import gateway
 
@@ -233,7 +234,19 @@ async def _execute(tool: dict, message: str) -> str:
     except Exception as exc:
         print(f"  [!!] archivist.remember failed (non-fatal): {exc}")
 
-    return review.govern(raw_output, verdict)
+    draft_offer = ""
+    if verdict.verdict == "pass":
+        try:
+            draft_dir = await proposer.draft_skill(
+                tool, message, raw_output,
+                base_url=BACKEND_URL, api_key=BACKEND_KEY,
+                model=CLASSIFIER_MODEL, backend=BACKEND,
+            )
+            draft_offer = proposer.offer_line(draft_dir)
+        except Exception as exc:
+            print(f"  [!!] proposer failed (non-fatal): {exc}")
+
+    return review.govern(raw_output, verdict) + draft_offer
 
 
 async def _resolve_approval(message: str, session_id: str = "local") -> str:

@@ -106,3 +106,14 @@ async def draft_skill(
     except Exception as exc:
         print(f"  [!!] proposer.draft_skill failed (non-fatal): {exc}")
         return None
+
+
+def offer_line(draft_dir: Optional[Path]) -> str:
+    """One-line promotion offer appended to the dispatch reply. '' when no draft."""
+    if draft_dir is None:
+        return ""
+    name = draft_dir.name
+    return (
+        f"\n\n[Proposer] Drafted skill '{name}' from this run — "
+        f'say "promote skill {name}" to review and activate it.'
+    )

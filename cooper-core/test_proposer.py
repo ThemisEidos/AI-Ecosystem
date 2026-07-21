@@ -82,3 +82,12 @@ def test_extraction_failure_returns_none(tmp_path):
             raise RuntimeError("llm down")
         return _inner()
     assert _draft(tmp_path, extract=broken) is None
+
+
+def test_offer_line_format(tmp_path):
+    path = _draft(tmp_path)
+    assert proposer.offer_line(path) == (
+        '\n\n[Proposer] Drafted skill \'stack-health-check\' from this run — '
+        'say "promote skill stack-health-check" to review and activate it.'
+    )
+    assert proposer.offer_line(None) == ""
