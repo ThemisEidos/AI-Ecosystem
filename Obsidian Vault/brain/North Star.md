@@ -15,7 +15,37 @@ The `.venv-win` dev-mode path (`Start-CooperCore.ps1`) remains the faster daily 
 
 Next horizon (not yet scoped): Pop!_OS deployment test, merge `step-9-dockerize` → `main`.
 (Open Workshop containerization done 2026-07-07; Steps 12 and 13 now done — see below. Step 10
-in progress on `step-10-skills`, Step 11 not started.)
+**DONE 2026-07-20** — whole-branch review passed with fixes (see below). Step 11 starting now.)
+
+### 2026-07-20 · Step 10 fully closed — whole-branch review + Docker wiring fix
+
+Resumed the 2026-07-08 pause: `step-10-skills` already had `step-9-dockerize`'s Steps 12/13
+merged in (`a4a5ca0`). Ran the deferred final whole-branch review
+(`superpowers:requesting-code-review`, range `a0b0ad5..a4a5ca0`) — verified independently
+(not taken on faith): the earlier symlink-exfiltration fix actually blocks the attack,
+the Step 12/13 merge conflict resolution in `main.py` is correct (`session_id` traced by
+hand through every path), and 120/120 tests pass.
+
+**One Critical finding, fixed same session:** the skills subsystem was inert under
+`docker compose up` — `Skills/` and `Config/skills_registry.yaml` were never copied into
+the `cooper-core` image or bind-mounted, so `GET /skills` was permanently empty and
+`import_skill` wrote into the ephemeral container layer (lost on restart). This slipped
+through per-task review because Step 10's live verification used the bare-metal
+`.venv-win` path, not Docker. Fixed (commit `f18b6c1`): Dockerfile now seeds `Skills/` +
+the manifest, both compose files bind-mount them read-write (same pattern as the existing
+`Obsidian Vault/brain` mount). **Verified live in real containers**, not just compose
+config parsing: built both open and private `cooper-core` images, confirmed
+`GET /skills` returns the seed skill through the open container and correctly returns
+empty for private (skill is scoped `workshop: open`). Also had to exclude
+`cooper-core/venv` (a stray local venv, not `.venv`/`.venv-win`) from the Docker build
+context — a broken symlink inside it was failing the build outright, unrelated to Skills
+but blocking verification.
+
+**Known, disclosed, deferred as follow-ups** (not blocking, real but lower-urgency):
+`fetch_tap`'s 10MB cap only bounds the final `skills/<name>` subdir, not the full clone;
+no cleanup of orphaned `Skills/_incoming/<name>` staging dirs on denial/expiry (and that
+path isn't gitignored); minor prompt-ordering inconsistency between the blocking and
+streaming chat paths' skill/recall context order.
 
 ### 2026-07-08 · Step 13 complete (session-bound approvals + install-cooper.sh)
 
@@ -45,8 +75,8 @@ Spec: `Docs/superpowers/specs/2026-07-08-cooper-hermes-merge-design.md`. Plans (
 
 | # | Name | Order | Status |
 |---|------|-------|--------|
-| 10 | Governed skills subsystem (hash-pinned manifest) | BLOCKER — first | **All 6 tasks DONE** on `step-10-skills` (commits a0b0ad5..193cdcb). Final whole-branch review NOT yet run — that's the resume point. |
-| 11 | Self-improvement loop (draft → approve → promote) | after 10 | not started |
+| 10 | Governed skills subsystem (hash-pinned manifest) | BLOCKER — first | **DONE 2026-07-20** on `step-10-skills` (a0b0ad5..f18b6c1). Whole-branch review passed; Docker deployment gap found and fixed. |
+| 11 | Self-improvement loop (draft → approve → promote) | after 10 | in progress — starting 2026-07-20 |
 | 12 | Signal gateway (signal-cli-rest-api, Open only) | parallel worktree | done, merged 2026-07-08 (live phone test pending) |
 | 13 | Session-bound approvals + install-cooper.sh | parallel worktree | done, merged 2026-07-08 |
 
