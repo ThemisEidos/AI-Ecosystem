@@ -46,11 +46,28 @@ merge; ledger history survives in git). Highlights for next session:
   tool in this environment). Reviewer judged this doesn't block merge-readiness since the
   offer line is a plain string appended server-side to the same bytes the browser renders,
   already covered by the API-level check — but flag it if a browser becomes available.
-- **Not yet checked:** whether Step 11 has the same Docker-deployment gap Step 10 had (code
-  paths worked in bare-metal live verification only, not confirmed against
-  `docker compose up`). `proposer.py`/`promote_skill` don't need new Docker wiring beyond
-  what Step 10's fix already added (same `Skills/` + manifest mount), so this is likely
-  fine, but hasn't been explicitly re-verified in containers the way Step 10's fix was.
+- **Docker-deployment gap check: done, confirmed working, with a useful real-world fail-safe
+  demonstration along the way.** Rebuilt and recreated `pda-private-cooper-core` with Step 11's
+  code, then re-ran the full DoD sequence through the real container. The natural-language
+  dispatch call ("run Test-Exec.ps1" → approve) took over 20 minutes and the draft never
+  appeared — `docker logs` showed `[!!] proposer.draft_skill failed (non-fatal): ` (empty
+  message). Root cause: `decision.py`'s httpx clients use a 120s timeout, and this one request
+  now chains THREE sequential LLM calls (review → archivist.remember → proposer.draft_skill,
+  Task 2's flagged latency concern made concrete) on a CPU-only Dockerized Ollama already under
+  sustained 200-270% CPU load from the first two calls — the third timed out. **This is exactly
+  the fail-safe design working as intended under real duress**: the user still got their correct
+  script output with no error surfaced, only the (optional) draft silently didn't happen.
+  Confirmed the actual open question — does the `Skills/_drafts`/`Skills/learned` write path
+  work through Docker's bind mount — directly and fast via `docker exec ... python -c` calling
+  `proposer.draft_skill()` with a fake `extract_fn` (bypassing the slow real LLM call): draft
+  written inside the container, confirmed visible on the HOST filesystem (proves the bind mount
+  is genuinely bidirectional, not just container-writable); then `skills.register_promotion()`
+  via the same exec path moved it to `Skills/learned/` and appended the manifest entry; then the
+  real running API's `GET /skills` confirmed status `"ok"`. No Docker-deployment gap exists for
+  Step 11 — Step 10's existing `Skills/` + manifest bind mount already covers it fully. Test
+  artifacts reverted afterward (the `Skills/learned/` entry was container-created as root and
+  needed removal from the Windows side, not WSL, due to a drvfs permission quirk — worth
+  remembering if cleaning up container-written files under `/mnt/d` again).
 
 ### 2026-07-20 · Step 10 fully closed — whole-branch review + Docker wiring fix
 
