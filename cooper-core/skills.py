@@ -13,6 +13,7 @@ import hashlib
 import re
 import shutil
 import subprocess
+import time
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -504,3 +505,30 @@ def _append_manifest_entry(entry: dict, manifest_path: Optional[Path] = None) ->
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
     _manifest_cache.clear()  # force reload on next read
+
+
+# ── Activation stats (Step 11; stored beside the archivist's tables) ─────────
+def record_activation(conn, skill_id: str) -> None:
+    """Count one knowledge-skill activation. Non-fatal on any error."""
+    from archivist import _DB_LOCK
+    now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    try:
+        with _DB_LOCK:
+            conn.execute(
+                "INSERT INTO skillmd_stats (skill_id, activation_count, last_activated) "
+                "VALUES (?, 1, ?) ON CONFLICT(skill_id) DO UPDATE SET "
+                "activation_count = activation_count + 1, last_activated = excluded.last_activated",
+                (skill_id, now),
+            )
+            conn.commit()
+    except Exception as exc:
+        print(f"  [!!] skills.record_activation failed (non-fatal): {exc}")
+
+
+def get_activation_count(conn, skill_id: str) -> int:
+    from archivist import _DB_LOCK
+    with _DB_LOCK:
+        row = conn.execute(
+            "SELECT activation_count FROM skillmd_stats WHERE skill_id = ?", (skill_id,)
+        ).fetchone()
+    return int(row[0]) if row else 0

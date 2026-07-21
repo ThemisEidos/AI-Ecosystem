@@ -3,6 +3,7 @@ import asyncio
 
 import yaml
 
+import archivist
 import proposer
 import skills
 
@@ -91,3 +92,12 @@ def test_offer_line_format(tmp_path):
         'say "promote skill stack-health-check" to review and activate it.'
     )
     assert proposer.offer_line(None) == ""
+
+
+def test_activation_stats_roundtrip(tmp_path):
+    conn = archivist.get_conn(tmp_path / "t.db")
+    archivist.init_db(conn)
+    assert skills.get_activation_count(conn, "hello-cooper") == 0
+    skills.record_activation(conn, "hello-cooper")
+    skills.record_activation(conn, "hello-cooper")
+    assert skills.get_activation_count(conn, "hello-cooper") == 2

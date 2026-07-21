@@ -555,8 +555,12 @@ async def _stream_sse(message: str, history: List[dict], session_id: str = "loca
                     system_prompt = f"{SYSTEM_PROMPT}\n\n{recall_context}"
             except Exception as exc:
                 print(f"  [!!] archivist.recall failed (non-fatal): {exc}")
+            skill_ctx = ""
             try:
-                skill_ctx = skills.skill_context_for(WORKSHOP, message)
+                matched = skills.select_skill(WORKSHOP, message)
+                if matched is not None:
+                    skill_ctx = skills.format_skill_context(matched)
+                    await asyncio.to_thread(skills.record_activation, _ARCHIVIST_CONN, matched.id)
             except Exception as exc:
                 print(f"  [!!] skill context injection failed (non-fatal): {exc}")
                 skill_ctx = ""
@@ -612,8 +616,12 @@ async def _generate(message: str, history: List[dict]) -> str:
     except Exception as exc:
         print(f"  [!!] archivist.recall failed (non-fatal): {exc}")
         recall_context = ""
+    skill_ctx = ""
     try:
-        skill_ctx = skills.skill_context_for(WORKSHOP, message)
+        matched = skills.select_skill(WORKSHOP, message)
+        if matched is not None:
+            skill_ctx = skills.format_skill_context(matched)
+            await asyncio.to_thread(skills.record_activation, _ARCHIVIST_CONN, matched.id)
     except Exception as exc:
         print(f"  [!!] skill context injection failed (non-fatal): {exc}")
         skill_ctx = ""
