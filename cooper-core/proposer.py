@@ -35,6 +35,12 @@ _DRAFT_SCHEMA = {
     "required": ["name", "description", "body"],
 }
 
+# Governance actions on the skill catalog itself never get drafted as skills —
+# otherwise approving a promotion/import immediately offers a meta-skill about
+# promoting/importing, a self-referential loop the whole-branch review caught
+# once Tasks 2 (drafting) and 3 (promote_skill) were combined.
+_UNDRAFTABLE_EXECUTOR_TYPES = {"skill_promote", "skill_import"}
+
 
 def slugify(name: str) -> str:
     slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
@@ -78,7 +84,10 @@ async def draft_skill(
     extract_fn: Optional[Callable[..., Awaitable[dict]]] = None,
 ) -> Optional[Path]:
     """Draft a SKILL.md into Skills/_drafts/<slug>/. Returns the dir, or None
-    when skipped (already covered / duplicate) or on any failure (non-fatal)."""
+    when skipped (already covered / duplicate / a governance action on the
+    skill catalog itself) or on any failure (non-fatal)."""
+    if tool.get("executor_type") in _UNDRAFTABLE_EXECUTOR_TYPES:
+        return None
     extract_fn = extract_fn or _extract_draft
     root = repo_root or _REPO_ROOT
     try:

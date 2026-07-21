@@ -94,6 +94,36 @@ def test_offer_line_format(tmp_path):
     assert proposer.offer_line(None) == ""
 
 
+def test_no_draft_for_governance_tools(tmp_path):
+    """Whole-branch review finding: with the tool param unchecked, approving
+    a promote_skill/skill_import dispatch would draft a meta-skill about
+    promoting/importing (a self-referential loop only visible once Tasks 2
+    and 3 are combined). Also asserts the LLM extraction call is skipped
+    entirely, not just its result discarded — no wasted round-trip."""
+    calls = []
+
+    def spy_extract(*a, **k):
+        async def _inner():
+            calls.append(1)
+            return dict(FAKE_DRAFT)
+        return _inner()
+
+    manifest = tmp_path / "Config" / "skills_registry.yaml"
+    manifest.parent.mkdir(exist_ok=True)
+    manifest.write_text(yaml.safe_dump({"skills": []}), encoding="utf-8")
+
+    for executor_type in ("skill_promote", "skill_import"):
+        result = run(proposer.draft_skill(
+            {"id": "promote_skill", "name": "Promote Skill", "executor_type": executor_type},
+            "promote skill stack-health-check", "Skill 'stack-health-check' promoted…",
+            base_url="", api_key="", model="", backend="ollama",
+            repo_root=tmp_path, manifest_path=manifest,
+            extract_fn=lambda *a, **k: spy_extract(),
+        ))
+        assert result is None
+    assert calls == []
+
+
 def test_activation_stats_roundtrip(tmp_path):
     conn = archivist.get_conn(tmp_path / "t.db")
     archivist.init_db(conn)
