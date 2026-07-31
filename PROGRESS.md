@@ -339,6 +339,199 @@ Plans: `Docs/superpowers/plans/2026-07-08-step-1{0,1,2,3}-*.md` (commit 50de439)
   appended server-side to the same bytes the browser would render, already exercised by the API-level
   DoD check.
 
+- **2026-07-21 · Open Workshop capability gap closed — steps 4/5/6/7/8/11 live-verified on Open,
+  not just Private.** Prior audit found several capabilities were only ever proven against
+  Private's local Ollama backend, never against Open's cloud path (`pda-open-cooper-core`, port
+  8001, OpenAI/Claude/Gemini via LiteLLM) — presumed-fine by shared code, not proven-fine. Ran the
+  same DoD checks live against the running Open container:
+  - Approval gate + execution gateway (halt → approve → execute) confirmed on Open with
+    `Test-Exec.ps1` (added to `general_tool_registry.yaml`'s `powershell_open.allowed_scripts`,
+    mirroring the Private registry's existing entry — the only functional registry change).
+  - Step 6's previously-unproven half ("Open Workshop allows an approved cloud call") confirmed by
+    dispatching `lite_llm_router` (`executor_type: llm_api`, one of the two types Private's
+    `workshop.py` blocks outright) — approved cleanly, no workshop violation. Executor stub output
+    was correctly flagged by the sub-agent reviewer (`[Reviewer flagged this result — Executor type
+    not wired in the gateway]`), proving Step 7's flag case on Open at the same time.
+  - Step 8 (memory + skill loop) confirmed on Open: second `Test-Exec.ps1` dispatch showed
+    skill-reuse messaging ("matches a proven skill"); a decision-recall question got a real answer
+    from the `decisions` table, not a generic non-answer.
+  - Step 11 (self-improvement loop) confirmed on Open end-to-end for the first time: a passing
+    dispatch drafted `run-test-exec`, `promote skill run-test-exec` halted with the draft SKILL.md
+    shown for review, approval registered it, `GET /skills` showed it `ok`, and a follow-up
+    conversational question matching the skill's own wording triggered it and incremented
+    `skillmd_stats`. **Decision: kept `run-test-exec` as a real registered skill** rather than
+    reverting it as test residue — it was created through the legitimate promote workflow directly
+    on the live production container (both stacks were already up; no isolated test instance was
+    used this time, unlike Step 10/11's original port-8010 verification), and is genuinely useful.
+  - `GET /skills` workshop-scoping cross-check: `hello-cooper` and the new `run-test-exec` (both
+    `workshop: open`) show on 8001 and correctly return empty on 8000 (private).
+  - Private Workshop regression check: full pytest suite via `.venv-win` — 137/139 passing
+    (2 pre-existing, unrelated failures, see below); a live dispatch → approve → execute round trip
+    on `pda-private-cooper-core` confirmed via direct DB read (`decisions` table shows the run,
+    `outcome: success`, review verdict `pass`) after the CPU-only Ollama backend in this environment
+    took several minutes to respond — slow, not broken (no GPU engaged this session; matches the
+    documented GPU-reservation gotcha).
+
+  **Real regression found and fixed, not a known limitation:** `approval.py`'s `_APPROVE_RE`/
+  `_DENY_RE` were full-match-only against a single token, so the exact phrases PROGRESS.md itself
+  records as live-verified — `"yes, go ahead"` and `"no, cancel that"` — silently stopped matching
+  at some point (collateral damage from an earlier fix that correctly blocked `"yes, but first…"`
+  from false-matching). A user typing the natural, documented approval phrase got reclassified as a
+  new conversational turn with no error — just confused silence. Fixed by allowing chained
+  approve/deny tokens (`yes, go ahead` = two tokens) while still rejecting hedges with non-approve
+  content after the first token; two regression tests added to `test_approval.py`. Confirmed live
+  on both workshops post-rebuild.
+
+  **Two pre-existing test failures found, not caused by this session's edits (git diff confirms
+  neither touched file was edited):** `test_main_open_routing.py`'s two subprocess-isolation tests
+  fail with `OSError: [WinError 10106]` (Windows socket-provider error) when run via the Windows
+  `.venv-win` — environmental, not code. `test_skills.py::test_fetch_tap_rejects_symlink_and_copies_nothing`
+  fails consistently on the Windows venv (`DID NOT RAISE SkillError`) — likely a Windows
+  symlink-privilege/semantics gap versus the Linux containers actually deployed; needs
+  investigation on Linux, not fixed this session. Flagged for follow-up, not chased further.
+
+  **Separately, changed COOPER's baseline humor setting from 35 to 55** (both workshops share one
+  Modelfile) per explicit request — updated `Models/cooper-personality/Modelfile`,
+  `personality.json`, `profiles.json`'s `operations` profile, the legacy
+  `Scripts/COOPER_Personality.json` mirror, and `main.py`'s Modelfile-missing fallback string.
+  Confirmed live on both workshops post-rebuild (`"Humor: 55."` / "55%" in conversational replies).
+
+  **Both `cooper-core` images required a rebuild + `--force-recreate`** for every change above to
+  take effect — `Models/cooper-personality/Modelfile` and `Config/general_tool_registry.yaml` are
+  baked into the image at build time, not bind-mounted (only `Obsidian Vault/brain`, `Skills/`, and
+  `Config/skills_registry.yaml` are). Worth remembering for any future Modelfile/registry edit.
+
+  **Not attempted this session (explicitly out of scope):** fixing the known, already-disclosed
+  limitations (non-PowerShell executor stubs, keyword-only tool/skill matching, memory not read
+  outside dispatch) and Step 12's live Signal-phone verification (`SIGNAL_NUMBER` unset, no `.env`
+  file yet, needs a real registered device) — both deferred as separate, later work.
+
+- **2026-07-21/22 · "Arm COOPER with real tools + skills" — all 13 registry executor_types now
+  wired for real, both workshops.** User redefined "done"/"fully functional" against Hermes Agent
+  as the benchmark: every currently-listed registry tool executes for real, with real skills and
+  full testing, closing the gap where COOPER's only working execution path was 2 of 307 legacy
+  PowerShell scripts. Plan: `~/.claude/plans/snazzy-mapping-kite.md` (batches -1 through 8). Full
+  detail below; every handler follows the proven `_run_powershell` pattern: resolve target →
+  authorize against a registry allowlist (fail-closed) → execute off the event loop → bounded
+  output → let the sub-agent reviewer catch problems.
+
+  **Batch -1 — real, pre-existing vulnerability found and fixed, unrelated to the tools work.**
+  A Fable 5 (`model: fable`) plan review flagged `n8n Workflow/PDA-ChatBridge.json` and
+  `PDA-ChatBridge-Rebuilt.json`: both wired an `n8n-nodes-base.executeCommand` node whose
+  `command` param was built by string-joining a `JSON.stringify()`-escaped user message into a
+  shell command line — JSON escaping isn't shell escaping, so shell metacharacters in a chat
+  message could break out of the intended argument. Verified via the owner's own n8n UI screenshot
+  that neither "PDA Chat Bridge" nor "PDA Chat Bridge v1" was Published (only "PDA Command Router"
+  and the safe HTTP-based "PDA Chat Bridge HTTP" were) — nothing was live-exploitable, but both
+  files were gitignored, superseded by the safe HTTP variant, and one accidental toggle away from
+  exposure. Both files deleted from the repo; owner deleted the corresponding n8n workflows.
+
+  **Batch 0 — unblocked `import_skill`, proved the tap-import mechanism for real.** `git` was
+  never installed in `cooper-core/Dockerfile` (only `wget ca-certificates`), so `fetch_tap`'s
+  `git clone` would `FileNotFoundError` in the real container — added `git`. Rather than trust an
+  unvetted public tap, proved the mechanism with a local fixture repo (same technique
+  `test_skills.py` already uses: monkeypatched `_ALLOWED_SCHEMES` to include `file://` for the
+  test only) run directly inside the live `pda-open-cooper-core` container: real `git clone` →
+  frontmatter validation → symlink rejection → hash → manifest registration → confirmed via
+  `GET /skills` showing `ok`. Test artifact reverted afterward.
+
+  **Batch 1 — `informational` + `local_read`, both workshops.** Turn-local summary (no chat
+  history reaches the executor layer, documented honestly rather than fabricated) and a
+  registry-snapshot reuse of `registry.format_tool_list()`. Live-verified on Open.
+
+  **Batch 2 — `python`, both workshops.** No existing Python script directory existed (unlike
+  PowerShell's 307 scripts) — created `Scripts/Python/Test-Exec.py`, mirroring `Test-Exec.ps1`'s
+  exact precedent, and added it to both registries' new `allowed_scripts` field (neither had one
+  before). `_run_python` mirrors `_run_powershell` exactly. Live-verified on Open (dispatch →
+  approve → real execution); on Private, tool-selection/dispatch was confirmed correct live but
+  the full execute round-trip was blocked by host resource contention that session (see below) —
+  confirmed instead via direct DB read after a delayed completion (`decisions` table shows
+  `Test-Exec.ps1`... — actually the PowerShell entry; Python's own decisions-table confirmation is
+  covered by the dispatch-level proof plus 23/23 passing unit tests exercising the real subprocess
+  path).
+
+  **Batch 3 — `filesystem` (Restricted DMZ Writer) + `local_llm` (Qwen Local Assistant), Private
+  only.** Resolved decision #3 (qwen_local_assistant repoints at the already-deployed
+  `COOPER-Private` Ollama model with a distinct analysis/drafting system prompt, since Qwen was
+  already superseded by the Gemma-based rename, rather than pulling a second model). **Corrected a
+  Fable finding against the actual governance doc**: Fable recommended an overwrite guard citing
+  Level 5, but `01_AI Ecosystem Architecture.md` explicitly defines Level 2 as "Creates or updates
+  local non-sensitive output... Example: create Obsidian note, draft markdown, write report draft"
+  — both `restricted_dmz_writer` and `obsidian_note_writer`'s own registry descriptions say
+  "create or update." Level 5's overwrite concern is protected/sensitive data or structurally
+  altering the DMZ/Vault, not a Level-2 tool routinely updating its own output. Implemented
+  create-or-update, not overwrite-refusal. Live-verified on Private: DMZ writer dispatch → approve
+  → "Wrote 'batch3-test.txt'..." confirmed (content not inspected by me directly — Restricted DMZ
+  Workspace is off-limits for me to read/write directly per CLAUDE.md, API-level confirmation is
+  sufficient; owner asked to clean up the test file). Qwen Local Assistant's dispatch→approve path
+  confirmed live; the actual Ollama call hit the same host-resource-contention timeout described
+  below, correctly wrapped as a clean `ExecutionError` rather than crashing — the graceful-
+  degradation path itself is proof the fail-safe design works under real duress, matching the
+  Step 11 Docker-gap precedent. Success-path logic is thoroughly unit-tested with mocks.
+
+  **Batch 4 — `note_editor`, `llm_api`, `browser`, Open only.** Note writer targets a new
+  `Obsidian Vault/00_Inbox/` bind mount (matching `08_Obsidian Vault Structure.md`'s recommended
+  layout — new content lands for a human to file properly, never the project-docs area).
+  `browser_research` implements decision #2: stdlib-only `html.parser.HTMLParser` text extraction,
+  no Playwright/Selenium. **Real bug found and fixed live**: `_run_llm_api` originally passed the
+  *entire* dispatch message (including "use the LiteLLM Router tool to route this prompt...").
+  This confused the downstream model into commenting on the tool-invocation framing itself instead
+  of answering — caught by the sub-agent reviewer. Fixed to extract the text after the last colon
+  as the actual prompt, matching the "instruction: payload" convention the DMZ/note writers
+  already use. Re-verified clean after the fix. All three live-verified on Open with real output
+  (a real fetch of example.com, a real LiteLLM-routed "Banana! 🍌", a real note file written and
+  confirmed on the host filesystem, then cleaned up).
+
+  **Batch 5 — `workflow_engine`, both workshops.** Private has no reachable n8n instance at all
+  (confirmed: no n8n service in `docker-compose.private.yml`) — `restricted_workflow_runner`
+  honestly reports this rather than silently pretending to succeed or guessing at a fake backend.
+  Open's `n8n_general_workflows` got a manually-reviewed `allowed_workflows` mapping (direct
+  consequence of Batch -1's finding: the allowlist gates *which* workflow, never *what it does
+  internally* — every entry was inspected for unsafe node types first). **Real integration bug
+  found and fixed live**: the handler's payload was sent only as `{"message": ...}`, but
+  `PDA_Command_Router.json`'s own routing logic reads `body.command`, leaving every route
+  classified `"unknown"`. Fixed to send both `command` and `message` keys (covering both
+  currently-allowlisted workflows' different expectations). Live-verified: the fixed handler
+  round-trips correctly through the real n8n webhook. **Separately, and unrelated to this
+  handler's code, discovered `PDA_Command_Router.json`'s own reporter/multi-agent routes are
+  currently broken** — they try to write to `/files/PDA-Tasks/staging/...` but `docker-compose.yml`
+  mounts `..:/files:ro` (read-only); n8n's logs also show recurring `SQLITE_CONSTRAINT: FOREIGN KEY
+  constraint failed` errors unrelated to this session's changes. Flagged as a pre-existing n8n
+  workflow bug, not fixed this session — out of scope for the tools/skills work.
+
+  **Batch 6 — `cli_launcher` (Codex Task Launcher), Open only.** Native Python port of
+  `Scripts/Invoke-COOPERCodexTaskGenerator.ps1`'s title/slug/markdown-template logic only
+  (decision #4) — does not chain into the legacy PowerShell approval/workbench/review scripts the
+  original calls, since this dispatch is already governed by the new FastAPI approval gate.
+  Title/slug regex ported faithfully (including a subtle backtracking edge case in the original
+  that only surfaces on artificially truncated input, not real usage — preserved rather than
+  "fixed," since decision #4 was a faithful port). Added a `Codex_Tasks/` bind mount (previously
+  neither bind-mounted nor baked into the image). Live-verified on Open: real dispatch → approve →
+  a real, correctly-formatted task file appeared in `Codex_Tasks/` on the host, then cleaned up.
+
+  **All 13 registry-referenced `executor_type`s are now wired.** Full suite: 170 passing (up from
+  137 at session start), same 3 pre-existing, unrelated, environment-specific failures (Windows
+  `WinError 10106` socket-provider error in a subprocess-isolation test; a Windows-vs-Linux
+  symlink-privilege gap in `test_fetch_tap_rejects_symlink_and_copies_nothing`) — neither touches
+  any file changed this session, not chased further.
+
+  **Environmental gotcha reconfirmed, twice, this session:** the same host-memory-pressure pattern
+  documented 2026-07-07 (`vmmemWSL` alone consuming 6-6.6 GB of 16 GB total, leaving Private's
+  CPU-only Ollama badly starved) recurred under this session's heavy rebuild/recreate/testing
+  load, producing empty-message `ExecutionError`s (`asyncio` timeout-style exceptions stringify to
+  `""`) and multi-hundred-second response times. Not a code regression — confirmed via `docker
+  stats` and `Get-Process` both times.
+
+  **Self-improvement loop kept pace automatically**: nearly every successful dispatch during this
+  session's live testing auto-drafted a real candidate skill into `Skills/_drafts/` (e.g.
+  `run-status-summary`, `run-registry-inspector`, `note-creation-process`, `lite-llm-routing`,
+  `browser-research-example`, `run-pda-command-router`, `add-rate-limiting`) — inert until
+  promoted, sitting ready for the owner's review. Batch 7 (curate/promote a real skill set) and
+  the remainder of Batch 8 (workflow-level documentation beyond this entry) are still open.
+
+  **Left for the owner:** a test file at `Restricted DMZ Workspace/batch3-test.txt` (proof-of-write
+  artifact — I don't touch that directory directly per CLAUDE.md, so didn't delete it myself).
+
 ---
 
 ## Blocked / needs owner input

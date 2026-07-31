@@ -88,6 +88,8 @@ tools:
     permission_level: 4
     approval_required: true
     executor_type: python
+    allowed_scripts:
+      - Test-Exec.py
     enabled: true
     inputs:
       - script_path

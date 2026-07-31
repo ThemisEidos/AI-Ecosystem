@@ -99,6 +99,12 @@ services:
         target: "/app/Obsidian Vault/brain"
         read_only: true
       - type: bind
+        source: "../Obsidian Vault/00_Inbox"
+        target: "/app/Obsidian Vault/00_Inbox"
+      - type: bind
+        source: "../Codex_Tasks"
+        target: "/app/Codex_Tasks"
+      - type: bind
         source: "../Skills"
         target: "/app/Skills"
       - type: bind

@@ -75,8 +75,16 @@ def peek(workshop: str, session_id: str = "local") -> Optional[ApprovalTicket]:
 
 
 # Full-match only: "yes, but first…" must NOT consume a ticket as approval.
-_APPROVE_RE = re.compile(r"^\s*(yes|y|approve[d]?|confirm(ed)?|go ahead|do it|proceed)\s*[.!]*\s*$", re.IGNORECASE)
-_DENY_RE    = re.compile(r"^\s*(no|n|deny|denied|cancel|stop|don'?t|abort)\s*[.!]*\s*$", re.IGNORECASE)
+# Chains of approve/deny tokens ("yes, go ahead", "no, cancel that") are allowed —
+# only a trailing "that" (deny) is tolerated as filler; any other extra content fails the match.
+_APPROVE_TOKEN = r"(?:yes|y|approve[d]?|confirm(?:ed)?|go ahead|do it|proceed)"
+_DENY_TOKEN = r"(?:no|n|deny|denied|cancel|stop|don'?t|abort)"
+_APPROVE_RE = re.compile(
+    rf"^\s*{_APPROVE_TOKEN}(?:\s*,?\s*(?:and\s+)?{_APPROVE_TOKEN})*\s*[.!]*\s*$", re.IGNORECASE
+)
+_DENY_RE = re.compile(
+    rf"^\s*{_DENY_TOKEN}(?:\s*,?\s*(?:and\s+)?{_DENY_TOKEN})*\s*(?:that)?\s*[.!]*\s*$", re.IGNORECASE
+)
 
 
 def is_response(message: str) -> bool:

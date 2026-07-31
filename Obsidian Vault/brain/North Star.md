@@ -13,11 +13,64 @@ private-ollama is required for usable inference (~90 s/turn warm vs >5 min on CP
 The `.venv-win` dev-mode path (`Start-CooperCore.ps1`) remains the faster daily driver
 (~30 s/turn via Windows-host Ollama).
 
-Next horizon (not yet scoped): Pop!_OS deployment test, merge `step-9-dockerize` → `main`.
-(Open Workshop containerization done 2026-07-07; Steps 10, 12, and 13 now done. Step 11
-**DONE 2026-07-21** — see below. All of Steps 10-13 are now merged into `step-9-dockerize`.
-Next: decide on Step 11's Docker deployment gap check — same class of bug Step 10 had —
-before treating the merge as fully closed, then scope whatever comes after Step 11.)
+**`step-9-dockerize` merged into `main` 2026-07-21** (clean fast-forward — `main` was a direct
+ancestor, no conflicts). Stale branches (`step-10-skills`, two `codex/nightly-task-002-*`,
+`audit-remediation`) cleaned up, local and remote.
+
+**"Arm COOPER with real tools + skills," 2026-07-21/22 — all 13 registry executor_types now wired,
+both workshops.** User redefined "done" against Hermes Agent as the benchmark. Full detail in
+PROGRESS.md; highlights: found and fixed a real pre-existing command-injection vulnerability in
+two now-deleted n8n workflow exports (Fable 5 plan review caught it, verified nothing was
+live-exploitable via the owner's own n8n UI); found and fixed two real integration bugs live
+(llm_api passing tool-framing text as the actual prompt; workflow_engine sending the wrong JSON
+key for n8n's own routing logic); corrected an over-broad Fable finding against the actual
+governance doc (Level 2 explicitly permits "create or update," not just create — Level 5's
+overwrite concern is protected data, not routine tool output). Skills/_drafts/ now holds several
+real candidate skills from the session's own dispatches, ready for the owner's review/promotion —
+curation (Batch 7) is the next open item.
+
+**Open Workshop capability-gap audit + closure, 2026-07-21** — see dated entry below. Found
+Open had never been live-verified for several of its documented capabilities (only ever proven
+against Private's Ollama backend); closed that gap, found and fixed a real regression along the
+way (approval phrase matching), and changed COOPER's baseline humor to 55.
+
+Next horizon (not yet scoped): Pop!_OS deployment test. Signal gateway (Step 12) still needs a
+real registered phone for live verification — not attempted, needs the owner's device.
+
+### 2026-07-21 · Open Workshop capability gap closed; approval-regex regression found + fixed
+
+The prior session's audit found Open Workshop (`pda-open-cooper-core`, port 8001, cloud backend)
+had never been live-verified for approval+execution, sub-agent review, memory/skill recall, or
+the self-improvement loop — all previously proven only against Private's local Ollama. User had
+real tasks queued for Open and wanted confirmation it actually works first. Full detail in
+`PROGRESS.md`'s decision log; highlights:
+
+- All of steps 4/5/6/7/8/11 replayed live against the running Open container and confirmed
+  working, including Step 6's previously-unproven "Open allows an approved cloud call" half
+  (proved via `lite_llm_router`, one of the two `_CLOUD_EXECUTORS` types Private blocks outright).
+- **Real regression found, not a known limitation:** `approval.py`'s approve/deny regexes were
+  full-match-only against a single token — `"yes, go ahead"` and `"no, cancel that"`, the *exact*
+  phrases this file's own history records as live-verified, silently stopped matching (collateral
+  damage from an earlier "yes, but first…" hedge-rejection fix). No error surfaced — the message
+  just got reclassified as a new turn. Fixed to allow chained approve/deny tokens; two regression
+  tests added. This is exactly the kind of gap a "presumed fine, never re-verified" capability can
+  hide — worth remembering when trusting old verification evidence at face value.
+- Promoted a real skill (`run-test-exec`) through the legitimate draft→promote workflow directly
+  on the live production container (both stacks were already running — no isolated test instance
+  this time, unlike Step 10/11's original port-8010 approach) — **kept it**, not reverted, since
+  it's genuinely useful, not test residue.
+- Private regression check: pytest 137/139 (2 pre-existing failures, environmental — Windows
+  socket-provider error in a subprocess-isolation test, and a likely Windows-vs-Linux symlink
+  semantics gap in the security test — neither touches files edited this session); live
+  dispatch→approve→execute round trip confirmed via direct DB read after Ollama (CPU-only, no GPU
+  engaged this session) took several minutes — slow, not broken.
+- Changed COOPER's baseline humor 35→55 (shared Modelfile, both workshops) per explicit request.
+- **Gotcha confirmed:** the Modelfile and `general_tool_registry.yaml` are baked into the
+  `cooper-core` image at build time, not bind-mounted (only `Obsidian Vault/brain`, `Skills/`, and
+  `skills_registry.yaml` are) — any edit needs an image rebuild + `--force-recreate`, not just a
+  container restart.
+- Not attempted (explicitly out of scope): fixing known limitations (executor stubs beyond
+  PowerShell, keyword-only tool/skill matching) and Step 12's live Signal-phone verification.
 
 ### 2026-07-21 · Step 11 complete — self-improvement loop (draft → approve → promote)
 

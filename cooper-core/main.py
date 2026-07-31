@@ -77,7 +77,7 @@ def _load_system_prompt() -> str:
     if not _MODELFILE.exists():
         return (
             "You are COOPER (Command Operations Orchestrator for Planning, Execution, "
-            "and Reporting). TARS-inspired. Direct, concise, dry humor at 35%, "
+            "and Reporting). TARS-inspired. Direct, concise, dry humor at 55%, "
             "professionalism at 90%. Lead with the answer. Surface risks early."
         )
     text = _MODELFILE.read_text(encoding="utf-8")

@@ -87,6 +87,7 @@ tools:
     approval_required: true
     executor_type: powershell
     allowed_scripts:
+      - Test-Exec.ps1
       - Test-PDAStack.ps1
     enabled: true
     inputs:
@@ -103,6 +104,8 @@ tools:
     permission_level: 4
     approval_required: true
     executor_type: python
+    allowed_scripts:
+      - Test-Exec.py
     enabled: true
     inputs:
       - script_path
@@ -118,13 +121,21 @@ tools:
     permission_level: 4
     approval_required: true
     executor_type: workflow_engine
+    allowed_workflows:
+      pda_command_router: pda-command-router
+      chat_bridge_http: pda-chat-bridge-http
     enabled: true
     inputs:
       - workflow_id
       - payload
     outputs:
       - workflow_result
-    notes: Open Workshop only. May integrate with external services when approved.
+    notes: >-
+      Open Workshop only. May integrate with external services when approved.
+      allowed_workflows is a manually-reviewed allowlist, not just an existence
+      check — each entry was inspected for unsafe node types (executeCommand
+      building shell strings from unescaped input, in particular) before being
+      added. Never add a workflow here without that review.
   - id: codex_task_launcher
     name: Codex Task Launcher
     drawer: Code

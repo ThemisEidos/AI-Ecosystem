@@ -6,7 +6,7 @@ FROM python:3.12-slim
 # avoids the libicu dependency (fine for local script execution).
 ARG PWSH_VERSION=7.4.6
 RUN apt-get update \
- && apt-get install -y --no-install-recommends wget ca-certificates \
+ && apt-get install -y --no-install-recommends wget ca-certificates git \
  && wget -q "https://github.com/PowerShell/PowerShell/releases/download/v${PWSH_VERSION}/powershell-${PWSH_VERSION}-linux-x64.tar.gz" -O /tmp/pwsh.tar.gz \
  && mkdir -p /opt/microsoft/powershell/7 \
  && tar zxf /tmp/pwsh.tar.gz -C /opt/microsoft/powershell/7 \
@@ -27,7 +27,8 @@ COPY cooper-core/ .
 # _REPO_ROOT resolves to /app — these paths must mirror the repo layout (spec §5, §8.2-8.3)
 COPY Models/cooper-personality/Modelfile /app/Models/cooper-personality/Modelfile
 COPY Config/general_tool_registry.yaml Config/private_tool_registry.yaml Config/skills_registry.yaml /app/Config/
-COPY Scripts/Test-Exec.ps1 /app/Scripts/Test-Exec.ps1
+COPY Scripts/Test-Exec.ps1 Scripts/Test-PDAStack.ps1 /app/Scripts/
+COPY Scripts/Python/ /app/Scripts/Python/
 COPY Skills/ /app/Skills/
 
 EXPOSE 8000

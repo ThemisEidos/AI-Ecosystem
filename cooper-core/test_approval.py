@@ -31,6 +31,15 @@ def test_qualified_yes_is_not_a_response():
     assert approval.is_response("yes, but first tell me what it does") is False
 
 
+def test_compound_approve_phrases_are_responses():
+    # Regression: these exact phrases are documented in PROGRESS.md as live-verified
+    # approve/deny replies; a prior full-match-only regex silently stopped matching them.
+    assert approval.is_response("yes, go ahead") is True
+    assert approval.is_response("no, cancel that") is True
+    assert approval.is_approved("yes, go ahead") is True
+    assert approval.is_denied("no, cancel that") is True
+
+
 def test_prefixed_deny_words_are_not_responses():
     assert approval.is_response("note that the server is down") is False
     assert approval.is_response("stop the webhook server and restart it") is False

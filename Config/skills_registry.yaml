@@ -1,11 +1,13 @@
-# COOPER skills governance manifest (Step 10).
-# A skill directory under Skills/ is INERT until listed here with a valid
-# content_hash. Recompute after any approved edit:
-#   cd cooper-core && python3 -c "import skills, pathlib; print(skills.compute_content_hash(pathlib.Path('../Skills/<category>/<name>')))"
 skills:
-  - id: hello-cooper
-    path: Skills/examples/hello-cooper
-    workshop: open
-    permission_level: 1
-    approval_required: false
-    content_hash: "03135fb0ddeef37a0fc68be9fcc5abf463456264309527e42e6891cad8926625"
+- id: hello-cooper
+  path: Skills/examples/hello-cooper
+  workshop: open
+  permission_level: 1
+  approval_required: false
+  content_hash: 03135fb0ddeef37a0fc68be9fcc5abf463456264309527e42e6891cad8926625
+- id: run-test-exec
+  path: Skills/learned/run-test-exec
+  workshop: open
+  permission_level: 1
+  approval_required: false
+  content_hash: dc01c74edec3f218ef1984802b1c68fb2797a95a7233e43a90b3e5a59cf55014

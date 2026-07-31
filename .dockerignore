@@ -3,6 +3,8 @@
 !Models/cooper-personality/Modelfile
 !Config
 !Scripts/Test-Exec.ps1
+!Scripts/Test-PDAStack.ps1
+!Scripts/Python
 !Skills
 cooper-core/.venv
 cooper-core/.venv-win
