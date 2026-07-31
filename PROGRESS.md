@@ -552,6 +552,27 @@ Plans: `Docs/superpowers/plans/2026-07-08-step-1{0,1,2,3}-*.md` (commit 50de439)
   `setup-linux.sh` (needs owner sudo), stand up the stacks, re-verify the suite on Linux,
   full CLAUDE.md Windows→Linux rewrite.
 
+- **2026-07-31 · Pop!_OS deployment verified: both stacks live, 173/173 tests green on Linux.**
+  Closes the "not yet done" list from the 07-30 migration entry (all but the CLAUDE.md rewrite).
+  Owner ran `setup-linux.sh` — validated: Docker 29.1.3 + Compose 2.40.3 with the `nvidia`
+  runtime, RTX 1000 Ada visible, Ollama 0.32.5 with `gemma4:12b`→`COOPER-Private`, pwsh 7.6.4,
+  Python 3.12.3, sqlite3. Both stacks brought up via `install-cooper.sh` and live-verified:
+  Private (8000) — health ok, 401 without key, `/tools` lists 8, GPU visible inside
+  `pda-private-ollama`, real chat round trip in character (~78 s cold incl. model load);
+  Open (8001) — health ok, 401 without key, real chat traversed cooper-core → LiteLLM → cloud.
+  One fix en route: `docker-compose.yml` declares the `open-webui` volume `external: true`, and
+  that volume didn't migrate — `docker volume create open-webui` before first `up` on a fresh
+  machine (candidate for install-cooper.sh or the migration checklist). Test suite re-verified
+  in a fresh Linux venv (`cooper-core/.venv`): **173 passed, 0 failed, 1.55 s** — all 3
+  chronic Windows-environment failures (2× `WinError 10106` subprocess-isolation, 1× symlink
+  semantics in `test_fetch_tap_rejects_symlink_and_copies_nothing`) pass on Linux, confirming
+  they were environmental; the symlink *security* test now genuinely exercises on the deployed
+  OS. GitHub auth for this machine set up (fresh ed25519 key, host keys fingerprint-verified);
+  the migrated dirty tree committed as `6e8a8f5` (tools session) + `5ca0749` (deploy packaging)
+  and pushed. Still open: CLAUDE.md Windows→Linux rewrite; Open WebUI fresh-volume setup on
+  3000/3001 (admin account + manual connection with the key in `PDA-Runtime/.env` — owner task);
+  Batch 7 skill curation; Step 12 live Signal-phone test.
+
 ---
 
 ## Blocked / needs owner input
