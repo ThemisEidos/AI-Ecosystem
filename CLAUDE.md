@@ -39,6 +39,11 @@ COOPER (Command Operations Orchestrator for Planning, Execution, and Reporting) 
 
 ## Start / stop / status commands
 
+**Fresh machine install (Linux):** `sudo bash setup-linux.sh` (system apps: Docker+Compose,
+NVIDIA toolkit if GPU present, host Ollama/pwsh/python; `--minimal` for Docker-only hosts),
+then `bash install-cooper.sh [--private]`. Full guide incl. the application list and which
+secret/state files carry COOPER's identity: `Documentation/PDA-Portable-Deployment.md`.
+
 All paths verified to exist. Commands assume PowerShell and Docker Desktop available.
 
 ### Profile functions (requires one-time setup)

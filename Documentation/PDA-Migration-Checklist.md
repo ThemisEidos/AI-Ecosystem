@@ -1,72 +1,47 @@
-# PDA Migration Checklist
+# COOPER Migration Checklist
 
-Use this checklist when moving the PDA ecosystem to another workstation.
+> Rewritten 2026-07-30 for the v2 FastAPI runtime and Linux targets. Use alongside
+> `Documentation/PDA-Portable-Deployment.md` (application list + full procedure).
 
-## Pre-Migration
+Use this when standing COOPER up on another machine (laptop or home server).
 
-- [ ] Confirm the source repo is clean enough to copy.
-- [ ] Confirm there are no real secrets in the repo.
-- [ ] Export or back up local-only runtime files separately.
-- [ ] Capture any machine-specific Obsidian vault paths.
-- [ ] Note the active Docker Desktop / Docker Engine version.
+## On the source machine
 
-## Files to Move
+- [ ] Commit and push all real work (`git status` clean — don't migrate a dirty tree)
+- [ ] Confirm no secrets are committed (`.env`, `*.env.local`, `n8n-api-key.txt` all gitignored)
+- [ ] Copy off-git secrets somewhere safe for transfer:
+  - [ ] `litellm/.env.local` (cloud provider keys — Open stack)
+  - [ ] `PDA-Runtime/.env` (only if keeping the same client key; otherwise skip — the installer regenerates)
+  - [ ] `n8n-api-key.txt` (only if using n8n workflows)
+- [ ] If carrying COOPER's memory: export `cooper_memory.db`
+  - Docker: `docker cp pda-private-cooper-core:/app/data/cooper_memory.db ./`
+  - Bare-metal: copy `cooper-core/cooper_memory.db`
 
-- [ ] Repository files
-- [ ] `PDA-Runtime/.env.example`
-- [ ] `litellm/.env.local.example`
-- [ ] Any local secret file stored outside git
-- [ ] Any runtime-specific notes or backup manifests
+## On the target machine
 
-## Files Not to Commit
+- [ ] Clone the repo
+- [ ] `sudo bash setup-linux.sh` (dev machine) or `sudo bash setup-linux.sh --minimal` (Docker-only server)
+- [ ] Log out/in (or `newgrp docker`) so the docker group applies
+- [ ] Verify: `git --version`, `docker --version`, `docker compose version`
+- [ ] Dev machines also: `ollama --version`, `pwsh --version`, `python3 --version`
+- [ ] No NVIDIA GPU? Comment out the `deploy:` block on `private-ollama` in
+      `PDA-Runtime/docker-compose.private.yml` (see guide, GPU-less section)
+- [ ] Place transferred secrets: `litellm/.env.local` (and `PDA-Runtime/.env` if kept)
+- [ ] `bash install-cooper.sh --private` and/or `bash install-cooper.sh` (open)
+- [ ] Record the generated client key if the installer seeded a fresh `.env`
+- [ ] If carrying memory: stop cooper-core, `docker cp` the DB into `/app/data/`, restart
 
-- [ ] `litellm/.env.local`
-- [ ] Any API key file
-- [ ] Any token or credential file
-- [ ] `PDA-Tasks/`
-- [ ] `PDA-Backups/`
-- [ ] Generated reports and logs
+## First-run wiring (per Open WebUI instance)
 
-## Target Machine Setup
+- [ ] `http://localhost:3000` (open) / `:3001` (private) → create the admin account
+- [ ] Settings → Connections → add `http://cooper-core:8000/v1` with the client key
+- [ ] Model dropdown shows COOPER-Open / COOPER-Private
 
-- [ ] Install PowerShell 7
-- [ ] Install Git
-- [ ] Install Docker Desktop or Docker Engine
-- [ ] Install Python 3
-- [ ] Install Ollama
-- [ ] Install Fabric CLI
-- [ ] Install Obsidian
-- [ ] Place the repo in the desired local workspace
-- [ ] Verify `docker --version`
-- [ ] Verify `pwsh --version`
-- [ ] Verify `git --version`
-- [ ] Verify `python --version`
-- [ ] Verify `fabric --version` or the fallback executable path
-- [ ] Verify Obsidian launches from the installed path
+## Validation
 
-## Runtime Configuration
-
-- [ ] Copy `PDA-Runtime/.env.example` to your local secret store if needed
-- [ ] Fill `litellm/.env.local` with local-only provider secrets
-- [ ] Confirm `PDA-Runtime/docker-compose.yml` points LiteLLM at `../litellm/.env.local`
-- [ ] Confirm Docker can reach host services as documented
-- [ ] Confirm `PDA-Backups/` and `Roadmap/` working folders exist
-
-## Post-Migration Validation
-
-- [ ] Run `pwsh -File Scripts\Test-PDADeployment.ps1 -AsJson -NoThrow`
-- [ ] Run `pwsh -File Scripts\Install-PDAEcosystem.ps1 -DryRun -AsJson -NoThrow`
-- [ ] Run `pwsh -File Scripts\Test-PDAStack.ps1 -Deep -NoThrow`
-- [ ] Run `pwsh -File Scripts\Test-PDAFabricHealthCheck.ps1 -AsJson -NoThrow`
-- [ ] Run `pwsh -File Scripts\Test-PDANotebookLMCommand.ps1 -AsJson -NoThrow`
-- [ ] Run `pwsh -File Scripts\Test-PDACapabilityRouter.ps1 -AsJson -NoThrow`
-
-## Final Checks
-
-- [ ] Open WebUI starts
-- [ ] LiteLLM is reachable on `http://localhost:4000/v1`
-- [ ] n8n is reachable on `http://localhost:5678`
-- [ ] Ollama is reachable on `http://localhost:11434`
-- [ ] Fabric CLI returns a version number
-- [ ] NotebookLM package generation works from Category 1 notes only
-- [ ] No secret-bearing files were committed
+- [ ] `curl http://localhost:8000/health` (private) / `:8001` (open) → `{"status":"ok",...}`
+- [ ] Authenticated `/chat` round trip answers in character
+- [ ] A dispatch (`run Test-Exec.ps1`) halts for approval, then executes after "yes, go ahead"
+- [ ] `GET /skills` lists the promoted skills (open workshop)
+- [ ] Dev machines: pytest suite green (`cooper-core/.venv`)
+- [ ] No secret-bearing files staged in git (`git status`)

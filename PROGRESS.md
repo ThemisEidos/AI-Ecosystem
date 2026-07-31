@@ -532,6 +532,26 @@ Plans: `Docs/superpowers/plans/2026-07-08-step-1{0,1,2,3}-*.md` (commit 50de439)
   **Left for the owner:** a test file at `Restricted DMZ Workspace/batch3-test.txt` (proof-of-write
   artifact — I don't touch that directory directly per CLAUDE.md, so didn't delete it myself).
 
+- **2026-07-30 · Migrated to Pop!_OS laptop + portable-deployment packaging.** Repo moved from
+  the Windows 11/WSL2 machine to `/home/zb6/Documents/Projects/01_AI_Ecosystem` on a Pop!_OS
+  laptop (i9-14900HX, 125 GB RAM, RTX 1000 Ada 6 GB) — the "Pop!_OS deployment test" horizon
+  from North Star. Inventory: repo/branches/`cooper_memory.db`/`litellm/.env.local`/
+  `n8n-api-key.txt` all migrated; `PDA-Runtime/.env` and Open WebUI volumes did not (installer
+  reseeds / 2-minute rewire); the 2026-07-21/22 tools session arrived as an uncommitted working
+  tree (real work — commit it). Machine was bare (no Docker/Ollama/pip/pwsh). Packaged the
+  install path for any future machine (other laptops, home server): **`setup-linux.sh`** (new,
+  repo root) provisions system applications on any Debian/Ubuntu-family host — git, curl,
+  Docker Engine + Compose v2 + buildx, nvidia-container-toolkit (auto-skipped without a GPU),
+  python3-venv/pip, sqlite3, host Ollama + `gemma4:12b`→`COOPER-Private`, pwsh tarball;
+  `--minimal` flag for Docker-only hosts. `Documentation/PDA-Portable-Deployment.md` and
+  `PDA-Migration-Checklist.md` rewritten for the v2 runtime (were PowerShell/Fabric-era):
+  full application list, 3-layer install (provision → `install-cooper.sh` → identity/state),
+  GPU-less private-stack override (`private-ollama`'s `deploy:` block), and the table of
+  files/volumes that carry COOPER's identity. README + CLAUDE.md now point at the guide.
+  Deleted the dead Windows `cooper-core/venv`. Not yet done on this machine: run
+  `setup-linux.sh` (needs owner sudo), stand up the stacks, re-verify the suite on Linux,
+  full CLAUDE.md Windows→Linux rewrite.
+
 ---
 
 ## Blocked / needs owner input
