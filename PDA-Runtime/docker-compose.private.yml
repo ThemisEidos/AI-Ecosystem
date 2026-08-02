@@ -34,7 +34,7 @@ services:
       ai.ecosystem.stack: private
     environment:
       - OLLAMA_HOST=http://private-ollama:11434
-    entrypoint: ["sh", "-c", "ollama pull gemma4:12b && ollama cp gemma4:12b COOPER-Private"]
+    entrypoint: ["sh", "-c", "ollama pull gemma4:12b && ollama cp gemma4:12b COOPER-Private && ollama pull nomic-embed-text"]
     networks:
       - pda-private-net
     depends_on:

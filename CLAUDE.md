@@ -126,7 +126,9 @@ WORKSHOP=private OLLAMA_HOST=http://localhost:11434 COOPER_ALLOW_ANON=1 \
 
 Key env vars (see `main.py` top): `WORKSHOP` (`open`/`private`), `OLLAMA_HOST`,
 `COOPER_MODEL` (default `COOPER-Private`), `OPENAI_BASE_URL`/`OPENAI_API_KEY` (Open
-workshop → LiteLLM), `COOPER_API_KEYS`/`COOPER_ALLOW_ANON=1`, `GATEWAY_ENABLED=1`.
+workshop → LiteLLM), `COOPER_API_KEYS`/`COOPER_ALLOW_ANON=1`, `GATEWAY_ENABLED=1`,
+`COOPER_EMBED_MODEL` (semantic skill matching — default `nomic-embed-text` on Ollama,
+`text-embedding-3-small` via LiteLLM; keyword fallback if unavailable).
 With `--reload`, edits take effect without a restart.
 
 **After editing cooper-core for the Docker stacks**, rebuild + recreate:
@@ -142,6 +144,7 @@ Done by `setup-linux.sh`; manually it is:
 ```bash
 ollama pull gemma4:12b
 ollama cp gemma4:12b COOPER-Private
+ollama pull nomic-embed-text     # semantic skill matching
 # OPTIONAL — legacy. `ollama create COOPER -f Models/cooper-personality/Modelfile` only
 # if you want `ollama run COOPER` for manual testing; the runtime doesn't use it.
 ```

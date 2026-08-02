@@ -35,6 +35,7 @@ import executor
 import review
 import workshop
 import archivist
+import embeddings
 import proposer
 import skills
 import gateway
@@ -67,6 +68,14 @@ else:  # open
     BACKEND_URL      = OPENAI_BASE_URL
     BACKEND_KEY      = OPENAI_API_KEY
 
+# Semantic skill selection: embeddings via the workshop's own backend, keyword
+# fallback inside select_skill_semantic on any failure — so a missing embedding
+# model degrades to Step 10 behavior, never to an error.
+EMBED_MODEL = os.environ.get(
+    "COOPER_EMBED_MODEL",
+    "nomic-embed-text" if BACKEND == "ollama" else "text-embedding-3-small",
+)
+
 # Branded id reported to OpenAI-compatible clients (Open WebUI's model dropdown, etc.)
 # — decoupled from COOPER_MODEL so Open Workshop's real backend model (the "openai" LiteLLM
 # alias, itself resolving to gpt-4o-mini) never has to leak into the UI.
@@ -93,6 +102,16 @@ SYSTEM_PROMPT = _load_system_prompt()
 
 # ── Archivist (Step 8) ───────────────────────────────────────────────────────────
 _ARCHIVIST_CONN = archivist.get_conn()
+
+_EMBED_FN = embeddings.make_fetcher(BACKEND, BACKEND_URL, BACKEND_KEY, EMBED_MODEL)
+
+
+async def _select_skill(message: str):
+    """One semantic-selection call shared by the blocking and streaming paths."""
+    return await skills.select_skill_semantic(
+        WORKSHOP, message, conn=_ARCHIVIST_CONN, model=EMBED_MODEL,
+        embed_fn=_EMBED_FN, lock=archivist._DB_LOCK,
+    )
 
 # ── Auth ───────────────────────────────────────────────────────────────────────
 _bearer     = HTTPBearer(auto_error=False)
@@ -562,7 +581,7 @@ async def _stream_sse(message: str, history: List[dict], session_id: str = "loca
                 print(f"  [!!] archivist.recall failed (non-fatal): {exc}")
             skill_ctx = ""
             try:
-                matched = skills.select_skill(WORKSHOP, message)
+                matched = await _select_skill(message)
                 if matched is not None:
                     skill_ctx = skills.format_skill_context(matched)
                     await asyncio.to_thread(skills.record_activation, _ARCHIVIST_CONN, matched.id)
@@ -623,7 +642,7 @@ async def _generate(message: str, history: List[dict]) -> str:
         recall_context = ""
     skill_ctx = ""
     try:
-        matched = skills.select_skill(WORKSHOP, message)
+        matched = await _select_skill(message)
         if matched is not None:
             skill_ctx = skills.format_skill_context(matched)
             await asyncio.to_thread(skills.record_activation, _ARCHIVIST_CONN, matched.id)

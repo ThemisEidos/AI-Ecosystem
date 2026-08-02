@@ -188,7 +188,12 @@ def test_generate_context_order_matches_streaming(monkeypatch):
     class _Skill:
         id = "s1"
 
-    monkeypatch.setattr(main.skills, "select_skill", lambda w, m: _Skill())
+    async def _fake_semantic(w, m, **kw):
+        return _Skill()
+
+    monkeypatch.setattr(main.skills, "select_skill_semantic", _fake_semantic)
+    # the legacy keyword path must NOT be what injects context here
+    monkeypatch.setattr(main.skills, "select_skill", lambda *a, **k: None)
     monkeypatch.setattr(main.skills, "format_skill_context", lambda s: "SKILL-CTX")
     monkeypatch.setattr(main.skills, "record_activation", lambda conn, sid: None)
 

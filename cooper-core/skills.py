@@ -219,6 +219,58 @@ def select_skill(
     return best
 
 
+# Similarity scales are model-specific — calibrated live 2026-08-02:
+# nomic-embed-text true matches 0.52-0.59 vs unrelated ≤0.43;
+# text-embedding-3-small true matches 0.34-0.40 vs unrelated ≤0.17.
+_SEMANTIC_SIM_BY_MODEL = {
+    "nomic-embed-text": 0.48,
+    "text-embedding-3-small": 0.25,
+}
+_SEMANTIC_SIM_DEFAULT = 0.48
+
+
+def _min_semantic_sim(model: str) -> float:
+    return _SEMANTIC_SIM_BY_MODEL.get(model, _SEMANTIC_SIM_DEFAULT)
+
+
+async def select_skill_semantic(
+    workshop: str,
+    message: str,
+    *,
+    conn,
+    model: str,
+    embed_fn,
+    lock=None,
+    manifest_path: Optional[Path] = None,
+    repo_root: Optional[Path] = None,
+) -> Optional[Skill]:
+    """Embedding-similarity match against name+description, falling back to
+    keyword overlap when the backend fails or nothing clears the threshold.
+    embed_fn: async (texts) -> vectors (see embeddings.make_fetcher)."""
+    import embeddings as _emb
+
+    loadable = list_skills(workshop, manifest_path=manifest_path, repo_root=repo_root)
+    if not loadable:
+        return None
+    try:
+        texts = [f"{s.name} — {s.description}" for s in loadable]
+        # catalog texts are stable → cached; the query is one-off → never cached
+        skill_vecs = await _emb.embed_cached(conn, model, texts, fetch=embed_fn, lock=lock)
+        query_vec = (await embed_fn([message]))[0]
+        best, best_sim = None, _min_semantic_sim(model)
+        for s, v in zip(loadable, skill_vecs):
+            sim = _emb.cosine(query_vec, v)
+            if sim > best_sim:
+                best, best_sim = s, sim
+        if best is not None:
+            return best
+    except Exception as exc:
+        print(f"  [!!] semantic skill selection failed (non-fatal): {exc}")
+    return select_skill(
+        workshop, message, manifest_path=manifest_path, repo_root=repo_root
+    )
+
+
 def format_skill_context(skill: Skill) -> str:
     """System-prompt block for an activated knowledge skill (approved content)."""
     return (

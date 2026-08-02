@@ -511,3 +511,97 @@ def test_fetch_tap_sweeps_stale_staging_dirs(tmp_path, monkeypatch):
     skills.fetch_tap(url, "tap-skill", repo_root=tmp_path)
     assert not stale.exists()
     assert fresh.exists()
+
+
+# ── Semantic skill selection (embeddings + keyword fallback) ─────────────────
+
+def _two_skill_setup(tmp_path):
+    a = make_skill_dir(tmp_path, name="stack-doctor", body=(
+        "---\nname: stack-doctor\ndescription: Diagnose container stack problems.\n---\n\nBody A.\n"))
+    b = make_skill_dir(tmp_path, name="note-writer", body=(
+        "---\nname: note-writer\ndescription: Write vault notes.\n---\n\nBody B.\n"))
+    manifest = write_manifest(tmp_path, [approved_entry(tmp_path, a), approved_entry(tmp_path, b)])
+    return manifest
+
+
+def test_select_skill_semantic_picks_highest_cosine(tmp_path):
+    """Message shares no keywords with either skill — embeddings must decide."""
+    import asyncio
+    import sqlite3
+    manifest = _two_skill_setup(tmp_path)
+    conn = sqlite3.connect(":memory:", check_same_thread=False)
+
+    async def embed_fn(texts):
+        def vec(t):
+            if "stack-doctor" in t:
+                return [1.0, 0.0]
+            if "note-writer" in t:
+                return [0.0, 1.0]
+            return [0.9, 0.1]  # the query — near stack-doctor
+        return [vec(t) for t in texts]
+
+    picked = asyncio.run(skills.select_skill_semantic(
+        "open", "why is everything down?", conn=conn, model="m",
+        embed_fn=embed_fn, manifest_path=manifest, repo_root=tmp_path))
+    assert picked is not None and picked.name == "stack-doctor"
+
+
+def test_select_skill_semantic_below_threshold_falls_back_to_keywords(tmp_path, monkeypatch):
+    import asyncio
+    import sqlite3
+    manifest = _two_skill_setup(tmp_path)
+    conn = sqlite3.connect(":memory:", check_same_thread=False)
+    monkeypatch.setattr(skills, "_SEMANTIC_SIM_DEFAULT", 0.99)
+
+    async def embed_fn(texts):
+        return [[1.0, 0.0] if "stack-doctor" in t else [0.5, 0.5] for t in texts]
+
+    picked = asyncio.run(skills.select_skill_semantic(
+        "open", "write vault notes please", conn=conn, model="m",
+        embed_fn=embed_fn, manifest_path=manifest, repo_root=tmp_path))
+    # similarity below threshold → keyword overlap picks note-writer
+    assert picked is not None and picked.name == "note-writer"
+
+
+def test_select_skill_semantic_embed_failure_falls_back_to_keywords(tmp_path):
+    import asyncio
+    import sqlite3
+    manifest = _two_skill_setup(tmp_path)
+    conn = sqlite3.connect(":memory:", check_same_thread=False)
+
+    async def embed_fn(texts):
+        raise RuntimeError("backend down")
+
+    picked = asyncio.run(skills.select_skill_semantic(
+        "open", "write vault notes please", conn=conn, model="m",
+        embed_fn=embed_fn, manifest_path=manifest, repo_root=tmp_path))
+    assert picked is not None and picked.name == "note-writer"
+
+
+def test_select_skill_semantic_threshold_is_per_model(tmp_path, monkeypatch):
+    """Similarity scales differ per embedding model (nomic ~0.5 vs openai ~0.3
+    for true matches) — the acceptance threshold must be model-aware."""
+    import asyncio
+    import sqlite3
+    manifest = _two_skill_setup(tmp_path)
+    monkeypatch.setitem(skills._SEMANTIC_SIM_BY_MODEL, "loose-model", 0.20)
+    monkeypatch.setattr(skills, "_SEMANTIC_SIM_DEFAULT", 0.48)
+
+    async def embed_fn(texts):
+        # 0.30 cosine between query and stack-doctor; 0.0 for note-writer
+        def vec(t):
+            if "stack-doctor" in t:
+                return [1.0, 0.0, 0.0]
+            if "note-writer" in t:
+                return [0.0, 1.0, 0.0]
+            return [0.3, 0.0, 0.9539392]
+        return [vec(t) for t in texts]
+
+    async def run(model):
+        conn = sqlite3.connect(":memory:", check_same_thread=False)
+        return await skills.select_skill_semantic(
+            "open", "unrelated words entirely", conn=conn, model=model,
+            embed_fn=embed_fn, manifest_path=manifest, repo_root=tmp_path)
+
+    assert asyncio.run(run("loose-model")).name == "stack-doctor"   # 0.30 > 0.20
+    assert asyncio.run(run("strict-model")) is None                 # 0.30 < 0.48 default, no keywords either
