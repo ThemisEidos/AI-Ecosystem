@@ -34,8 +34,38 @@ Open had never been live-verified for several of its documented capabilities (on
 against Private's Ollama backend); closed that gap, found and fixed a real regression along the
 way (approval phrase matching), and changed COOPER's baseline humor to 55.
 
-Next horizon (not yet scoped): Pop!_OS deployment test. Signal gateway (Step 12) still needs a
-real registered phone for live verification — not attempted, needs the owner's device.
+Next horizon: Batch 8 skill curation when drafts accumulate (now gated for quality);
+decide grandfather-vs-archive for the 12 non-compliant v1 evidence records in
+`State/Workflow_Evidence/`; investigate the dead DNS listener on 127.0.0.1:53 (owner).
+Signal gateway (Step 12) deferred to "far later" by owner direction 2026-08-02 —
+needs a real registered phone. Open WebUI fresh-volume wizard on :3000/:3001 still owner-pending.
+
+### 2026-08-02 · Working-product session: Batch 7, launchers, Step 10 follow-ups, 4 hardening features
+
+Owner direction: Signal is far-later; focus is a working product on this machine. Everything
+below is committed, deployed to both stacks, and live-verified (suite 173→206, all green;
+full detail in PROGRESS.md's three dated 2026-08-02 entries):
+- **Batch 7 curation done** — promoted `run-registry-inspector` + `run-status-summary` via
+  the live governed workflow; rejected 5 test-residue drafts.
+- **Desktop launcher buttons** — `launch-cooper.sh --install-desktop` gives dock-pinnable
+  "COOPER Private"/"COOPER Open" entries (up → health-wait → browser); the open-webui
+  external-volume gotcha is now fixed inside install-cooper.sh.
+- **Step 10 deferred follow-ups closed** — whole-clone 50MB cap in fetch_tap, staged-import
+  cleanup on deny + 1h orphan sweep (+`Skills/_incoming/` gitignored), blocking/streaming
+  prompt-order aligned (recall before skill).
+- **Semantic skill matching** — embeddings per workshop backend (nomic-embed-text local /
+  text-embedding-3-small via LiteLLM), per-model calibrated thresholds, sqlite cache,
+  keyword fallback. Live-proven with a zero-keyword-overlap activation.
+- **Post-dispatch is background** — memory write + skill draft no longer block the reply
+  (3.3s live dispatch); draft offers arrive as next-turn notices (notice path unit-tested,
+  not yet observed live — needs a novel non-test dispatch).
+- **Draft gate** — test-style dispatches never reach the drafting LLM; drafts must
+  self-declare `reusable`.
+- **Evidence validator** — `evidence.py` + all 15 fixtures running; found all 12 real
+  `State/Workflow_Evidence/` records non-compliant (v1-era, pre-linkage) — left as history.
+- **Machine gotcha fixed** — git clone hung machine-wide (hostname missing from /etc/hosts
+  + dead 127.0.0.1:53 resolver upstream); owner added `127.0.1.1 pop-os`, suite made
+  hermetic via `cooper-core/conftest.py` git-ident pins. See Gotchas.md 2026-08-02.
 
 ### 2026-07-21 · Open Workshop capability gap closed; approval-regex regression found + fixed
 
