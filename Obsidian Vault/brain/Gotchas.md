@@ -187,3 +187,14 @@ only existed at the intersection of "script generates a key" + "compose still de
 old one" + "a second service hardcodes that same old default independently." Worth checking for
 this pattern (a new credential mechanism added alongside an old one that was never actually
 retired) whenever a bootstrap/install script's whole point is to replace a shared default.
+
+### 2026-08-02 · git clone hangs machine-wide when hostname lookup stalls
+
+Every `git clone` on the laptop (local file paths AND network) hung indefinitely mid-session — including the full pytest suite (tap-import tests clone) and even Claude's plugin updater. Root cause chain: `git clone` without explicit committer ident DNS-canonicalizes the machine hostname; `pop-os` is NOT in `/etc/hosts` (Pop!_OS normally seeds `127.0.1.1 pop-os`); nsswitch routes the query to systemd-resolved (`resolve [!UNAVAIL=return]` sits BEFORE `myhostname`, which would answer instantly); resolved's Global upstream is `127.0.0.1:53`, which listens but never answers, and the DHCP search domain gets appended — result: infinite stall, not fast NXDOMAIN. Started mid-session (~08:30) after a network/DHCP change; `git commit`/`status` unaffected (repo has user config), Docker containers unaffected (Docker writes the container hostname into the container's /etc/hosts).
+
+**Repo-side fix (done):** `cooper-core/conftest.py` pins `GIT_AUTHOR_*`/`GIT_COMMITTER_*` env for the suite — clone-based tests are now hermetic against machine name resolution.
+
+**Machine-side fix (needs owner sudo):** add the hostname to /etc/hosts:
+`echo "127.0.1.1 pop-os" | sudo tee -a /etc/hosts` — and separately investigate what listens on 127.0.0.1:53 and why resolved's Global DNS points at it.
+
+Diagnostic trail: `getent hosts pop-os` hangs while `getent hosts github.com` works; `GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t git clone …` succeeds instantly.

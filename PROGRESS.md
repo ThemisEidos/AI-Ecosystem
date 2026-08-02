@@ -618,6 +618,24 @@ Plans: `Docs/superpowers/plans/2026-07-08-step-1{0,1,2,3}-*.md` (commit 50de439)
   closes the 07-31 gotcha, a fresh machine's first button click now works. Docs updated:
   CLAUDE.md start/stop section + `PDA-Portable-Deployment.md` launcher subsection.
 
+- **2026-08-02 · Step 10 deferred follow-ups closed (TDD) + machine DNS gotcha found.** All
+  three items from the 07-20 "known, disclosed, deferred" list, red-green with 5 new tests
+  (`test_skills.py` ×3, `test_main_skills.py` ×2): (1) `fetch_tap` now bounds the WHOLE
+  clone at 50MB (was: only the final `skills/<name>` subdir at 10MB — a huge file elsewhere
+  in the tap repo sailed through); (2) staged-import cleanup — denying an `import_skill`
+  approval discards `Skills/_incoming/<name>` (`skills.discard_staged`, non-fatal hook in
+  `_resolve_approval`), `fetch_tap` sweeps `_incoming/` orphans older than 1h (expired
+  tickets), and `Skills/_incoming/` is gitignored; (3) the blocking chat path
+  (`_generate`) now injects recall-then-skill context, matching the streaming path (was
+  inverted). Suite 178/178; both stack images rebuilt + recreated, health ok, new code
+  confirmed inside both containers via `docker exec grep`. En route, the suite hung and
+  systematic debugging traced it to a MACHINE bug, not the code: every `git clone` on the
+  laptop hangs because the hostname isn't in `/etc/hosts` and the resolver path stalls
+  (full chain + fixes in Gotchas.md 2026-08-02). Repo-side hardening landed as
+  `cooper-core/conftest.py` (hermetic git ident for the suite); machine-side `/etc/hosts`
+  fix needs owner sudo. Also this session: desktop launcher buttons (entry above) and
+  Batch 7 curation (entry above).
+
 ---
 
 ## Blocked / needs owner input
