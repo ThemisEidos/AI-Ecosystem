@@ -604,6 +604,20 @@ Plans: `Docs/superpowers/plans/2026-07-08-step-1{0,1,2,3}-*.md` (commit 50de439)
   173/173 after. Owner direction this session: Signal (Step 12) deferred to "far later";
   focus is a working product on this machine.
 
+- **2026-08-02 · Desktop launcher buttons + open-webui volume fix.** New `launch-cooper.sh`
+  (repo root): `--install-desktop` writes "COOPER Private" / "COOPER Open" `.desktop`
+  entries into `~/.local/share/applications` (icons in `PDA-Runtime/launchers/`,
+  absolute-path Exec — re-run after a repo move); `launch-cooper.sh <stack>` wraps
+  `install-cooper.sh`, additionally polls the Open WebUI port, then `xdg-open`s :3001/:3000,
+  with notify-send progress and failures logged to `tmp/launch-<stack>.log`. Verified live:
+  `desktop-file-validate` clean on both entries, both stacks launched via the script
+  (exit 0, browser opened), and a real click simulated with `gtk-launch cooper-private`
+  (same code path as the dock) — full round trip through install-cooper.sh confirmed in the
+  log. Also folded the fresh-machine `docker volume create open-webui` fix into
+  `install-cooper.sh` (the volume is `external: true` in compose; create is idempotent) —
+  closes the 07-31 gotcha, a fresh machine's first button click now works. Docs updated:
+  CLAUDE.md start/stop section + `PDA-Portable-Deployment.md` launcher subsection.
+
 ---
 
 ## Blocked / needs owner input

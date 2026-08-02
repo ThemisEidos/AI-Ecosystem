@@ -87,6 +87,19 @@ bash install-cooper.sh                # Open stack    → cooper-core :8001, Ope
 cooper-core before declaring success. **Record the generated client key it prints** — that is
 the Bearer token / Open WebUI connection key for this machine.
 
+### Desktop launcher buttons (optional, per machine)
+
+```bash
+./launch-cooper.sh --install-desktop
+```
+
+Installs **COOPER Private** and **COOPER Open** into the app launcher (pin to the dock as
+desired). Clicking one runs `launch-cooper.sh <stack>`: brings that stack up via
+`install-cooper.sh`, waits for cooper-core and Open WebUI health, then opens the WebUI in
+the default browser. Progress is reported via desktop notifications; on failure the
+notification points at `tmp/launch-<stack>.log`. The `.desktop` entries embed this
+checkout's absolute path — re-run `--install-desktop` if the repo moves.
+
 ### First-run wiring (per machine, manual)
 
 Open WebUI stores its config in its own Docker volume, so on a fresh machine each instance

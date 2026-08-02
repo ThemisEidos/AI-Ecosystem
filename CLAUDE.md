@@ -66,7 +66,13 @@ docker compose -f PDA-Runtime/docker-compose.yml down
 ```
 
 Fresh-machine gotcha: `docker-compose.yml` declares the `open-webui` volume
-`external: true` — run `docker volume create open-webui` once before the first `up`.
+`external: true` — `install-cooper.sh` creates it; for a bare `docker compose up` run
+`docker volume create open-webui` once first.
+
+**Desktop launchers:** `./launch-cooper.sh --install-desktop` installs "COOPER Private" /
+"COOPER Open" app-grid entries (pin to dock). Each runs `launch-cooper.sh <stack>`:
+brings the stack up via `install-cooper.sh`, waits for health, opens the WebUI in the
+browser; progress via desktop notifications, failures logged to `tmp/launch-<stack>.log`.
 
 ### Port map
 

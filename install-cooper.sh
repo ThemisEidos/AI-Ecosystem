@@ -46,6 +46,11 @@ else
 fi
 
 # 4. Up
+if [[ "$STACK" == "open" ]]; then
+    # docker-compose.yml declares this volume external: true — it must exist
+    # before the first `up` on a fresh machine (create is idempotent).
+    docker volume create open-webui >/dev/null
+fi
 say "Starting the $STACK stack…"
 docker compose -f "$COMPOSE_FILE" up -d
 
