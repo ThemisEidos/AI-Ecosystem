@@ -230,14 +230,55 @@ async def _handle_dispatch(message: str, session_id: str = "local") -> str:
     # L0/L1: execute immediately
     if skill_note:
         print(f"  [archivist] {tool.get('name')}{skill_note}")
-    return await _execute(tool, message)
+    return await _execute(tool, message, session_id)
 
 
-async def _execute(tool: dict, message: str) -> str:
+# Post-dispatch notices: background work (memory writes, skill drafts) reports
+# back on the session's NEXT turn instead of blocking this one.
+_SESSION_NOTICES: dict = {}
+_BG_TASKS: set = set()  # strong refs — bare create_task results can be GC'd
+
+
+def _queue_notice(session_id: str, text: str) -> None:
+    _SESSION_NOTICES.setdefault(session_id, []).append(text)
+
+
+def _drain_notices(session_id: str) -> str:
+    notes = _SESSION_NOTICES.pop(session_id, [])
+    return "".join(f"\n\n{n}" for n in notes)
+
+
+async def _post_dispatch(tool: dict, message: str, raw_output: str, verdict, session_id: str) -> None:
+    """Memory write + skill draft — the two chained LLM calls that used to run
+    inside the request (and once blew the 120s timeout under CPU load)."""
+    try:
+        await archivist.remember(
+            _ARCHIVIST_CONN, tool, message, raw_output, verdict, WORKSHOP,
+            base_url=BACKEND_URL, api_key=BACKEND_KEY,
+            model=CLASSIFIER_MODEL, backend=BACKEND,
+        )
+    except Exception as exc:
+        print(f"  [!!] archivist.remember failed (non-fatal): {exc}")
+
+    if verdict.verdict == "pass":
+        try:
+            draft_dir = await proposer.draft_skill(
+                tool, message, raw_output,
+                base_url=BACKEND_URL, api_key=BACKEND_KEY,
+                model=CLASSIFIER_MODEL, backend=BACKEND,
+            )
+            offer = proposer.offer_line(draft_dir).strip()
+            if offer:
+                _queue_notice(session_id, offer)
+        except Exception as exc:
+            print(f"  [!!] proposer failed (non-fatal): {exc}")
+
+
+async def _execute(tool: dict, message: str, session_id: str = "local") -> str:
     """
     Run an approved/auto-run tool through the Workbench (Worker), then have
-    the Reviewer check the result (Step 7) and the Archivist remember it
-    (Step 8) before it reaches the user.
+    the Reviewer check the result (Step 7) before it reaches the user.
+    Memory + skill drafting happen in the background (_post_dispatch).
     """
     try:
         raw_output = await executor.run(tool, message, WORKSHOP)
@@ -252,28 +293,12 @@ async def _execute(tool: dict, message: str) -> str:
         backend=BACKEND,
     )
 
-    try:
-        await archivist.remember(
-            _ARCHIVIST_CONN, tool, message, raw_output, verdict, WORKSHOP,
-            base_url=BACKEND_URL, api_key=BACKEND_KEY,
-            model=CLASSIFIER_MODEL, backend=BACKEND,
-        )
-    except Exception as exc:
-        print(f"  [!!] archivist.remember failed (non-fatal): {exc}")
+    task = asyncio.create_task(
+        _post_dispatch(tool, message, raw_output, verdict, session_id))
+    _BG_TASKS.add(task)
+    task.add_done_callback(_BG_TASKS.discard)
 
-    draft_offer = ""
-    if verdict.verdict == "pass":
-        try:
-            draft_dir = await proposer.draft_skill(
-                tool, message, raw_output,
-                base_url=BACKEND_URL, api_key=BACKEND_KEY,
-                model=CLASSIFIER_MODEL, backend=BACKEND,
-            )
-            draft_offer = proposer.offer_line(draft_dir)
-        except Exception as exc:
-            print(f"  [!!] proposer failed (non-fatal): {exc}")
-
-    return review.govern(raw_output, verdict) + draft_offer
+    return review.govern(raw_output, verdict)
 
 
 async def _resolve_approval(message: str, session_id: str = "local") -> str:
@@ -297,12 +322,18 @@ async def _resolve_approval(message: str, session_id: str = "local") -> str:
     if ticket is None:
         return "No pending action to approve. Nothing queued."
 
-    return await _execute(ticket.tool, ticket.message)
+    return await _execute(ticket.tool, ticket.message, session_id)
 
 
 async def _chat_core(message: str, history: List[dict], session_id: str = "local") -> tuple:
     """One routing path for every front door (HTTP endpoints + gateway):
-    registry/skill catalog queries, approval responses, then route_turn."""
+    registry/skill catalog queries, approval responses, then route_turn.
+    Queued background notices (skill drafts, …) ride along on the reply."""
+    reply, td = await _chat_core_inner(message, history, session_id)
+    return reply + _drain_notices(session_id), td
+
+
+async def _chat_core_inner(message: str, history: List[dict], session_id: str = "local") -> tuple:
     if registry.is_registry_query(message):
         return registry.format_tool_list(WORKSHOP), TurnDecision(
             decision="answer", reason="registry query answered directly by Quartermaster")
@@ -609,6 +640,17 @@ async def _stream_sse(message: str, history: List[dict], session_id: str = "loca
                 "created": created,
                 "model":   DISPLAY_MODEL,
                 "choices": [{"index": 0, "delta": {"content": chunk}, "finish_reason": None}],
+            }
+            yield f"data: {json.dumps(data)}\n\n"
+
+        notices = _drain_notices(session_id)
+        if notices:
+            data = {
+                "id":      request_id,
+                "object":  "chat.completion.chunk",
+                "created": created,
+                "model":   DISPLAY_MODEL,
+                "choices": [{"index": 0, "delta": {"content": notices}, "finish_reason": None}],
             }
             yield f"data: {json.dumps(data)}\n\n"
 
