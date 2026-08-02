@@ -131,3 +131,59 @@ def test_activation_stats_roundtrip(tmp_path):
     skills.record_activation(conn, "hello-cooper")
     skills.record_activation(conn, "hello-cooper")
     assert skills.get_activation_count(conn, "hello-cooper") == 2
+
+
+# ── Draft gate: test-residue dispatches (Batch 7 follow-up) ──────────────────
+
+def _draft_msg(tmp_path, message, extract=fake_extract):
+    manifest = tmp_path / "Config" / "skills_registry.yaml"
+    manifest.parent.mkdir(exist_ok=True)
+    manifest.write_text(yaml.safe_dump({"skills": []}), encoding="utf-8")
+    return run(proposer.draft_skill(
+        {"id": "t", "name": "T"}, message, "output ok",
+        base_url="", api_key="", model="", backend="ollama",
+        repo_root=tmp_path, manifest_path=manifest,
+        extract_fn=lambda *a, **k: extract(),
+    ))
+
+
+def test_no_draft_for_test_style_dispatches(tmp_path):
+    """Batch 7 curation found 5 of 7 drafts were residue of test dispatches —
+    gate them BEFORE any LLM call is spent."""
+    calls = []
+
+    def spying():
+        async def _inner():
+            calls.append(1)
+            return dict(FAKE_DRAFT)
+        return _inner()
+
+    for msg in [
+        "run Test-Exec.ps1",
+        "/reporter test payload from batch 5",
+        "browse https://example.com and summarize the page",
+        "use the router to say the word banana",
+        "quick demo of the note editor",
+    ]:
+        assert _draft_msg(tmp_path, msg, extract=spying) is None, msg
+    assert calls == []  # the LLM was never consulted
+
+
+def test_no_draft_when_llm_marks_not_reusable(tmp_path):
+    def not_reusable():
+        async def _inner():
+            return {**FAKE_DRAFT, "reusable": False}
+        return _inner()
+
+    assert _draft_msg(tmp_path, "check the stack health", extract=not_reusable) is None
+    assert not (tmp_path / "Skills" / "_drafts" / "stack-health-check").exists()
+
+
+def test_draft_proceeds_when_llm_marks_reusable(tmp_path):
+    def reusable():
+        async def _inner():
+            return {**FAKE_DRAFT, "reusable": True}
+        return _inner()
+
+    path = _draft_msg(tmp_path, "check the stack health", extract=reusable)
+    assert path is not None and (path / "SKILL.md").exists()

@@ -20,19 +20,22 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 
 _DRAFT_SYSTEM = """\
 You are COOPER's Proposer. A dispatched task just succeeded. If the procedure is
-worth reusing, write it as a skill. Output JSON only — no other text.
+worth reusing, write it as a skill. Set "reusable" to false when the task was a
+test, demo, verification probe, or one-off — those must not become skills.
+Output JSON only — no other text.
 
-{"name":"<lowercase-hyphen slug, 2-4 words>","description":"<one line: when to use this>","body":"<markdown: '## When to use' and '## Procedure' sections, under 300 words>"}\
+{"reusable":<true|false>,"name":"<lowercase-hyphen slug, 2-4 words>","description":"<one line: when to use this>","body":"<markdown: '## When to use' and '## Procedure' sections, under 300 words>"}\
 """
 
 _DRAFT_SCHEMA = {
     "type": "object",
     "properties": {
+        "reusable":    {"type": "boolean"},
         "name":        {"type": "string"},
         "description": {"type": "string"},
         "body":        {"type": "string"},
     },
-    "required": ["name", "description", "body"],
+    "required": ["reusable", "name", "description", "body"],
 }
 
 # Governance actions on the skill catalog itself never get drafted as skills —
@@ -40,6 +43,14 @@ _DRAFT_SCHEMA = {
 # promoting/importing, a self-referential loop the whole-branch review caught
 # once Tasks 2 (drafting) and 3 (promote_skill) were combined.
 _UNDRAFTABLE_EXECUTOR_TYPES = {"skill_promote", "skill_import"}
+
+# Test/demo probes aren't reusable procedure — Batch 7 curation (2026-08-02)
+# found 5 of 7 auto-drafts were residue of exactly these dispatch shapes.
+_TEST_DISPATCH_RE = re.compile(
+    r"\btest\b|\bdemo\b|\bpayload\b|\bbatch\s*\d+\b"
+    r"|\bexample\.(?:com|org|net)\b|\bsay the word\b|\bsanity check\b|\bdry run\b",
+    re.IGNORECASE,
+)
 
 
 def slugify(name: str) -> str:
@@ -88,6 +99,8 @@ async def draft_skill(
     skill catalog itself) or on any failure (non-fatal)."""
     if tool.get("executor_type") in _UNDRAFTABLE_EXECUTOR_TYPES:
         return None
+    if _TEST_DISPATCH_RE.search(message):
+        return None
     extract_fn = extract_fn or _extract_draft
     root = repo_root or _REPO_ROOT
     try:
@@ -95,6 +108,8 @@ async def draft_skill(
             message, raw_output,
             base_url=base_url, api_key=api_key, model=model, backend=backend,
         )
+        if draft.get("reusable") is False:  # absent (legacy extract) → draftable
+            return None
         name = slugify(str(draft.get("name", "")))
         description = str(draft.get("description", "")).strip()
         body = str(draft.get("body", "")).strip()
