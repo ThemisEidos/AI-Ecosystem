@@ -11,3 +11,15 @@ skills:
   permission_level: 1
   approval_required: false
   content_hash: dc01c74edec3f218ef1984802b1c68fb2797a95a7233e43a90b3e5a59cf55014
+- id: run-registry-inspector
+  path: Skills/learned/run-registry-inspector
+  workshop: open
+  permission_level: 1
+  approval_required: false
+  content_hash: 0f586919379d46d022bb739725e06a45626ae7de0fa89802d82108f6f2b7769f
+- id: run-status-summary
+  path: Skills/learned/run-status-summary
+  workshop: open
+  permission_level: 1
+  approval_required: false
+  content_hash: 47526b7a9747cee7286a77a4c40b02f4a588b913b104b6d9d9f1e2116eb2e8d0

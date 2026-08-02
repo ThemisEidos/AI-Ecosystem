@@ -589,6 +589,21 @@ Plans: `Docs/superpowers/plans/2026-07-08-step-1{0,1,2,3}-*.md` (commit 50de439)
   `COOPER-Private`. Remaining open items unchanged: Open WebUI fresh-volume wiring (owner),
   Batch 7 skill curation, Step 12 live Signal test.
 
+- **2026-08-02 · Batch 7 skill curation done — 2 promoted, 5 rejected.** Reviewed all 7
+  `Skills/_drafts/` candidates from the 07-21/22 tools session. Promoted
+  `run-registry-inspector` and `run-status-summary` (accurate, general procedures for real
+  registry tools) through the live governed workflow on the Open container — dispatch
+  `promote skill <name>` → approval gate → `register_promotion` — both now in
+  `Skills/learned/`, manifest entries appended (workshop: open), `GET /skills` on 8001
+  reports 4 skills all status `ok`; Private (8000) unaffected at 0. Bind-mount writes
+  preserved host ownership (`shutil.move` + in-place manifest rewrite — no root-owned-file
+  cleanup needed on Linux, unlike the Windows drvfs episode). Rejected as test residue:
+  `browser-research-example` (example.com browse), `lite-llm-routing` ("say banana" test),
+  `note-creation-process` (batch4-test.md artifact), `run-pda-command-router` ("test payload
+  from batch 5"), `add-rate-limiting` (generic Express.js advice, wrong stack). Suite
+  173/173 after. Owner direction this session: Signal (Step 12) deferred to "far later";
+  focus is a working product on this machine.
+
 ---
 
 ## Blocked / needs owner input
