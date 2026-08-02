@@ -450,3 +450,64 @@ def test_promote_registered_open_skill_into_private(tmp_path):
     # both workshops now load it — the Open entry survived the append
     assert len(skills.list_skills("open", manifest_path=manifest, repo_root=tmp_path)) == 1
     assert len(skills.list_skills("private", manifest_path=manifest, repo_root=tmp_path)) == 1
+
+
+# ── Step 10 deferred follow-ups (2026-08-02) ─────────────────────────────────
+
+def test_fetch_tap_rejects_oversized_clone(tmp_path, monkeypatch):
+    """The size cap must bound the whole clone, not just the final skills/<name>
+    subdir — a huge file elsewhere in the tap repo must reject the import."""
+    url = make_tap_repo(tmp_path, skill_name="tap-skill")
+    monkeypatch.setattr(skills, "_ALLOWED_SCHEMES", ("https://", "file://"))
+    monkeypatch.setattr(skills, "_MAX_CLONE_SIZE_BYTES", 10_000, raising=False)
+
+    repo = tmp_path / "tap-src"
+    (repo / "big-elsewhere.bin").write_bytes(b"x" * 100_000)  # outside skills/
+    subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
+    subprocess.run(
+        ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "pad repo"],
+        cwd=repo, check=True,
+    )
+
+    with pytest.raises(skills.SkillError, match="clone too large"):
+        skills.fetch_tap(url, "tap-skill", repo_root=tmp_path)
+    assert not (tmp_path / "Skills" / "_incoming" / "tap-skill").exists()
+
+
+def test_discard_staged_removes_staging_dir(tmp_path, monkeypatch):
+    """Denied imports must be able to clean their Skills/_incoming/<name> staging
+    dir; discarding again (or an unparseable message) is a silent no-op."""
+    url = make_tap_repo(tmp_path)
+    monkeypatch.setattr(skills, "_ALLOWED_SCHEMES", ("https://", "file://"))
+    msg = f"import skill tap-skill from {url}"
+    skills.preview_import(msg, repo_root=tmp_path)
+    staged = tmp_path / "Skills" / "_incoming" / "tap-skill"
+    assert staged.exists()
+
+    assert skills.discard_staged(msg, repo_root=tmp_path) is True
+    assert not staged.exists()
+    assert skills.discard_staged(msg, repo_root=tmp_path) is False
+    assert skills.discard_staged("not an import message", repo_root=tmp_path) is False
+
+
+def test_fetch_tap_sweeps_stale_staging_dirs(tmp_path, monkeypatch):
+    """Orphans from expired tickets: fetch_tap must remove _incoming entries older
+    than the staleness window while leaving recent ones alone."""
+    import os
+    import time
+
+    url = make_tap_repo(tmp_path)
+    monkeypatch.setattr(skills, "_ALLOWED_SCHEMES", ("https://", "file://"))
+    incoming = tmp_path / "Skills" / "_incoming"
+    stale = incoming / "old-skill"
+    stale.mkdir(parents=True)
+    (stale / "SKILL.md").write_text("x", encoding="utf-8")
+    past = time.time() - 7200
+    os.utime(stale, (past, past))
+    fresh = incoming / "fresh-skill"
+    fresh.mkdir()
+    (fresh / "SKILL.md").write_text("x", encoding="utf-8")
+
+    skills.fetch_tap(url, "tap-skill", repo_root=tmp_path)
+    assert not stale.exists()
+    assert fresh.exists()

@@ -279,6 +279,8 @@ _SAFE_NAME_RE     = re.compile(r"\A[a-z0-9][a-z0-9-]*\Z")
 _CLONE_TIMEOUT    = 60
 _PREVIEW_MAX      = 3_500
 _MAX_TAP_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB — generous for a skill dir, caps disk use
+_MAX_CLONE_SIZE_BYTES = 50 * 1024 * 1024  # bounds the whole clone (incl. .git), not just skills/<name>
+_STALE_STAGING_SECONDS = 3600  # _incoming/ orphans (denied/expired tickets) older than this get swept
 
 
 def parse_import_request(message: str) -> Tuple[str, str]:
@@ -305,6 +307,32 @@ def _dir_size_bytes(src: Path) -> int:
     return sum(f.stat().st_size for f in src.rglob("*") if f.is_file())
 
 
+def _sweep_stale_staging(incoming: Path) -> None:
+    """Remove _incoming/ entries older than the staleness window — orphans left
+    by tickets that expired without ever being approved or denied."""
+    now = time.time()
+    for child in incoming.iterdir():
+        try:
+            if child.is_dir() and now - child.stat().st_mtime > _STALE_STAGING_SECONDS:
+                shutil.rmtree(child, ignore_errors=True)
+        except OSError:
+            pass
+
+
+def discard_staged(message: str, *, repo_root: Optional[Path] = None) -> bool:
+    """Denied import: drop the staged _incoming/<name> dir. Silent no-op (False)
+    when nothing is staged or the message isn't an import request."""
+    try:
+        name, _url = parse_import_request(message)
+    except SkillError:
+        return False
+    staged = (repo_root or _REPO_ROOT) / "Skills" / "_incoming" / name
+    if not staged.is_dir():
+        return False
+    shutil.rmtree(staged, ignore_errors=True)
+    return True
+
+
 def fetch_tap(url: str, skill_name: str, *, repo_root: Optional[Path] = None) -> Path:
     """Clone a tap repo and stage skills/<name>/ under Skills/_incoming/<name>/.
     Staged skills are inert (reserved dir). Returns the staged path."""
@@ -317,6 +345,7 @@ def fetch_tap(url: str, skill_name: str, *, repo_root: Optional[Path] = None) ->
     root = repo_root or _REPO_ROOT
     incoming = root / "Skills" / "_incoming"
     incoming.mkdir(parents=True, exist_ok=True)
+    _sweep_stale_staging(incoming)
     clone_dir = incoming / f"_clone-{uuid.uuid4().hex[:8]}"
     dest = incoming / skill_name
     try:
@@ -329,6 +358,11 @@ def fetch_tap(url: str, skill_name: str, *, repo_root: Optional[Path] = None) ->
             raise SkillError(f"git clone failed: {exc.stderr.decode(errors='replace')[:300]}")
         except subprocess.TimeoutExpired:
             raise SkillError(f"git clone timed out after {_CLONE_TIMEOUT}s")
+        clone_size = _dir_size_bytes(clone_dir)
+        if clone_size > _MAX_CLONE_SIZE_BYTES:
+            raise SkillError(
+                f"tap clone too large ({clone_size} bytes > {_MAX_CLONE_SIZE_BYTES} cap)"
+            )
         src = clone_dir / "skills" / skill_name
         if not (src / "SKILL.md").exists():
             raise SkillError(f"tap has no skills/{skill_name}/SKILL.md")

@@ -149,3 +149,60 @@ def test_execute_reply_unchanged_when_proposer_raises(monkeypatch):
     expected = main.review.govern("[Test-PDAStack.ps1 — OK]\nall green", verdict)
     reply = asyncio.run(main._execute(tool, "check the stack health"))
     assert reply == expected
+
+
+def test_deny_import_skill_cleans_staging(tmp_path, monkeypatch):
+    """Denying a pending import_skill approval must remove the staged
+    Skills/_incoming/<name> dir, not orphan it."""
+    monkeypatch.setattr(main, "_API_KEYS", set())
+    monkeypatch.setattr(main, "_ALLOW_ANON", True)
+    staged = tmp_path / "Skills" / "_incoming" / "tap-skill"
+    staged.mkdir(parents=True)
+    (staged / "SKILL.md").write_text(
+        "---\nname: tap-skill\ndescription: d.\n---\n\nB.\n", encoding="utf-8"
+    )
+    monkeypatch.setattr(skills, "_REPO_ROOT", tmp_path)
+
+    import approval
+    msg = "import skill tap-skill from https://example.com/tap"
+    approval.request("open", _IMPORT_SKILL_TOOL, msg, "anon")
+    with TestClient(main.app) as client:
+        resp = client.post("/chat", json={"message": "deny"})
+    assert resp.status_code == 200
+    assert "Cancelled" in resp.json()["reply"]
+    assert not staged.exists()
+
+
+def test_generate_context_order_matches_streaming(monkeypatch):
+    """The blocking path must inject context in the same order as the streaming
+    path: SYSTEM, then recall, then skill."""
+    import asyncio
+
+    import decision
+
+    monkeypatch.setattr(main, "BACKEND", "openai")
+    monkeypatch.setattr(main.archivist, "index_brain", lambda conn: None)
+    monkeypatch.setattr(main.archivist, "recall", lambda conn, m: ["hit"])
+    monkeypatch.setattr(main.archivist, "format_recall_context", lambda hits: "RECALL-CTX")
+
+    class _Skill:
+        id = "s1"
+
+    monkeypatch.setattr(main.skills, "select_skill", lambda w, m: _Skill())
+    monkeypatch.setattr(main.skills, "format_skill_context", lambda s: "SKILL-CTX")
+    monkeypatch.setattr(main.skills, "record_activation", lambda conn, sid: None)
+
+    captured = {}
+
+    async def _fake_complete(base_url, api_key, model, messages, **kw):
+        captured["msgs"] = messages
+        return "ok"
+
+    monkeypatch.setattr(decision, "_openai_complete", _fake_complete)
+    assert asyncio.run(main._generate("hello", [])) == "ok"
+
+    contents = [m["content"] for m in captured["msgs"]]
+    assert contents[0] == main.SYSTEM_PROMPT
+    assert contents[1] == "RECALL-CTX"
+    assert contents[2] == "SKILL-CTX"
+    assert captured["msgs"][3] == {"role": "user", "content": "hello"}

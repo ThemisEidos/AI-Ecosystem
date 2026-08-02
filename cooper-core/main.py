@@ -266,6 +266,11 @@ async def _resolve_approval(message: str, session_id: str = "local") -> str:
         ticket = approval.consume(WORKSHOP, session_id)
         if ticket is None:
             return "No pending action to cancel."
+        if ticket.tool.get("executor_type") == "skill_import":
+            try:
+                skills.discard_staged(ticket.message)
+            except Exception as exc:
+                print(f"  [!!] discard_staged failed (non-fatal): {exc}")
         name = ticket.tool.get("name", ticket.tool.get("id"))
         return f"Cancelled. {name} will not run."
 
@@ -626,10 +631,11 @@ async def _generate(message: str, history: List[dict]) -> str:
         print(f"  [!!] skill context injection failed (non-fatal): {exc}")
         skill_ctx = ""
     msgs = _build_messages(history, message)
-    if recall_context:
-        msgs.insert(1, {"role": "system", "content": recall_context})
+    # Same injection order as the streaming path: SYSTEM, recall, skill.
     if skill_ctx:
         msgs.insert(1, {"role": "system", "content": skill_ctx})
+    if recall_context:
+        msgs.insert(1, {"role": "system", "content": recall_context})
     if BACKEND == "openai":
         from decision import _openai_complete
         return await _openai_complete(BACKEND_URL, BACKEND_KEY, COOPER_MODEL, msgs)
