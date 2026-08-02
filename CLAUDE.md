@@ -173,7 +173,8 @@ cooper-core/.venv/bin/python -m pytest "Open WebUI/Test_PDA_ChatBridge_Pipe.py"
 ```
 
 `Tests/Fixtures/Workflow_Evidence/` contains JSON schema fixtures (valid + invalid) for
-evidence validation. No standalone runner exists yet.
+evidence validation, exercised by `cooper-core/test_evidence.py`. Standalone runner:
+`cooper-core/.venv/bin/python cooper-core/evidence.py <dir>` (exit 1 on any invalid record).
 
 ---
 

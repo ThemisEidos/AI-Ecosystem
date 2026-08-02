@@ -636,6 +636,30 @@ Plans: `Docs/superpowers/plans/2026-07-08-step-1{0,1,2,3}-*.md` (commit 50de439)
   fix needs owner sudo. Also this session: desktop launcher buttons (entry above) and
   Batch 7 curation (entry above).
 
+- **2026-08-02 · Four hardening features (owner-picked), TDD, 206/206, deployed.** Machine
+  DNS fixed by owner (`127.0.1.1 pop-os` in /etc/hosts — lookup now 2ms, clones work).
+  (1) **Semantic skill matching** — `select_skill_semantic` embeds catalog+query via the
+  workshop's own backend (`nomic-embed-text` on Ollama / `text-embedding-3-small` via
+  LiteLLM, new `embeddings.py` with sqlite cache in cooper_memory.db), per-model thresholds
+  calibrated live (nomic: match .52-.59 vs noise ≤.43 → 0.48; openai: .34-.40 vs ≤.17 →
+  0.25 — one threshold would NOT fit both), keyword fallback on any failure. Live-proven on
+  Open: "how are all systems doing right now?" (zero keyword overlap) activated
+  run-status-summary, activation row written. Model pulls added to setup-linux.sh + private
+  compose model-init; embedding model added to litellm_config. (2) **Background
+  post-dispatch** — archivist.remember + proposer.draft_skill moved off the request path
+  (`_post_dispatch` via create_task, strong-ref set); draft offers now arrive as next-turn
+  session notices on both blocking and streaming paths. Live: dispatch replied in 3.3s with
+  the memory write landing seconds after the reply. (3) **Draft gate** — heuristic
+  test-residue regex before the LLM call + required `reusable` boolean in the draft schema
+  (Batch 7's 5/7 residue ratio was the driver). (4) **Evidence validator** — new
+  `evidence.py` (+CLI) encoding the Workflow_Evidence rule set: approval linkage,
+  workflow/status consistency, Category 1/2 artifact boundaries, sensitive-marker hygiene;
+  all 15 fixtures execute, each invalid failing for its named rule. **Real finding:** all
+  12 records in `State/Workflow_Evidence/` are non-compliant (June v1-era, no approval_id —
+  predate the linkage rule); left untouched as history. Not live-observed (unit-tested
+  only): the next-turn draft-offer notice — needs a novel non-test dispatch to draft
+  something new.
+
 ---
 
 ## Blocked / needs owner input
