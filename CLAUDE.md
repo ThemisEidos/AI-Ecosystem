@@ -3,11 +3,16 @@
 This file is read automatically every session. It describes the repo as it actually exists.
 Full scope plan: `PRD.md` (repo root). Full governance spec: `01_AI Ecosystem Architecture.md` through `06_Automation & Workflow Catalog.md`.
 
+> Deployment host since 2026-07-30: Pop!_OS laptop, repo at
+> `/home/zb6/Documents/Projects/01_AI_Ecosystem`. The Windows 11/WSL2-era instructions
+> (D:\ paths, `.venv-win`, `powershell.exe` interop, mirrored networking) are retired —
+> they survive in git history if ever needed.
+
 ---
 
 ## Project summary
 
-COOPER (Command Operations Orchestrator for Planning, Execution, and Reporting) is a governed AI operations platform (owner: ThemisEidos). It exposes two workshops — Open (cloud-capable, Claude Sonnet default, port 3000) and Private (local-only, Qwen via Ollama, port 3001) — each with a 6-level permission ladder and Category 1/2 data classification. The v2 runtime is a FastAPI backend (`cooper-core/`) that owns conversation and routes to local Ollama. The old PowerShell webhook server remains in place (untouched) until FastAPI proves out. See `PRD.md` for the full plan.
+COOPER (Command Operations Orchestrator for Planning, Execution, and Reporting) is a governed AI operations platform (owner: ThemisEidos). It exposes two workshops — Open (cloud-capable via LiteLLM, port 8001) and Private (local-only, Ollama `COOPER-Private`, port 8000) — each with a 6-level permission ladder and Category 1/2 data classification. The runtime is the FastAPI backend in `cooper-core/`, deployed as Docker Compose stacks; it owns conversation, classification (`decision.py`), the approval gate, and the tool registry (all 13 `executor_type`s wired). See `PRD.md` for the full plan.
 
 ---
 
@@ -15,215 +20,178 @@ COOPER (Command Operations Orchestrator for Planning, Execution, and Reporting) 
 
 | Path | Contents |
 |---|---|
-| `PDA-Runtime/` | Docker Compose files (`docker-compose.yml`, `docker-compose.open.yml`, `docker-compose.private.yml`), launch/stop/status/dashboard PowerShell wrappers, `.env.example` |
-| `Scripts/` | ~200 PowerShell scripts — the current backend runtime (router, approval gate, workers, build runner, webhook server) plus ~20 JSON policy/config files |
-| `Config/` | Workshop identity YAML, tool registries (`general_tool_registry.yaml`, `private_tool_registry.yaml`), workflow definitions (`workflows.yaml`) |
-| `litellm/` | LiteLLM config (`litellm_config.yaml`) and `.env.local.example` |
-| `Models/cooper-personality/` | COOPER Ollama Modelfile (base: gemma3:12b) and personality JSON |
-| `Open WebUI/` | Python Pipe function (`PDA_ChatBridge_Pipe.py`) deployed into Open WebUI; pytest test file |
+| `cooper-core/` | **The runtime.** FastAPI backend (`main.py`, `decision.py`, `executor.py`, `skills.py`, …), full pytest suite, `Dockerfile`, Linux venv at `.venv/`. Runs in Docker via the compose stacks; bare-metal dev path below. |
+| `PDA-Runtime/` | Docker Compose files (`docker-compose.yml` = Open, `docker-compose.private.yml` = Private), `.env` (client keys — gitignored), `.env.example`. The `*.ps1` launch/stop/status wrappers are Windows-era legacy. |
+| `Scripts/` | ~200 PowerShell scripts — the v1 backend, now legacy. Some remain callable as registry tools via the `powershell` executor (the cooper-core image ships its own `pwsh`). ~20 JSON policy/config files still read by the runtime. |
+| `Config/` | Workshop identity YAML, tool registries (`general_tool_registry.yaml`, `private_tool_registry.yaml`), `skills_registry.yaml`, workflow definitions (`workflows.yaml`) |
+| `Skills/` | Learned-skill store: `learned/` (promoted, governed by `Config/skills_registry.yaml`), `_drafts/` (auto-drafted by the self-improvement loop, inert until promoted) |
+| `litellm/` | LiteLLM config (`litellm_config.yaml`) and `.env.local` (cloud keys — gitignored) |
+| `Models/cooper-personality/` | Ollama Modelfile + personality JSON. At runtime `main.py` only extracts the SYSTEM prompt from the Modelfile; the `FROM gemma3:12b` line is legacy — the served weights are Ollama's `gemma4:12b` aliased as `COOPER-Private` |
+| `Open WebUI/` | Python Pipe function (`PDA_ChatBridge_Pipe.py`) from the v1 bridge; pytest test file |
 | `State/` | `COOPER_ProjectMemory.json`, `COOPER_Skills.json`, `Workflow_Evidence/` completion records |
 | `n8n Workflow/` | n8n workflow JSON exports (import via n8n UI) |
-| `Tests/Fixtures/Workflow_Evidence/` | JSON fixtures for evidence schema validation (valid + invalid cases) — no runner script, consumed by future tests |
-| `Roadmap/` | `PDA-Roadmap.json` (9-task build runner roadmap), `PDA-BuildRunnerPolicy.json` |
-| `Codex_Tasks/` | WF-002 generated task markdown files |
-| `Documentation/` | Architecture and integration docs |
+| `Tests/Fixtures/Workflow_Evidence/` | JSON fixtures for evidence schema validation (valid + invalid cases) |
+| `Roadmap/` | `PDA-Roadmap.json` (build runner roadmap), `PDA-BuildRunnerPolicy.json` |
+| `Codex_Tasks/` | Generated task markdown files (also a bind mount of the Open stack's `cli_launcher` tool) |
+| `Documentation/` | Architecture and integration docs — **`PDA-Portable-Deployment.md` is the install/migration guide**, with `PDA-Migration-Checklist.md` as its companion |
 | `Docs/` | Design docs, phase exit reviews |
 | `PDA-Fabric/` | 4 Fabric prompt pattern templates (reporting, research, review, security) |
 | `Legacy_Docs/` | Superseded docs — do not update |
 | `PDA-Backups/` | Build runner logs and nightly artifacts — do not modify |
 | `PDA-Agent-Runs/` | Agent run records |
-| `Obsidian Vault/` | Human knowledge vault (agent output files; output subdirs are gitignored) |
-| `cooper-core/` | **FastAPI conversational backend (v2 runtime).** `main.py`, `decision.py` (step 2 turn classifier), `requirements.txt`, `Start-CooperCore.ps1` (detached auto-reload launcher). Run from Windows PowerShell (see below). |
+| `Obsidian Vault/` | Human knowledge vault incl. `brain/` (North Star, Gotchas, Patterns); output subdirs are gitignored |
 
 ---
 
 ## Start / stop / status commands
 
-**Fresh machine install (Linux):** `sudo bash setup-linux.sh` (system apps: Docker+Compose,
-NVIDIA toolkit if GPU present, host Ollama/pwsh/python; `--minimal` for Docker-only hosts),
-then `bash install-cooper.sh [--private]`. Full guide incl. the application list and which
-secret/state files carry COOPER's identity: `Documentation/PDA-Portable-Deployment.md`.
+**Fresh machine install:** `sudo bash setup-linux.sh` (system apps: Docker + Compose v2,
+NVIDIA toolkit if GPU present, host Ollama + model, pwsh, python; `--minimal` for
+Docker-only hosts), then `bash install-cooper.sh [--private]`. Full guide incl. the
+application list and which secret/state files carry COOPER's identity:
+`Documentation/PDA-Portable-Deployment.md`.
 
-All paths verified to exist. Commands assume PowerShell and Docker Desktop available.
-
-### Profile functions (requires one-time setup)
-
-```powershell
-# One-time: install profile functions
-pwsh -File setup-pda-profile.ps1
-. $PROFILE
-
-# After setup:
-aiec-start      # Start Open Stack: Docker Desktop → compose up → webhook server → open browser
-pda             # Alias for aiec-start
-pdadown         # docker compose down (Open Stack)
-aiec-status     # Show container + service + webhook health
-pda-status      # Alias for aiec-status
-pda-go          # Run Build Runner (next Codex task from Roadmap)
-pda-dashboard   # Refresh Obsidian dashboard notes and open them
-pda-console     # Alias for pda-dashboard
-aiec            # cd to repo root
-pdaroot         # cd to PDA-Runtime/
-```
-
-### Direct script commands (no profile needed)
-
-```powershell
-# Open Stack
-pwsh -File PDA-Runtime/launch-pda.ps1
-pwsh -File PDA-Runtime/stop-pda.ps1
-pwsh -File PDA-Runtime/status-pda.ps1
-
-# Private Stack (port 3001, local-only, no cloud)
-pwsh -File Scripts/Start-PDAPrivateStack.ps1
-
-# Build Runner
-pwsh -File Scripts/Start-PDABuildRunner.ps1 -ExecuteCodexTask
-
-# Webhook server (auto-started by aiec-start; port 8788)
-pwsh -File Scripts/Start-PDAWebhookServer.ps1
-```
-
-### Docker Compose direct
+### Bring stacks up / down (Docker Compose)
 
 ```bash
-# Open Stack
+# Private stack — cooper-core :8000, Open WebUI :3001, in-container GPU Ollama
+bash install-cooper.sh --private          # seeds .env if missing + health-polls
+docker compose -f PDA-Runtime/docker-compose.private.yml up -d    # equivalent, no polling
+docker compose -f PDA-Runtime/docker-compose.private.yml down
+
+# Open stack — cooper-core :8001, Open WebUI :3000, LiteLLM :4000, n8n :5678, signal-cli
+bash install-cooper.sh
 docker compose -f PDA-Runtime/docker-compose.yml up -d
 docker compose -f PDA-Runtime/docker-compose.yml down
-
-# Private Stack
-docker compose -f PDA-Runtime/docker-compose.private.yml up -d
-docker compose -f PDA-Runtime/docker-compose.private.yml down
 ```
 
-### One-time model setup
+Fresh-machine gotcha: `docker-compose.yml` declares the `open-webui` volume
+`external: true` — run `docker volume create open-webui` once before the first `up`.
 
-```powershell
-# OPTIONAL — legacy. cooper-core does NOT use the built COOPER model at runtime:
-# main.py extracts the SYSTEM prompt from the Modelfile and calls COOPER-Private
-# (COOPER_MODEL env var; an Ollama alias of the gemma4:12b weights) directly.
-# Build only if you want `ollama run COOPER` for manual testing.
-ollama create COOPER -f Models/cooper-personality/Modelfile
-```
+### Port map
 
----
+| Port | Service | Stack |
+|---|---|---|
+| 8000 | cooper-core (Private) | Private |
+| 8001 | cooper-core (Open; container port 8000) | Open |
+| 3001 | Open WebUI (Private; loopback only) | Private |
+| 3000 | Open WebUI (Open) | Open |
+| 4000 | LiteLLM | Open |
+| 5678 | n8n | Open |
+| 8080 | signal-cli REST API (loopback only) | Open |
 
-### COOPER Core (FastAPI backend — run from Windows PowerShell)
-
-Ollama binds to Windows loopback (`127.0.0.1:11434`). The FastAPI server must run on the Windows side to reach it. **Run from a Windows PowerShell terminal**, not WSL2:
-
-```powershell
-# One-time: create venv and install dependencies
-cd D:\D_Projects\01_AI_Ecosystem\cooper-core
-python -m venv .venv-win
-.venv-win\Scripts\pip install -r requirements.txt
-
-# OPTIONAL — legacy; the server reads the Modelfile's SYSTEM prompt directly
-# and calls COOPER-Private. Skip unless you want `ollama run COOPER` manually.
-cd D:\D_Projects\01_AI_Ecosystem
-ollama create COOPER -f Models\cooper-personality\Modelfile
-
-# Start the server (interactive, foreground — blocks the terminal)
-cd D:\D_Projects\01_AI_Ecosystem\cooper-core
-.venv-win\Scripts\uvicorn main:app --host 0.0.0.0 --port 8000
-```
-
-**Agent-friendly start (detached, auto-reload — preferred).** `cooper-core/Start-CooperCore.ps1` launches uvicorn as a **detached background process** with `--reload`, frees port 8000 first (so it doubles as a restart), and redirects output to `cooper-core.out.log` / `cooper-core.err.log`. Because it's detached, it can be fired from a one-shot `powershell.exe -Command` call — an agent in WSL2 can start, restart, and stop the server itself without an interactive terminal:
+### Status / health
 
 ```bash
-# from WSL2 — start or restart
-powershell.exe -Command "cd D:\D_Projects\01_AI_Ecosystem\cooper-core; .\Start-CooperCore.ps1"
-# check startup
-cat /mnt/d/D_Projects/01_AI_Ecosystem/cooper-core/cooper-core.err.log
-# stop
-powershell.exe -Command "Get-NetTCPConnection -LocalPort 8000 -State Listen | ForEach-Object { Stop-Process -Id \$_.OwningProcess -Force }"
+docker ps --format 'table {{.Names}}\t{{.Status}}'     # pda-* containers
+curl -s http://localhost:8000/health                   # private → {"status":"ok","workshop":"private",...}
+curl -s http://localhost:8001/health                   # open    → {"status":"ok","workshop":"open",...}
+docker compose -f PDA-Runtime/docker-compose.private.yml logs cooper-core --tail 50
 ```
 
-With `--reload` running, edits to `main.py`/`decision.py` take effect without a restart. Re-run the script only for dependency changes or if reload wedges. Caveat: `--reload`'s file watcher is unreliable across the `/mnt/d` DrvFs boundary (agent edits from WSL while uvicorn watches from Windows) — if an edit doesn't take, re-run `Start-CooperCore.ps1` to force a clean restart.
+### Auth
 
-**Verify from WSL2 or any terminal** (server binds to 0.0.0.0 so it's accessible everywhere):
+`/health` is unauthenticated. Everything else requires `Authorization: Bearer <key>` where
+the key is the `COOPER_API_KEYS` value in `PDA-Runtime/.env` (generated by
+`install-cooper.sh`, printed once at seed time). No auth → 401.
+
 ```bash
-curl http://localhost:8000/health
-curl -X POST http://localhost:8000/chat \
-  -H "Content-Type: application/json" \
-  -d '{"message": "hi"}'
+KEY=$(grep '^COOPER_API_KEYS=' PDA-Runtime/.env | cut -d= -f2)
+curl -s -X POST http://localhost:8000/chat \
+  -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" \
+  -d '{"message":"hi"}'
 ```
 
-### Testing from WSL2 (mirrored networking + interop)
+**Test the API, not the browser.** Open WebUI is just a client of `/v1/chat/completions`.
+`POST /chat` additionally returns the routing `decision` field for debugging;
+`POST /v1/chat/completions` mirrors browser behavior. Use the browser only for a single
+final visual confirmation per step, not per iteration.
 
-Ollama and the FastAPI server both run on **Windows**. By default WSL2 uses NAT networking, so `localhost` inside WSL points at WSL's own loopback, not Windows' — an agent in WSL2 cannot reach `8000`/`3000`/`11434` until this is resolved. Two ways through:
+### Bare-metal dev path (optional — Docker is the deployed truth)
 
-**1. Mirrored networking (makes `localhost` work from WSL).** `C:\Users\earth\.wslconfig` already contains `[wsl2]` / `networkingMode=mirrored`, but it is inert until WSL restarts. From a **Windows** terminal: `wsl --shutdown`, wait ~8s, reopen WSL, then confirm inside WSL with `wslinfo --networking-mode` (must print `mirrored`; needs WSL 2.0+ on Win11 22H2+ — `wsl --update` if older). Once active, the agent curls `http://localhost:8000` directly. Caveat: mirrored mode can disrupt Docker Desktop networking — if Open WebUI at `http://localhost:3000` breaks after the switch, that's the tradeoff.
+`cooper-core/.venv` is a Linux venv with the full dependency set. To run the server
+outside Docker against **host** Ollama (a compose stack must not be holding the port):
 
-**2. Windows interop fallback (works regardless of networking mode).** The request runs in the Windows context where the port resolves, output returns to the agent's stdout:
 ```bash
-powershell.exe -Command "Invoke-RestMethod -Uri http://localhost:8000/chat -Method Post -ContentType 'application/json' -Body '{\"message\":\"sort it out\"}'"
+cd cooper-core
+WORKSHOP=private OLLAMA_HOST=http://localhost:11434 COOPER_ALLOW_ANON=1 \
+  .venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
-The agent can also run one-shot `powershell.exe -Command "..."` calls but **not** interactive PowerShell sessions — hence the detached `Start-CooperCore.ps1` for the server.
 
-**Test the API, not the browser.** Open WebUI is just a client of `/v1/chat/completions`. To see exactly what the browser would render, hit that endpoint directly. Use the browser only for a single final visual confirmation per step, not per iteration. `POST /chat` additionally returns the routing `decision` field for debugging; `POST /v1/chat/completions` mirrors browser behavior.
+Key env vars (see `main.py` top): `WORKSHOP` (`open`/`private`), `OLLAMA_HOST`,
+`COOPER_MODEL` (default `COOPER-Private`), `OPENAI_BASE_URL`/`OPENAI_API_KEY` (Open
+workshop → LiteLLM), `COOPER_API_KEYS`/`COOPER_ALLOW_ANON=1`, `GATEWAY_ENABLED=1`.
+With `--reload`, edits take effect without a restart.
 
-**Open WebUI wiring (manual — env var ignored after first run):** Open WebUI v0.9.6 stores connections in SQLite, which takes precedence over env vars set in `docker-compose.yml`. Add the connection manually via the UI:
+**After editing cooper-core for the Docker stacks**, rebuild + recreate:
 
-1. `http://localhost:3000` → avatar → **Settings → Connections**
-2. Under **OpenAI API**, click **+** to add a connection
-3. URL: `http://host.docker.internal:8000/v1`
-4. Key: `cooper-local`
-5. Click the checkmark/save — it pings the server and fetches models
-6. Select **COOPER** from the model dropdown in the chat interface
+```bash
+docker compose -f PDA-Runtime/docker-compose.private.yml up -d --build cooper-core
+```
 
-The env vars (`OPENAI_API_BASE_URL`, `OPENAI_API_KEY`) remain in `docker-compose.yml` as a fallback for fresh installs where no SQLite DB exists yet.
+### One-time model setup (host Ollama)
+
+Done by `setup-linux.sh`; manually it is:
+
+```bash
+ollama pull gemma4:12b
+ollama cp gemma4:12b COOPER-Private
+# OPTIONAL — legacy. `ollama create COOPER -f Models/cooper-personality/Modelfile` only
+# if you want `ollama run COOPER` for manual testing; the runtime doesn't use it.
+```
+
+### Open WebUI wiring (per machine, manual — env vars ignored after first run)
+
+Open WebUI stores connections in its own SQLite volume, which takes precedence over
+compose env vars. On a fresh volume:
+
+1. `http://localhost:3000` (Open) or `:3001` (Private) → complete the admin-account wizard.
+2. Avatar → **Settings → Connections** → under **OpenAI API** click **+**:
+   - URL: `http://cooper-core:8000/v1` (container DNS — same value on both stacks)
+   - Key: the `COOPER_API_KEYS` value from `PDA-Runtime/.env`
+3. Save (it pings the server and fetches models), then pick **COOPER** in the model dropdown.
 
 ---
 
 ## Running tests
 
-```powershell
-# Stack health check
-pwsh -File Scripts/Test-PDAStack.ps1
-pwsh -File Scripts/Test-PDAStack.ps1 -Deep
-pwsh -File Scripts/Test-PDAStack.ps1 -ValidateOpenWebUIChat
-```
-
 ```bash
-# Python Pipe unit tests (requires pytest; no pytest.ini exists, run from repo root)
-pytest "Open WebUI/Test_PDA_ChatBridge_Pipe.py"
+# Full cooper-core suite — 173 tests, ~1.5 s (run from cooper-core/)
+cd cooper-core && .venv/bin/python -m pytest
+
+# v1 Pipe unit tests (legacy bridge, run from repo root)
+cooper-core/.venv/bin/python -m pytest "Open WebUI/Test_PDA_ChatBridge_Pipe.py"
 ```
 
-`Tests/Fixtures/Workflow_Evidence/` contains JSON schema fixtures (valid + invalid) for evidence validation. No standalone runner exists yet.
+`Tests/Fixtures/Workflow_Evidence/` contains JSON schema fixtures (valid + invalid) for
+evidence validation. No standalone runner exists yet.
 
 ---
 
 ## Coding conventions (observed in existing code)
 
-**PowerShell:**
-- `[CmdletBinding()]` on every script.
-- Typed `param()` block with `[Parameter(Mandatory = $false)]` on all params.
-- Verb-Noun naming: `Invoke-AIECStart`, `Get-COOPEROperationalStatus`, `Start-PDABuildRunner`.
-- Path params default to `$PSScriptRoot`-relative values; never hardcode absolute paths.
-- Switch params for execution modes: `-DryRun`, `-PrepareExecution`, `-ExecuteCodexTask`.
-- All policy in declarative JSON files — no inline policy logic in scripts.
+**Python (`cooper-core/`):**
+- FastAPI + standard library-first; dependencies stay minimal (`requirements.txt`).
+- No new JSON policy files — implement the existing ones (`Config/`, `Scripts/*.json`).
+- Every behavior change lands with tests in the sibling `test_*.py` file.
 
-**Python (`Open WebUI/PDA_ChatBridge_Pipe.py`):**
-- Standard library only; `pydantic` imported with inline `try/except` fallback.
-- `Valves` inner class for Open WebUI Pipe configuration.
-- No external dependencies — file is deployed into Open WebUI's container environment.
+**PowerShell (`Scripts/` — legacy, maintained not extended):**
+- `[CmdletBinding()]` on every script; typed `param()` blocks; Verb-Noun naming.
+- Path params default to `$PSScriptRoot`-relative values; never hardcode absolute paths.
+- All policy in declarative JSON files — no inline policy logic in scripts.
 
 **JSON configs (`Scripts/`, `Config/`):**
 - All runtime policy declarative: `PDA_ApprovalPolicy.json`, `PDA_ModelRouting.json`, `PDA_RetryPolicy.json`, `PDA_LifecyclePolicy.json`.
 - Worker registry shape: `{name, purpose, model, input_type, output_type, next_worker}`.
 - Tool registry shape: `{name, drawer, role, permission_level, executor, approval_required, io_shape, security_notes}`.
 
-**New FastAPI code (step 1+):**
-- Python + FastAPI. Match standard library-first approach. No new JSON policy files — implement the existing ones (`Config/`, `Scripts/*.json`).
-
 ---
 
 ## DO NOT TOUCH
 
 ```
-.env                            # Secrets — never commit
-.env.local                      # Secrets — never commit
+PDA-Runtime/.env                # Secrets — never commit
+litellm/.env.local              # Secrets — never commit
 n8n-api-key.txt                 # Secrets
 insert_api_key.sql              # Secrets
 workers.json                    # Runtime state — gitignored
@@ -244,11 +212,19 @@ Secure Vault and StandardNotes are outside this repo entirely — COOPER must ne
 
 ---
 
-## Current vs target architecture
+## Architecture (current)
 
-**Current:** Open WebUI Pipe → n8n → PowerShell raw TCP socket (port 8788, `Scripts/Start-PDAWebhookServer.ps1`) → `Scripts/COOPER_ConversationalRouter.ps1` (~200 `.ps1` scripts). No conversational path; approval gate is policy JSON only; execution gateway unwired.
+**Live (v2):** Open WebUI → cooper-core (FastAPI) per workshop. cooper-core owns
+conversation, turn classification (`decision.py`), the approval gate
+(dispatch → approve → execute), the tool registry (13 executor types), skills
+(draft → promote loop, stats in `cooper_memory.db`), and routes inference to
+in-container Ollama (Private) or LiteLLM → cloud (Open). n8n and signal-cli run as
+containers in the Open stack. SQLite memory travels in the
+`pda-private-cooper-core-data` volume (`/app/data/cooper_memory.db`).
 
-**Target (PRD §4, §9):** Python FastAPI backend (replaces the socket/PS routing layer) + Ollama conversational core + LiteLLM routing + ChromaDB memory + SQLite state. Open WebUI and n8n retained. PowerShell scripts wrapped as callable registry tools where they do deterministic work.
+**Legacy (v1, retired):** Open WebUI Pipe → n8n → PowerShell raw TCP socket (port 8788) →
+`Scripts/COOPER_ConversationalRouter.ps1`. The scripts remain for the `powershell`
+executor tools and for reference; do not extend them.
 
 ---
 
@@ -271,16 +247,14 @@ Obsidian Vault/brain/Patterns.md     ← confirmed implementation choices
 
 **2. Confirm server health:**
 ```bash
-curl -s --max-time 3 http://localhost:8000/health
+curl -s --max-time 3 http://localhost:8000/health   # private
+curl -s --max-time 3 http://localhost:8001/health   # open
 ```
-Expected: `{"status":"ok","workshop":"private","backend":"ollama",...}`
-
-If down, restart from Windows PowerShell:
-```powershell
-cd D:\D_Projects\01_AI_Ecosystem\cooper-core
-.\Start-CooperCore.ps1 -Workshop private
+Expected: `{"status":"ok","workshop":...}`. If down:
+```bash
+docker compose -f PDA-Runtime/docker-compose.private.yml up -d   # or docker-compose.yml (open)
+docker compose -f PDA-Runtime/docker-compose.private.yml logs cooper-core --tail 50
 ```
-Then check `cooper-core.err.log` if still failing.
 
 **3. State position in one sentence before touching code:**
 > "Step N in progress. Server up. Today: [DoD for current step]. Gotcha: [if any]."

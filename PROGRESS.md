@@ -573,6 +573,22 @@ Plans: `Docs/superpowers/plans/2026-07-08-step-1{0,1,2,3}-*.md` (commit 50de439)
   3000/3001 (admin account + manual connection with the key in `PDA-Runtime/.env` — owner task);
   Batch 7 skill curation; Step 12 live Signal-phone test.
 
+- **2026-08-01 · CLAUDE.md Windows→Linux rewrite.** Closes the last CLAUDE.md item from the
+  migration entries. Full rewrite for the Pop!_OS deployment: start/stop/status is now
+  `install-cooper.sh` / `docker compose` (with port map and the `docker volume create
+  open-webui` fresh-machine gotcha), auth section documents the `COOPER_API_KEYS` Bearer flow,
+  bare-metal dev path is `cooper-core/.venv` + uvicorn with the `main.py` env vars, Open WebUI
+  wiring updated to container-DNS URL + generated key. Removed entirely: D:\ paths,
+  `.venv-win`, `Start-CooperCore.ps1` interop, WSL2 mirrored-networking section (git history
+  has them). Directory map updated (Skills/, litellm `.env.local`, legacy markings on
+  `Scripts/` and the PDA-Runtime `*.ps1` wrappers); "Current vs target architecture" replaced
+  with the live v2 description (v1 socket path marked retired). Every documented command
+  verified live this session: both healths, 173/173 suite (1.4 s), 8/8 pipe tests from repo
+  root, key extraction + 401 without auth. Modelfile note clarified: `FROM gemma3:12b` is
+  legacy — runtime extracts only the SYSTEM prompt; served weights are `gemma4:12b` aliased
+  `COOPER-Private`. Remaining open items unchanged: Open WebUI fresh-volume wiring (owner),
+  Batch 7 skill curation, Step 12 live Signal test.
+
 ---
 
 ## Blocked / needs owner input
