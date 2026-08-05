@@ -8,6 +8,11 @@ services:
       ai.ecosystem.stack: private
     environment:
       - OLLAMA_NO_CLOUD=true
+      # 6 GB VRAM is the binding constraint on this host: flash attention plus a
+      # q8_0 KV cache frees ~300 MiB, which is what lets a 12B quant stay fully
+      # GPU-resident instead of splitting layers to CPU.
+      - OLLAMA_FLASH_ATTENTION=1
+      - OLLAMA_KV_CACHE_TYPE=q8_0
     volumes:
       - private-ollama:/root/.ollama
     networks:
