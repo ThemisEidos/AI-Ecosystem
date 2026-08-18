@@ -37,6 +37,37 @@ Plans: `Docs/superpowers/plans/2026-07-08-step-1{0,1,2,3}-*.md` (commit 50de439)
 
 ---
 
+## Roadmap — Steps 14–15 (Max-Metric Program, scoped 2026-08-04 + 2026-08-18)
+
+Owner direction 2026-08-18: **max all nine harness metrics** (COOPER-Open to 45/45,
+Private to its physical ceiling), **outperform other agentic harnesses — specifically
+Hermes Agent** (29/45 on the same rubric) — and keep a running version operational
+throughout: every slice ships alone and live. Specs:
+`Docs/superpowers/specs/2026-08-04-step-14-autonomous-jobs-design.md` (approved) and
+`Docs/superpowers/specs/2026-08-18-step-15-max-metrics-design.md` (approved direction;
+governance gates G1–G5 open — see Blocked section).
+
+Execution order: 15a → 14a(rev) → 15c → 14b → 15d → 15e → 14c(+15f-i) → 14d → 14e →
+15f → 15g → 15h. 15b anytime; 14f blocked on hardware choice.
+
+- [ ] **15a — Native tool-calling dispatch** (M3→5; retires classifier dispatch; kills both 2026-08-04 gotchas as a class)
+- [ ] **14a — Fabric pattern executor** (existing plan gets a light revision on top of 15a)
+- [ ] **15b — Zero-touch Open WebUI provisioning** (M9→5; independent, anytime)
+- [ ] **15c — Per-role model routing** (implements `Scripts/PDA_ModelRouting.json`; LiteLLM fallback pools; Private E4B/12B role split — E4B benchmark is the entry gate)
+- [ ] **14b — Jobs harness + link-checker** (M2→3)
+- [ ] **15d — Council subsystem** (M6→5; planning-time panel + tiered final review, verdicts in evidence)
+- [ ] **15e — Planner–executor** (M2→4; big brain drafts envelopes, cheap model executes)
+- [ ] **14c — SearXNG + web_search + PII job** (ships WITH 15f's injection canaries, not before)
+- [ ] **14d — Bounded loop + opt-out documenter job**
+- [ ] **14e — Repo steward, draft-and-notify**
+- [ ] **15f — Robustness: retry policy implemented, chaos tests** (M8→5)
+- [ ] **15g — Governed learning breadth** (M5→5; prompt-diff self-optimization, outcome-weighted skill scores)
+- [ ] **15h — Session plans** (M2→5; gated on G3)
+- [ ] **15i — COOPER Cockpit: custom UI** (chat with native approve/deny buttons, Obsidian-brain graph view, workflow monitor, metrics dashboard, settings; incremental — monitor page after 14b, dashboard after 15d; Open WebUI retires only after Cockpit chat parity is browser-verified)
+- [ ] **14f — Network review design** (blocked on owner hardware choice)
+
+---
+
 ## What actually runs today
 
 *Updated 2026-07-01 after Step 5 (Workbench) implementation and verification.*
@@ -659,9 +690,63 @@ Plans: `Docs/superpowers/plans/2026-07-08-step-1{0,1,2,3}-*.md` (commit 50de439)
   predate the linkage rule); left untouched as history. Not live-observed (unit-tested
   only): the next-turn draft-offer notice — needs a novel non-test dispatch to draft
   something new.
+- **2026-08-04 · Browser path verified live; OpenRouter wired as a parallel connection.**
+  Owner logged into Open WebUI on :3000 and the model dropdown was empty. Root cause: an
+  OpenAI `sk-proj-…` key had been pasted where the `cooper-…` key belongs — Open WebUI shows
+  NO error for this, only `401` in cooper-core's log (Gotchas 2026-08-04). After the fix:
+  `GET /v1/models` and `POST /v1/chat/completions` all 200, and `run a status summary`
+  matched the promoted `run-status-summary` skill ("1 successful run, 100% trust") on a real
+  browser turn. **This closes the Open WebUI browser click-through, honestly flagged "not
+  done, not claimed" since 2026-07-08 across Steps 11/12/13** — the full path Open WebUI →
+  cooper-core → LiteLLM → cloud → browser is now proven end to end.
+  **OpenRouter:** already keyed and working through LiteLLM (alias `openrouter`) but exposed
+  nowhere; verified live from inside cooper-core (HTTP 200). Owner chose a second, direct
+  Open WebUI connection to `https://openrouter.ai/api/v1` rather than routing it behind
+  COOPER — deliberate ungoverned path for talking to models directly, governance tradeoff
+  stated and accepted. Key validated (paid account, no cap). COOPER's own brain and
+  classifier deliberately unchanged on gpt-4o-mini. Zero code changes, zero rebuild.
+  **Dispatch pipeline re-verified live twice** (Obsidian Note Writer): dispatch → halt →
+  approve → execute → reviewer pass → memory row → skill stats, with the note confirmed on
+  the HOST filesystem. First attempt failed on the note-writer's undocumented literal syntax
+  (Gotchas 2026-08-04) — the reviewer caught it and surfaced it rather than passing it.
+  **Draft-offer notice: still not observed live, and now understood why.** `_post_dispatch`
+  demonstrably ran (memory rows 6-7 written, skills table updated), so `draft_skill` returned
+  `None` silently — the drafter judged both dispatches non-reusable, which is exactly what the
+  2026-08-02 gate instructs (`proposer.py:22-24` names "verification probe" and "one-off").
+  The first test message literally announced itself as a verification; the second was a
+  one-off note write. Not a bug — but it means the notice path needs a dispatch whose
+  *procedure* is repeatable, and the obvious candidate (`lite_llm_router`) turned out to be
+  unreachable through natural language (Gotchas 2026-08-04). Still open.
+- **2026-08-18 · New direction — Step 15 Max-Metric Program: max every metric, outperform Hermes Agent, stay operational.**
+  Session defined a 9-metric agentic-harness rubric; scored COOPER 32/45 vs Hermes Agent 29/45 —
+  mirror-image profiles (COOPER maxes governance/audit/verification exactly where Hermes bottoms
+  out, and vice versa). Owner merged three threads into one program
+  (`Docs/superpowers/specs/2026-08-18-step-15-max-metrics-design.md`): (1) close every metric
+  gap — 8 new slices 15a–15h interleaved with Step 14's; (2) planner–executor split — a big-brain
+  model drafts each job's plan+envelope once (plan == envelope, hash-pinned), a cheap executor
+  runs the steps inside it; (3) council system at planning time and final review only — mid-run
+  deviation prevention stays deterministic (envelope/quota/exception queue in code); councils
+  judge quality, mechanisms enforce bounds. **15a (native tool-calling) goes first** and retires
+  the classifier-dispatch architecture; key enabler verified: gemma4 has native Ollama tool
+  support, so Private needs no model swap. **Local-model decision:** quantize-down rejected —
+  gemma4:12b is already Q4_K_M and Q3/Q2 quality loss is disqualifying; role-split instead:
+  `gemma4:e4b` (~5GB, fully GPU-resident on the 6GB card) for high-frequency roles, 12b
+  on-demand for judgment; E4B side-by-side benchmark queued as 15c's entry gate. **OpenRouter
+  recon** (live key query): account is NOT free-tier — $7.91 of $20 prepaid consumed; `:free`
+  daily caps are account-wide so fan-out doesn't multiply quota; `qwen3-235b` undercuts
+  gpt-4o-mini per-token. Five governance gates (G1–G5) recorded in spec §6 and the Blocked
+  section — each blocks only its named slice. Docs updated same day: North Star, Gotchas, this
+  file, the Step 15 spec.
 
 ---
 
 ## Blocked / needs owner input
 
-*(none)*
+Governance gates from the Step 15 spec §6 — each blocks only its named slice:
+
+- **G1 (blocks 15e's Private variant):** may an Open-drafted, owner-approved plan file be handed inbound to Private for execution? Default if undecided: no — Private plans locally with gemma4 (weaker plans, purest boundary).
+- **G2 (blocks 15c's planner alias):** Open brain/planner model — keep gpt-4o-mini, or switch (`qwen3-235b` is cheaper per-token; `:free` options may log prompts — Category 1 only). Changing the brain reverses the 2026-08-04 decision.
+- **G3 (blocks 15h):** session-plans governance amendment — per-job approval extended to interactive chat work.
+- **G4 (blocks 14c):** SearXNG scope — Open-stack only, or also reachable from Private (self-hosted, local-only possible).
+- **G5 (anytime):** OpenRouter spend limit / burn alert — credits silently drawing down, $12.09 of $20 remains.
+- **14f (unchanged from Step 14 spec):** network-review data source — router syslog / Pi-hole / other.

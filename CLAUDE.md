@@ -158,7 +158,13 @@ compose env vars. On a fresh volume:
 2. Avatar → **Settings → Connections** → under **OpenAI API** click **+**:
    - URL: `http://cooper-core:8000/v1` (container DNS — same value on both stacks)
    - Key: the `COOPER_API_KEYS` value from `PDA-Runtime/.env`
-3. Save (it pings the server and fetches models), then pick **COOPER** in the model dropdown.
+3. Save (it pings the server and fetches models), then pick **COOPER-Open** (or
+   **COOPER-Private**) in the model dropdown — cooper-core advertises a workshop-branded
+   id (`DISPLAY_MODEL` in `main.py`), never a bare `COOPER`.
+
+**If the dropdown is empty, the key is wrong.** Open WebUI surfaces no error for a rejected
+key — the only evidence is `"GET /v1/models HTTP/1.1" 401 Unauthorized` in
+`docker logs pda-open-cooper-core`. See Gotchas 2026-08-04.
 
 ---
 
@@ -241,6 +247,52 @@ executor tools and for reference; do not extend them.
 ## Discipline rule
 
 Every artifact produced in this repo must **run**, not describe. New standards, policy, or doctrine documents do not count as done. If you cannot execute it, it is not finished. Before declaring any phase done, apply the anti-drift checklist in `PRD.md §10`.
+
+## Operating mindset — how to work in this repo
+
+These are the working habits that have produced this repo's best sessions. Follow them
+regardless of which model is running.
+
+**Ground every claim in the running system.** Before asserting anything works, is broken,
+or is configured a certain way: `curl` the endpoint, read `docker logs`, query the SQLite
+DB, read the actual config. Docs and memory describe the past; only the running system is
+now. Corollary: after editing cooper-core, `up -d` does NOT rebuild — live-test against an
+un-rebuilt container and you are testing old code (Gotchas 2026-07-08).
+
+**Debug layer by layer, evidence before hypotheses.** When something fails across
+components (browser → Open WebUI → cooper-core → LiteLLM → backend), test each boundary
+independently and find WHERE it breaks before proposing any fix. Read what the failing
+component actually stored (e.g. Open WebUI's own SQLite) — that ends arguments that log
+inspection alone cannot. Root cause before fix, one hypothesis at a time; no bundled fixes.
+
+**A plausible reply is not proof of execution.** `POST /chat` returns a `decision` field —
+check it. `"answer"` means no tool ran, no matter how good the reply looks. The same
+skepticism applies to your own work: an edit that "should" work is unverified until the
+live path exercised it. Evidence, then claims.
+
+**Distinguish harness bugs from brain limits.** A regex that rejects valid input is a code
+bug — fix it. A classifier misrouting a request is a model limit — document the phrasing
+that works (or escalate the model), don't contort the code around it. Both failure types
+look like "COOPER did the wrong thing"; the fixes live in different places.
+
+**Report honestly, always.** Not-done is flagged as not-done, never claimed. Failures are
+reported with their output. If verification was skipped, say so. Prior sessions' honesty
+("browser click-through not verified — no browser available") is what made 2026-08-04's
+verification meaningful; keep that standard.
+
+**Write findings down the day they happen.** New trap → dated entry in
+`Obsidian Vault/brain/Gotchas.md` with the diagnostic trail (the commands that end the
+argument, not just the conclusion). Position change → PROGRESS.md decision log + North
+Star. Undocumented findings die with the session.
+
+**Stay inside the asked scope; governance is owner-only.** Fix what was asked, list what
+else you found, let the owner choose. Never amend approval rules, permission levels, or
+workshop boundaries implicitly — those are ThemisEidos's decisions, made explicitly or not
+at all. When a fork genuinely changes the work, ask; otherwise decide and state the
+assumption.
+
+**Every behavior change lands with tests** in the sibling `test_*.py`, and the full suite
+runs before any "done" claim: `cd cooper-core && .venv/bin/python -m pytest`.
 
 ---
 

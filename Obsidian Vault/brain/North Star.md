@@ -1,8 +1,17 @@
 # North Star — COOPER Project Direction
 
-> Updated 2026-07-01. Source of truth: PROGRESS.md + PRD.md.
+> Updated 2026-08-18. Source of truth: PROGRESS.md + PRD.md.
 
 ## Current Position
+
+**NEW DIRECTION 2026-08-18 — Step 15 Max-Metric Program.** Owner redefined success:
+COOPER maxes all nine agentic-harness metrics (Open to 45/45, Private to its physical
+ceiling), **outperforms Hermes Agent** on the same rubric, and a running version stays
+operational the whole way — every slice ships alone and live. Spec:
+`Docs/superpowers/specs/2026-08-18-step-15-max-metrics-design.md`; slice checklist in
+PROGRESS.md's Steps 14–15 roadmap. **Next up: slice 15a (native tool-calling dispatch)**
+— it goes before 14a and retires classifier dispatch. Five owner gates (G1–G5) are open
+in PROGRESS.md's Blocked section.
 
 **All 9 steps COMPLETE (2026-07-02).** Step 9 shipped and DoD-verified live: the private
 compose stack (`PDA-Runtime/docker-compose.private.yml`) brings cooper-core + Ollama +
@@ -38,7 +47,63 @@ Next horizon: Batch 8 skill curation when drafts accumulate (now gated for quali
 decide grandfather-vs-archive for the 12 non-compliant v1 evidence records in
 `State/Workflow_Evidence/`; investigate the dead DNS listener on 127.0.0.1:53 (owner).
 Signal gateway (Step 12) deferred to "far later" by owner direction 2026-08-02 —
-needs a real registered phone. Open WebUI fresh-volume wizard on :3000/:3001 still owner-pending.
+needs a real registered phone.
+
+**Open WebUI browser click-through is DONE as of 2026-08-04** — no longer owner-pending.
+See the dated entry below.
+
+### 2026-08-18 · Step 15 scoped: max every metric, planner–executor, council
+
+Full detail: PROGRESS.md's 2026-08-18 decision-log entry + the Step 15 spec. Highlights:
+
+- **9-metric harness rubric defined; COOPER 32/45 vs Hermes Agent 29/45** — mirror-image
+  profiles. Standing constraint carried into every slice: never spend M4 (governance) or
+  M7 (audit) to buy another metric — that trade is Hermes's profile, declining it is ours.
+- **Architecture:** big brain drafts plan+envelope → council critiques (dissents attached)
+  → owner approves → hash-pinned → cheap executor runs inside it. Councils at planning +
+  final review only; mid-run deviation prevention stays deterministic (envelope/quota/
+  exception queue in code). Rejected and recorded so they stay rejected: mid-run council
+  checkpoints, runtime LLM-picks-the-LLM routing, `:free`-model fan-out for quota.
+- **15a first:** native tool-calling dispatch. gemma4 has native Ollama tool support
+  (~86% claimed), so Private needs no model swap; both 2026-08-04 gotchas (unreachable
+  `lite_llm_router`, note-writer literal syntax) die as a class. The written 14a plan gets
+  a light revision on top.
+- **Private model strategy:** quantize-down rejected (12b already Q4_K_M; Q3/Q2 unusable).
+  Role split instead — `gemma4:e4b` (~5GB, fully GPU-resident) for high-frequency roles,
+  12b on-demand for judgment. E4B benchmark (tool-call accuracy, t/s, 100% GPU) is 15c's
+  entry gate and caps Private's M6 score.
+- **COOPER Cockpit (15i), owner-added same day:** custom UI to replace Open WebUI —
+  chat with native approve/deny buttons (retires the approval-phrase-regex fragility
+  class), a graph view of the Obsidian brain, workflow monitor + exception-queue drain,
+  M1–M9 metrics dashboard, settings. Strictly a client of the same gated API — never a
+  bypass. Incremental delivery; Open WebUI retires only after chat parity is
+  browser-verified (same rule that governed the v1 PS-webhook retirement).
+- **Owner gates open (G1–G5):** Private plan-handoff, Open model choice, session-plans
+  amendment, SearXNG scope, OpenRouter spend guard. Each blocks only its named slice.
+
+### 2026-08-04 · Browser path proven; OpenRouter added as a parallel ungoverned path
+
+Owner-driven session, no roadmap step. Full detail in PROGRESS.md's 2026-08-04 entry.
+
+- **The browser path is verified end to end** — Open WebUI → cooper-core → LiteLLM → cloud →
+  browser, on a real turn, with the promoted `run-status-summary` skill matching live. This
+  had been honestly flagged "not done, not claimed" since 2026-07-08 (Steps 11/12/13 all
+  lacked a browser). It should stop appearing as an open item.
+- **The bug that hid it:** an OpenAI key pasted where the COOPER key belongs. Open WebUI
+  renders an empty dropdown and no error whatsoever; the 401 exists only in cooper-core's
+  log. Worth internalizing — "empty dropdown" reads as "server down" and is not.
+- **OpenRouter** was already keyed and working through LiteLLM but exposed nowhere. Owner
+  chose a direct second Open WebUI connection (ungoverned, deliberate — governance tradeoff
+  stated and accepted) over routing it behind COOPER. COOPER's brain stays gpt-4o-mini by
+  explicit owner decision. No code changed.
+- **Two real paper-cuts logged, neither fixed** (out of scope, see Gotchas 2026-08-04): the
+  note writer demands a literal syntax the registry doesn't advertise and only fails AFTER
+  an approval is spent; and `lite_llm_router` could not be dispatched at all — three
+  phrasings all classified as `answer`, COOPER answering the payload itself. The latter is
+  the more serious of the two: a registered L3 tool that natural language cannot reach.
+- **Draft-offer notice still unobserved, but no longer mysterious** — `_post_dispatch` ran
+  (memory + skill stats prove it); the drafter correctly judged both dispatches non-reusable
+  per its own 2026-08-02 gate. Needs a dispatch with a genuinely repeatable procedure.
 
 ### 2026-08-02 · Working-product session: Batch 7, launchers, Step 10 follow-ups, 4 hardening features
 

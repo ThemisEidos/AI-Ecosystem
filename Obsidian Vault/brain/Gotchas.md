@@ -198,3 +198,69 @@ Every `git clone` on the laptop (local file paths AND network) hung indefinitely
 `echo "127.0.1.1 pop-os" | sudo tee -a /etc/hosts` — and separately investigate what listens on 127.0.0.1:53 and why resolved's Global DNS points at it.
 
 Diagnostic trail: `getent hosts pop-os` hangs while `getent hosts github.com` works; `GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t git clone …` succeeds instantly.
+
+### 2026-08-04 · A wrong key in Open WebUI shows an EMPTY model dropdown, never an error
+
+Open WebUI was wired to `http://cooper-core:8000/v1` with the wrong key (an OpenAI `sk-proj-…`
+pasted where the 39-char `cooper-…` key belongs). The UI showed no error, no toast, no red
+banner — just a model dropdown with nothing in it, which reads like "the server is down" rather
+than "auth failed". The only evidence is server-side:
+`docker logs pda-open-cooper-core | grep 401` → `"GET /v1/models HTTP/1.1" 401 Unauthorized`
+from the open-webui container's IP.
+
+**Debug order that works** (each layer independently, don't guess): (1) host →
+`curl localhost:8001/v1/models -H "Authorization: Bearer $KEY"`; (2) container DNS →
+`docker exec pda-open-webui sh -c 'curl -s http://cooper-core:8000/v1/models -H "Authorization: Bearer <key>"'`;
+(3) what Open WebUI actually stored →
+`docker exec pda-open-webui python3 -c "import sqlite3,json; c=sqlite3.connect('/app/backend/data/webui.db'); print(json.loads(c.execute('select data from config order by id desc limit 1').fetchone()[0])['openai'])"`.
+Step 3 is the one that ends the argument — it shows the stored URL and key length per connection.
+
+Related: the model appears as **COOPER-Open** / **COOPER-Private**, not `COOPER`
+(`DISPLAY_MODEL`, main.py:82). CLAUDE.md said "pick COOPER" until this date.
+
+### 2026-08-04 · Obsidian Note Writer demands a literal syntax the registry doesn't advertise
+
+`general_tool_registry.yaml` lists `obsidian_note_writer` inputs as `note_path` and
+`markdown_content`, and the classifier happily dispatches to it from ordinary phrasing. But
+`_run_note_editor` (executor.py:357) regex-parses the RAW message and requires the literal form
+`write note <name>.md: <content>` (`_NOTE_WRITE_RE`, executor.py:116). Anything else returns
+"Workbench: could not parse a note write request" — and only AFTER you have spent an approval
+on it, because the parse happens post-gate.
+
+Two further constraints the registry doesn't mention: the filename charset is `[\w.\- ]`, so
+**no subdirectories** (`Open Projects/foo.md` can never match), and the executor ignores any path
+anyway — `Path(filename).name` into a fixed `Obsidian Vault/00_Inbox/`, refusing anything that
+resolves outside it. That inbox IS bind-mounted rw on both stacks, so writes reach the host
+(verified: file present on host, owned by root — container-written, as in the Step 11 history).
+
+Working example: `write note openrouter-access.md: OpenRouter reaches the Open stack two ways…`
+
+### 2026-08-04 · The classifier answers "run the litellm router using X: <payload>" instead of dispatching
+
+Three phrasings — `use the litellm router using openrouter: <question>`,
+`run the litellm router using openrouter: <question>`, and the same with an imperative
+("summarize this in one sentence — …") — ALL classified as `answer` / "request for information".
+COOPER answered the payload itself with its own model; the L3 `lite_llm_router` tool never ran
+and no approval was ever requested. The tool was live-verified working on 2026-07-21, so this is
+a classifier-routing problem, not a broken executor — the payload being answerable appears to
+outweigh the explicit run-verb + named tool. Unresolved; not investigated further (out of scope
+the day it was found). If you need the router, check `POST /chat`'s `decision` field —
+`"decision":"answer"` means it never dispatched, regardless of how plausible the reply looks.
+
+Note `_MODEL_HINT_RE` (executor.py:120) is `\busing\s+([\w.\-]+)` — no `/`, so raw OpenRouter
+slugs like `anthropic/claude-sonnet-5` cannot be named directly; only LiteLLM aliases work.
+
+### 2026-08-18 · OpenRouter "free" isn't, and `:free` fan-out doesn't multiply quota
+
+Two facts that kill two plausible assumptions (verified live: `GET openrouter.ai/api/v1/key`
+with the key from `litellm/.env.local`):
+
+- The account is `is_free_tier: false` with **$7.91 of a $20 prepaid balance consumed**
+  ($5.44 in Aug 2026 alone — presumably the direct Open WebUI → OpenRouter connection).
+  "Never had to pay" = silent credit drawdown, not free usage. No spend limit set (gate G5).
+- The `:free`-model daily request cap (1000/day at ≥$10 balance) is **account-wide across
+  all `:free` models** — spreading a multi-agent workflow over five `:free` models draws one
+  shared bucket. Quota-spreading only works across paid models / separate providers.
+
+Also: COOPER-Open's brain (`openai` alias → gpt-4o-mini) bills the **OpenAI** key, not
+OpenRouter — repointing it to an `openrouter/*` alias moves that spend onto the credits.
