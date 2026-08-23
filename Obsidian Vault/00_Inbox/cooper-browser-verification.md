@@ -1,0 +1,1 @@
+Open WebUI browser path verified 2026-08-04 - dispatch, approval gate, and execution confirmed live through the browser against COOPER-Open.
