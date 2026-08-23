@@ -159,11 +159,11 @@ Hermes's RCE vector — 14c does not ship without it.
 
 | # | Decision | Needed by | Default if undecided |
 |---|---|---|---|
-| G1 | **Private plan-handoff:** may an Open-drafted, owner-approved plan file be handed inbound to Private for execution? Defensible iff the planning context contains zero Category 2 data; still boundary-adjacent | 15e | No — Private plans locally with gemma4 (weaker plans, purest boundary) |
-| G2 | **Open brain/planner model:** reverse the 2026-08-04 "stays gpt-4o-mini" decision? Candidates: `qwen3-235b` (cheaper than current), `:free` Nemotron/GLM (provider may log prompts — Category 1 only, stated not assumed). Planner role (15c) can differ from brain | 15c | Brain stays gpt-4o-mini; planner alias choice still required |
-| G3 | **Session-plans amendment** (15h): extends per-job approval to interactive chat work | 15h | Not enacted; M2 rests at 4 |
-| G4 | **SearXNG scope:** Open-stack only, or also reachable from Private (self-hosted, so local-only is possible)? | 14c | Open only |
-| G5 | **Spend guard:** set an OpenRouter spend limit / burn alert now that credit drawdown is confirmed ($7.91 of $20 used) | anytime | none set (status quo) |
+| G1 | **DECIDED 2026-08-23: No.** Private plan-handoff — may an Open-drafted, owner-approved plan file be handed inbound to Private for execution? Owner ruled no: Private plans locally with gemma4 (weaker plans, purest boundary) | 15e | — |
+| G2 | **DECIDED 2026-08-23: keep gpt-4o-mini.** Open brain stays gpt-4o-mini (reaffirms 2026-08-04). Planner alias (15c) starts as gpt-4o-mini too; revisit only if 15c benchmarking shows planning quality is the binding constraint | 15c | — |
+| G3 | **DECIDED 2026-08-23: Yes — amendment enacted.** Session-plans (15h): per-job approval extends to interactive chat work. 15h unblocked; M2 ceiling 5 | 15h | — |
+| G4 | **DECIDED 2026-08-23: Open-stack only.** SearXNG scope — Private gets no web search; explicitly revisitable later if the owner chooses to give Private a search path | 14c | — |
+| G5 | **DECIDED 2026-08-23: Yes — enact a spend guard.** OpenRouter spend limit / burn alert ($12.09 of $20 remained at decision time). Mechanism: dashboard key-level limit (owner action) + a burn-alert check when the digest job lands (14b); threshold set at implementation | anytime | — |
 
 ## 7. Rejected in this design (recorded so they stay rejected)
 

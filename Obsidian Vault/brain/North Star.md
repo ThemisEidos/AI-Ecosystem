@@ -10,8 +10,11 @@ ceiling), **outperforms Hermes Agent** on the same rubric, and a running version
 operational the whole way — every slice ships alone and live. Spec:
 `Docs/superpowers/specs/2026-08-18-step-15-max-metrics-design.md`; slice checklist in
 PROGRESS.md's Steps 14–15 roadmap. **Next up: slice 15a (native tool-calling dispatch)**
-— it goes before 14a and retires classifier dispatch. Five owner gates (G1–G5) are open
-in PROGRESS.md's Blocked section.
+— it goes before 14a and retires classifier dispatch. **All five owner gates decided
+2026-08-23** (G1: no inbound Open-drafted plans to Private; G2: brain stays gpt-4o-mini;
+G3: session-plans amendment enacted, 15h unblocked; G4: SearXNG Open-only, Private gets
+no web search; G5: spend guard to be enacted). 14f is pinned as a placeholder until the
+home-lab network exists. No governance blockers remain on any slice.
 
 **All 9 steps COMPLETE (2026-07-02).** Step 9 shipped and DoD-verified live: the private
 compose stack (`PDA-Runtime/docker-compose.private.yml`) brings cooper-core + Ollama +
@@ -78,8 +81,9 @@ Full detail: PROGRESS.md's 2026-08-18 decision-log entry + the Step 15 spec. Hig
   M1–M9 metrics dashboard, settings. Strictly a client of the same gated API — never a
   bypass. Incremental delivery; Open WebUI retires only after chat parity is
   browser-verified (same rule that governed the v1 PS-webhook retirement).
-- **Owner gates open (G1–G5):** Private plan-handoff, Open model choice, session-plans
-  amendment, SearXNG scope, OpenRouter spend guard. Each blocks only its named slice.
+- **Owner gates: all five decided 2026-08-23** — G1 no inbound plans to Private; G2 keep
+  gpt-4o-mini; G3 session-plans yes; G4 SearXNG Open-only (revisitable); G5 spend guard
+  yes. 14f pinned until the home-lab network exists.
 
 ### 2026-08-04 · Browser path proven; OpenRouter added as a parallel ungoverned path
 

@@ -48,7 +48,7 @@ throughout: every slice ships alone and live. Specs:
 governance gates G1–G5 open — see Blocked section).
 
 Execution order: 15a → 14a(rev) → 15c → 14b → 15d → 15e → 14c(+15f-i) → 14d → 14e →
-15f → 15g → 15h. 15b anytime; 14f blocked on hardware choice.
+15f → 15g → 15h. 15b anytime; 14f pinned until the home-lab network exists (2026-08-23).
 
 - [ ] **15a — Native tool-calling dispatch** (M3→5; retires classifier dispatch; kills both 2026-08-04 gotchas as a class)
 - [ ] **14a — Fabric pattern executor** (existing plan gets a light revision on top of 15a)
@@ -64,7 +64,7 @@ Execution order: 15a → 14a(rev) → 15c → 14b → 15d → 15e → 14c(+15f-i
 - [ ] **15g — Governed learning breadth** (M5→5; prompt-diff self-optimization, outcome-weighted skill scores)
 - [ ] **15h — Session plans** (M2→5; gated on G3)
 - [ ] **15i — COOPER Cockpit: custom UI** (chat with native approve/deny buttons, Obsidian-brain graph view, workflow monitor, metrics dashboard, settings; incremental — monitor page after 14b, dashboard after 15d; Open WebUI retires only after Cockpit chat parity is browser-verified)
-- [ ] **14f — Network review design** (blocked on owner hardware choice)
+- [ ] **14f — Network review design** (pinned 2026-08-23: placeholder until the home-lab network is built; integrate COOPER when that project starts)
 
 ---
 
@@ -737,6 +737,26 @@ Execution order: 15a → 14a(rev) → 15c → 14b → 15d → 15e → 14c(+15f-i
   gpt-4o-mini per-token. Five governance gates (G1–G5) recorded in spec §6 and the Blocked
   section — each blocks only its named slice. Docs updated same day: North Star, Gotchas, this
   file, the Step 15 spec.
+- **2026-08-23 · G1 decided: NO — Private plans locally, no inbound Open-drafted plans.** Owner
+  ruled that an Open-drafted, owner-approved plan file may NOT be handed inbound to Private for
+  execution. This matches the spec's default: Private plans with gemma4 locally (weaker plans,
+  purest workshop boundary). Consequence: 15e's Private variant is now unblocked and its design
+  is fixed — the planner–executor split on Private runs entirely on local models; M2's Private
+  ceiling stays at the "jobs + local planner" level. Recorded in spec §6 and the Blocked section.
+- **2026-08-23 · G2, G3, G5 decided (same session as G1).** **G2: keep gpt-4o-mini** as
+  COOPER-Open's brain (reaffirms 2026-08-04); the 15c planner alias also starts as gpt-4o-mini —
+  revisit only if 15c benchmarking shows planning quality is the binding constraint. **G3: yes** —
+  the session-plans governance amendment is enacted: per-job approval extends to interactive chat
+  work; 15h is unblocked and M2's target ceiling is 5. **G5: yes** — an OpenRouter spend guard
+  will be enacted: owner sets a key-level limit in the OpenRouter dashboard, and a burn-alert
+  check joins the digest job when 14b lands; dollar threshold chosen at implementation. Still
+  open: G4 (SearXNG scope, blocks 14c) and 14f (network-review data source).
+- **2026-08-23 · G4 decided: SearXNG stays Open-only; 14f pinned pending home lab.** Private
+  gets no web-search path — the boundary stays "nothing leaves the machine"; owner may revisit
+  later if Private ever needs internet lookup. All five G-gates are now closed; 14c is fully
+  unblocked. **14f is no longer a pending decision** — the home-lab network doesn't exist yet, so
+  it converts to a placeholder: when the home-lab project begins, pick the data source (router
+  syslog / Pi-hole / other) and integrate COOPER as the network reviewer then.
 
 ---
 
@@ -744,9 +764,9 @@ Execution order: 15a → 14a(rev) → 15c → 14b → 15d → 15e → 14c(+15f-i
 
 Governance gates from the Step 15 spec §6 — each blocks only its named slice:
 
-- **G1 (blocks 15e's Private variant):** may an Open-drafted, owner-approved plan file be handed inbound to Private for execution? Default if undecided: no — Private plans locally with gemma4 (weaker plans, purest boundary).
-- **G2 (blocks 15c's planner alias):** Open brain/planner model — keep gpt-4o-mini, or switch (`qwen3-235b` is cheaper per-token; `:free` options may log prompts — Category 1 only). Changing the brain reverses the 2026-08-04 decision.
-- **G3 (blocks 15h):** session-plans governance amendment — per-job approval extended to interactive chat work.
-- **G4 (blocks 14c):** SearXNG scope — Open-stack only, or also reachable from Private (self-hosted, local-only possible).
-- **G5 (anytime):** OpenRouter spend limit / burn alert — credits silently drawing down, $12.09 of $20 remains.
-- **14f (unchanged from Step 14 spec):** network-review data source — router syslog / Pi-hole / other.
+- ~~**G1**~~ **DECIDED 2026-08-23: No** — see decision log. Private plans locally with gemma4.
+- ~~**G2**~~ **DECIDED 2026-08-23: keep gpt-4o-mini** (brain and initial 15c planner alias) — see decision log.
+- ~~**G3**~~ **DECIDED 2026-08-23: Yes** — session-plans amendment enacted; 15h unblocked.
+- ~~**G4**~~ **DECIDED 2026-08-23: Open only** — Private gets no web search; revisitable later by owner choice. 14c fully unblocked.
+- ~~**G5**~~ **DECIDED 2026-08-23: Yes** — spend guard to be enacted (dashboard limit + digest burn alert); threshold at implementation.
+- **14f — PINNED (owner direction 2026-08-23):** the home-lab network is not built yet. Not a decision gate anymore — a placeholder: when the home-lab project starts, revisit the data-source choice (router syslog / Pi-hole / other) and integrate COOPER then.
