@@ -118,17 +118,6 @@ _CODEX_STOPWORDS = {
     "implement", "implementation", "task", "codex",
 }
 
-_DMZ_WRITE_RE = re.compile(
-    r"write\s+(?:to\s+)?dmz\s+(?P<filename>[\w.\-]+)\s*:\s*(?P<content>.+)",
-    re.IGNORECASE | re.DOTALL,
-)
-_NOTE_WRITE_RE = re.compile(
-    r"write\s+note\s+(?P<filename>[\w.\- ]+?\.md)\s*:\s*(?P<content>.+)",
-    re.IGNORECASE | re.DOTALL,
-)
-_MODEL_HINT_RE = re.compile(r"\busing\s+([\w.\-]+)", re.IGNORECASE)
-_URL_RE = re.compile(r"https?://\S+")
-
 _QWEN_ANALYSIS_SYSTEM_PROMPT = (
     "You are a specialist local analysis/drafting assistant operating inside the "
     "Restricted DMZ Workspace. Produce concise, structured analysis or draft text "
@@ -166,33 +155,20 @@ class ExecutionError(Exception):
     pass
 
 
-def _resolve_script_in_dir(message: str, ext: str, scripts_dir: Path) -> Optional[Path]:
-    """
-    Find a filename ending in `ext` mentioned in the message that actually
-    exists in `scripts_dir`. Returns the resolved Path or None if nothing
-    matches. Any path traversal is neutralized before the existence check.
-    """
-    for token in message.split():
-        clean = token.strip("\"'(),")
-        if clean.lower().endswith(ext):
-            candidate = (scripts_dir / Path(clean).name).resolve()
-            try:
-                candidate.relative_to(scripts_dir.resolve())
-            except ValueError:
-                continue
-            if candidate.exists():
-                return candidate
-    return None
-
-
-def _resolve_script(message: str) -> Optional[Path]:
-    """Find a .ps1 filename mentioned in the message that exists in Scripts/."""
-    return _resolve_script_in_dir(message, ".ps1", _SCRIPTS_DIR)
-
-
-def _resolve_python_script(message: str) -> Optional[Path]:
-    """Find a .py filename mentioned in the message that exists in Scripts/Python/."""
-    return _resolve_script_in_dir(message, ".py", _SCRIPTS_PY_DIR)
+def _resolve_named_script(name: str, scripts_dir: Path) -> Optional[Path]:
+    """Resolve a script filename named directly in validated args against
+    scripts_dir. Any path traversal is neutralized before the existence
+    check (Path(...).name strips directories; relative_to confirms
+    containment)."""
+    clean = Path(name).name
+    if not clean:
+        return None
+    candidate = (scripts_dir / clean).resolve()
+    try:
+        candidate.relative_to(scripts_dir.resolve())
+    except ValueError:
+        return None
+    return candidate if candidate.exists() else None
 
 
 def _authorize_script(script: Path, tool: dict) -> Optional[str]:
@@ -225,7 +201,7 @@ def _stub(executor_type: str, tool_name: str) -> str:
     )
 
 
-async def run(tool: dict, message: str, workshop: str) -> str:
+async def run(tool: dict, message: str, workshop: str, args: Optional[dict] = None) -> str:
     """
     Execute an approved tool and return the result string.
 
@@ -235,18 +211,19 @@ async def run(tool: dict, message: str, workshop: str) -> str:
     """
     executor_type = tool.get("executor_type", "")
     tool_name     = tool.get("name", tool.get("id", "unknown"))
+    args = args or {}
 
     if executor_type == "powershell":
-        return await _run_powershell(tool, message)
+        return await _run_powershell(tool, args)
 
     if executor_type == "python":
-        return await _run_python(tool, message)
+        return await _run_python(tool, args)
 
     if executor_type == "skill_import":
-        return await _run_skill_import(message)
+        return await _run_skill_import(args)
 
     if executor_type == "skill_promote":
-        return await _run_skill_promote(message, workshop)
+        return await _run_skill_promote(args, workshop)
 
     if executor_type == "informational":
         return _run_informational(tool, message, workshop)
@@ -255,25 +232,25 @@ async def run(tool: dict, message: str, workshop: str) -> str:
         return _run_local_read(tool, workshop)
 
     if executor_type == "filesystem":
-        return await _run_filesystem(message)
+        return await _run_filesystem(args)
 
     if executor_type == "local_llm":
-        return await _run_local_llm(message)
+        return await _run_local_llm(args)
 
     if executor_type == "note_editor":
-        return await _run_note_editor(message)
+        return await _run_note_editor(args)
 
     if executor_type == "llm_api":
-        return await _run_llm_api(message)
+        return await _run_llm_api(args)
 
     if executor_type == "browser":
-        return await _run_browser(message)
+        return await _run_browser(args)
 
     if executor_type == "workflow_engine":
-        return await _run_workflow_engine(tool, message, workshop)
+        return await _run_workflow_engine(tool, args, workshop)
 
     if executor_type == "cli_launcher":
-        return await _run_cli_launcher(message)
+        return await _run_cli_launcher(args)
 
     return _stub(executor_type, tool_name)
 
@@ -297,19 +274,13 @@ def _run_local_read(tool: dict, workshop: str) -> str:
     return f"[{tool_name}]\n{registry.format_tool_list(workshop)}"
 
 
-async def _run_filesystem(message: str) -> str:
+async def _run_filesystem(args: dict) -> str:
     """Restricted DMZ Writer (Private only). New files only — governance
     classifies overwrites as Level 5 (blocked by default), so an existing
     path is refused rather than silently replaced."""
-    match = _DMZ_WRITE_RE.search(message)
-    if match is None:
-        return (
-            "Workbench: could not parse a DMZ write request — use "
-            "'write dmz <filename>: <content>'."
-        )
-    filename = Path(match.group("filename")).name  # strips any directory components
-    content = match.group("content").strip()
-    if not content:
+    filename = Path(str(args.get("filename", ""))).name
+    content = str(args.get("content", "")).strip()
+    if not filename or not content:
         return "Workbench: DMZ write request has no content to write."
     content_bytes = content.encode("utf-8")
     if len(content_bytes) > _MAX_DMZ_CONTENT_BYTES:
@@ -343,19 +314,17 @@ async def _run_filesystem(message: str) -> str:
         return f"Workbench: DMZ write failed unexpectedly — {exc}"
 
 
-async def _run_local_llm(message: str) -> str:
-    """Qwen Local Assistant (Private only) — specialist analysis/drafting route,
-    distinct from the conversational COOPER-Private personality. Repointed at
-    the already-deployed Ollama model per the qwen_local_assistant design
-    decision (Qwen itself was superseded by the Gemma-based COOPER-Private
-    rename, PROGRESS.md 2026-07-02) rather than pulling a second model."""
+async def _run_local_llm(args: dict) -> str:
+    """Qwen Local Assistant (Private only) — specialist analysis/drafting route."""
+    prompt = str(args.get("prompt", "")).strip()
+    if not prompt:
+        return "Workbench: no prompt supplied for local analysis."
     try:
         draft = await _ollama_complete(
-            _OLLAMA_HOST,
-            _QWEN_MODEL,
+            _OLLAMA_HOST, _QWEN_MODEL,
             [
                 {"role": "system", "content": _QWEN_ANALYSIS_SYSTEM_PROMPT},
-                {"role": "user", "content": message},
+                {"role": "user", "content": prompt},
             ],
         )
     except Exception as exc:
@@ -363,22 +332,13 @@ async def _run_local_llm(message: str) -> str:
     return f"[Qwen Local Assistant — draft]\n{draft.strip()}"
 
 
-async def _run_note_editor(message: str) -> str:
+async def _run_note_editor(args: dict) -> str:
     """Obsidian Note Writer (Open only). Create-or-update, same Level 2
-    reasoning as _run_filesystem — governance names this exact action
-    ("create Obsidian note") as the canonical Level 2 example. Writes into
-    00_Inbox/ per 08_Obsidian Vault Structure.md's recommended layout (new
-    content lands for a human to file properly), never into the project
-    docs area."""
-    match = _NOTE_WRITE_RE.search(message)
-    if match is None:
-        return (
-            "Workbench: could not parse a note write request — use "
-            "'write note <name>.md: <content>'."
-        )
-    filename = Path(match.group("filename").strip()).name
-    content = match.group("content").strip()
-    if not content:
+    reasoning as _run_filesystem. Writes into 00_Inbox/ per 08_Obsidian
+    Vault Structure.md's recommended layout."""
+    filename = Path(str(args.get("filename", "")).strip()).name
+    content = str(args.get("content", "")).strip()
+    if not filename or not content:
         return "Workbench: note write request has no content to write."
     content_bytes = content.encode("utf-8")
     if len(content_bytes) > _MAX_NOTE_CONTENT_BYTES:
@@ -407,27 +367,18 @@ async def _run_note_editor(message: str) -> str:
         return f"Workbench: note write failed unexpectedly — {exc}"
 
 
-async def _run_llm_api(message: str) -> str:
+async def _run_llm_api(args: dict) -> str:
     """LiteLLM Router (Open only) — routes an approved prompt to LiteLLM's
-    chat-completions endpoint, the same gateway the main conversational path
-    already uses (proven live, PROGRESS.md 2026-07-07).
-
-    Live-verified finding: passing the *entire* dispatch message (including
-    the "use the LiteLLM Router tool to..." framing) as the prompt confused
-    the downstream model into commenting on the tool-invocation framing
-    itself, rather than answering the actual request — caught by the
-    sub-agent reviewer. Extracts the text after the last colon as the actual
-    prompt, matching the "<instruction>: <payload>" convention already used
-    by the DMZ/note writers, falling back to the whole message if no colon
-    is present."""
-    hint_match = _MODEL_HINT_RE.search(message)
-    model = hint_match.group(1) if hint_match else _LITELLM_DEFAULT_MODEL
-    prompt = message.rsplit(":", 1)[-1].strip() if ":" in message else message
+    chat-completions endpoint. args.prompt is the clean instruction text
+    with no tool-invocation framing (the 2026-07-21 'framing text sent as
+    prompt' bug class dies with the regex it required)."""
+    model = args.get("model") or _LITELLM_DEFAULT_MODEL
+    prompt = str(args.get("prompt", "")).strip()
+    if not prompt:
+        return "Workbench: LiteLLM Router request has no prompt to route."
     try:
         response = await _openai_complete(
-            _LITELLM_BASE_URL,
-            _LITELLM_API_KEY,
-            model,
+            _LITELLM_BASE_URL, _LITELLM_API_KEY, model,
             [{"role": "user", "content": prompt}],
         )
     except Exception as exc:
@@ -435,14 +386,13 @@ async def _run_llm_api(message: str) -> str:
     return f"[LiteLLM Router — model: {model}]\n{response.strip()}"
 
 
-async def _run_browser(message: str) -> str:
+async def _run_browser(args: dict) -> str:
     """Browser Research (Open only). HTTP fetch + stdlib HTML→text extraction
-    per decision #2 — no Playwright/Selenium (new heavy dependency and
-    sandboxing burden, deferred). Won't render JS-only pages."""
-    url_match = _URL_RE.search(message)
-    if url_match is None:
+    per decision #2 — no Playwright/Selenium. Won't render JS-only pages."""
+    urls = args.get("urls") or []
+    url = str(urls[0]).strip().rstrip(".,)") if urls else ""
+    if not url.startswith(("http://", "https://")):
         return "Workbench: no http(s):// URL found in request."
-    url = url_match.group(0).rstrip(".,)")
 
     loop = asyncio.get_running_loop()
 
@@ -470,13 +420,11 @@ async def _run_browser(message: str) -> str:
     return f"[Browser Research — {url}]\n{text}"
 
 
-async def _run_workflow_engine(tool: dict, message: str, workshop: str) -> str:
-    """n8n workflow trigger (Open only — n8n has no reachable instance from
-    Private, confirmed: no n8n service exists in docker-compose.private.yml).
-    allowed_workflows maps a spoken workflow_id to a webhook path; per the
-    Batch -1 finding, this mapping is a manually-reviewed-safe allowlist, not
-    just an existence check — never add an entry without inspecting the
-    workflow's own nodes for unsafe command construction first."""
+async def _run_workflow_engine(tool: dict, args: dict, workshop: str) -> str:
+    """n8n workflow trigger (Open only — no reachable instance from
+    Private). allowed_workflows maps a workflow id to a webhook path; per
+    the Batch -1 finding, this mapping is a manually-reviewed-safe
+    allowlist, not just an existence check."""
     if workshop != "open":
         return (
             "Workbench: no n8n (or equivalent) workflow engine is deployed for "
@@ -490,32 +438,26 @@ async def _run_workflow_engine(tool: dict, message: str, workshop: str) -> str:
             "allowed_workflows mapping in its registry entry. Execution is fail-closed."
         )
 
-    lowered = message.lower()
-    matched_id = next((wid for wid in allowed if wid.replace("_", " ") in lowered or wid in lowered), None)
-    if matched_id is None:
+    workflow_id = str(args.get("workflow", ""))
+    if workflow_id not in allowed:
         return (
             f"Workbench: no known workflow_id found in request. "
             f"Known workflows: {', '.join(sorted(allowed))}."
         )
-    webhook_path = allowed[matched_id]
-    payload_text = message.rsplit(":", 1)[-1].strip() if ":" in message else message
+    webhook_path = allowed[workflow_id]
+    payload_text = str(args.get("payload") or "")
 
     try:
         async with httpx.AsyncClient(timeout=_FETCH_TIMEOUT) as client:
             resp = await client.post(
                 f"{_N8N_BASE_URL}/webhook/{webhook_path}",
-                # Sent under both keys for compatibility across the current
-                # allowlist: PDA_Command_Router.json reads body.command;
-                # PDA-ChatBridge-HTTP.json reads body.user_message/body.message.
-                # Live-verified finding: sending only "message" left
-                # PDA_Command_Router's route classification at "unknown".
                 json={"command": payload_text, "message": payload_text},
             )
             resp.raise_for_status()
             result_text = resp.text[:_MAX_OUTPUT]
     except Exception as exc:
-        raise ExecutionError(f"n8n workflow '{matched_id}' call failed — {exc}")
-    return f"[n8n workflow: {matched_id}]\n{result_text.strip()}"
+        raise ExecutionError(f"n8n workflow '{workflow_id}' call failed — {exc}")
+    return f"[n8n workflow: {workflow_id}]\n{result_text.strip()}"
 
 
 def _codex_task_title(request_text: str) -> str:
@@ -581,15 +523,15 @@ def _codex_task_markdown(title: str, request_text: str) -> str:
     ])
 
 
-async def _run_cli_launcher(message: str) -> str:
+async def _run_cli_launcher(args: dict) -> str:
     """Codex Task Launcher (Open only) — Level 2 template-writing half of
-    WF-002 only (decision #4). Each dispatch gets a fresh timestamped
-    filename, so there is no realistic overwrite case to guard against."""
-    title = _codex_task_title(message)
-    slug = _codex_task_slug(message)
+    WF-002 only. Each dispatch gets a fresh timestamped filename."""
+    request_text = str(args.get("request", ""))
+    title = _codex_task_title(request_text)
+    slug = _codex_task_slug(request_text)
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     filename = f"TASK-{timestamp}-{slug}.md"
-    content = _codex_task_markdown(title, message)
+    content = _codex_task_markdown(title, request_text)
 
     loop = asyncio.get_running_loop()
 
@@ -605,14 +547,14 @@ async def _run_cli_launcher(message: str) -> str:
         return f"Workbench: Codex task creation failed unexpectedly — {exc}"
 
 
-async def _run_powershell(tool: dict, message: str) -> str:
-    script = _resolve_script(message)
+async def _run_powershell(tool: dict, args: dict) -> str:
+    script_name = str(args.get("script", ""))
+    script = _resolve_named_script(script_name, _SCRIPTS_DIR)
 
     if script is None:
         return (
-            "Workbench: no .ps1 script path found in request, or the named "
-            "script does not exist in Scripts/. "
-            "Rephrase with the script filename (e.g. 'run Test-PDAStack.ps1')."
+            f"Workbench: script '{script_name}' does not exist in Scripts/. "
+            "Rephrase with the script filename (e.g. 'Test-PDAStack.ps1')."
         )
 
     denial = _authorize_script(script, tool)
@@ -656,15 +598,15 @@ async def _run_powershell(tool: dict, message: str) -> str:
         raise ExecutionError(f"executor error ({type(exc).__name__}): {exc}")
 
 
-async def _run_python(tool: dict, message: str) -> str:
+async def _run_python(tool: dict, args: dict) -> str:
     """Mirrors _run_powershell exactly, for .py scripts under Scripts/Python/."""
-    script = _resolve_python_script(message)
+    script_name = str(args.get("script", ""))
+    script = _resolve_named_script(script_name, _SCRIPTS_PY_DIR)
 
     if script is None:
         return (
-            "Workbench: no .py script path found in request, or the named "
-            "script does not exist in Scripts/Python/. "
-            "Rephrase with the script filename (e.g. 'run Test-Exec.py')."
+            f"Workbench: script '{script_name}' does not exist in Scripts/Python/. "
+            "Rephrase with the script filename (e.g. 'Test-Exec.py')."
         )
 
     denial = _authorize_script(script, tool)
@@ -701,12 +643,14 @@ async def _run_python(tool: dict, message: str) -> str:
         raise ExecutionError(f"executor error ({type(exc).__name__}): {exc}")
 
 
-async def _run_skill_import(message: str) -> str:
+async def _run_skill_import(args: dict) -> str:
     """Post-approval skill registration. Network + filesystem work off-loop."""
     loop = asyncio.get_running_loop()
+    skill_name = str(args.get("skill_name", ""))
+    tap_url = str(args.get("tap_url", ""))
 
     def _sync() -> str:
-        entry = skills.register_import(message)
+        entry = skills.register_import(skill_name, tap_url)
         content_hash = entry.get("content_hash", "?")
         return (
             f"Skill '{entry.get('id', '?')}' imported and registered for the "
@@ -723,15 +667,14 @@ async def _run_skill_import(message: str) -> str:
         return f"Workbench: skill import failed unexpectedly — {exc}"
 
 
-async def _run_skill_promote(message: str, workshop: str) -> str:
+async def _run_skill_promote(args: dict, workshop: str) -> str:
     """Post-approval draft activation. Filesystem work off-loop, same
-    degrade-gracefully contract as _run_skill_import (matches the Step 10
-    review finding: a broad Exception fallback so unwrapped OS/IO errors
-    never propagate out of the executor)."""
+    degrade-gracefully contract as _run_skill_import."""
     loop = asyncio.get_running_loop()
+    skill_name = str(args.get("skill_name", ""))
 
     def _sync() -> str:
-        entry = skills.register_promotion(message, workshop=workshop)
+        entry = skills.register_promotion(skill_name, workshop=workshop)
         content_hash = entry.get("content_hash", "?")
         return (
             f"Skill '{entry.get('id', '?')}' promoted from draft and registered for the "
