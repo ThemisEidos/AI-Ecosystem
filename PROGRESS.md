@@ -757,6 +757,13 @@ Execution order: 15a → 14a(rev) → 15c → 14b → 15d → 15e → 14c(+15f-i
   unblocked. **14f is no longer a pending decision** — the home-lab network doesn't exist yet, so
   it converts to a placeholder: when the home-lab project begins, pick the data source (router
   syslog / Pi-hole / other) and integrate COOPER as the network reviewer then.
+- **2026-08-23 · G5 enacted on the owner side: $15 lifetime key cap, auto top-up off.** Owner set
+  the OpenRouter key's credit limit to $15 in the dashboard. Verified live via
+  `GET /api/v1/auth/key`: `limit: 15`, `limit_reset: null` (never resets — cumulative lifetime
+  cap), `usage: 7.91` already counted, so ~$7.09 of headroom remains under the cap ($12.09 credit
+  remains on the account). At the cap the key returns 402s — no charge, no refill. Owner chose to
+  keep $15 rather than match the $20 prepaid total (guard trips early by design). COOPER-side
+  half still to build: burn alert in the 14b digest job, trigger = remaining < $5.
 
 ---
 
@@ -768,5 +775,5 @@ Governance gates from the Step 15 spec §6 — each blocks only its named slice:
 - ~~**G2**~~ **DECIDED 2026-08-23: keep gpt-4o-mini** (brain and initial 15c planner alias) — see decision log.
 - ~~**G3**~~ **DECIDED 2026-08-23: Yes** — session-plans amendment enacted; 15h unblocked.
 - ~~**G4**~~ **DECIDED 2026-08-23: Open only** — Private gets no web search; revisitable later by owner choice. 14c fully unblocked.
-- ~~**G5**~~ **DECIDED 2026-08-23: Yes** — spend guard to be enacted (dashboard limit + digest burn alert); threshold at implementation.
+- ~~**G5**~~ **CLOSED 2026-08-23:** dashboard key limit set to $15 lifetime (never resets, verified live via `/api/v1/auth/key`: `limit_reset: null`, $7.91 already counted → ~$7.09 headroom); auto top-up off. Burn alert (trigger: remaining < $5) joins the digest job at 14b.
 - **14f — PINNED (owner direction 2026-08-23):** the home-lab network is not built yet. Not a decision gate anymore — a placeholder: when the home-lab project starts, revisit the data-source choice (router syslog / Pi-hole / other) and integrate COOPER then.
