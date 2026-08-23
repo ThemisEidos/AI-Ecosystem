@@ -162,33 +162,53 @@ def _session_id(
     return _derive_session_id(creds.credentials if creds else None)
 
 
-async def _handle_dispatch(message: str, session_id: str = "local") -> str:
+_ARGS_PREVIEW_CHAR_THRESHOLD = 60
+
+
+def _render_args_preview(args: dict) -> str:
+    """Approval-halt preview line: short values verbatim, long ones as a
+    char count (spec §4 main.py — 'note: ...md, content: 214 chars')."""
+    if not args:
+        return ""
+    parts = []
+    for key, value in args.items():
+        text = str(value)
+        if len(text) > _ARGS_PREVIEW_CHAR_THRESHOLD:
+            parts.append(f"{key}: {len(text)} chars")
+        else:
+            parts.append(f"{key}: {value!r}")
+    return "\n\nArgs — " + ", ".join(parts)
+
+
+async def _handle_tool_call(
+    tool_id: str, args: dict, raw_message: str, session_id: str = "local"
+) -> str:
     """
-    Quartermaster selects a tool; Safety Officer gates it; Workbench executes
+    The model's tool_call IS the dispatch (spec §2 step 4-5). Resolve
+    tool_id to a registry entry, validate args, gate via approval, execute
     if the gate passes. L0/L1 auto-run immediately. L2+ halts for approval.
+    Every failure here is fail-closed and spends no approval (spec §5).
     """
-    # Enforce backend integrity before doing anything else
     try:
         workshop.check_backend(BACKEND, WORKSHOP)
     except workshop.WorkshopViolation as exc:
         return f"Workshop violation: {exc}"
 
-    tool = await registry.select_tool_llm(
-        WORKSHOP, message,
-        base_url=BACKEND_URL, api_key=BACKEND_KEY,
-        model=CLASSIFIER_MODEL, backend=BACKEND,
-    )
+    tool = registry.get_tool(WORKSHOP, tool_id)
     if tool is None:
-        return (
-            "Acknowledged. No registered tool in the active workshop matches this "
-            "request. Nothing will run — check the registry or rephrase."
-        )
+        return f"COOPER proposed a call to unregistered tool '{tool_id}'. Nothing ran."
 
-    # Enforce workshop boundary before gating or executing
     try:
         workshop.check_tool(tool, WORKSHOP)
     except workshop.WorkshopViolation as exc:
         return f"Workshop violation: {exc}"
+
+    violations = registry.validate_args(tool, args)
+    if violations:
+        return (
+            f"COOPER proposed an invalid call to {tool.get('name', tool_id)}: "
+            f"{'; '.join(violations)}. Nothing ran."
+        )
 
     skill_note = ""
     skill = await asyncio.to_thread(
@@ -205,7 +225,9 @@ async def _handle_dispatch(message: str, session_id: str = "local") -> str:
         preview = ""
         if tool.get("executor_type") == "skill_import":
             try:
-                text = await asyncio.to_thread(skills.preview_import, message)
+                text = await asyncio.to_thread(
+                    skills.preview_import, args.get("skill_name", ""), args.get("tap_url", "")
+                )
                 preview = f"\n\nSKILL.md under review:\n---\n{text}\n---"
             except skills.SkillError as exc:
                 return f"Skill import rejected before approval: {exc}"
@@ -213,24 +235,25 @@ async def _handle_dispatch(message: str, session_id: str = "local") -> str:
                 return f"Skill import rejected before approval (unexpected error): {exc}"
         elif tool.get("executor_type") == "skill_promote":
             try:
-                text = await asyncio.to_thread(skills.preview_promote, message)
+                text = await asyncio.to_thread(skills.preview_promote, args.get("skill_name", ""))
                 preview = f"\n\nDraft SKILL.md under review:\n---\n{text}\n---"
             except skills.SkillError as exc:
                 return f"Skill promotion rejected before approval: {exc}"
             except Exception as exc:
                 return f"Skill promotion rejected before approval (unexpected error): {exc}"
-        approval.request(WORKSHOP, tool, message, session_id)
+        approval.request(WORKSHOP, tool, raw_message, session_id, args=args)
         return (
             f"Halt — {tool.get('name', tool.get('id'))} "
             f"[{tool.get('drawer', 'Uncategorized')}, permission level {tool.get('permission_level', '?')}] "
             f"requires approval before it can proceed{skill_note}. Reply 'approve' or 'deny'."
+            f"{_render_args_preview(args)}"
             f"{preview}"
         )
 
     # L0/L1: execute immediately
     if skill_note:
         print(f"  [archivist] {tool.get('name')}{skill_note}")
-    return await _execute(tool, message, session_id)
+    return await _execute(tool, raw_message, session_id, args)
 
 
 # Post-dispatch notices: background work (memory writes, skill drafts) reports
@@ -274,14 +297,17 @@ async def _post_dispatch(tool: dict, message: str, raw_output: str, verdict, ses
             print(f"  [!!] proposer failed (non-fatal): {exc}")
 
 
-async def _execute(tool: dict, message: str, session_id: str = "local") -> str:
+async def _execute(
+    tool: dict, message: str, session_id: str = "local", args: Optional[dict] = None
+) -> str:
     """
     Run an approved/auto-run tool through the Workbench (Worker), then have
     the Reviewer check the result (Step 7) before it reaches the user.
     Memory + skill drafting happen in the background (_post_dispatch).
     """
+    args = args or {}
     try:
-        raw_output = await executor.run(tool, message, WORKSHOP)
+        raw_output = await executor.run(tool, message, WORKSHOP, args)
     except executor.ExecutionError as exc:
         return f"Workbench error: {exc}"
 
@@ -312,7 +338,7 @@ async def _resolve_approval(message: str, session_id: str = "local") -> str:
             return "No pending action to cancel."
         if ticket.tool.get("executor_type") == "skill_import":
             try:
-                skills.discard_staged(ticket.message)
+                skills.discard_staged(ticket.args.get("skill_name", ""))
             except Exception as exc:
                 print(f"  [!!] discard_staged failed (non-fatal): {exc}")
         name = ticket.tool.get("name", ticket.tool.get("id"))
@@ -322,7 +348,7 @@ async def _resolve_approval(message: str, session_id: str = "local") -> str:
     if ticket is None:
         return "No pending action to approve. Nothing queued."
 
-    return await _execute(ticket.tool, ticket.message, session_id)
+    return await _execute(ticket.tool, ticket.message, session_id, ticket.args)
 
 
 async def _chat_core(message: str, history: List[dict], session_id: str = "local") -> tuple:
@@ -346,9 +372,8 @@ async def _chat_core_inner(message: str, history: List[dict], session_id: str = 
     return await route_turn(
         message, history,
         generate_answer=_generate,
-        base_url=BACKEND_URL, api_key=BACKEND_KEY,
-        model=COOPER_MODEL, classifier_model=CLASSIFIER_MODEL,
-        backend=BACKEND, dispatch_handler=lambda m: _handle_dispatch(m, session_id),
+        tools=registry.render_workshop_tools(WORKSHOP),
+        tool_call_handler=lambda tid, a, raw: _handle_tool_call(tid, a, raw, session_id),
     )
 
 
@@ -628,9 +653,9 @@ async def _stream_sse(message: str, history: List[dict], session_id: str = "loca
                 base_url=BACKEND_URL,
                 api_key=BACKEND_KEY,
                 model=COOPER_MODEL,
-                classifier_model=CLASSIFIER_MODEL,
                 backend=BACKEND,
-                dispatch_handler=lambda m: _handle_dispatch(m, session_id),
+                tools=registry.render_workshop_tools(WORKSHOP),
+                tool_call_handler=lambda tid, a, raw: _handle_tool_call(tid, a, raw, session_id),
             )
 
         async for chunk in content_iter:
@@ -673,7 +698,7 @@ async def _single_text_chunk(text: str) -> AsyncIterator[str]:
     yield text
 
 
-async def _generate(message: str, history: List[dict]) -> str:
+async def _generate(message: str, history: List[dict], tools: Optional[List[dict]] = None):
     try:
         await asyncio.to_thread(archivist.index_brain, _ARCHIVIST_CONN)
         recall_context = archivist.format_recall_context(
@@ -699,9 +724,9 @@ async def _generate(message: str, history: List[dict]) -> str:
         msgs.insert(1, {"role": "system", "content": recall_context})
     if BACKEND == "openai":
         from decision import _openai_complete
-        return await _openai_complete(BACKEND_URL, BACKEND_KEY, COOPER_MODEL, msgs)
+        return await _openai_complete(BACKEND_URL, BACKEND_KEY, COOPER_MODEL, msgs, tools=tools)
     from decision import _ollama_complete
-    return await _ollama_complete(BACKEND_URL, COOPER_MODEL, msgs)
+    return await _ollama_complete(BACKEND_URL, COOPER_MODEL, msgs, tools=tools)
 
 
 def _build_messages(history: List[dict], user_message: str) -> List[dict]:

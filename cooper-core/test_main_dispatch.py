@@ -29,7 +29,7 @@ def test_execute_returns_before_memory_and_draft_run(monkeypatch):
     async def scenario():
         gate = asyncio.Event()
 
-        async def fake_run(tool, message, workshop):
+        async def fake_run(tool, message, workshop, args=None):
             return "RAW-OUTPUT"
 
         async def fake_review(*a, **k):
@@ -80,3 +80,82 @@ def test_chat_core_appends_queued_notice_to_next_reply(monkeypatch):
     reply2, _ = asyncio.run(
         main._chat_core("what skills do you have?", [], "sess-n"))
     assert "OTHER" not in reply2
+
+
+import approval  # noqa: E402
+
+
+def test_handle_tool_call_refuses_unknown_tool_id():
+    reply = asyncio.run(main._handle_tool_call("nonexistent_tool", {}, "do it", "s1"))
+    assert "unregistered tool" in reply.lower()
+
+
+def test_handle_tool_call_refuses_invalid_args(monkeypatch):
+    monkeypatch.setattr(main.registry, "get_tool", lambda ws, tid: {
+        "id": "status_summary", "name": "Status Summary", "permission_level": 0,
+        "workshop": "Open Workshop", "executor_type": "informational",
+    })
+    monkeypatch.setattr(main.registry, "validate_args", lambda tool, args: ["missing required argument 'x'"])
+    reply = asyncio.run(main._handle_tool_call("status_summary", {}, "do it", "s1"))
+    assert "invalid call" in reply.lower()
+    assert "missing required argument" in reply
+
+
+def test_handle_tool_call_opens_ticket_with_rendered_args_preview(monkeypatch):
+    monkeypatch.setattr(main, "_API_KEYS", set())
+    monkeypatch.setattr(main.registry, "get_tool", lambda ws, tid: {
+        "id": "obsidian_note_writer", "name": "Obsidian Note Writer",
+        "workshop": "Open Workshop", "permission_level": 2,
+        "approval_required": True, "executor_type": "note_editor",
+        "drawer": "Knowledge Shelf",
+    })
+    monkeypatch.setattr(main.registry, "validate_args", lambda tool, args: [])
+    approval._pending.clear()
+    reply = asyncio.run(main._handle_tool_call(
+        "obsidian_note_writer",
+        {"filename": "x.md", "content": "y" * 100},
+        "write it", "s2",
+    ))
+    assert "Halt —" in reply
+    assert "filename: 'x.md'" in reply
+    assert "content: 100 chars" in reply
+    ticket = approval.peek(main.WORKSHOP, "s2")
+    assert ticket.args == {"filename": "x.md", "content": "y" * 100}
+
+
+def test_approve_executes_with_ticket_stored_args(monkeypatch):
+    monkeypatch.setattr(main, "_API_KEYS", set())
+    tool = {"id": "obsidian_note_writer", "name": "Obsidian Note Writer",
+            "workshop": "Open Workshop", "executor_type": "note_editor"}
+    approval._pending.clear()
+    approval.request(main.WORKSHOP, tool, "write it", "s3",
+                      args={"filename": "x.md", "content": "hi"})
+
+    seen = {}
+
+    async def fake_run(t, message, workshop, args=None):
+        seen["args"] = args
+        return "wrote it"
+
+    monkeypatch.setattr(main.executor, "run", fake_run)
+
+    verdict = main.review.ReviewVerdict(verdict="pass", reason="ok")
+
+    async def fake_review(*a, **k):
+        return verdict
+
+    monkeypatch.setattr(main.review, "review", fake_review)
+
+    async def fake_remember(*a, **k):
+        return None
+
+    monkeypatch.setattr(main.archivist, "remember", fake_remember)
+
+    async def fake_draft(*a, **k):
+        return None
+
+    monkeypatch.setattr(main.proposer, "draft_skill", fake_draft)
+
+    reply = asyncio.run(main._resolve_approval("approve", "s3"))
+    assert seen["args"] == {"filename": "x.md", "content": "hi"}
+    assert "wrote it" in reply

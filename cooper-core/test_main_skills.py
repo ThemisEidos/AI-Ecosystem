@@ -85,19 +85,16 @@ def test_get_skills_endpoint_isolates_per_entry_status_failure(monkeypatch):
 
 
 def test_rejected_preview_never_opens_an_approval_ticket(monkeypatch):
-    # Core security property of Step 10: if skills.preview_import() raises before
-    # approval.request() is ever called, _handle_dispatch() must return the
+    # Core security property: if skills.preview_import() raises before
+    # approval.request() is ever called, _handle_tool_call() must return the
     # rejection immediately and MUST NOT leave a dangling approval ticket behind.
-    # Previously verified only by a manual live-curl transcript — this pins it down.
     monkeypatch.setattr(main, "_API_KEYS", set())
     monkeypatch.setattr(main, "_ALLOW_ANON", True)
 
-    async def _select_import_skill(*args, **kwargs):
-        return dict(_IMPORT_SKILL_TOOL)
+    monkeypatch.setattr(main.registry, "get_tool", lambda ws, tid: dict(_IMPORT_SKILL_TOOL))
+    monkeypatch.setattr(main.registry, "validate_args", lambda tool, args: [])
 
-    monkeypatch.setattr(main.registry, "select_tool_llm", _select_import_skill)
-
-    def _boom(message):
+    def _boom(skill_name, tap_url):
         raise skills.SkillError("bad tap")
 
     monkeypatch.setattr(main.skills, "preview_import", _boom)
@@ -109,7 +106,11 @@ def test_rejected_preview_never_opens_an_approval_ticket(monkeypatch):
     )
 
     reply = asyncio.run(
-        main._handle_dispatch("import skill tap-skill from https://x/y")
+        main._handle_tool_call(
+            "import_skill",
+            {"skill_name": "tap-skill", "tap_url": "https://x/y"},
+            "import skill tap-skill from https://x/y",
+        )
     )
 
     assert "rejected" in reply.lower()
@@ -164,8 +165,10 @@ def test_deny_import_skill_cleans_staging(tmp_path, monkeypatch):
     monkeypatch.setattr(skills, "_REPO_ROOT", tmp_path)
 
     import approval
-    msg = "import skill tap-skill from https://example.com/tap"
-    approval.request("open", _IMPORT_SKILL_TOOL, msg, "anon")
+    approval.request(
+        "open", _IMPORT_SKILL_TOOL, "import skill tap-skill from https://example.com/tap",
+        "anon", args={"skill_name": "tap-skill", "tap_url": "https://example.com/tap"},
+    )
     with TestClient(main.app) as client:
         resp = client.post("/chat", json={"message": "deny"})
     assert resp.status_code == 200
