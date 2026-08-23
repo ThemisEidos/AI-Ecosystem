@@ -68,6 +68,15 @@ _MAX_NOTE_CONTENT_BYTES = 65_536
 _MAX_FETCH_BYTES = 262_144  # 256 KB of raw HTML before extraction
 _FETCH_TIMEOUT   = 20  # seconds — a research fetch should fail fast, not hang a turn
 
+# Every executor_type `run()` actually dispatches to (excludes the generic
+# `_stub` fallback for unrecognized types) — read by the registry-walk test
+# (M1) to assert every registry tool maps to a real handler, not a stub.
+WIRED_EXECUTOR_TYPES = frozenset({
+    "powershell", "python", "skill_import", "skill_promote", "informational",
+    "local_read", "filesystem", "local_llm", "note_editor", "llm_api",
+    "browser", "workflow_engine", "cli_launcher",
+})
+
 # Private Workshop's local Ollama backend — read directly rather than importing
 # main.py's WORKSHOP-scoped constants, to avoid a circular import (main imports
 # executor). Mirrors main.py's own env-var pattern.

@@ -2,6 +2,7 @@ from pathlib import Path
 
 import yaml
 
+import executor as executor_mod
 import registry
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -114,3 +115,48 @@ def test_validate_args_rejects_path_separators_when_flagged():
 
 def test_validate_args_rejects_non_dict_args():
     assert registry.validate_args(_ECHO_TOOL, ["not", "a", "dict"]) != []
+
+
+def _synthetic_args(params: dict) -> dict:
+    """Minimal args dict that satisfies a parameters schema's required keys —
+    just enough to drive validate_args() through a real accept path."""
+    out = {}
+    for key in params.get("required", []):
+        prop = params["properties"][key]
+        t = prop.get("type")
+        if t == "string":
+            out[key] = "example"
+        elif t == "array":
+            item_type = (prop.get("items") or {}).get("type")
+            out[key] = ["https://example.com"] if item_type == "string" else []
+        elif t == "object":
+            out[key] = {}
+    return out
+
+
+def test_every_enabled_tool_has_a_valid_wired_parameters_block():
+    """Registry-walk test — this IS metric M1, permanently (spec §6.1). For
+    every enabled tool in both registries: a parameters block exists and is
+    well-formed, render_tool_schema emits a valid OpenAI shape, a synthetic
+    schema-conforming call passes validate_args, and the tool's
+    executor_type maps to a real executor.py handler (no live LLM)."""
+    for workshop_name in ("open", "private"):
+        for tool in registry.list_tools(workshop_name):
+            params = tool.get("parameters")
+            assert params is not None, f"{tool['id']} is missing a parameters block"
+            assert params.get("type") == "object", tool["id"]
+            assert "properties" in params, tool["id"]
+
+            schema = registry.render_tool_schema(tool)
+            assert schema["type"] == "function"
+            assert schema["function"]["name"] == tool["id"]
+            assert schema["function"]["parameters"] == params
+
+            synthetic = _synthetic_args(params)
+            violations = registry.validate_args(tool, synthetic)
+            assert violations == [], f"{tool['id']}: {violations}"
+
+            executor_type = tool.get("executor_type")
+            assert executor_type in executor_mod.WIRED_EXECUTOR_TYPES, (
+                f"{tool['id']}'s executor_type {executor_type!r} is not wired"
+            )
