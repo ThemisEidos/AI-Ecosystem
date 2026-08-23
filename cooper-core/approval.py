@@ -14,7 +14,7 @@ State is in-memory, one pending ticket per workshop.
 import re
 import time
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict, Optional
 
 _TICKET_TTL_SECONDS = 600  # 10 minutes
@@ -28,6 +28,7 @@ class ApprovalTicket:
     message: str
     created_at: float
     session_id: str = "local"
+    args: dict = field(default_factory=dict)
 
 
 _pending: Dict[tuple, ApprovalTicket] = {}  # (workshop, session_id) -> ticket
@@ -38,10 +39,18 @@ def needs_approval(tool: dict) -> bool:
     return bool(tool.get("approval_required")) or tool.get("permission_level", 0) >= 2
 
 
-def request(workshop: str, tool: dict, message: str, session_id: str = "local") -> ApprovalTicket:
+def request(
+    workshop: str,
+    tool: dict,
+    message: str,
+    session_id: str = "local",
+    args: Optional[dict] = None,
+) -> ApprovalTicket:
     """Open a pending ticket for this (workshop, session), replacing any prior one.
     Session binding (Step 13): only the session that opened a ticket can see or
-    consume it — client A can never approve client B's action."""
+    consume it — client A can never approve client B's action. `args` carries
+    the tool_call's validated arguments through to execution on approve
+    (Step 15a) — `main.py` reads `ticket.args` in `_execute`."""
     ticket = ApprovalTicket(
         id=uuid.uuid4().hex[:8],
         workshop=workshop,
@@ -49,6 +58,7 @@ def request(workshop: str, tool: dict, message: str, session_id: str = "local") 
         message=message,
         created_at=time.time(),
         session_id=session_id,
+        args=args or {},
     )
     _pending[(workshop, session_id)] = ticket
     return ticket
