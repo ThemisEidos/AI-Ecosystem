@@ -1,4 +1,3 @@
-import asyncio
 from pathlib import Path
 
 import yaml
@@ -37,69 +36,81 @@ def test_registry_yaml_files_have_no_duplicate_keys():
         yaml.load(path.read_text(encoding="utf-8"), Loader=_DuplicateKeyLoader)
 
 
-def _run(coro):
-    return asyncio.run(coro)
-
-
-def test_keyword_select_finds_status_tool():
-    tool = registry.select_tool("private", "run a status summary")
-    assert tool is not None
-    assert tool["id"] == "status_summary_private"
-
-
-def test_keyword_select_returns_none_on_no_overlap():
-    assert registry.select_tool("private", "zzzz qqqq") is None
-
-
 def test_is_registry_query():
     assert registry.is_registry_query("what tools do you have") is True
     assert registry.is_registry_query("how are you") is False
 
 
-def test_llm_select_returns_chosen_tool(monkeypatch):
-    async def choose(*args, **kwargs):
-        return '{"tool_id": "powershell_private"}'
-
-    monkeypatch.setattr(registry, "_ollama_complete", choose)
-    tool = _run(registry.select_tool_llm(
-        "private", "run Test-Exec.ps1",
-        base_url="", api_key="", model="m", backend="ollama",
-    ))
-    assert tool is not None and tool["id"] == "powershell_private"
-
-
-def test_llm_select_none_means_no_tool(monkeypatch):
-    async def none_pick(*args, **kwargs):
-        return '{"tool_id": "none"}'
-
-    monkeypatch.setattr(registry, "_ollama_complete", none_pick)
-    tool = _run(registry.select_tool_llm(
-        "private", "write me a poem",
-        base_url="", api_key="", model="m", backend="ollama",
-    ))
-    assert tool is None
+_ECHO_TOOL = {
+    "id": "echo_tool",
+    "name": "Echo Tool",
+    "description": "Echoes back the given text.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "text": {"type": "string", "no_path_separators": True},
+            "tags": {"type": "array", "items": {"type": "string"}},
+            "context": {"type": "object"},
+        },
+        "required": ["text"],
+        "additionalProperties": False,
+    },
+}
 
 
-def test_llm_select_falls_back_to_keywords_on_error(monkeypatch):
-    async def boom(*args, **kwargs):
-        raise RuntimeError("llm down")
+def test_render_tool_schema_shape():
+    schema = registry.render_tool_schema(_ECHO_TOOL)
+    assert schema == {
+        "type": "function",
+        "function": {
+            "name": "echo_tool",
+            "description": "Echoes back the given text.",
+            "parameters": _ECHO_TOOL["parameters"],
+        },
+    }
 
-    monkeypatch.setattr(registry, "_ollama_complete", boom)
-    tool = _run(registry.select_tool_llm(
-        "private", "run a status summary",
-        base_url="", api_key="", model="m", backend="ollama",
-    ))
-    assert tool is not None and tool["id"] == "status_summary_private"
+
+def test_render_tool_schema_defaults_to_empty_object_parameters():
+    schema = registry.render_tool_schema({"id": "no_args", "description": "d"})
+    assert schema["function"]["parameters"] == {
+        "type": "object", "properties": {}, "additionalProperties": False,
+    }
 
 
-def test_llm_select_falls_back_on_unregistered_tool_id(monkeypatch):
-    async def fake_complete(*args, **kwargs):
-        return '{"tool_id": "not_a_real_tool"}'
+def test_render_workshop_tools_covers_every_enabled_tool():
+    rendered = registry.render_workshop_tools("private")
+    ids = {r["function"]["name"] for r in rendered}
+    assert ids == {t["id"] for t in registry.list_tools("private")}
 
-    monkeypatch.setattr(registry, "_ollama_complete", fake_complete)
-    tool = _run(registry.select_tool_llm(
-        "private", "run a status summary",
-        base_url="", api_key="", model="m", backend="ollama",
-    ))
-    assert tool is not None
-    assert tool["id"] == "status_summary_private"
+
+def test_validate_args_accepts_valid_call():
+    assert registry.validate_args(_ECHO_TOOL, {"text": "hi"}) == []
+
+
+def test_validate_args_rejects_missing_required():
+    violations = registry.validate_args(_ECHO_TOOL, {})
+    assert any("missing required argument 'text'" in v for v in violations)
+
+
+def test_validate_args_rejects_unknown_key():
+    violations = registry.validate_args(_ECHO_TOOL, {"text": "hi", "bogus": 1})
+    assert any("unknown argument 'bogus'" in v for v in violations)
+
+
+def test_validate_args_rejects_wrong_type():
+    violations = registry.validate_args(_ECHO_TOOL, {"text": 5})
+    assert any("must be a string" in v for v in violations)
+
+
+def test_validate_args_rejects_non_string_array_items():
+    violations = registry.validate_args(_ECHO_TOOL, {"text": "hi", "tags": [1, 2]})
+    assert any("must be an array of strings" in v for v in violations)
+
+
+def test_validate_args_rejects_path_separators_when_flagged():
+    violations = registry.validate_args(_ECHO_TOOL, {"text": "sub/dir.md"})
+    assert any("no directory separators" in v for v in violations)
+
+
+def test_validate_args_rejects_non_dict_args():
+    assert registry.validate_args(_ECHO_TOOL, ["not", "a", "dict"]) != []
