@@ -273,6 +273,42 @@ def test_ollama_stream_plain_content_forwards_incrementally(monkeypatch):
     assert chunks == ["Hel", "lo"]
 
 
+def test_ollama_stream_content_before_tool_call_drops_the_tool_call(monkeypatch):
+    """Pins the plan's locked-in 'never interleaved' design decision: once
+    content has started streaming, a tool_call_delta that arrives afterward
+    is silently dropped — the turn stays an "answer", not a "dispatch"."""
+    lines = [
+        json.dumps({"message": {"content": "Sure, let me do that"}, "done": False}),
+        json.dumps({
+            "message": {"content": "", "tool_calls": [
+                {"function": {"name": "status_summary", "arguments": {}}}
+            ]},
+            "done": True,
+        }),
+    ]
+    monkeypatch.setattr(decision.httpx, "AsyncClient", lambda **kw: _FakeStreamClient(lines))
+
+    async def handler(tool_id, args, raw):
+        return "EXECUTED"
+
+    # Same single-event-loop pattern as test_ollama_stream_plain_content_forwards_incrementally
+    # above — the "answer" branch's content_iter keeps the underlying stream
+    # generator alive and must be drained in the same asyncio.run() call.
+    async def scenario():
+        td, content_iter = await decision.route_turn_stream(
+            "do the thing", [], system_prompt="sys",
+            base_url="http://x", api_key="", model="m", backend="ollama",
+            tools=[{"type": "function", "function": {"name": "status_summary", "parameters": {}}}],
+            tool_call_handler=handler,
+        )
+        chunks = await _collect(content_iter)
+        return td, chunks
+
+    td, chunks = _run(scenario())
+    assert td.decision == "answer"
+    assert chunks == ["Sure, let me do that"]
+
+
 def test_stream_dispatch_falls_back_without_a_handler(monkeypatch):
     lines = [json.dumps({
         "message": {"content": "", "tool_calls": [{"function": {"name": "x", "arguments": {}}}]},
