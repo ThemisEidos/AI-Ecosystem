@@ -318,12 +318,18 @@ def test_every_enabled_tool_has_a_valid_wired_parameters_block():
             assert schema["type"] == "function"
             assert schema["function"]["name"] == tool["id"]
             # rendered parameters match the source block except for the
-            # COOPER-internal no_path_separators flag, which is stripped
-            # before the schema goes out over the wire (finding: Important #3)
+            # COOPER-internal no_path_separators and url_only flags, both of
+            # which are stripped before the schema goes out over the wire
+            # (finding: Important #3; url_only leak: fix-forward round 1)
             for prop_name, prop in params.get("properties", {}).items():
                 rendered_prop = schema["function"]["parameters"]["properties"][prop_name]
                 assert "no_path_separators" not in rendered_prop
+                assert "url_only" not in rendered_prop.get("items", {})
                 expected_prop = {k: v for k, v in prop.items() if k != "no_path_separators"}
+                if isinstance(expected_prop.get("items"), dict):
+                    expected_prop["items"] = {
+                        k: v for k, v in expected_prop["items"].items() if k != "url_only"
+                    }
                 assert rendered_prop == expected_prop, tool["id"]
 
             synthetic = _synthetic_args(tool)

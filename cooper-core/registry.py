@@ -118,10 +118,12 @@ def is_registry_query(message: str) -> bool:
 def render_tool_schema(tool: dict) -> dict:
     """One tool entry -> an OpenAI function-calling `tools` array element.
 
-    `no_path_separators` is a COOPER-internal flag read by validate_args
-    directly off the tool's own `parameters` dict (never off this rendered
-    copy) — it isn't part of the JSON-Schema/OpenAI function-calling spec,
-    so it's stripped here before the schema goes out over the wire. The
+    `no_path_separators` and `url_only` are COOPER-internal flags read by
+    validate_args directly off the tool's own `parameters` dict (never off
+    this rendered copy) — neither is part of the JSON-Schema/OpenAI
+    function-calling spec, so both are stripped here before the schema goes
+    out over the wire (`url_only` lives one level deeper, inside an array
+    property's `items` block, so stripping recurses into `items` too). The
     source `tool["parameters"]` object is deep-copied first and never
     mutated in place, since validate_args reads that same object.
     """
@@ -132,6 +134,9 @@ def render_tool_schema(tool: dict) -> dict:
     for prop in (parameters.get("properties") or {}).values():
         if isinstance(prop, dict):
             prop.pop("no_path_separators", None)
+            items = prop.get("items")
+            if isinstance(items, dict):
+                items.pop("url_only", None)
     return {
         "type": "function",
         "function": {
