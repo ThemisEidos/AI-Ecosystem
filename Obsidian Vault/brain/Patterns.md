@@ -4,6 +4,61 @@
 
 ---
 
+### 2026-08-23 · Step 15a native tool-calling dispatch — implemented, test-green, NOT live-verified
+
+Implemented via `superpowers:subagent-driven-development` on branch
+`worktree-step-15a-native-tool-calling` (worktree at
+`.claude/worktrees/step-15a-native-tool-calling`), plan at
+`Docs/superpowers/plans/2026-08-23-step-15a-native-tool-calling-plan.md`,
+spec at `Docs/superpowers/specs/2026-08-23-step-15a-native-tool-calling-design.md`.
+All 8 code tasks complete and independently task-reviewed (7 clean, 1 with a
+verified-correct test deviation — see the plan's ledger at
+`.superpowers/sdd/2026-08-23-step-15a-native-tool-calling-plan/progress.md`
+inside that worktree for every ruling and deferred-minor finding). Full
+`cooper-core` suite: 226/226 passing, independently re-run by the Task 8
+reviewer, not just claimed.
+
+Four design decisions this plan locked in beyond the spec's literal text
+(full rationale in the plan's "Design decisions this plan locks in"
+section):
+1. `decision._ollama_complete`/`_openai_complete` return a bare `str` when
+   called without `tools=` — the six existing non-tool callers
+   (`archivist.py`, `proposer.py`, `review.py`, `executor.py`'s
+   `_run_local_llm`/`_run_llm_api`) stay untouched. A new
+   `ModelReply(content, tool_calls)` dataclass is returned only when
+   `tools=` is passed — i.e. only the persona-turn call path.
+2. Streaming forwards content in real time for plain answers and only
+   buffers once a tool_call fragment is detected, via a shared
+   `_stream_events()` generator per backend that `route_turn_stream` peeks
+   on its first event to pick the branch — avoids buffering the common
+   case while still satisfying "never interleaved."
+3. A custom `no_path_separators: true` flag on registry YAML parameter
+   schemas (`obsidian_note_writer`, `restricted_dmz_writer`,
+   `powershell_*`/`python_*`'s `script` args) drives
+   `registry.validate_args` to refuse subdirectory-targeting filenames
+   **pre-approval** — this is the actual generic mechanism behind spec
+   §5's "note write targeting a subdirectory... refuses before approval."
+4. `decision.route_turn` dropped `base_url`/`api_key`/`model`/`backend`/
+   `classifier_model` from its signature (dead inside `route_turn` itself,
+   since the one persona call lives in the `generate_answer` closure
+   main.py owns). `route_turn_stream` keeps them since it makes the
+   backend HTTP call directly.
+
+**Live DoD verification (spec §7) was NOT run this session.** Both the
+Private and Open Docker stacks were found already running live (5 hours
+up, real ports 8000/8001) when Task 10 started. The plan's verification
+steps call for rebuilding those containers from this unmerged branch and
+writing a real test file into `Restricted DMZ Workspace/` — which
+`CLAUDE.md`'s DO NOT TOUCH list marks human-only. Owner chose to skip live
+verification rather than disrupt the running deployment or touch that
+directory. **The branch is implementation-complete and test-green but not
+live-verified** — run the plan's Task 10 (Docker rebuild + curl round
+trips on both stacks, including the three previously-dead
+`lite_llm_router` phrasings from Gotchas 2026-08-04) before merging or
+calling this shipped.
+
+---
+
 ### 2026-07-08 · Session identity = derived from the credential, never client-supplied
 
 `_derive_session_id(token)` in `cooper-core/main.py` is `sha256(token)[:12]`, `"anon"` for
