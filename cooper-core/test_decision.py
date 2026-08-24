@@ -147,6 +147,26 @@ def test_ollama_complete_returns_model_reply_with_tools(monkeypatch):
     assert result.tool_calls[0].name == "status_summary"
 
 
+# ── _ToolCallAccumulator — index-less fragments (fix-forward Important #3) ──
+def test_accumulator_indexless_fragments_continue_last_entry():
+    acc = decision._ToolCallAccumulator()
+    acc.add({"id": "call_1", "function": {"name": "status_summary", "arguments": ""}})
+    acc.add({"function": {"arguments": '{"a"'}})
+    acc.add({"function": {"arguments": ': 1}'}})
+    calls = acc.finish()
+    assert len(calls) == 1
+    assert calls[0].name == "status_summary"
+    assert calls[0].arguments == {"a": 1}
+
+
+def test_accumulator_explicit_index_still_opens_separate_slots():
+    acc = decision._ToolCallAccumulator()
+    acc.add({"index": 0, "id": "call_1", "function": {"name": "a", "arguments": "{}"}})
+    acc.add({"index": 1, "id": "call_2", "function": {"name": "b", "arguments": "{}"}})
+    calls = acc.finish()
+    assert [c.name for c in calls] == ["a", "b"]
+
+
 # ── route_turn_stream — fixture-driven, no live LLM (spec §6.6) ─────────────
 class _FakeStreamResp:
     def __init__(self, lines):
@@ -227,6 +247,47 @@ def test_openai_stream_fragmented_tool_call_accumulates(monkeypatch):
         ]}}]},
         {"choices": [{"delta": {"tool_calls": [
             {"index": 0, "function": {"arguments": ': 1}'}}
+        ]}}]},
+    ]
+    lines = [f"data: {json.dumps(d)}" for d in deltas] + ["data: [DONE]"]
+    monkeypatch.setattr(decision.httpx, "AsyncClient", lambda **kw: _FakeStreamClient(lines))
+
+    captured = {}
+    async def handler(tool_id, args, raw):
+        captured["tool_id"] = tool_id
+        captured["args"] = args
+        return "EXECUTED"
+
+    async def scenario():
+        td, content_iter = await decision.route_turn_stream(
+            "status please", [], system_prompt="sys",
+            base_url="http://x", api_key="k", model="m", backend="openai",
+            tools=[{"type": "function", "function": {"name": "status_summary", "parameters": {}}}],
+            tool_call_handler=handler,
+        )
+        chunks = await _collect(content_iter)
+        return td, chunks
+
+    td, chunks = _run(scenario())
+    assert td.decision == "dispatch"
+    assert captured["tool_id"] == "status_summary"
+    assert captured["args"] == {"a": 1}
+    assert chunks == ["EXECUTED"]
+
+
+def test_openai_stream_index_less_fragments_continue_one_call(monkeypatch):
+    """Some providers behind LiteLLM omit `index` entirely — every fragment
+    must still assemble into ONE call, not shred into name-only ghosts
+    (fix-forward Important #3)."""
+    deltas = [
+        {"choices": [{"delta": {"tool_calls": [
+            {"id": "call_1", "function": {"name": "status_summary", "arguments": ""}}
+        ]}}]},
+        {"choices": [{"delta": {"tool_calls": [
+            {"function": {"arguments": '{"a"'}}
+        ]}}]},
+        {"choices": [{"delta": {"tool_calls": [
+            {"function": {"arguments": ': 1}'}}
         ]}}]},
     ]
     lines = [f"data: {json.dumps(d)}" for d in deltas] + ["data: [DONE]"]

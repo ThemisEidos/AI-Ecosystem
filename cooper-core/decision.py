@@ -163,14 +163,26 @@ def _stream_events(
 class _ToolCallAccumulator:
     """Accumulates OpenAI-style fragmented tool_call deltas (by `index`,
     arguments arrive as a partial JSON string across chunks) or Ollama-style
-    single-chunk tool_calls (arguments arrive as a whole dict already)."""
+    single-chunk tool_calls (arguments arrive as a whole dict already).
+
+    Some providers behind LiteLLM omit `index` entirely on every fragment of
+    a call. A fragment carrying an explicit `index` always opens/continues
+    that exact slot; a fragment with no `index` continues whichever slot was
+    most recently opened, except the very first fragment ever seen, which
+    opens slot 0. This keeps a single index-less call's fragments together
+    instead of shredding them into one slot per fragment."""
 
     def __init__(self) -> None:
         self._by_index: Dict[int, dict] = {}
         self._order: List[int] = []
 
     def add(self, fragment: dict) -> None:
-        index = fragment.get("index", len(self._order))
+        if "index" in fragment:
+            index = fragment["index"]
+        elif self._order:
+            index = self._order[-1]
+        else:
+            index = 0
         if index not in self._by_index:
             self._by_index[index] = {"id": "", "name": "", "arguments": ""}
             self._order.append(index)
