@@ -180,7 +180,7 @@ def list_skills(
     return out
 
 
-# ── Selection (mirrors registry.select_tool's keyword-overlap approach) ─────
+# ── Selection (keyword-overlap approach) ─────────────────────────────────────
 _STOPWORDS = {
     "the", "a", "an", "of", "to", "for", "and", "or", "in", "on", "at",
     "is", "are", "please", "can", "you", "me", "my", "it", "this", "that",
@@ -324,25 +324,12 @@ def format_skill_list(
 
 # ── Tap importer (approval-gated via the import_skill registry tool) ─────────
 _ALLOWED_SCHEMES  = ("https://",)
-_IMPORT_RE        = re.compile(
-    r"import\s+skill\s+([a-z0-9][a-z0-9-]*)\s+from\s+(\S+)", re.IGNORECASE
-)
 _SAFE_NAME_RE     = re.compile(r"\A[a-z0-9][a-z0-9-]*\Z")
 _CLONE_TIMEOUT    = 60
 _PREVIEW_MAX      = 3_500
 _MAX_TAP_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB — generous for a skill dir, caps disk use
 _MAX_CLONE_SIZE_BYTES = 50 * 1024 * 1024  # bounds the whole clone (incl. .git), not just skills/<name>
 _STALE_STAGING_SECONDS = 3600  # _incoming/ orphans (denied/expired tickets) older than this get swept
-
-
-def parse_import_request(message: str) -> Tuple[str, str]:
-    """Extract (skill_name, url) from 'import skill <name> from <url>'."""
-    m = _IMPORT_RE.search(message)
-    if not m:
-        raise SkillError(
-            'could not parse import request — use: import skill <name> from <https url>'
-        )
-    return m.group(1).lower(), m.group(2)
 
 
 def _reject_symlinks(src: Path) -> None:
@@ -371,14 +358,13 @@ def _sweep_stale_staging(incoming: Path) -> None:
             pass
 
 
-def discard_staged(message: str, *, repo_root: Optional[Path] = None) -> bool:
-    """Denied import: drop the staged _incoming/<name> dir. Silent no-op (False)
-    when nothing is staged or the message isn't an import request."""
-    try:
-        name, _url = parse_import_request(message)
-    except SkillError:
+def discard_staged(skill_name: str, *, repo_root: Optional[Path] = None) -> bool:
+    """Denied import: drop the staged _incoming/<name> dir. False if nothing
+    is staged for this skill_name (including an unsafe name — never found
+    staged, so it's a silent no-op like any other miss)."""
+    if not _SAFE_NAME_RE.match(skill_name):
         return False
-    staged = (repo_root or _REPO_ROOT) / "Skills" / "_incoming" / name
+    staged = (repo_root or _REPO_ROOT) / "Skills" / "_incoming" / skill_name
     if not staged.is_dir():
         return False
     shutil.rmtree(staged, ignore_errors=True)
@@ -437,10 +423,11 @@ def fetch_tap(url: str, skill_name: str, *, repo_root: Optional[Path] = None) ->
         shutil.rmtree(clone_dir, ignore_errors=True)
 
 
-def preview_import(message: str, *, repo_root: Optional[Path] = None) -> str:
+def preview_import(
+    skill_name: str, tap_url: str, *, repo_root: Optional[Path] = None
+) -> str:
     """Fetch + stage the skill, return its SKILL.md text for the approval question."""
-    name, url = parse_import_request(message)
-    staged = fetch_tap(url, name, repo_root=repo_root)
+    staged = fetch_tap(tap_url, skill_name, repo_root=repo_root)
     text = (staged / "SKILL.md").read_text(encoding="utf-8")
     if len(text) > _PREVIEW_MAX:
         text = text[:_PREVIEW_MAX] + "\n[... preview truncated]"
@@ -448,7 +435,8 @@ def preview_import(message: str, *, repo_root: Optional[Path] = None) -> str:
 
 
 def register_import(
-    message: str,
+    skill_name: str,
+    tap_url: str,
     *,
     repo_root: Optional[Path] = None,
     manifest_path: Optional[Path] = None,
@@ -456,19 +444,22 @@ def register_import(
     """Post-approval: promote _incoming/<name> to Skills/imported/<name>, hash it,
     append the manifest entry (workshop: open — Private promotion is a separate
     approval, spec §3). Re-fetches if staging is missing (e.g. ticket expired)."""
-    name, url = parse_import_request(message)
+    if not _SAFE_NAME_RE.match(skill_name):
+        raise SkillError(
+            f"unsafe skill name '{skill_name}' — must match [a-z0-9][a-z0-9-]*"
+        )
     root = repo_root or _REPO_ROOT
-    staged = root / "Skills" / "_incoming" / name
+    staged = root / "Skills" / "_incoming" / skill_name
     if not (staged / "SKILL.md").exists():
-        print(f"  [!!] skill '{name}' staged copy missing at registration — re-fetching from {url}")
-        staged = fetch_tap(url, name, repo_root=repo_root)
-    final = root / "Skills" / "imported" / name
+        print(f"  [!!] skill '{skill_name}' staged copy missing at registration — re-fetching from {tap_url}")
+        staged = fetch_tap(tap_url, skill_name, repo_root=repo_root)
+    final = root / "Skills" / "imported" / skill_name
     final.parent.mkdir(parents=True, exist_ok=True)
     if final.exists():
         shutil.rmtree(final)
     shutil.move(str(staged), str(final))
     entry = {
-        "id": name,
+        "id": skill_name,
         "path": str(final.relative_to(root)).replace("\\", "/"),
         "workshop": "open",
         "permission_level": 1,
@@ -480,17 +471,9 @@ def register_import(
 
 
 # ── Draft promotion (Step 11; approval-gated via the promote_skill tool) ─────
-_PROMOTE_RE = re.compile(r"promote\s+skill\s+([a-z0-9][a-z0-9-]*)", re.IGNORECASE)
-
-
-def parse_promote_request(message: str) -> str:
-    m = _PROMOTE_RE.search(message)
-    if not m:
-        raise SkillError("could not parse — use: promote skill <name>")
-    return m.group(1).lower()
-
-
 def _draft_dir(name: str, repo_root: Optional[Path] = None) -> Path:
+    if not _SAFE_NAME_RE.match(name):
+        raise SkillError(f"unsafe skill name '{name}' — must match [a-z0-9][a-z0-9-]*")
     root = repo_root or _REPO_ROOT
     d = root / "Skills" / "_drafts" / name
     if not (d / "SKILL.md").exists():
@@ -499,7 +482,7 @@ def _draft_dir(name: str, repo_root: Optional[Path] = None) -> Path:
 
 
 def preview_promote(
-    message: str,
+    skill_name: str,
     *,
     repo_root: Optional[Path] = None,
     manifest_path: Optional[Path] = None,
@@ -507,25 +490,24 @@ def preview_promote(
     """SKILL.md text for the approval question — from the draft, or (fallback,
     matching register_promotion) from an already-registered skill being
     promoted into another workshop."""
-    name = parse_promote_request(message)
     root = repo_root or _REPO_ROOT
     try:
-        d = _draft_dir(name, repo_root)
+        d = _draft_dir(skill_name, repo_root)
     except SkillError:
         existing = next(
-            (e for e in load_manifest(manifest_path) if str(e.get("id")) == name), None
+            (e for e in load_manifest(manifest_path) if str(e.get("id")) == skill_name), None
         )
         if existing is None:
             raise
         d = (root / str(existing["path"])).resolve()
         if not (d / "SKILL.md").exists():
-            raise SkillError(f"registered skill '{name}' has no SKILL.md on disk")
+            raise SkillError(f"registered skill '{skill_name}' has no SKILL.md on disk")
     text = (d / "SKILL.md").read_text(encoding="utf-8")
     return text[:_PREVIEW_MAX] + ("\n[... preview truncated]" if len(text) > _PREVIEW_MAX else "")
 
 
 def register_promotion(
-    message: str,
+    skill_name: str,
     *,
     workshop: str = "open",
     repo_root: Optional[Path] = None,
@@ -536,19 +518,18 @@ def register_promotion(
     approval'): when no draft exists but the skill is already registered for
     another workshop, add an entry for the ACTIVE workshop instead — this is
     how an imported Open skill gets promoted into Private."""
-    name = parse_promote_request(message)
     root = repo_root or _REPO_ROOT
     try:
-        src = _draft_dir(name, repo_root)
+        src = _draft_dir(skill_name, repo_root)
     except SkillError:
         existing = next(
-            (e for e in load_manifest(manifest_path) if str(e.get("id")) == name), None
+            (e for e in load_manifest(manifest_path) if str(e.get("id")) == skill_name), None
         )
         if existing is None:
             raise
         skill_dir = (root / str(existing["path"])).resolve()
         entry = {
-            "id": name,
+            "id": skill_name,
             "path": existing["path"],
             "workshop": workshop,
             "permission_level": int(existing.get("permission_level", 1)),
@@ -557,13 +538,13 @@ def register_promotion(
         }
         _append_manifest_entry(entry, manifest_path)
         return entry
-    final = root / "Skills" / "learned" / name
+    final = root / "Skills" / "learned" / skill_name
     final.parent.mkdir(parents=True, exist_ok=True)
     if final.exists():
         shutil.rmtree(final)
     shutil.move(str(src), str(final))
     entry = {
-        "id": name,
+        "id": skill_name,
         "path": str(final.relative_to(root)).replace("\\", "/"),
         "workshop": workshop,
         "permission_level": 1,

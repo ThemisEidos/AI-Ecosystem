@@ -13,6 +13,10 @@ tools:
     approval_required: false
     executor_type: informational
     enabled: true
+    parameters:
+      type: object
+      properties: {}
+      additionalProperties: false
     inputs:
       - chat_context
     outputs:
@@ -27,6 +31,10 @@ tools:
     approval_required: false
     executor_type: local_read
     enabled: true
+    parameters:
+      type: object
+      properties: {}
+      additionalProperties: false
     inputs:
       - registry_path
     outputs:
@@ -41,6 +49,20 @@ tools:
     approval_required: true
     executor_type: filesystem
     enabled: true
+    parameters:
+      type: object
+      properties:
+        filename:
+          type: string
+          no_path_separators: true
+          description: "Bare filename for the DMZ workspace, e.g. 'analysis.txt'. No directories."
+        content:
+          type: string
+          description: "The full text content to write."
+      required:
+        - filename
+        - content
+      additionalProperties: false
     inputs:
       - file_path
       - content
@@ -56,6 +78,15 @@ tools:
     approval_required: true
     executor_type: local_llm
     enabled: true
+    parameters:
+      type: object
+      properties:
+        prompt:
+          type: string
+          description: "The analysis or drafting prompt to send to the local model."
+      required:
+        - prompt
+      additionalProperties: false
     inputs:
       - prompt
       - context
@@ -74,6 +105,16 @@ tools:
       - Test-Exec.ps1
       - Test-PDAStack.ps1
     enabled: true
+    parameters:
+      type: object
+      properties:
+        script:
+          type: string
+          no_path_separators: true
+          description: "Filename of an allowlisted PowerShell script under Scripts/, e.g. 'Test-PDAStack.ps1'."
+      required:
+        - script
+      additionalProperties: false
     inputs:
       - script_path
       - arguments
@@ -91,6 +132,16 @@ tools:
     allowed_scripts:
       - Test-Exec.py
     enabled: true
+    parameters:
+      type: object
+      properties:
+        script:
+          type: string
+          no_path_separators: true
+          description: "Filename of an allowlisted Python script under Scripts/Python/, e.g. 'Test-Exec.py'."
+      required:
+        - script
+      additionalProperties: false
     inputs:
       - script_path
       - arguments
@@ -106,6 +157,18 @@ tools:
     approval_required: true
     executor_type: workflow_engine
     enabled: true
+    parameters:
+      type: object
+      properties:
+        workflow:
+          type: string
+          description: "Key into this tool's allowed_workflows mapping (currently empty — this tool is fail-closed until workflows are added)."
+        payload:
+          type: string
+          description: "Optional text payload passed to the workflow."
+      required:
+        - workflow
+      additionalProperties: false
     inputs:
       - workflow_id
       - payload
@@ -116,11 +179,21 @@ tools:
     name: Promote Skill
     drawer: Skills
     workshop: Private Workshop
-    description: Promote a drafted skill from Skills/_drafts into the live registry. Usage — promote skill <name>. Shows the draft SKILL.md for review before approval.
+    description: Promote a drafted skill from Skills/_drafts into the live registry. Called with a skill_name argument. Shows the draft SKILL.md for review before approval.
     permission_level: 2
     approval_required: true
     executor_type: skill_promote
     enabled: true
+    parameters:
+      type: object
+      properties:
+        skill_name:
+          type: string
+          no_path_separators: true
+          description: "Lowercase id of the drafted or already-registered skill to promote."
+      required:
+        - skill_name
+      additionalProperties: false
     inputs:
       - skill_name
     outputs:

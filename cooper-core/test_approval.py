@@ -90,3 +90,18 @@ def test_default_session_is_local():
     approval.request("open", _tool(), "solo")
     assert approval.has_pending("open")
     assert approval.consume("open").session_id == "local"
+
+
+def test_ticket_stores_and_returns_args():
+    ticket = approval.request(
+        "open", _tool(), "write note x.md: hi", session_id="c",
+        args={"filename": "x.md", "content": "hi"},
+    )
+    assert ticket.args == {"filename": "x.md", "content": "hi"}
+    consumed = approval.consume("open", "c")
+    assert consumed.args == {"filename": "x.md", "content": "hi"}
+
+
+def test_ticket_args_defaults_to_empty_dict():
+    ticket = approval.request("open", _tool(), "do it", session_id="c2")
+    assert ticket.args == {}

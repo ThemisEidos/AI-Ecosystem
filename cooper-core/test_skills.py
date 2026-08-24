@@ -291,15 +291,6 @@ def make_tap_repo(tmp_path: Path, skill_name: str = "tap-skill") -> str:
     return repo.as_uri()  # file:// URL
 
 
-def test_parse_import_request():
-    name, url = skills.parse_import_request(
-        "import skill weekly-review from https://github.com/x/taps"
-    )
-    assert name == "weekly-review" and url == "https://github.com/x/taps"
-    with pytest.raises(skills.SkillError):
-        skills.parse_import_request("import something vague")
-
-
 def test_fetch_tap_rejects_non_https():
     with pytest.raises(skills.SkillError):
         skills.fetch_tap("http://evil.example/repo", "x")
@@ -372,11 +363,10 @@ def test_register_import_logs_refetch_when_staging_missing(tmp_path, monkeypatch
     url = make_tap_repo(tmp_path)
     monkeypatch.setattr(skills, "_ALLOWED_SCHEMES", ("https://", "file://"))
     manifest = write_manifest(tmp_path, [])
-    msg = f"import skill tap-skill from {url}"
 
     # Skip preview_import (which would stage it) and register directly —
     # staged dir is missing, forcing the re-fetch path.
-    entry = skills.register_import(msg, repo_root=tmp_path, manifest_path=manifest)
+    entry = skills.register_import("tap-skill", url, repo_root=tmp_path, manifest_path=manifest)
     assert entry["id"] == "tap-skill"
     output = capsys.readouterr().out
     assert "[!!]" in output and "re-fetching" in output
@@ -386,14 +376,13 @@ def test_import_flow_end_to_end(tmp_path, monkeypatch):
     url = make_tap_repo(tmp_path)
     monkeypatch.setattr(skills, "_ALLOWED_SCHEMES", ("https://", "file://"))
     manifest = write_manifest(tmp_path, [])
-    msg = f"import skill tap-skill from {url}"
 
-    preview = skills.preview_import(msg, repo_root=tmp_path)
+    preview = skills.preview_import("tap-skill", url, repo_root=tmp_path)
     assert "Imported test skill" in preview
     # staged in _incoming — still inert
     assert skills.list_skills("open", manifest_path=manifest, repo_root=tmp_path) == []
 
-    entry = skills.register_import(msg, repo_root=tmp_path, manifest_path=manifest)
+    entry = skills.register_import("tap-skill", url, repo_root=tmp_path, manifest_path=manifest)
     assert entry["id"] == "tap-skill"
     assert entry["workshop"] == "open"
     assert (tmp_path / "Skills" / "imported" / "tap-skill" / "SKILL.md").exists()
@@ -411,19 +400,13 @@ def make_draft(root: Path, name: str = "stack-health-check") -> Path:
     return d
 
 
-def test_parse_promote_request():
-    assert skills.parse_promote_request("promote skill stack-health-check") == "stack-health-check"
-    with pytest.raises(skills.SkillError):
-        skills.parse_promote_request("promote something")
-
-
 def test_promotion_flow(tmp_path):
     make_draft(tmp_path)
     manifest = write_manifest(tmp_path, [])
-    preview = skills.preview_promote("promote skill stack-health-check", repo_root=tmp_path)
+    preview = skills.preview_promote("stack-health-check", repo_root=tmp_path)
     assert "Drafted procedure" in preview
     entry = skills.register_promotion(
-        "promote skill stack-health-check",
+        "stack-health-check",
         workshop="open", repo_root=tmp_path, manifest_path=manifest,
     )
     assert entry["id"] == "stack-health-check"
@@ -435,7 +418,7 @@ def test_promotion_flow(tmp_path):
 
 def test_promote_missing_draft_raises(tmp_path):
     with pytest.raises(skills.SkillError):
-        skills.preview_promote("promote skill ghost", repo_root=tmp_path)
+        skills.preview_promote("ghost", repo_root=tmp_path)
 
 
 def test_promote_registered_open_skill_into_private(tmp_path):
@@ -443,7 +426,7 @@ def test_promote_registered_open_skill_into_private(tmp_path):
     d = make_skill_dir(tmp_path, name="hello-cooper")
     manifest = write_manifest(tmp_path, [approved_entry(tmp_path, d)])
     entry = skills.register_promotion(
-        "promote skill hello-cooper",
+        "hello-cooper",
         workshop="private", repo_root=tmp_path, manifest_path=manifest,
     )
     assert entry["workshop"] == "private"
@@ -476,18 +459,17 @@ def test_fetch_tap_rejects_oversized_clone(tmp_path, monkeypatch):
 
 def test_discard_staged_removes_staging_dir(tmp_path, monkeypatch):
     """Denied imports must be able to clean their Skills/_incoming/<name> staging
-    dir; discarding again (or an unparseable message) is a silent no-op."""
+    dir; discarding again (or a name with nothing staged) is a silent no-op."""
     url = make_tap_repo(tmp_path)
     monkeypatch.setattr(skills, "_ALLOWED_SCHEMES", ("https://", "file://"))
-    msg = f"import skill tap-skill from {url}"
-    skills.preview_import(msg, repo_root=tmp_path)
+    skills.preview_import("tap-skill", url, repo_root=tmp_path)
     staged = tmp_path / "Skills" / "_incoming" / "tap-skill"
     assert staged.exists()
 
-    assert skills.discard_staged(msg, repo_root=tmp_path) is True
+    assert skills.discard_staged("tap-skill", repo_root=tmp_path) is True
     assert not staged.exists()
-    assert skills.discard_staged(msg, repo_root=tmp_path) is False
-    assert skills.discard_staged("not an import message", repo_root=tmp_path) is False
+    assert skills.discard_staged("tap-skill", repo_root=tmp_path) is False
+    assert skills.discard_staged("no-such-skill", repo_root=tmp_path) is False
 
 
 def test_fetch_tap_sweeps_stale_staging_dirs(tmp_path, monkeypatch):

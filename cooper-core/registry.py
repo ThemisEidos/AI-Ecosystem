@@ -1,27 +1,28 @@
 """
-COOPER Quartermaster — tool registry reader + selector (Step 3).
+COOPER Quartermaster — tool registry reader, OpenAI-schema renderer, and arg
+validator (Step 15a).
 
-Loads the workshop-scoped tool registry YAML and answers two questions:
+Loads the workshop-scoped tool registry YAML and answers:
 
-  1. "what tools are available?"  -> list_tools(workshop) / format_tool_list(workshop)
-  2. "which tool fits this task?" -> select_tool(workshop, message)
+  1. "what tools are available?"        -> list_tools(workshop) / format_tool_list(workshop)
+  2. "what does the model see as tool schemas?" -> render_workshop_tools(workshop)
+  3. "is this tool_call's args valid?"  -> validate_args(tool, args)
 
 Registry files live at Config/general_tool_registry.yaml (open) and
 Config/private_tool_registry.yaml (private), per CLAUDE.md's directory map.
 Files are re-read whenever their mtime changes, so editing the YAML takes
 effect immediately under `--reload` without a server restart.
 
-This module only reads and selects. It does not execute anything — the
-approval gate (step 4) and execution gateway (step 5) are not wired yet.
+This module only reads, renders, and validates. It does not execute
+anything — the approval gate (approval.py) and execution gateway
+(executor.py) are separate.
 """
-import json
+import copy
 import re
 from pathlib import Path
 from typing import Dict, List, Optional
 
 import yaml
-
-from decision import _ollama_complete, _openai_complete
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _REGISTRY_PATHS: Dict[str, Path] = {
@@ -113,114 +114,85 @@ def is_registry_query(message: str) -> bool:
     return bool(_REGISTRY_QUERY_RE.search(message))
 
 
-# ── Capability selection (used on dispatch turns) ───────────────────────────
-_STOPWORDS = {
-    "the", "a", "an", "of", "to", "for", "and", "or", "in", "on", "at",
-    "is", "are", "please", "can", "you", "me", "my", "it", "this", "that",
-}
+# ── OpenAI-format tool schema rendering (Step 15a) ──────────────────────────
+def render_tool_schema(tool: dict) -> dict:
+    """One tool entry -> an OpenAI function-calling `tools` array element.
 
-
-def select_tool(workshop: str, message: str) -> Optional[dict]:
+    `no_path_separators` is a COOPER-internal flag read by validate_args
+    directly off the tool's own `parameters` dict (never off this rendered
+    copy) — it isn't part of the JSON-Schema/OpenAI function-calling spec,
+    so it's stripped here before the schema goes out over the wire. The
+    source `tool["parameters"]` object is deep-copied first and never
+    mutated in place, since validate_args reads that same object.
     """
-    Pick the best-matching enabled tool for a dispatch message by keyword
-    overlap against each tool's name/description/drawer. Returns None if no
-    tool scores above zero (nothing dispatches on a non-match).
-
-    This is capability *selection* only — "which tool fits this task, in this
-    workshop" (PRD step 3 DoD). It does not execute anything; steps 4/5 add
-    the approval gate and execution gateway on top of whatever this returns.
-    """
-    try:
-        tools = list_tools(workshop)
-    except RegistryError:
-        return None
-    if not tools:
-        return None
-
-    words = {w for w in re.findall(r"[a-z]+", message.lower()) if w not in _STOPWORDS}
-    if not words:
-        return None
-
-    best, best_score = None, 0
-    for t in tools:
-        haystack = " ".join([t.get("name", ""), t.get("description", ""), t.get("drawer", "")]).lower()
-        hay_words = set(re.findall(r"[a-z]+", haystack))
-        score = len(words & hay_words)
-        if score > best_score:
-            best, best_score = t, score
-    return best
-
-
-# ── LLM-backed selection (audit F2) ─────────────────────────────────────────
-_SELECT_SYSTEM_TMPL = """\
-You are COOPER's Quartermaster. Pick the single best tool for the user's task, \
-or "none" if no tool fits. Output JSON only — no other text.
-
-{{"tool_id":"<one of the ids below, or 'none'>"}}
-
-Available tools:
-{catalog}\
-"""
-
-
-async def select_tool_llm(
-    workshop: str,
-    message: str,
-    *,
-    base_url: str,
-    api_key: str,
-    model: str,
-    backend: str,
-) -> Optional[dict]:
-    """Schema-constrained LLM pick from the registry; keyword fallback on any error."""
-    try:
-        tools = list_tools(workshop)
-    except RegistryError:
-        return None
-    if not tools:
-        return None
-
-    ids = [t["id"] for t in tools if t.get("id")]
-    catalog = "\n".join(
-        f"- {t.get('id')}: {t.get('name', '')} — {t.get('description', '')}"
-        for t in tools
-    )
-    messages = [
-        {"role": "system", "content": _SELECT_SYSTEM_TMPL.format(catalog=catalog)},
-        {"role": "user", "content": message},
-    ]
-    schema = {
-        "type": "object",
-        "properties": {"tool_id": {"type": "string", "enum": ids + ["none"]}},
-        "required": ["tool_id"],
+    parameters = tool.get("parameters") or {
+        "type": "object", "properties": {}, "additionalProperties": False,
     }
-    try:
-        if backend == "openai":
-            raw = await _openai_complete(
-                base_url, api_key, model, messages,
-                temperature=0,
-                response_format={
-                    "type": "json_schema",
-                    "json_schema": {
-                        "name": "tool_selection",
-                        "strict": True,
-                        "schema": {**schema, "additionalProperties": False},
-                    },
-                },
-            )
-        else:
-            raw = await _ollama_complete(
-                base_url, model, messages,
-                options={"temperature": 0},
-                fmt=schema,
-            )
-        tool_id = json.loads(raw).get("tool_id", "none")
-        if tool_id == "none":
-            return None
-        selected = get_tool(workshop, tool_id)
-        if selected is None:
-            # model named an id outside the registry — fall back to keywords
-            return select_tool(workshop, message)
-        return selected
-    except Exception:
-        return select_tool(workshop, message)
+    parameters = copy.deepcopy(parameters)
+    for prop in (parameters.get("properties") or {}).values():
+        if isinstance(prop, dict):
+            prop.pop("no_path_separators", None)
+    return {
+        "type": "function",
+        "function": {
+            "name": tool.get("id"),
+            "description": tool.get("description", ""),
+            "parameters": parameters,
+        },
+    }
+
+
+def render_workshop_tools(workshop: str) -> List[dict]:
+    """Every enabled tool for a workshop, rendered as OpenAI tool schemas —
+    attached to the persona model on every turn (spec §2, step 1)."""
+    return [render_tool_schema(t) for t in list_tools(workshop)]
+
+
+# ── Arg validation (Step 15a) ───────────────────────────────────────────────
+# Hand-rolled subset of JSON Schema (no jsonschema dependency — stdlib-first
+# is the repo convention, spec §4). Covers what the registry's `parameters`
+# blocks actually use: object/string/array-of-string/array-of-object,
+# required keys, unknown-key rejection, and a custom `no_path_separators`
+# flag (declared per-property in the YAML) so a bare-filename argument can
+# be refused pre-approval rather than only sanitized at execution time.
+def validate_args(tool: dict, args: dict) -> List[str]:
+    """Validate a proposed tool_call's args against tool['parameters'].
+    Returns a list of human-readable violation strings; empty = valid."""
+    schema = tool.get("parameters") or {
+        "type": "object", "properties": {}, "additionalProperties": False,
+    }
+    properties = schema.get("properties") or {}
+    required = schema.get("required") or []
+    violations: List[str] = []
+
+    if not isinstance(args, dict):
+        return [f"expected an object of arguments, got {type(args).__name__}"]
+
+    for key in required:
+        if key not in args:
+            violations.append(f"missing required argument '{key}'")
+
+    for key, value in args.items():
+        if key not in properties:
+            violations.append(f"unknown argument '{key}'")
+            continue
+        prop = properties[key]
+        expected_type = prop.get("type")
+        if expected_type == "string":
+            if not isinstance(value, str):
+                violations.append(f"argument '{key}' must be a string")
+            elif prop.get("no_path_separators") and ("/" in value or "\\" in value):
+                violations.append(
+                    f"argument '{key}' must be a bare filename with no directory separators"
+                )
+        elif expected_type == "array":
+            if not isinstance(value, list):
+                violations.append(f"argument '{key}' must be an array")
+            else:
+                item_type = (prop.get("items") or {}).get("type")
+                if item_type == "string" and not all(isinstance(v, str) for v in value):
+                    violations.append(f"argument '{key}' must be an array of strings")
+        elif expected_type == "object" and not isinstance(value, dict):
+            violations.append(f"argument '{key}' must be an object")
+
+    return violations
