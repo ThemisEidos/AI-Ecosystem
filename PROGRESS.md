@@ -50,7 +50,7 @@ governance gates G1–G5 open — see Blocked section).
 Execution order: 15a → 14a(rev) → 15c → 14b → 15d → 15e → 14c(+15f-i) → 14d → 14e →
 15f → 15g → 15h. 15b anytime; 14f pinned until the home-lab network exists (2026-08-23).
 
-- [ ] **15a — Native tool-calling dispatch** (M3→5; retires classifier dispatch; kills both 2026-08-04 gotchas as a class)
+- [x] **15a — Native tool-calling dispatch** (M3→5; retires classifier dispatch; kills both 2026-08-04 gotchas as a class) — shipped 2026-08-24, live-verified both stacks, 3 post-review Importants closed in a fix-forward pass
 - [ ] **14a — Fabric pattern executor** (existing plan gets a light revision on top of 15a)
 - [ ] **15b — Zero-touch Open WebUI provisioning** (M9→5; independent, anytime)
 - [ ] **15c — Per-role model routing** (implements `Scripts/PDA_ModelRouting.json`; LiteLLM fallback pools; Private E4B/12B role split — E4B benchmark is the entry gate)
@@ -764,6 +764,36 @@ Execution order: 15a → 14a(rev) → 15c → 14b → 15d → 15e → 14c(+15f-i
   remains on the account). At the cap the key returns 402s — no charge, no refill. Owner chose to
   keep $15 rather than match the $20 prepaid total (guard trips early by design). COOPER-side
   half still to build: burn alert in the 14b digest job, trigger = remaining < $5.
+- **2026-08-24 · 15a shipped: native tool-calling dispatch live on both stacks, 3 post-review
+  Importants closed in a fix-forward pass.** Implementation (`f6d320b`, 8 tasks via
+  subagent-driven-development): `registry.py` renders OpenAI-format tool schemas and validates
+  args pre-approval; `decision.py` attaches `tools=` on every persona-model call and surfaces
+  `tool_call`s instead of running a separate classifier; `main.py`/`approval.py`/`executor.py`
+  thread validated args through the existing approval gate unchanged. Classifier, `select_tool`/
+  `select_tool_llm`, and all execution-time regex parsing deleted outright — no fallback path.
+  A whole-branch review found 3 Important findings the task-scoped reviews couldn't see; a
+  fix-forward pass (`60461fd`, 4 more tasks) closed all three: (1) streaming no longer silently
+  drops a `tool_call` that arrives after preamble content — content streams live and the
+  dispatch still runs, appended after a visible separator, so the blocking and streaming paths
+  agree on every turn's governance outcome; (2) `validate_args` now refuses empty required
+  args, an unknown `workflow_engine` value, and non-http(s) URLs *before* opening an approval
+  ticket — the exact "approval spent, then refused" class 15a exists to kill; (3) the tool_call
+  accumulator no longer shreds one call into ghost entries when a provider omits `index` on
+  fragmented deltas, and (self-caught during the fix-forward's own final review) no longer
+  silently overwrites one Ollama tool_call with another when both arrive index-less in the same
+  message. **Live-verified post-merge, both stacks rebuilt:** `/health` on both ports OK;
+  blocking dispatch confirmed on Private (`status_summary`, L0 auto-run) and Open
+  (`lite_llm_router`, L3 halt → approve → execute, args preview rendered correctly); the
+  identical round trip re-confirmed over the real SSE streaming endpoint
+  (`/v1/chat/completions`, `stream:true`) on both stacks — the code path Open WebUI actually
+  uses and the one the streaming fix targets. Gemma4 tool-call hit rate this session: 2/2 clean
+  dispatches, no preamble observed (extends the 2026-08-24 baseline of 2/2 already recorded
+  pre-fix-forward). **Not verified:** an actual browser click-through through Open WebUI — no
+  `claude-in-chrome` extension connection available in this environment session-side. The API
+  path is proven end-to-end including the exact streaming transport Open WebUI consumes; only
+  the rendering-in-a-real-browser step is unconfirmed. See `Obsidian Vault/brain/Gotchas.md`
+  for a new trap surfaced during the fix-forward review: a client disconnecting mid-preamble now
+  skips the trailing dispatch (fail-closed, no lying reply, but worth knowing).
 
 ---
 

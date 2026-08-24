@@ -264,3 +264,37 @@ with the key from `litellm/.env.local`):
 
 Also: COOPER-Open's brain (`openai` alias → gpt-4o-mini) bills the **OpenAI** key, not
 OpenRouter — repointing it to an `openrouter/*` alias moves that spend onto the credits.
+
+**Superseded by 15a (2026-08-24):** the classifier this entry and the one above describe no
+longer exists — `decision.py::_classify`/`_CLASSIFIER_SYSTEM` were deleted outright, no
+fallback. The persona model now sees the tool registry as `tools` on every turn; a `tool_call`
+in its reply is the dispatch signal, checked against `registry.validate_args` before the
+approval gate. Both entries stay for the historical record (the failure MODE — a plausible
+answer standing in for a dispatch that never happened — is exactly what 15a was built to kill
+as a class), but the specific phrasings/regexes named above no longer apply to the live system.
+
+### 2026-08-24 · Streaming dispatch: a client that disconnects mid-preamble skips the dispatch
+
+15a's streaming fix (`decision.py::_stream_and_maybe_dispatch`) forwards content live as it
+arrives and only runs the accumulated tool_call's dispatch handler AFTER the stream ends —
+this is necessary so a model's preamble text ("Sure, let me check…") doesn't cause the
+following tool_call to be dropped (that was the bug the fix closed). Side effect: if the
+HTTP client disconnects while the preamble is still streaming, Starlette closes the async
+generator at its current `yield` and the dispatch handler is never reached — the tool_call the
+model already committed to simply never runs, silently, no error, no approval ticket, no
+executed action. This is a strictly milder failure than the bug that was fixed (no reply lies
+to the user about what happened — there's just no reply at all), and no confirmed live
+occurrence exists yet, but it's a new "a proposed dispatch can vanish" path worth knowing about
+if a Private-workshop turn is ever observed to silently do nothing after visible preamble text.
+Nothing to fix here today; documented so it isn't re-discovered as a mystery later.
+
+### 2026-08-24 · Approval tickets expire at 600s; an expired "approve" falls through to plain chat
+
+`approval.py::_TICKET_TTL_SECONDS = 600`. If a human takes more than 10 minutes to reply
+"approve" after a halt message, the ticket has already expired (`approval._get_live` pops it
+silently) and the literal word "approve" is handed to the persona model as an ordinary chat
+message — it answers conversationally instead of executing anything, with no indication the
+original action was ever abandoned. Pre-existing behavior, not introduced by 15a; surfaced
+during 15a's fix-forward review as worth documenting. No fix planned — it's the correct
+fail-closed behavior (a stale approval must not silently execute), just a UX wart: the human
+has to notice the reply doesn't match what they expected and re-issue the original request.

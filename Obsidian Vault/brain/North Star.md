@@ -1,20 +1,29 @@
 # North Star — COOPER Project Direction
 
-> Updated 2026-08-18. Source of truth: PROGRESS.md + PRD.md.
+> Updated 2026-08-24. Source of truth: PROGRESS.md + PRD.md.
 
 ## Current Position
 
-**NEW DIRECTION 2026-08-18 — Step 15 Max-Metric Program.** Owner redefined success:
-COOPER maxes all nine agentic-harness metrics (Open to 45/45, Private to its physical
-ceiling), **outperforms Hermes Agent** on the same rubric, and a running version stays
-operational the whole way — every slice ships alone and live. Spec:
-`Docs/superpowers/specs/2026-08-18-step-15-max-metrics-design.md`; slice checklist in
-PROGRESS.md's Steps 14–15 roadmap. **Next up: slice 15a (native tool-calling dispatch)**
-— it goes before 14a and retires classifier dispatch. **All five owner gates decided
-2026-08-23** (G1: no inbound Open-drafted plans to Private; G2: brain stays gpt-4o-mini;
-G3: session-plans amendment enacted, 15h unblocked; G4: SearXNG Open-only, Private gets
-no web search; G5: spend guard to be enacted). 14f is pinned as a placeholder until the
-home-lab network exists. No governance blockers remain on any slice.
+**15a (native tool-calling dispatch) SHIPPED 2026-08-24 — first Step 15 slice complete,
+live-verified both stacks.** Classifier dispatch is retired outright (deleted, not
+dormant): the persona model now gets the tool registry attached as OpenAI-format `tools`
+on every turn, and its own `tool_call` is the dispatch signal, validated against a
+JSON-Schema subset before the approval gate. Full detail: PROGRESS.md's 2026-08-24
+decision-log entry. A whole-branch review after initial implementation found 3 Important
+findings a task-scoped review couldn't see (streaming silently dropping a dispatch after
+preamble content; `validate_args` letting empty/invalid args spend an approval before
+refusal; the tool_call accumulator shredding or silently overwriting calls when a
+provider omits `index`) — all three closed in a fix-forward pass, itself reviewed clean.
+Live-verified post-merge on both rebuilt Docker stacks (blocking `/chat` and the real SSE
+streaming endpoint `/v1/chat/completions`) — browser click-through itself unconfirmed
+(no `claude-in-chrome` extension available this session); the streaming transport Open
+WebUI actually uses was exercised directly instead. **Next up: slice 14a (Fabric pattern
+executor)**, a light revision on top of 15a's new dispatch shape. **All five owner gates
+decided 2026-08-23** (G1: no inbound Open-drafted plans to Private; G2: brain stays
+gpt-4o-mini; G3: session-plans amendment enacted, 15h unblocked; G4: SearXNG Open-only,
+Private gets no web search; G5: spend guard enacted, $15 lifetime OpenRouter key cap live).
+14f is pinned as a placeholder until the home-lab network exists. No governance blockers
+remain on any slice.
 
 **All 9 steps COMPLETE (2026-07-02).** Step 9 shipped and DoD-verified live: the private
 compose stack (`PDA-Runtime/docker-compose.private.yml`) brings cooper-core + Ollama +
