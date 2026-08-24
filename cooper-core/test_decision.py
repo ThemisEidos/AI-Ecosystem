@@ -194,13 +194,23 @@ def test_ollama_stream_single_chunk_tool_call_dispatches(monkeypatch):
         captured["args"] = args
         return "EXECUTED"
 
-    td, content_iter = _run(decision.route_turn_stream(
-        "give me a status summary", [], system_prompt="sys",
-        base_url="http://x", api_key="", model="m", backend="ollama",
-        tools=[{"type": "function", "function": {"name": "status_summary", "parameters": {}}}],
-        tool_call_handler=handler,
-    ))
-    chunks = _run(_collect(content_iter))
+    # td can only be finalized after the stream is fully drained (it may
+    # start with content deltas before any tool_call arrives), so drive the
+    # route_turn_stream() call and the content_iter drain inside one
+    # asyncio.run() / one async scenario() function — see
+    # test_ollama_stream_plain_content_forwards_incrementally for why two
+    # separate _run() calls would force-close the still-suspended generator.
+    async def scenario():
+        td, content_iter = await decision.route_turn_stream(
+            "give me a status summary", [], system_prompt="sys",
+            base_url="http://x", api_key="", model="m", backend="ollama",
+            tools=[{"type": "function", "function": {"name": "status_summary", "parameters": {}}}],
+            tool_call_handler=handler,
+        )
+        chunks = await _collect(content_iter)
+        return td, chunks
+
+    td, chunks = _run(scenario())
     assert td.decision == "dispatch"
     assert td.reason == "tool_call: status_summary"
     assert captured["tool_id"] == "status_summary"
@@ -228,13 +238,17 @@ def test_openai_stream_fragmented_tool_call_accumulates(monkeypatch):
         captured["args"] = args
         return "EXECUTED"
 
-    td, content_iter = _run(decision.route_turn_stream(
-        "status please", [], system_prompt="sys",
-        base_url="http://x", api_key="k", model="m", backend="openai",
-        tools=[{"type": "function", "function": {"name": "status_summary", "parameters": {}}}],
-        tool_call_handler=handler,
-    ))
-    chunks = _run(_collect(content_iter))
+    async def scenario():
+        td, content_iter = await decision.route_turn_stream(
+            "status please", [], system_prompt="sys",
+            base_url="http://x", api_key="k", model="m", backend="openai",
+            tools=[{"type": "function", "function": {"name": "status_summary", "parameters": {}}}],
+            tool_call_handler=handler,
+        )
+        chunks = await _collect(content_iter)
+        return td, chunks
+
+    td, chunks = _run(scenario())
     assert td.decision == "dispatch"
     assert captured["tool_id"] == "status_summary"
     assert captured["args"] == {"a": 1}
@@ -249,14 +263,13 @@ def test_ollama_stream_plain_content_forwards_incrementally(monkeypatch):
     ]
     monkeypatch.setattr(decision.httpx, "AsyncClient", lambda **kw: _FakeStreamClient(lines))
 
-    # Unlike the dispatch-branch tests above (whose content_iter is a fully
-    # self-contained _single_chunk), the "answer" branch's content_iter
-    # (_forward_remaining) keeps the underlying _stream_ollama_events
-    # generator alive and resumes it lazily. asyncio.run() tears down any
-    # async generators still suspended when its loop shuts down
-    # (loop.shutdown_asyncgens()), so driving route_turn_stream and then
-    # draining content_iter via two separate _run()/asyncio.run() calls
-    # force-closes that generator between them. Real callers (a FastAPI
+    # content_iter (_stream_and_maybe_dispatch) keeps the underlying
+    # _stream_ollama_events generator alive and resumes it lazily — true for
+    # every route_turn_stream() call now, not just this "answer" case.
+    # asyncio.run() tears down any async generators still suspended when its
+    # loop shuts down (loop.shutdown_asyncgens()), so driving route_turn_stream
+    # and then draining content_iter via two separate _run()/asyncio.run()
+    # calls force-closes that generator between them. Real callers (a FastAPI
     # request handler) consume both within one event loop, so exercise it
     # the same way here.
     async def scenario():
@@ -273,10 +286,10 @@ def test_ollama_stream_plain_content_forwards_incrementally(monkeypatch):
     assert chunks == ["Hel", "lo"]
 
 
-def test_ollama_stream_content_before_tool_call_drops_the_tool_call(monkeypatch):
-    """Pins the plan's locked-in 'never interleaved' design decision: once
-    content has started streaming, a tool_call_delta that arrives afterward
-    is silently dropped — the turn stays an "answer", not a "dispatch"."""
+def test_ollama_stream_content_then_tool_call_streams_content_and_dispatches(monkeypatch):
+    """The core fix: a preamble before a tool_call must not swallow the
+    dispatch. Content streams live, then the dispatch result is appended
+    after a visible separator."""
     lines = [
         json.dumps({"message": {"content": "Sure, let me do that"}, "done": False}),
         json.dumps({
@@ -291,9 +304,6 @@ def test_ollama_stream_content_before_tool_call_drops_the_tool_call(monkeypatch)
     async def handler(tool_id, args, raw):
         return "EXECUTED"
 
-    # Same single-event-loop pattern as test_ollama_stream_plain_content_forwards_incrementally
-    # above — the "answer" branch's content_iter keeps the underlying stream
-    # generator alive and must be drained in the same asyncio.run() call.
     async def scenario():
         td, content_iter = await decision.route_turn_stream(
             "do the thing", [], system_prompt="sys",
@@ -305,8 +315,40 @@ def test_ollama_stream_content_before_tool_call_drops_the_tool_call(monkeypatch)
         return td, chunks
 
     td, chunks = _run(scenario())
-    assert td.decision == "answer"
-    assert chunks == ["Sure, let me do that"]
+    assert td.decision == "dispatch"
+    assert td.reason == "tool_call: status_summary"
+    assert chunks == ["Sure, let me do that", "\n\n---\n", "EXECUTED"]
+
+
+def test_openai_stream_content_then_tool_call_streams_content_and_dispatches(monkeypatch):
+    deltas = [
+        {"choices": [{"delta": {"content": "Sure, let me check"}}]},
+        {"choices": [{"delta": {"tool_calls": [
+            {"index": 0, "id": "call_1", "function": {"name": "status_summary", "arguments": ""}}
+        ]}}]},
+        {"choices": [{"delta": {"tool_calls": [
+            {"index": 0, "function": {"arguments": "{}"}}
+        ]}}]},
+    ]
+    lines = [f"data: {json.dumps(d)}" for d in deltas] + ["data: [DONE]"]
+    monkeypatch.setattr(decision.httpx, "AsyncClient", lambda **kw: _FakeStreamClient(lines))
+
+    async def handler(tool_id, args, raw):
+        return "EXECUTED"
+
+    async def scenario():
+        td, content_iter = await decision.route_turn_stream(
+            "status please", [], system_prompt="sys",
+            base_url="http://x", api_key="k", model="m", backend="openai",
+            tools=[{"type": "function", "function": {"name": "status_summary", "parameters": {}}}],
+            tool_call_handler=handler,
+        )
+        chunks = await _collect(content_iter)
+        return td, chunks
+
+    td, chunks = _run(scenario())
+    assert td.decision == "dispatch"
+    assert chunks == ["Sure, let me check", "\n\n---\n", "EXECUTED"]
 
 
 def test_stream_dispatch_falls_back_without_a_handler(monkeypatch):
@@ -316,11 +358,15 @@ def test_stream_dispatch_falls_back_without_a_handler(monkeypatch):
     })]
     monkeypatch.setattr(decision.httpx, "AsyncClient", lambda **kw: _FakeStreamClient(lines))
 
-    td, content_iter = _run(decision.route_turn_stream(
-        "do it", [], system_prompt="sys",
-        base_url="http://x", api_key="", model="m", backend="ollama",
-        tools=[], tool_call_handler=None,
-    ))
-    chunks = _run(_collect(content_iter))
+    async def scenario():
+        td, content_iter = await decision.route_turn_stream(
+            "do it", [], system_prompt="sys",
+            base_url="http://x", api_key="", model="m", backend="ollama",
+            tools=[], tool_call_handler=None,
+        )
+        chunks = await _collect(content_iter)
+        return td, chunks
+
+    td, chunks = _run(scenario())
     assert td.decision == "dispatch"
     assert chunks == [decision._DISPATCH_FALLBACK]

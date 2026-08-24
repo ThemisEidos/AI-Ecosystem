@@ -15,8 +15,10 @@ route_turn(message, history, *, generate_answer, tools=None, tool_call_handler=N
 route_turn_stream(message, history, *, system_prompt, base_url, api_key, model,
                    backend, tools=None, tool_call_handler=None)
   -> (TurnDecision, AsyncIterator[str])
-  Streams the backend response; buffers silently if tool_call deltas appear,
-  then emits the dispatch result as content chunks (spec §2 streaming specifics).
+  Streams content deltas in real time; a tool_call is accumulated silently
+  regardless of when it arrives relative to content, and if one completes,
+  the dispatch result is appended as additional chunks after the content
+  (spec §2 streaming specifics) — never dropped, matching route_turn.
 
 Decisions
 ---------
@@ -198,8 +200,8 @@ class _ToolCallAccumulator:
         return calls
 
 
-# ── route_turn_stream — real-time content streaming; silent buffer + single
-#    dispatch chunk if a tool_call appears (spec §2 streaming specifics) ─────
+# ── route_turn_stream — content streams in real time; a tool_call is never
+#    dropped regardless of when it arrives relative to content ────────────
 async def route_turn_stream(
     message: str,
     history: List[dict],
@@ -214,44 +216,51 @@ async def route_turn_stream(
 ) -> Tuple[TurnDecision, AsyncIterator[str]]:
     msgs = _build_answer_messages(message, history, system_prompt)
     events = _stream_events(base_url, api_key, model, msgs, backend=backend, tools=tools)
+    td = TurnDecision(decision="answer", reason="no tool call emitted")
+    return td, _stream_and_maybe_dispatch(events, td, message, tool_call_handler)
 
+
+async def _stream_and_maybe_dispatch(
+    events: AsyncIterator[dict],
+    td: TurnDecision,
+    message: str,
+    tool_call_handler: Optional[Callable[[str, dict, str], Awaitable[str]]],
+) -> AsyncIterator[str]:
+    """Forwards content deltas in real time as they arrive. Tool_call
+    fragments are accumulated silently throughout, regardless of when they
+    arrive relative to content — the model's own tool_call is never dropped
+    (fix-forward Important #1). If any tool_call completed by stream end,
+    the dispatch runs and its result is appended after a visible separator
+    only when content was actually streamed first; a pure tool_call turn
+    (no preceding content) is unchanged from before this fix — a single
+    chunk, no separator. `td` is mutated in place once the true outcome is
+    known, since it can't be determined before the stream ends."""
     accumulator = _ToolCallAccumulator()
-    first_content: Optional[str] = None
-
+    any_content = False
     async for ev in events:
         if "tool_call_delta" in ev:
             accumulator.add(ev["tool_call_delta"])
-            # A tool_call turn: drain the rest of the stream silently — any
-            # stray content after this point is buffered, never forwarded
-            # (a turn is either streamed text OR a buffered dispatch, never
-            # interleaved).
-            async for ev2 in events:
-                if "tool_call_delta" in ev2:
-                    accumulator.add(ev2["tool_call_delta"])
-            tool_calls = accumulator.finish()
-            primary = tool_calls[0]
-            extra_note = _dropped_calls_note(tool_calls)
-            td = TurnDecision(decision="dispatch", reason=f"tool_call: {primary.name}")
-            if tool_call_handler is None:
-                return td, _single_chunk(_DISPATCH_FALLBACK + extra_note)
-            reply = await tool_call_handler(primary.name, primary.arguments, message)
-            return td, _single_chunk(reply + extra_note)
-        first_content = ev["content"]
-        break
+            continue
+        content = ev.get("content")
+        if content:
+            any_content = True
+            yield content
 
-    td = TurnDecision(decision="answer", reason="no tool call emitted")
-    if first_content is None:
-        return td, _single_chunk("")
-    return td, _forward_remaining(first_content, events)
+    tool_calls = accumulator.finish()
+    if not tool_calls:
+        return
 
-
-async def _forward_remaining(first_content: str, events: AsyncIterator[dict]) -> AsyncIterator[str]:
-    yield first_content
-    async for ev in events:
-        if "content" in ev and ev["content"]:
-            yield ev["content"]
-        # a stray tool_call_delta arriving after content has already started
-        # streaming is ignored — see the "never interleaved" note above.
+    primary = tool_calls[0]
+    extra_note = _dropped_calls_note(tool_calls)
+    td.decision = "dispatch"
+    td.reason = f"tool_call: {primary.name}"
+    if tool_call_handler is None:
+        reply = _DISPATCH_FALLBACK
+    else:
+        reply = await tool_call_handler(primary.name, primary.arguments, message)
+    if any_content:
+        yield "\n\n---\n"
+    yield reply + extra_note
 
 
 # ── Blocking completions ───────────────────────────────────────────────────
