@@ -794,6 +794,26 @@ Execution order: 15a → 14a(rev) → 15c → 14b → 15d → 15e → 14c(+15f-i
   the rendering-in-a-real-browser step is unconfirmed. See `Obsidian Vault/brain/Gotchas.md`
   for a new trap surfaced during the fix-forward review: a client disconnecting mid-preamble now
   skips the trailing dispatch (fail-closed, no lying reply, but worth knowing).
+- **2026-08-24 · Fix-forward pass independently reviewed clean; 15a closes pending one owner
+  browser turn.** A fresh-eyes whole-range review (2e7946a..645d91a) confirmed: 248/248 tests
+  (run by the reviewer, not taken on faith); all three Importants closed with the plan's exact
+  semantics; governance invariants verified independently (validation before ticket, ticket-arg
+  fidelity, approval.py/workshop.py zero-diff, execution-time allowlists untouched); the
+  mid-pass revision commit (60461fd) judged a correct self-catch of a bug in the fix-forward
+  plan's own Task 3 wording, not a regression. Separately live-corroborated this session:
+  in-container `decision.py` hashes byte-identical to repo HEAD, and the preamble-then-dispatch
+  scenario round-tripped on the real SSE endpoint (67 preamble chunks → `---` → halt with
+  validated args → approve → executor output). **Deferred minors recorded for a future sweep**
+  (none urgent): key the tool_call accumulator on fragment `id` before the name heuristic;
+  give synthetic indices a disjoint key space (negative counter); consider `asyncio.shield`
+  around the dispatch block if mid-executor client-disconnect cancellation ever bites;
+  harden `TurnDecision`'s deferred-mutation contract for future stream callers;
+  `_render_args_preview` repr/str two-char count mismatch. **Also observed live:** the two
+  `Skills/_drafts/` entries are genuine proposer output from this week's DoD dispatches —
+  the 2026-08-02 "draft offer never observed live" item is now closed; drafts await Batch 8
+  curation. Remaining 15a step: owner browser click-through per stack (steps in the 15a
+  fix-forward plan Task 5.2); only Open WebUI's rendering of the mid-stream separator is
+  unproven. Next slice: 14a.
 
 ---
 
