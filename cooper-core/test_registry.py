@@ -61,14 +61,28 @@ _ECHO_TOOL = {
 
 def test_render_tool_schema_shape():
     schema = registry.render_tool_schema(_ECHO_TOOL)
+    # no_path_separators is a COOPER-internal validate_args flag, not part of
+    # the OpenAI/JSON-Schema wire format — render_tool_schema strips it.
+    expected_parameters = {
+        "type": "object",
+        "properties": {
+            "text": {"type": "string"},
+            "tags": {"type": "array", "items": {"type": "string"}},
+            "context": {"type": "object"},
+        },
+        "required": ["text"],
+        "additionalProperties": False,
+    }
     assert schema == {
         "type": "function",
         "function": {
             "name": "echo_tool",
             "description": "Echoes back the given text.",
-            "parameters": _ECHO_TOOL["parameters"],
+            "parameters": expected_parameters,
         },
     }
+    # the source dict (the same object validate_args reads) must be untouched
+    assert _ECHO_TOOL["parameters"]["properties"]["text"]["no_path_separators"] is True
 
 
 def test_render_tool_schema_defaults_to_empty_object_parameters():
@@ -117,6 +131,25 @@ def test_validate_args_rejects_non_dict_args():
     assert registry.validate_args(_ECHO_TOOL, ["not", "a", "dict"]) != []
 
 
+def test_no_path_separators_refuses_subdirectory_targets_on_real_registry():
+    """Pins the pre-approval path-separator refusal against the LIVE registry
+    entries (not the synthetic _ECHO_TOOL fixture) — would fail if
+    no_path_separators: true were ever accidentally dropped from the YAML."""
+    cases = [
+        ("open", "obsidian_note_writer", {"filename": "sub/dir.md", "content": "x"}),
+        ("private", "restricted_dmz_writer", {"filename": "sub/dir.txt", "content": "x"}),
+        ("open", "powershell_open", {"script": "sub/dir.ps1"}),
+        ("open", "import_skill", {"skill_name": "../../etc", "tap_url": "https://example.com"}),
+        ("open", "promote_skill", {"skill_name": "../../etc"}),
+        ("private", "promote_skill", {"skill_name": "../../etc"}),
+    ]
+    for workshop, tool_id, args in cases:
+        tool = registry.get_tool(workshop, tool_id)
+        assert tool is not None, f"{tool_id} missing from {workshop} registry"
+        violations = registry.validate_args(tool, args)
+        assert violations, f"{tool_id} should refuse a subdirectory target, got no violations"
+
+
 def _synthetic_args(params: dict) -> dict:
     """Minimal args dict that satisfies a parameters schema's required keys —
     just enough to drive validate_args() through a real accept path."""
@@ -150,7 +183,14 @@ def test_every_enabled_tool_has_a_valid_wired_parameters_block():
             schema = registry.render_tool_schema(tool)
             assert schema["type"] == "function"
             assert schema["function"]["name"] == tool["id"]
-            assert schema["function"]["parameters"] == params
+            # rendered parameters match the source block except for the
+            # COOPER-internal no_path_separators flag, which is stripped
+            # before the schema goes out over the wire (finding: Important #3)
+            for prop_name, prop in params.get("properties", {}).items():
+                rendered_prop = schema["function"]["parameters"]["properties"][prop_name]
+                assert "no_path_separators" not in rendered_prop
+                expected_prop = {k: v for k, v in prop.items() if k != "no_path_separators"}
+                assert rendered_prop == expected_prop, tool["id"]
 
             synthetic = _synthetic_args(params)
             violations = registry.validate_args(tool, synthetic)
