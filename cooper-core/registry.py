@@ -185,6 +185,10 @@ def validate_args(tool: dict, args: dict) -> List[str]:
             violations.append(f"missing required argument '{key}'")
 
     for key, value in args.items():
+        # Note: `additionalProperties` in the schema is documentation only here —
+        # unknown keys are always rejected below regardless of its value. Every
+        # registry `parameters` block sets it to `false` by convention; nothing
+        # in this function reads it.
         if key not in properties:
             violations.append(f"unknown argument '{key}'")
             continue

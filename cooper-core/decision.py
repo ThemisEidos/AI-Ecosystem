@@ -59,8 +59,9 @@ def _dropped_calls_note(tool_calls: List[ToolCall]) -> str:
     if len(tool_calls) <= 1:
         return ""
     n = len(tool_calls) - 1
+    verb = "was" if n == 1 else "were"
     return (
-        f"\n\n(Note: {n} additional tool call{'s' if n != 1 else ''} were proposed "
+        f"\n\n(Note: {n} additional tool call{'s' if n != 1 else ''} {verb} proposed "
         "and dropped — COOPER dispatches one action per turn.)"
     )
 

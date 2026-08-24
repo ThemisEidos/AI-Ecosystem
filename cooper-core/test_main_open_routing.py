@@ -16,7 +16,7 @@ def test_open_workshop_defaults_to_litellm_base_url():
 
 def test_open_workshop_defaults_to_openai_alias_model():
     assert main.COOPER_MODEL == "openai"
-    assert main.CLASSIFIER_MODEL == "openai"
+    assert main.UTILITY_MODEL == "openai"
 
 
 def _run_main_import_with_env(env_overrides: dict) -> dict:

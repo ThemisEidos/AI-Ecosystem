@@ -68,14 +68,9 @@ _MAX_NOTE_CONTENT_BYTES = 65_536
 _MAX_FETCH_BYTES = 262_144  # 256 KB of raw HTML before extraction
 _FETCH_TIMEOUT   = 20  # seconds — a research fetch should fail fast, not hang a turn
 
-# Every executor_type `run()` actually dispatches to (excludes the generic
-# `_stub` fallback for unrecognized types) — read by the registry-walk test
-# (M1) to assert every registry tool maps to a real handler, not a stub.
-WIRED_EXECUTOR_TYPES = frozenset({
-    "powershell", "python", "skill_import", "skill_promote", "informational",
-    "local_read", "filesystem", "local_llm", "note_editor", "llm_api",
-    "browser", "workflow_engine", "cli_launcher",
-})
+# WIRED_EXECUTOR_TYPES (read by the registry-walk test — M1 — to assert every
+# registry tool maps to a real handler, not a stub) is defined near the
+# bottom of this file, derived from the _HANDLERS dispatch table.
 
 # Private Workshop's local Ollama backend — read directly rather than importing
 # main.py's WORKSHOP-scoped constants, to avoid a circular import (main imports
@@ -213,46 +208,14 @@ async def run(tool: dict, message: str, workshop: str, args: Optional[dict] = No
     tool_name     = tool.get("name", tool.get("id", "unknown"))
     args = args or {}
 
-    if executor_type == "powershell":
-        return await _run_powershell(tool, args)
+    handler = _HANDLERS.get(executor_type)
+    if handler is None:
+        return _stub(executor_type, tool_name)
 
-    if executor_type == "python":
-        return await _run_python(tool, args)
-
-    if executor_type == "skill_import":
-        return await _run_skill_import(args)
-
-    if executor_type == "skill_promote":
-        return await _run_skill_promote(args, workshop)
-
-    if executor_type == "informational":
-        return _run_informational(tool, message, workshop)
-
-    if executor_type == "local_read":
-        return _run_local_read(tool, workshop)
-
-    if executor_type == "filesystem":
-        return await _run_filesystem(args)
-
-    if executor_type == "local_llm":
-        return await _run_local_llm(args)
-
-    if executor_type == "note_editor":
-        return await _run_note_editor(args)
-
-    if executor_type == "llm_api":
-        return await _run_llm_api(args)
-
-    if executor_type == "browser":
-        return await _run_browser(args)
-
-    if executor_type == "workflow_engine":
-        return await _run_workflow_engine(tool, args, workshop)
-
-    if executor_type == "cli_launcher":
-        return await _run_cli_launcher(args)
-
-    return _stub(executor_type, tool_name)
+    result = handler(tool, message, workshop, args)
+    if asyncio.iscoroutine(result):
+        return await result
+    return result
 
 
 def _run_informational(tool: dict, message: str, workshop: str) -> str:
@@ -688,3 +651,32 @@ async def _run_skill_promote(args: dict, workshop: str) -> str:
         return f"Workbench: skill promotion failed — {exc}"
     except Exception as exc:
         return f"Workbench: skill promotion failed unexpectedly — {exc}"
+
+
+# ── Dispatch table ────────────────────────────────────────────────────────
+# Adapter closures give every handler a uniform (tool, message, workshop, args)
+# call signature despite their differing native signatures. Some handlers are
+# `async def` (return a coroutine); `_run_informational` and `_run_local_read`
+# are plain `def` (return a str directly) — run() handles both via
+# asyncio.iscoroutine.
+_HANDLERS = {
+    "powershell":     lambda tool, message, workshop, args: _run_powershell(tool, args),
+    "python":         lambda tool, message, workshop, args: _run_python(tool, args),
+    "skill_import":   lambda tool, message, workshop, args: _run_skill_import(args),
+    "skill_promote":  lambda tool, message, workshop, args: _run_skill_promote(args, workshop),
+    "informational":  lambda tool, message, workshop, args: _run_informational(tool, message, workshop),
+    "local_read":     lambda tool, message, workshop, args: _run_local_read(tool, workshop),
+    "filesystem":     lambda tool, message, workshop, args: _run_filesystem(args),
+    "local_llm":      lambda tool, message, workshop, args: _run_local_llm(args),
+    "note_editor":    lambda tool, message, workshop, args: _run_note_editor(args),
+    "llm_api":        lambda tool, message, workshop, args: _run_llm_api(args),
+    "browser":        lambda tool, message, workshop, args: _run_browser(args),
+    "workflow_engine": lambda tool, message, workshop, args: _run_workflow_engine(tool, args, workshop),
+    "cli_launcher":   lambda tool, message, workshop, args: _run_cli_launcher(args),
+}
+
+# Every executor_type run() actually dispatches to — derived from _HANDLERS so
+# the M1 registry-walk test (test_registry.py) cannot drift from what's
+# really wired (fix-forward Task 4; previously a hand-maintained frozenset
+# that could silently fall out of sync with the if-chain).
+WIRED_EXECUTOR_TYPES = frozenset(_HANDLERS.keys())

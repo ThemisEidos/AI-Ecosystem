@@ -58,13 +58,13 @@ OPENAI_API_KEY  = os.environ.get("OPENAI_API_KEY", "")
 if WORKSHOP == "private":
     BACKEND          = "ollama"
     COOPER_MODEL     = os.environ.get("COOPER_MODEL", "COOPER-Private")
-    CLASSIFIER_MODEL = os.environ.get("COOPER_CLASSIFIER_MODEL", "COOPER-Private")
+    UTILITY_MODEL    = os.environ.get("COOPER_CLASSIFIER_MODEL", "COOPER-Private")
     BACKEND_URL      = OLLAMA_HOST
     BACKEND_KEY      = "ollama"
 else:  # open
     BACKEND          = "openai"
     COOPER_MODEL     = os.environ.get("COOPER_MODEL", "openai")
-    CLASSIFIER_MODEL = os.environ.get("COOPER_CLASSIFIER_MODEL", "openai")
+    UTILITY_MODEL    = os.environ.get("COOPER_CLASSIFIER_MODEL", "openai")
     BACKEND_URL      = OPENAI_BASE_URL
     BACKEND_KEY      = OPENAI_API_KEY
 
@@ -172,11 +172,11 @@ def _render_args_preview(args: dict) -> str:
         return ""
     parts = []
     for key, value in args.items():
-        text = str(value)
-        if len(text) > _ARGS_PREVIEW_CHAR_THRESHOLD:
-            parts.append(f"{key}: {len(text)} chars")
+        rendered = repr(value)
+        if len(rendered) > _ARGS_PREVIEW_CHAR_THRESHOLD:
+            parts.append(f"{key}: {len(str(value))} chars")
         else:
-            parts.append(f"{key}: {value!r}")
+            parts.append(f"{key}: {rendered}")
     return "\n\nArgs — " + ", ".join(parts)
 
 
@@ -278,7 +278,7 @@ async def _post_dispatch(tool: dict, message: str, raw_output: str, verdict, ses
         await archivist.remember(
             _ARCHIVIST_CONN, tool, message, raw_output, verdict, WORKSHOP,
             base_url=BACKEND_URL, api_key=BACKEND_KEY,
-            model=CLASSIFIER_MODEL, backend=BACKEND,
+            model=UTILITY_MODEL, backend=BACKEND,
         )
     except Exception as exc:
         print(f"  [!!] archivist.remember failed (non-fatal): {exc}")
@@ -288,7 +288,7 @@ async def _post_dispatch(tool: dict, message: str, raw_output: str, verdict, ses
             draft_dir = await proposer.draft_skill(
                 tool, message, raw_output,
                 base_url=BACKEND_URL, api_key=BACKEND_KEY,
-                model=CLASSIFIER_MODEL, backend=BACKEND,
+                model=UTILITY_MODEL, backend=BACKEND,
             )
             offer = proposer.offer_line(draft_dir).strip()
             if offer:
@@ -315,7 +315,7 @@ async def _execute(
         tool, message, raw_output,
         base_url=BACKEND_URL,
         api_key=BACKEND_KEY,
-        model=CLASSIFIER_MODEL,
+        model=UTILITY_MODEL,
         backend=BACKEND,
     )
 
@@ -389,7 +389,7 @@ async def lifespan(app: FastAPI):
     print(f"\n  workshop : {WORKSHOP}")
     print(f"  backend  : {BACKEND}")
     print(f"  model    : {COOPER_MODEL}")
-    print(f"  classify : {CLASSIFIER_MODEL}")
+    print(f"  utility  : {UTILITY_MODEL}")
 
     if BACKEND == "ollama":
         async with httpx.AsyncClient(timeout=5.0) as client:
@@ -397,7 +397,7 @@ async def lifespan(app: FastAPI):
                 resp = await client.get(f"{OLLAMA_HOST}/api/tags")
                 models = [m["name"] for m in resp.json().get("models", [])]
                 known = {m.lower() for m in models} | {m.split(":")[0].lower() for m in models}
-                for name in {COOPER_MODEL, CLASSIFIER_MODEL}:
+                for name in {COOPER_MODEL, UTILITY_MODEL}:
                     ok = name.lower() in known
                     print(f"  {'[ok]' if ok else '[!!]'} ollama model: {name}")
             except Exception as exc:
@@ -455,7 +455,8 @@ async def health():
         "workshop":   WORKSHOP,
         "backend":    BACKEND,
         "model":      COOPER_MODEL,
-        "classifier": CLASSIFIER_MODEL,
+        "classifier":    UTILITY_MODEL,  # deprecated key name — kept for one release, no confirmed consumer found (fix-forward Task 4)
+        "utility_model": UTILITY_MODEL,
     }
 
 

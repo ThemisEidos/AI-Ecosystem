@@ -159,3 +159,14 @@ def test_approve_executes_with_ticket_stored_args(monkeypatch):
     reply = asyncio.run(main._resolve_approval("approve", "s3"))
     assert seen["args"] == {"filename": "x.md", "content": "hi"}
     assert "wrote it" in reply
+
+
+def test_render_args_preview_uses_repr_length_for_threshold():
+    # str(value) has length 59 (under the 60-char threshold), but repr(value)
+    # adds two quote chars -> 61, over threshold. The branch decision must be
+    # driven by the repr length (what verbatim rendering would actually cost),
+    # so this must take the "N chars" branch, reporting the plain str() length.
+    value = "x" * 59
+    preview = main._render_args_preview({"content": value})
+    assert "content: 59 chars" in preview
+    assert "'" not in preview  # not rendered verbatim with repr quoting

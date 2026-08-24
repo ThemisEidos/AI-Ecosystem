@@ -44,7 +44,7 @@ tools:
     name: Browser Research
     drawer: Research
     workshop: Open Workshop
-    description: Review public web pages and approved local pages for non-sensitive research.
+    description: Fetch a single public web page for non-sensitive research (only the first URL given is fetched; additional URLs are ignored).
     permission_level: 3
     approval_required: true
     executor_type: browser
@@ -57,10 +57,10 @@ tools:
           items:
             type: string
             url_only: true
-          description: "One or more https:// URLs to research. At least one is required."
+          description: "One or more https:// URLs to research. At least one is required. Only the first URL is actually fetched — extras are accepted but unused."
         search_terms:
           type: string
-          description: "Optional search terms to focus the research summary."
+          description: "Optional search terms. Currently accepted but not read by the executor — the returned summary is unfiltered page text, not focused by these terms."
       required:
         - urls
       additionalProperties: false

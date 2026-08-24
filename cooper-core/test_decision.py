@@ -71,6 +71,20 @@ def test_route_turn_multiple_tool_calls_drops_extra_with_note():
     assert "dropped" in reply
 
 
+def test_dropped_calls_note_grammar():
+    one = decision._dropped_calls_note([
+        decision.ToolCall(id="1", name="a", arguments={}),
+        decision.ToolCall(id="2", name="b", arguments={}),
+    ])
+    assert "1 additional tool call was proposed" in one
+    many = decision._dropped_calls_note([
+        decision.ToolCall(id="1", name="a", arguments={}),
+        decision.ToolCall(id="2", name="b", arguments={}),
+        decision.ToolCall(id="3", name="c", arguments={}),
+    ])
+    assert "2 additional tool calls were proposed" in many
+
+
 def test_route_turn_backend_error_is_caught():
     async def gen(message, history, tools=None):
         raise RuntimeError("boom")

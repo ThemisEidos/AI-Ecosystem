@@ -40,6 +40,14 @@ def test_health_is_open_without_auth():
     assert client.get("/health").status_code == 200
 
 
+def test_health_emits_both_classifier_and_utility_model_keys():
+    client = TestClient(main.app)
+    body = client.get("/health").json()
+    assert "classifier" in body
+    assert "utility_model" in body
+    assert body["classifier"] == body["utility_model"] == main.UTILITY_MODEL
+
+
 def test_derive_session_id_is_stable_and_anonymous_safe():
     import main
     a = main._derive_session_id("key-alpha")
