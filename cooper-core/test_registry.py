@@ -150,21 +150,155 @@ def test_no_path_separators_refuses_subdirectory_targets_on_real_registry():
         assert violations, f"{tool_id} should refuse a subdirectory target, got no violations"
 
 
-def _synthetic_args(params: dict) -> dict:
+def _synthetic_args(tool: dict) -> dict:
     """Minimal args dict that satisfies a parameters schema's required keys —
     just enough to drive validate_args() through a real accept path."""
+    params = tool["parameters"]
+    allowed_workflows = tool.get("allowed_workflows") or {}
     out = {}
     for key in params.get("required", []):
         prop = params["properties"][key]
         t = prop.get("type")
         if t == "string":
-            out[key] = "example"
+            if key == "workflow" and allowed_workflows:
+                # workflow_engine tools now validate `workflow` against
+                # allowed_workflows pre-approval (fix-forward Important #2) —
+                # a plain placeholder string is no longer a valid synthetic
+                # value for these tools.
+                out[key] = next(iter(allowed_workflows))
+            else:
+                out[key] = "example"
         elif t == "array":
             item_type = (prop.get("items") or {}).get("type")
             out[key] = ["https://example.com"] if item_type == "string" else []
         elif t == "object":
             out[key] = {}
     return out
+
+
+def test_validate_args_rejects_empty_required_string():
+    tool = {
+        "id": "t", "parameters": {
+            "type": "object",
+            "properties": {"content": {"type": "string"}},
+            "required": ["content"],
+            "additionalProperties": False,
+        },
+    }
+    violations = registry.validate_args(tool, {"content": "   "})
+    assert any("must not be empty" in v for v in violations)
+
+
+def test_validate_args_allows_empty_optional_string():
+    tool = {
+        "id": "t", "parameters": {
+            "type": "object",
+            "properties": {
+                "content": {"type": "string"},
+                "note": {"type": "string"},
+            },
+            "required": ["content"],
+            "additionalProperties": False,
+        },
+    }
+    assert registry.validate_args(tool, {"content": "hi", "note": ""}) == []
+
+
+def test_validate_args_rejects_empty_required_array():
+    tool = {
+        "id": "t", "parameters": {
+            "type": "object",
+            "properties": {"urls": {"type": "array", "items": {"type": "string"}}},
+            "required": ["urls"],
+            "additionalProperties": False,
+        },
+    }
+    violations = registry.validate_args(tool, {"urls": []})
+    assert any("must not be empty" in v for v in violations)
+
+
+def test_validate_args_rejects_url_only_violation():
+    tool = {
+        "id": "t", "parameters": {
+            "type": "object",
+            "properties": {"urls": {"type": "array", "items": {"type": "string", "url_only": True}}},
+            "required": ["urls"],
+            "additionalProperties": False,
+        },
+    }
+    violations = registry.validate_args(tool, {"urls": ["ftp://example.com/x"]})
+    assert any("http://" in v for v in violations)
+
+
+def test_validate_args_accepts_valid_urls():
+    tool = {
+        "id": "t", "parameters": {
+            "type": "object",
+            "properties": {"urls": {"type": "array", "items": {"type": "string", "url_only": True}}},
+            "required": ["urls"],
+            "additionalProperties": False,
+        },
+    }
+    assert registry.validate_args(tool, {"urls": ["https://example.com/x"]}) == []
+
+
+def test_validate_args_rejects_unknown_workflow_value():
+    tool = {
+        "id": "t", "executor_type": "workflow_engine",
+        "allowed_workflows": {"pda_command_router": "pda-command-router"},
+        "parameters": {
+            "type": "object",
+            "properties": {"workflow": {"type": "string"}, "payload": {"type": "string"}},
+            "required": ["workflow"],
+            "additionalProperties": False,
+        },
+    }
+    violations = registry.validate_args(tool, {"workflow": "not_a_real_workflow"})
+    assert any("allowed_workflows" in v for v in violations)
+
+
+def test_validate_args_accepts_known_workflow_value():
+    tool = {
+        "id": "t", "executor_type": "workflow_engine",
+        "allowed_workflows": {"pda_command_router": "pda-command-router"},
+        "parameters": {
+            "type": "object",
+            "properties": {"workflow": {"type": "string"}, "payload": {"type": "string"}},
+            "required": ["workflow"],
+            "additionalProperties": False,
+        },
+    }
+    assert registry.validate_args(tool, {"workflow": "pda_command_router"}) == []
+
+
+def test_validate_args_skips_workflow_check_when_allowlist_empty():
+    # restricted_workflow_runner-shaped: no allowed_workflows configured yet —
+    # this stays the executor's fail-closed job (spec §4: "stays exactly as-is"),
+    # not validate_args's.
+    tool = {
+        "id": "t", "executor_type": "workflow_engine",
+        "parameters": {
+            "type": "object",
+            "properties": {"workflow": {"type": "string"}},
+            "required": ["workflow"],
+            "additionalProperties": False,
+        },
+    }
+    assert registry.validate_args(tool, {"workflow": "anything"}) == []
+
+
+def test_validate_args_rejects_unknown_workflow_on_real_registry():
+    tool = registry.get_tool("open", "n8n_general_workflows")
+    assert tool is not None
+    violations = registry.validate_args(tool, {"workflow": "not_a_real_workflow", "payload": "hi"})
+    assert violations, "an unknown workflow key must be refused pre-approval"
+
+
+def test_validate_args_rejects_non_http_url_on_real_browser_research_registry():
+    tool = registry.get_tool("open", "browser_research")
+    assert tool is not None
+    violations = registry.validate_args(tool, {"urls": ["ftp://example.com/x"]})
+    assert violations, "a non-http(s) URL must be refused pre-approval"
 
 
 def test_every_enabled_tool_has_a_valid_wired_parameters_block():
@@ -192,7 +326,7 @@ def test_every_enabled_tool_has_a_valid_wired_parameters_block():
                 expected_prop = {k: v for k, v in prop.items() if k != "no_path_separators"}
                 assert rendered_prop == expected_prop, tool["id"]
 
-            synthetic = _synthetic_args(params)
+            synthetic = _synthetic_args(tool)
             violations = registry.validate_args(tool, synthetic)
             assert violations == [], f"{tool['id']}: {violations}"
 

@@ -56,6 +56,7 @@ tools:
           type: array
           items:
             type: string
+            url_only: true
           description: "One or more https:// URLs to research. At least one is required."
         search_terms:
           type: string

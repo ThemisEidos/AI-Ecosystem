@@ -152,9 +152,16 @@ def render_workshop_tools(workshop: str) -> List[dict]:
 # Hand-rolled subset of JSON Schema (no jsonschema dependency — stdlib-first
 # is the repo convention, spec §4). Covers what the registry's `parameters`
 # blocks actually use: object/string/array-of-string/array-of-object,
-# required keys, unknown-key rejection, and a custom `no_path_separators`
-# flag (declared per-property in the YAML) so a bare-filename argument can
-# be refused pre-approval rather than only sanitized at execution time.
+# required keys, unknown-key rejection, a custom `no_path_separators` flag
+# (declared per-property in the YAML) so a bare-filename argument can be
+# refused pre-approval rather than only sanitized at execution time, and
+# (fix-forward Important #2) three more pre-approval gaps that previously let
+# a call pass validation only to be refused by the executor AFTER a human
+# spent an approval: a required string/array arg being empty, an array
+# property's `items.url_only` flag (declared per-property, same pattern as
+# no_path_separators) requiring http(s) entries, and a `workflow_engine`
+# tool's `workflow` value being checked against its own `allowed_workflows`
+# mapping keys when that mapping is non-empty.
 def validate_args(tool: dict, args: dict) -> List[str]:
     """Validate a proposed tool_call's args against tool['parameters'].
     Returns a list of human-readable violation strings; empty = valid."""
@@ -178,6 +185,7 @@ def validate_args(tool: dict, args: dict) -> List[str]:
             continue
         prop = properties[key]
         expected_type = prop.get("type")
+        is_required = key in required
         if expected_type == "string":
             if not isinstance(value, str):
                 violations.append(f"argument '{key}' must be a string")
@@ -185,14 +193,33 @@ def validate_args(tool: dict, args: dict) -> List[str]:
                 violations.append(
                     f"argument '{key}' must be a bare filename with no directory separators"
                 )
+            elif is_required and not value.strip():
+                violations.append(f"argument '{key}' must not be empty")
         elif expected_type == "array":
             if not isinstance(value, list):
                 violations.append(f"argument '{key}' must be an array")
             else:
-                item_type = (prop.get("items") or {}).get("type")
+                items_schema = prop.get("items") or {}
+                item_type = items_schema.get("type")
                 if item_type == "string" and not all(isinstance(v, str) for v in value):
                     violations.append(f"argument '{key}' must be an array of strings")
+                if is_required and not value:
+                    violations.append(f"argument '{key}' must not be empty")
+                elif item_type == "string" and items_schema.get("url_only"):
+                    bad = [v for v in value if isinstance(v, str) and not v.startswith(("http://", "https://"))]
+                    if bad:
+                        violations.append(
+                            f"argument '{key}' entries must start with http:// or https://"
+                        )
         elif expected_type == "object" and not isinstance(value, dict):
             violations.append(f"argument '{key}' must be an object")
+
+    if tool.get("executor_type") == "workflow_engine" and "workflow" in args:
+        workflow_value = args["workflow"]
+        allowed = tool.get("allowed_workflows") or {}
+        if isinstance(workflow_value, str) and allowed and workflow_value not in allowed:
+            violations.append(
+                f"argument 'workflow' value '{workflow_value}' is not in this tool's allowed_workflows"
+            )
 
     return violations
