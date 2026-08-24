@@ -173,6 +173,16 @@ def test_accumulator_indexless_fragments_continue_last_entry():
     assert calls[0].arguments == {"a": 1}
 
 
+def test_accumulator_indexless_fragments_with_new_name_opens_new_slot():
+    """Two genuinely separate Ollama-style tool_calls in one message, both
+    lacking `index` — must NOT collapse into one overwritten call."""
+    acc = decision._ToolCallAccumulator()
+    acc.add({"id": "call_1", "function": {"name": "a", "arguments": {}}})
+    acc.add({"id": "call_2", "function": {"name": "b", "arguments": {}}})
+    calls = acc.finish()
+    assert [c.name for c in calls] == ["a", "b"]
+
+
 def test_accumulator_explicit_index_still_opens_separate_slots():
     acc = decision._ToolCallAccumulator()
     acc.add({"index": 0, "id": "call_1", "function": {"name": "a", "arguments": "{}"}})
@@ -424,6 +434,50 @@ def test_openai_stream_content_then_tool_call_streams_content_and_dispatches(mon
     td, chunks = _run(scenario())
     assert td.decision == "dispatch"
     assert chunks == ["Sure, let me check", "\n\n---\n", "EXECUTED"]
+
+
+def test_ollama_stream_content_interleaved_with_indexless_fragments_still_assembles(monkeypatch):
+    """Content arriving BETWEEN two index-less continuation fragments of the
+    SAME call must not disturb accumulator continuity (Task 1 x Task 3
+    interaction, final-review Minor #6)."""
+    lines = [
+        json.dumps({"message": {"content": "Working on it"}, "done": False}),
+        json.dumps({
+            "message": {"content": "", "tool_calls": [
+                {"id": "call_1", "function": {"name": "status_summary", "arguments": ""}}
+            ]},
+            "done": False,
+        }),
+        json.dumps({"message": {"content": " almost done"}, "done": False}),
+        json.dumps({
+            "message": {"content": "", "tool_calls": [
+                {"function": {"arguments": {}}}
+            ]},
+            "done": True,
+        }),
+    ]
+    monkeypatch.setattr(decision.httpx, "AsyncClient", lambda **kw: _FakeStreamClient(lines))
+
+    captured = {}
+    async def handler(tool_id, args, raw):
+        captured["tool_id"] = tool_id
+        captured["args"] = args
+        return "EXECUTED"
+
+    async def scenario():
+        td, content_iter = await decision.route_turn_stream(
+            "do it", [], system_prompt="sys",
+            base_url="http://x", api_key="", model="m", backend="ollama",
+            tools=[{"type": "function", "function": {"name": "status_summary", "parameters": {}}}],
+            tool_call_handler=handler,
+        )
+        chunks = await _collect(content_iter)
+        return td, chunks
+
+    td, chunks = _run(scenario())
+    assert td.decision == "dispatch"
+    assert captured["tool_id"] == "status_summary"
+    assert chunks == ["Working on it", " almost done", "\n\n---\n", "EXECUTED"]
 
 
 def test_stream_dispatch_falls_back_without_a_handler(monkeypatch):

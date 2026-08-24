@@ -18,7 +18,11 @@ route_turn_stream(message, history, *, system_prompt, base_url, api_key, model,
   Streams content deltas in real time; a tool_call is accumulated silently
   regardless of when it arrives relative to content, and if one completes,
   the dispatch result is appended as additional chunks after the content
-  (spec §2 streaming specifics) — never dropped, matching route_turn.
+  (spec §2 streaming specifics) — never dropped, matching route_turn. The
+  returned TurnDecision is mutated in place and only reaches its final
+  "dispatch"/"answer" value once content_iter has been fully drained — a
+  caller that inspects it right after the await, before draining, always
+  sees "answer".
 
 Decisions
 ---------
@@ -170,29 +174,44 @@ class _ToolCallAccumulator:
     a call. A fragment carrying an explicit `index` always opens/continues
     that exact slot; a fragment with no `index` continues whichever slot was
     most recently opened, except the very first fragment ever seen, which
-    opens slot 0. This keeps a single index-less call's fragments together
-    instead of shredding them into one slot per fragment."""
+    opens a new slot. This keeps a single index-less call's fragments
+    together instead of shredding them into one slot per fragment.
+
+    Ollama's native tool_calls shape also omits `index`, but each entry is a
+    COMPLETE, STANDALONE call with its own `function.name` — never a
+    continuation fragment of the previous one (a genuine continuation only
+    ever repeats `arguments`, never `name`). So an index-less fragment that
+    carries a name while the most-recently-opened slot already has one is
+    treated as a new call and opens a new slot, rather than overwriting the
+    slot in place."""
 
     def __init__(self) -> None:
         self._by_index: Dict[int, dict] = {}
         self._order: List[int] = []
 
     def add(self, fragment: dict) -> None:
+        fn = fragment.get("function") or {}
+        incoming_name = fn.get("name")
         if "index" in fragment:
             index = fragment["index"]
-        elif self._order:
+        elif self._order and not (incoming_name and self._by_index[self._order[-1]]["name"]):
+            # No explicit index: continue the most recently opened slot UNLESS
+            # this fragment brings its own name while that slot already has
+            # one — that's a second complete call arriving without an index
+            # (e.g. Ollama's per-item tool_calls shape, where every entry is a
+            # standalone call carrying its own name), not a continuation
+            # fragment of the same call (which never repeats the name).
             index = self._order[-1]
         else:
-            index = 0
+            index = len(self._order)
         if index not in self._by_index:
             self._by_index[index] = {"id": "", "name": "", "arguments": ""}
             self._order.append(index)
         entry = self._by_index[index]
         if fragment.get("id"):
             entry["id"] = fragment["id"]
-        fn = fragment.get("function") or {}
-        if fn.get("name"):
-            entry["name"] = fn["name"]
+        if incoming_name:
+            entry["name"] = incoming_name
         raw_args = fn.get("arguments")
         if isinstance(raw_args, str):
             entry["arguments"] += raw_args
@@ -380,8 +399,3 @@ def _build_answer_messages(
     if message.strip():
         msgs.append({"role": "user", "content": message})
     return msgs
-
-
-# ── Utilities ──────────────────────────────────────────────────────────────
-async def _single_chunk(text: str) -> AsyncIterator[str]:
-    yield text
