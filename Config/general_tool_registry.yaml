@@ -244,7 +244,7 @@ tools:
     name: Import Skill
     drawer: Skills
     workshop: Open Workshop
-    description: Import a community SKILL.md skill from a tap repository into the Open workshop. Usage — import skill <name> from <https url>. Shows the SKILL.md for review before approval.
+    description: Import a community SKILL.md skill from a tap repository into the Open workshop. Called with a skill_name and tap_url argument. Shows the SKILL.md for review before approval.
     permission_level: 2
     approval_required: true
     executor_type: skill_import
@@ -254,6 +254,7 @@ tools:
       properties:
         skill_name:
           type: string
+          no_path_separators: true
           description: "Lowercase skill id, e.g. 'stack-health-check'. Must match [a-z0-9][a-z0-9-]*."
         tap_url:
           type: string
@@ -272,7 +273,7 @@ tools:
     name: Promote Skill
     drawer: Skills
     workshop: Open Workshop
-    description: Promote a drafted skill from Skills/_drafts into the live registry. Usage — promote skill <name>. Shows the draft SKILL.md for review before approval.
+    description: Promote a drafted skill from Skills/_drafts into the live registry. Called with a skill_name argument. Shows the draft SKILL.md for review before approval.
     permission_level: 2
     approval_required: true
     executor_type: skill_promote
@@ -282,6 +283,7 @@ tools:
       properties:
         skill_name:
           type: string
+          no_path_separators: true
           description: "Lowercase id of the drafted or already-registered skill to promote."
       required:
         - skill_name

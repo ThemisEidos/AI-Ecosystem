@@ -180,7 +180,7 @@ def list_skills(
     return out
 
 
-# ── Selection (mirrors registry.select_tool's keyword-overlap approach) ─────
+# ── Selection (keyword-overlap approach) ─────────────────────────────────────
 _STOPWORDS = {
     "the", "a", "an", "of", "to", "for", "and", "or", "in", "on", "at",
     "is", "are", "please", "can", "you", "me", "my", "it", "this", "that",
@@ -360,7 +360,10 @@ def _sweep_stale_staging(incoming: Path) -> None:
 
 def discard_staged(skill_name: str, *, repo_root: Optional[Path] = None) -> bool:
     """Denied import: drop the staged _incoming/<name> dir. False if nothing
-    is staged for this skill_name."""
+    is staged for this skill_name (including an unsafe name — never found
+    staged, so it's a silent no-op like any other miss)."""
+    if not _SAFE_NAME_RE.match(skill_name):
+        return False
     staged = (repo_root or _REPO_ROOT) / "Skills" / "_incoming" / skill_name
     if not staged.is_dir():
         return False
@@ -441,6 +444,10 @@ def register_import(
     """Post-approval: promote _incoming/<name> to Skills/imported/<name>, hash it,
     append the manifest entry (workshop: open — Private promotion is a separate
     approval, spec §3). Re-fetches if staging is missing (e.g. ticket expired)."""
+    if not _SAFE_NAME_RE.match(skill_name):
+        raise SkillError(
+            f"unsafe skill name '{skill_name}' — must match [a-z0-9][a-z0-9-]*"
+        )
     root = repo_root or _REPO_ROOT
     staged = root / "Skills" / "_incoming" / skill_name
     if not (staged / "SKILL.md").exists():
@@ -465,6 +472,8 @@ def register_import(
 
 # ── Draft promotion (Step 11; approval-gated via the promote_skill tool) ─────
 def _draft_dir(name: str, repo_root: Optional[Path] = None) -> Path:
+    if not _SAFE_NAME_RE.match(name):
+        raise SkillError(f"unsafe skill name '{name}' — must match [a-z0-9][a-z0-9-]*")
     root = repo_root or _REPO_ROOT
     d = root / "Skills" / "_drafts" / name
     if not (d / "SKILL.md").exists():

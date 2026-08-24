@@ -162,7 +162,7 @@ tools:
       properties:
         workflow:
           type: string
-          description: "Key into this tool's allowed_workflows mapping, e.g. 'pda_command_router'."
+          description: "Key into this tool's allowed_workflows mapping (currently empty — this tool is fail-closed until workflows are added)."
         payload:
           type: string
           description: "Optional text payload passed to the workflow."
@@ -179,7 +179,7 @@ tools:
     name: Promote Skill
     drawer: Skills
     workshop: Private Workshop
-    description: Promote a drafted skill from Skills/_drafts into the live registry. Usage — promote skill <name>. Shows the draft SKILL.md for review before approval.
+    description: Promote a drafted skill from Skills/_drafts into the live registry. Called with a skill_name argument. Shows the draft SKILL.md for review before approval.
     permission_level: 2
     approval_required: true
     executor_type: skill_promote
@@ -189,6 +189,7 @@ tools:
       properties:
         skill_name:
           type: string
+          no_path_separators: true
           description: "Lowercase id of the drafted or already-registered skill to promote."
       required:
         - skill_name
