@@ -161,6 +161,16 @@ def test_approve_executes_with_ticket_stored_args(monkeypatch):
     assert "wrote it" in reply
 
 
+def test_unknown_workflow_is_refused_without_opening_a_ticket():
+    tool = main.registry.get_tool("open", "n8n_general_workflows")
+    assert tool is not None
+    reply = asyncio.run(main._handle_tool_call(
+        "n8n_general_workflows", {"workflow": "not_real", "payload": "hi"}, "run it", "s-inv"
+    ))
+    assert "invalid call" in reply.lower()
+    assert not approval.has_pending(main.WORKSHOP, "s-inv")
+
+
 def test_render_args_preview_uses_repr_length_for_threshold():
     # str(value) has length 59 (under the 60-char threshold), but repr(value)
     # adds two quote chars -> 61, over threshold. The branch decision must be
