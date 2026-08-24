@@ -50,7 +50,7 @@ governance gates G1–G5 open — see Blocked section).
 Execution order: 15a → 14a(rev) → 15c → 14b → 15d → 15e → 14c(+15f-i) → 14d → 14e →
 15f → 15g → 15h. 15b anytime; 14f pinned until the home-lab network exists (2026-08-23).
 
-- [x] **15a — Native tool-calling dispatch** (M3→5; retires classifier dispatch; kills both 2026-08-04 gotchas as a class) — shipped 2026-08-24, live-verified both stacks, 3 post-review Importants closed in a fix-forward pass
+- [x] **15a — Native tool-calling dispatch** (M3→5; retires classifier dispatch; kills both 2026-08-04 gotchas as a class) — shipped 2026-08-24, live-verified both stacks (blocking + real SSE incl. preamble-then-dispatch), 3 post-review Importants closed in a fix-forward pass, itself reviewed clean (248/248). **One step open: browser click-through per stack** (no Chrome extension in either session; residual risk is Open WebUI's rendering of the mid-stream `---` separator only)
 - [ ] **14a — Fabric pattern executor** (existing plan gets a light revision on top of 15a)
 - [ ] **15b — Zero-touch Open WebUI provisioning** (M9→5; independent, anytime)
 - [ ] **15c — Per-role model routing** (implements `Scripts/PDA_ModelRouting.json`; LiteLLM fallback pools; Private E4B/12B role split — E4B benchmark is the entry gate)
