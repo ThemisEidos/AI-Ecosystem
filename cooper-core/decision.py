@@ -280,7 +280,7 @@ async def _ollama_complete(
         resp.raise_for_status()
         data = resp.json()
     message_obj = data["message"]
-    if tools:
+    if tools is not None:
         return ModelReply(
             content=message_obj.get("content") or "",
             tool_calls=_parse_ollama_tool_calls(message_obj.get("tool_calls") or []),
@@ -313,7 +313,7 @@ async def _openai_complete(
         resp.raise_for_status()
         data = resp.json()
     message_obj = data["choices"][0]["message"]
-    if tools:
+    if tools is not None:
         return ModelReply(
             content=message_obj.get("content") or "",
             tool_calls=_parse_openai_tool_calls(message_obj.get("tool_calls") or []),

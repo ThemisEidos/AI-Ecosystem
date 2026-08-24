@@ -369,10 +369,15 @@ async def _chat_core_inner(message: str, history: List[dict], session_id: str = 
     if approval.has_pending(WORKSHOP, session_id) and approval.is_response(message):
         return await _resolve_approval(message, session_id), TurnDecision(
             decision="answer", reason="approval gate resolved")
+    try:
+        tools = registry.render_workshop_tools(WORKSHOP)
+    except registry.RegistryError as exc:
+        print(f"  [!!] render_workshop_tools failed (non-fatal): {exc}")
+        tools = []
     return await route_turn(
         message, history,
         generate_answer=_generate,
-        tools=registry.render_workshop_tools(WORKSHOP),
+        tools=tools,
         tool_call_handler=lambda tid, a, raw: _handle_tool_call(tid, a, raw, session_id),
     )
 
@@ -646,6 +651,11 @@ async def _stream_sse(message: str, history: List[dict], session_id: str = "loca
                 skill_ctx = ""
             if skill_ctx:
                 system_prompt = f"{system_prompt}\n\n{skill_ctx}"
+            try:
+                stream_tools = registry.render_workshop_tools(WORKSHOP)
+            except registry.RegistryError as exc:
+                print(f"  [!!] render_workshop_tools failed (non-fatal): {exc}")
+                stream_tools = []
             td, content_iter = await route_turn_stream(
                 message,
                 history,
@@ -654,7 +664,7 @@ async def _stream_sse(message: str, history: List[dict], session_id: str = "loca
                 api_key=BACKEND_KEY,
                 model=COOPER_MODEL,
                 backend=BACKEND,
-                tools=registry.render_workshop_tools(WORKSHOP),
+                tools=stream_tools,
                 tool_call_handler=lambda tid, a, raw: _handle_tool_call(tid, a, raw, session_id),
             )
 
