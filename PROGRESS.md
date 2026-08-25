@@ -906,6 +906,24 @@ Execution order: 15a → 14a(rev) → 15c → 14b → 15d → 15e → 14c(+15f-i
   evidence trail. This is a cross-cutting approval/session-architecture question, not a
   Fabric bug, and needs an owner decision on the right fix. Next slice: per the roadmap
   execution order, 15c (unless the owner prioritizes the approval-ticket finding first).
+- **2026-08-25 · Owner decision: fix the approval-ticket overwrite, next session, before 15c.**
+  Discussed the Gotchas 2026-08-25 finding (Open WebUI's background calls can silently
+  hijack a pending approval ticket). Considered whether 15i's planned Cockpit UI (which
+  retires Open WebUI) makes this moot — decided no: 15i is several slices away per the
+  roadmap execution order, so the exposure is live in the interim, and the actual root
+  cause isn't Open-WebUI-specific — it's `approval.request()` (`approval.py:63`)
+  unconditionally overwriting a live ticket for `(workshop, session_id)` with no check,
+  which would still matter under Cockpit too (concurrent requests, multiple tabs/devices)
+  even without Open WebUI's specific trigger. Scoped the fix deliberately narrow: make
+  `approval.request()` refuse to open a new ticket when one is already pending for that
+  key, instead of silently replacing it — a small, UI-agnostic correctness fix, not a
+  session-identity redesign. Explicitly ruled out: pattern-matching Open WebUI's specific
+  background-prompt templates (throwaway work that dies with Open WebUI) and a full
+  per-conversation session-id scheme (better solved properly in Cockpit's own design,
+  not retrofitted onto Open WebUI's client). **Next session: implement this fix before
+  starting 15c** — needs a test proving a second dispatch is rejected (not silently
+  substituted) while a ticket is already pending, then live-reverify via curl that the
+  original ticket survives an interleaving dispatch attempt.
 
 ---
 

@@ -44,8 +44,20 @@ ticket. Reproduced once in ~4 browser attempts; confirmed by code trace plus `/p
 polling, not guessed. Full mechanism and evidence: `Gotchas.md`'s 2026-08-25 entry. This
 needs an owner decision on the right fix — it's an approval/session-architecture
 question, not a Fabric bug, and stays open across every workshop and every tool, not
-just this slice's. **Next up: 15c per the roadmap execution order**, unless the owner
-wants the approval-ticket finding addressed first.
+just this slice's.
+
+**Owner decision 2026-08-25: fix it, next session, before 15c.** Considered whether 15i's
+planned Cockpit UI (retires Open WebUI) makes this moot — no: 15i is several slices out
+per the execution order, so the exposure is live meanwhile, and the root cause
+(`approval.request()` unconditionally overwriting a live ticket) isn't Open-WebUI-specific
+— it'd still matter under Cockpit given concurrent requests or multiple tabs/devices.
+Scope decided narrow and UI-agnostic: make `approval.request()` refuse to open a new
+ticket while one is already pending for that `(workshop, session_id)` key, instead of
+silently replacing it. Explicitly NOT doing: pattern-matching Open WebUI's own
+background-prompt templates (throwaway, dies with Open WebUI) or a full per-conversation
+session-id redesign (belongs in Cockpit's own design later, not retrofitted now). Full
+decision log: PROGRESS.md's 2026-08-25 entry. **Next up: this approval-ticket fix, then
+15c** per the roadmap execution order.
 
 **All five owner gates decided 2026-08-23** (G1: no inbound Open-drafted plans to Private; G2: brain stays
 gpt-4o-mini; G3: session-plans amendment enacted, 15h unblocked; G4: SearXNG Open-only,
