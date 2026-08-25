@@ -544,3 +544,19 @@ def test_resolve_pattern_returns_none_for_empty_name():
     catalog = executor._fabric_catalog()
     key, path = executor._resolve_pattern("", catalog)
     assert key is None and path is None
+
+
+def test_fabric_fill_pattern_substitutes_known_and_defaults():
+    out = executor._fill_pattern(
+        "A={{content_input}} B={{pattern_name}} C={{audience}} D={{mystery}}",
+        {"content_input": "raw", "pattern_name": "report-summary"},
+    )
+    assert "A=raw" in out
+    assert "B=report-summary" in out
+    assert "C=the owner" in out
+    assert "D=unspecified" in out
+
+
+def test_fabric_fill_pattern_prefers_provided_value_over_default():
+    out = executor._fill_pattern("{{tone}}", {"tone": "formal"})
+    assert out == "formal"

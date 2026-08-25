@@ -69,6 +69,24 @@ _MAX_NOTE_CONTENT_BYTES = 65_536
 _MAX_FETCH_BYTES = 262_144  # 256 KB of raw HTML before extraction
 _FETCH_TIMEOUT   = 20  # seconds — a research fetch should fail fast, not hang a turn
 
+_MAX_FABRIC_INPUT_BYTES = 65_536  # same cap as the note/DMZ writers
+
+# The shipped patterns' optional knobs. Anything a pattern asks for that the
+# caller didn't supply resolves to "unspecified" rather than leaving a raw
+# {{placeholder}} in the prompt sent to the model.
+_FABRIC_DEFAULTS = {
+    "audience": "the owner",
+    "focus": "the main point of the input",
+    "tone": "direct and neutral",
+    "priority": "normal",
+}
+_FABRIC_PLACEHOLDER_RE = re.compile(r"\{\{([a-z_]+)\}\}")
+_FABRIC_SYSTEM_PROMPT = (
+    "You are COOPER's Fabric pattern processor. Follow the pattern's Instructions "
+    "section exactly and produce only the finished artifact — no preamble, no "
+    "commentary about the pattern itself."
+)
+
 # WIRED_EXECUTOR_TYPES (read by the registry-walk test — M1 — to assert every
 # registry tool maps to a real handler, not a stub) is defined near the
 # bottom of this file, derived from the _HANDLERS dispatch table.
@@ -270,6 +288,15 @@ def _resolve_pattern(name: str, catalog: dict):
             if f" {_normalize(path.parent.name)} " in norm:
                 return key, path
     return None, None
+
+
+def _fill_pattern(template: str, values: dict) -> str:
+    def _sub(match):
+        key = match.group(1)
+        if key in values:
+            return str(values[key])
+        return _FABRIC_DEFAULTS.get(key, "unspecified")
+    return _FABRIC_PLACEHOLDER_RE.sub(_sub, template)
 
 
 async def _run_filesystem(args: dict) -> str:
