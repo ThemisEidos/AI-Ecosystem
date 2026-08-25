@@ -65,6 +65,20 @@ Execution order: 15a → 14a(rev) → 15c → 14b → 15d → 15e → 14c(+15f-i
 - [ ] **15h — Session plans** (M2→5; gated on G3)
 - [ ] **15i — COOPER Cockpit: custom UI** (chat with native approve/deny buttons, Obsidian-brain graph view, workflow monitor, metrics dashboard, settings; incremental — monitor page after 14b, dashboard after 15d; Open WebUI retires only after Cockpit chat parity is browser-verified)
 - [ ] **14f — Network review design** (pinned 2026-08-23: placeholder until the home-lab network is built; integrate COOPER when that project starts)
+- [ ] **MCP integration — backlogged 2026-08-25, not yet slotted to a letter.** Owner confirmed
+  this needs addressing at some point, scope/timing undecided. Not a new idea: three
+  candidates have sat at `Status: Evaluating` in `Docs/Ecosystem_Change_Backlog.md` since
+  2026-06-24 — **CHG-005** (expanded MCP registry, ROI 9/10), **CHG-007** (Playwright MCP
+  for browser automation, ROI 9/10), **CHG-008** (Perplexity MCP for research, ROI 8/10) —
+  none picked up by any of the ~15 roadmap slices scoped since. Architecture docs
+  (`COOPER-Agent-Routing-Architecture.md`, `COOPER-Agent-Profiles.md`) already list "MCP
+  tools" as an approved-in-principle future tool class, bounded and auditable. Cheapest
+  integration shape discussed: one generic `mcp_tool`-style executor acting as an MCP
+  client (stdio/SSE), with COOPER's own registry YAML still owning
+  `workshop`/`permission_level`/`approval_required` per mapped tool — the MCP server itself
+  has no concept of COOPER's approval gate, so the boundary has to hold entirely on
+  COOPER's side, before the call. When scheduled: read the full CHG-005/007/008 entries,
+  pick a first candidate, and confirm the bridge-executor design before building.
 
 ---
 
