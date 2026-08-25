@@ -61,6 +61,7 @@ _SCRIPTS_DIR    = _REPO_ROOT / "Scripts"
 _SCRIPTS_PY_DIR = _REPO_ROOT / "Scripts" / "Python"
 _DMZ_DIR        = _REPO_ROOT / "Restricted DMZ Workspace"
 _OBSIDIAN_INBOX_DIR = _REPO_ROOT / "Obsidian Vault" / "00_Inbox"
+_FABRIC_DIR = _REPO_ROOT / "PDA-Fabric"
 _TIMEOUT     = 60    # seconds
 _MAX_OUTPUT  = 8192  # bytes
 _MAX_DMZ_CONTENT_BYTES  = 65_536  # 64 KB — generous for a drafted note, not a data dump
@@ -235,6 +236,40 @@ def _run_local_read(tool: dict, workshop: str) -> str:
     mtime-cached registry snapshot backing GET /tools."""
     tool_name = tool.get("name", tool.get("id", "unknown"))
     return f"[{tool_name}]\n{registry.format_tool_list(workshop)}"
+
+
+def _normalize(text: str) -> str:
+    """Lowercase, punctuation-to-space — so 'Report Summary', 'report-summary'
+    and 'report_summary' all compare equal. Deliberately lenient: naming a
+    pattern must never require exact syntax (Gotchas 2026-08-04)."""
+    return re.sub(r"[^a-z0-9]+", " ", text.lower()).strip()
+
+
+def _fabric_catalog() -> dict:
+    """Map pattern key (file stem, lowercased) -> pattern file path. Layout is
+    PDA-Fabric/<Category>/<pattern-name>.md."""
+    catalog = {}
+    if not _FABRIC_DIR.is_dir():
+        return catalog
+    for path in sorted(_FABRIC_DIR.glob("*/*.md")):
+        catalog[path.stem.lower()] = path
+    return catalog
+
+
+def _resolve_pattern(name: str, catalog: dict):
+    """Match a single name/phrase (the model's pattern_name arg) against the
+    catalog: exact/loose key match first (longest key first, so a two-word
+    name beats a one-word category), then category-name fallback."""
+    norm = f" {_normalize(name)} "
+    if norm.strip():
+        for key in sorted(catalog, key=len, reverse=True):
+            if f" {_normalize(key)} " in norm:
+                return key, catalog[key]
+        for key in sorted(catalog):
+            path = catalog[key]
+            if f" {_normalize(path.parent.name)} " in norm:
+                return key, path
+    return None, None
 
 
 async def _run_filesystem(args: dict) -> str:

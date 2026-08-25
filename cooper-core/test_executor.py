@@ -501,3 +501,46 @@ def test_local_read_executor_reuses_registry_snapshot(monkeypatch):
     out = asyncio.run(executor.run(tool, "what's in the registry?", "private"))
     assert "Registry Inspector" in out
     assert "snapshot-for-private" in out
+
+
+def test_fabric_catalog_finds_shipped_patterns():
+    catalog = executor._fabric_catalog()
+    assert "report-summary" in catalog
+    assert "security-triage" in catalog
+    assert catalog["report-summary"].parent.name == "Reporting"
+
+
+def test_fabric_catalog_empty_when_dir_missing(tmp_path, monkeypatch):
+    monkeypatch.setattr(executor, "_FABRIC_DIR", tmp_path / "nope")
+    assert executor._fabric_catalog() == {}
+
+
+def test_resolve_pattern_matches_exact_key():
+    catalog = executor._fabric_catalog()
+    key, path = executor._resolve_pattern("report-summary", catalog)
+    assert key == "report-summary"
+    assert path.parent.name == "Reporting"
+
+
+def test_resolve_pattern_matches_loosely_spaced_name():
+    catalog = executor._fabric_catalog()
+    key, _ = executor._resolve_pattern("Report Summary", catalog)
+    assert key == "report-summary"
+
+
+def test_resolve_pattern_falls_back_to_category():
+    catalog = executor._fabric_catalog()
+    key, path = executor._resolve_pattern("security", catalog)
+    assert path.parent.name == "Security"
+
+
+def test_resolve_pattern_returns_none_when_unmatched():
+    catalog = executor._fabric_catalog()
+    key, path = executor._resolve_pattern("something nobody named", catalog)
+    assert key is None and path is None
+
+
+def test_resolve_pattern_returns_none_for_empty_name():
+    catalog = executor._fabric_catalog()
+    key, path = executor._resolve_pattern("", catalog)
+    assert key is None and path is None
