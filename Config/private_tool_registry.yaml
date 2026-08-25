@@ -199,3 +199,47 @@ tools:
     outputs:
       - manifest_entry
     notes: Local filesystem only. Registers the skill for the private workshop.
+  - id: fabric_pattern_writer_private
+    name: Fabric Pattern Writer
+    drawer: Local Models
+    workshop: Private Workshop
+    description: >-
+      Fill a reusable Fabric prompt pattern from raw notes or conversation text, using the
+      local model only. Available patterns: report-summary (Reporting), research-synthesis
+      (Research), review-checklist (Review), security-triage (Security). Name the pattern by
+      its id or category, and pass the raw text to work from as content_input.
+    permission_level: 2
+    approval_required: true
+    executor_type: fabric_pattern
+    enabled: true
+    parameters:
+      type: object
+      properties:
+        pattern_name:
+          type: string
+          description: "Which Fabric pattern to apply, e.g. 'report-summary' or 'security'. Loosely matched — exact id or category name both work."
+        content_input:
+          type: string
+          description: "The raw text (notes, conversation, workflow output) the pattern should be applied to."
+        audience:
+          type: string
+          description: "Optional — who the output is for. Defaults to 'the owner' if omitted."
+        focus:
+          type: string
+          description: "Optional — what the output should emphasize. Defaults to the main point of the input if omitted."
+        tone:
+          type: string
+          description: "Optional — desired tone. Defaults to direct and neutral if omitted."
+        priority:
+          type: string
+          description: "Optional — urgency framing. Defaults to normal if omitted."
+      required:
+        - pattern_name
+        - content_input
+      additionalProperties: false
+    inputs:
+      - pattern_name
+      - content_input
+    outputs:
+      - filled_template
+    notes: Private Workshop only. Runs on local Ollama — content never leaves the machine.
