@@ -138,7 +138,6 @@ litellm/.env.local
 !PDA-Runtime/.env.example
 
 # PDA generated exports / local mirrors
-PDA-Fabric/
 PDA-Obsidian-Vault/
 PDA-Runtime/data/
 PDA_ArtifactIndex.json
