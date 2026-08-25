@@ -50,7 +50,7 @@ governance gates G1–G5 open — see Blocked section).
 Execution order: 15a → 14a(rev) → 15c → 14b → 15d → 15e → 14c(+15f-i) → 14d → 14e →
 15f → 15g → 15h. 15b anytime; 14f pinned until the home-lab network exists (2026-08-23).
 
-- [x] **15a — Native tool-calling dispatch** (M3→5; retires classifier dispatch; kills both 2026-08-04 gotchas as a class) — shipped 2026-08-24, live-verified both stacks (blocking + real SSE incl. preamble-then-dispatch), 3 post-review Importants closed in a fix-forward pass, itself reviewed clean (248/248). **One step open: browser click-through per stack** (no Chrome extension in either session; residual risk is Open WebUI's rendering of the mid-stream `---` separator only)
+- [x] **15a — Native tool-calling dispatch** (M3→5; retires classifier dispatch; kills both 2026-08-04 gotchas as a class) — shipped 2026-08-24, live-verified both stacks (blocking + real SSE incl. preamble-then-dispatch), 3 post-review Importants closed in a fix-forward pass, itself reviewed clean (248/248). **Browser click-through per stack closed 2026-08-25** — see decision log; en route, found and fixed a real governance bypass on Private's Open WebUI (no cooper-core connection existed at all).
 - [ ] **14a — Fabric pattern executor** (existing plan gets a light revision on top of 15a)
 - [ ] **15b — Zero-touch Open WebUI provisioning** (M9→5; independent, anytime)
 - [ ] **15c — Per-role model routing** (implements `Scripts/PDA_ModelRouting.json`; LiteLLM fallback pools; Private E4B/12B role split — E4B benchmark is the entry gate)
@@ -814,6 +814,52 @@ Execution order: 15a → 14a(rev) → 15c → 14b → 15d → 15e → 14c(+15f-i
   curation. Remaining 15a step: owner browser click-through per stack (steps in the 15a
   fix-forward plan Task 5.2); only Open WebUI's rendering of the mid-stream separator is
   unproven. Next slice: 14a.
+- **2026-08-25 · 15a's browser click-through closed — found and fixed a real governance
+  bypass on Private along the way.** `claude-in-chrome` became available this session
+  (previously absent, per every 15a session log above). Before running the click-through,
+  checked Private Open WebUI (`localhost:3001`)'s Admin → Connections and found **no
+  `cooper-core` connection existed at all** — instead, two live connections: a direct
+  `https://api.openai.com/v1` (Bearer key set, enabled) and a direct
+  `http://private-ollama:11434` (enabled). Confirmed the effect before touching anything:
+  sent a dispatch-shaped turn ("Could you please give me a status summary right now?"),
+  which ran and dispatched a tool call to `search_calendar_events` — not a registry tool
+  (`grep` across `Config/` came up empty) — with **no approval halt**, and
+  `docker logs pda-private-cooper-core` showed **zero non-health requests** for the entire
+  turn. The turn never touched cooper-core: it went straight to Ollama's native tool
+  calling, client-side in Open WebUI, bypassing the approval gate, tool registry,
+  classification, and audit logging entirely — on the one workshop whose entire premise is
+  local-only, air-gapped, boundary-enforced. Root cause: Open WebUI's SQLite-stored
+  connections (see the 2026-07-01 Gotchas entry) had drifted from the documented wiring at
+  some point with zero server-side trace of it happening.
+  Fixed with owner sign-off: deleted both bypass connections (via each connection's own
+  "Delete" control, not a raw DB edit), added the documented `http://cooper-core:8000/v1`
+  connection with the `COOPER_API_KEYS` value (owner supplied it in-terminal from
+  `PDA-Runtime/.env` — that file is access-denied to Claude by permission settings, so the
+  owner read and pasted it, not Claude). Re-ran the click-through: `Could you please run
+  Test-Exec.ps1 for me?` → real halt (`Halt — PowerShell Private Runner [Local Automation,
+  permission level 4]...`) → `yes, go ahead` → `[Test-Exec.ps1 — OK]` rendered live in the
+  browser, `docker logs` confirmed the `POST /v1/chat/completions` landed on cooper-core.
+  **Open stack (`localhost:3000`) checked too**: `cooper-core:8000/v1` connection present
+  and correct, plus the intentional OpenRouter connection from the 2026-08-04 decision log
+  — but also flagged (not fixed, owner hasn't decided): an undocumented
+  `http://host.docker.internal:11434` direct-Ollama connection, enabled, that isn't
+  recorded as intentional anywhere. Ran its click-through anyway since cooper-core was
+  correctly selected: `Could you please use the litellm router to answer: what is 2+2?` →
+  halt (`Halt — LiteLLM Router [AI Models, permission level 3]...`) → approve →
+  `[LiteLLM Router — model: openai] 2 + 2 equals 4.` rendered live, `docker logs` confirmed
+  `pda-open-cooper-core` served it. **15a is now fully DoD-closed on both stacks** — no
+  open items remain. gemma4 tool-call hit rate this session: 1/1 clean (Private), extends
+  the running baseline to 3/3. New Gotchas entry filed for the SQLite-connections-drift
+  risk. **Open stack's stray `host.docker.internal:11434` Ollama connection also
+  resolved**: owner suspected it might belong to the sibling `03_brain_bot` project;
+  checked that repo directly — its own Ollama link uses the container DNS name
+  `pda-private-ollama:11434` (not `host.docker.internal`) and it runs its own dedicated
+  Open WebUI instances (`:3002`/`:3003`), with zero references anywhere to port
+  `3000`/`8001` or `host.docker.internal`. Confirmed unrelated, owner approved removal,
+  deleted via the connection's own "Delete" control. Open's Open WebUI now has exactly
+  two connections: `http://cooper-core:8000/v1` (governed) and
+  `https://openrouter.ai/api/v1` (the 2026-08-04 sanctioned ungoverned path). Next slice:
+  14a.
 
 ---
 

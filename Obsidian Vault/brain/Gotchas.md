@@ -298,3 +298,29 @@ original action was ever abandoned. Pre-existing behavior, not introduced by 15a
 during 15a's fix-forward review as worth documenting. No fix planned — it's the correct
 fail-closed behavior (a stale approval must not silently execute), just a UX wart: the human
 has to notice the reply doesn't match what they expected and re-issue the original request.
+
+### 2026-08-25 · Open WebUI's SQLite connections can drift to a governance bypass with zero server-side trace
+
+Builds on the 2026-07-01 entry above ("Open WebUI stores connections in SQLite, env vars
+ignored after first run") — that entry covers the *setup* gotcha; this one covers the
+*drift* risk it creates. Found live on Private (`localhost:3001`): Admin → Connections had
+**no `cooper-core` connection at all**, replaced by a direct `https://api.openai.com/v1`
+(live Bearer key) and a direct `http://private-ollama:11434`. Neither is documented as
+ever having been added deliberately — best guess is an artifact of earlier ad hoc testing
+that was never reverted, but the mechanism doesn't matter as much as the blast radius: with
+either of those enabled, a chat that *looks* identical to a normal COOPER conversation
+(same model-picker label, same UI) skips cooper-core entirely — no classification, no
+approval gate, no tool-registry validation, no audit log — and on Private specifically, the
+OpenAI connection is a live crack in "local-only, air-gapped." **The failure is invisible
+from the server side**: `docker logs`/`docker compose logs cooper-core` show nothing at all
+for a bypassed turn (not an error — simply zero requests), because the request never
+reached the container. The only way to catch it is from the client side: open Admin →
+Connections and check the URL list against `http://cooper-core:<port>/v1` being the *only*
+entry, or notice a dispatch-shaped prompt resolving to a tool name that doesn't exist in
+`Config/*_tool_registry.yaml` (as happened here — `search_calendar_events`, no approval
+halt, on a message clearly worded to trigger one). Fixed on Private 2026-08-25 (deleted
+both stray connections, re-added the documented `cooper-core:8000/v1` one). **Not yet
+checked as a standing practice**: verify Admin → Connections shows exactly the documented
+entry (plus any owner-sanctioned ungoverned path, e.g. Open's OpenRouter connection from
+2026-08-04) as part of any future session that does browser verification — this doesn't
+self-heal and a stack rebuild does not reset Open WebUI's SQLite volume.

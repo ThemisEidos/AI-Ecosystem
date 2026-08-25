@@ -4,22 +4,30 @@
 
 ## Current Position
 
-**15a (native tool-calling dispatch) SHIPPED 2026-08-24 — first Step 15 slice complete,
-live-verified both stacks.** Classifier dispatch is retired outright (deleted, not
-dormant): the persona model now gets the tool registry attached as OpenAI-format `tools`
-on every turn, and its own `tool_call` is the dispatch signal, validated against a
-JSON-Schema subset before the approval gate. Full detail: PROGRESS.md's 2026-08-24
-decision-log entry. A whole-branch review after initial implementation found 3 Important
-findings a task-scoped review couldn't see (streaming silently dropping a dispatch after
-preamble content; `validate_args` letting empty/invalid args spend an approval before
-refusal; the tool_call accumulator shredding or silently overwriting calls when a
-provider omits `index`) — all three closed in a fix-forward pass, itself reviewed clean.
-Live-verified post-merge on both rebuilt Docker stacks (blocking `/chat` and the real SSE
-streaming endpoint `/v1/chat/completions`) — browser click-through itself unconfirmed
-(no `claude-in-chrome` extension available this session); the streaming transport Open
-WebUI actually uses was exercised directly instead. **Next up: slice 14a (Fabric pattern
-executor)**, a light revision on top of 15a's new dispatch shape. **All five owner gates
-decided 2026-08-23** (G1: no inbound Open-drafted plans to Private; G2: brain stays
+**15a (native tool-calling dispatch) fully DoD-closed 2026-08-25 — browser click-through
+verified on both stacks, a real governance bypass on Private found and fixed along the
+way.** Shipped 2026-08-24 (see that entry below for the dispatch-shape detail). On
+2026-08-25, with `claude-in-chrome` available for the first time across every 15a
+session, checked Private Open WebUI's connections before testing and found **no
+cooper-core connection existed at all** — instead a direct `https://api.openai.com/v1`
+(live key) and a direct `http://private-ollama:11434`, both bypassing the approval gate,
+registry, and audit log entirely on the one workshop meant to be local-only and
+air-gapped. Confirmed live before touching anything (a dispatch-shaped turn ran with zero
+requests reaching cooper-core's logs), then fixed with owner sign-off: deleted both
+connections, wired the documented `http://cooper-core:8000/v1` with the real
+`COOPER_API_KEYS` value (owner supplied it directly — `.env` is access-denied to Claude).
+Re-ran click-through on both stacks, both fully governed round trips confirmed live in
+browser: Private (`Test-Exec.ps1`, L4 halt → approve → executor output rendered) and Open
+(`lite_llm_router`, L3 halt → approve → `2 + 2 equals 4.` rendered), each cross-checked
+against `docker logs` to prove the request actually hit cooper-core. Open stack's own
+stray `host.docker.internal:11434` Ollama connection was also resolved same-session —
+checked the sibling `03_brain_bot` repo (owner's hypothesis it might belong there) and
+found no reference to that host or to Open's ports anywhere in it; confirmed unrelated
+and removed. Open's Open WebUI now carries exactly two connections: governed
+`cooper-core:8000/v1` and the 2026-08-04 sanctioned OpenRouter path. Full detail:
+PROGRESS.md's 2026-08-25 decision-log entry. No open items remain on 15a.
+**Next up: slice 14a (Fabric pattern executor)**, a light revision on top of 15a's new
+dispatch shape. **All five owner gates decided 2026-08-23** (G1: no inbound Open-drafted plans to Private; G2: brain stays
 gpt-4o-mini; G3: session-plans amendment enacted, 15h unblocked; G4: SearXNG Open-only,
 Private gets no web search; G5: spend guard enacted, $15 lifetime OpenRouter key cap live).
 14f is pinned as a placeholder until the home-lab network exists. No governance blockers
