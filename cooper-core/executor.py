@@ -1,7 +1,7 @@
 """
 COOPER Workbench — execution gateway (Step 5).
 
-Executes approved tools. All 13 registry-referenced executor_types are wired
+Executes approved tools. All 14 registry-referenced executor_types are wired
 (see below). An unrecognized executor_type not present in any registry still
 falls through to a "not yet wired" stub, so the gateway keeps growing safely
 if new types are ever added to a registry ahead of a handler.
@@ -37,6 +37,8 @@ Supported executor_types:
                   gate, so re-running the old gate underneath would be redundant. Level 2
                   (template-writing) only; it does not also launch anything, matching the
                   registry's "Launcher handoff remains optional" note.
+  fabric_pattern — applies a PDA-Fabric prompt pattern to model-supplied content on
+                  the workshop's own backend (both workshops; Private stays local)
 """
 import asyncio
 import os
@@ -392,6 +394,63 @@ async def _run_note_editor(args: dict) -> str:
         return f"Workbench: note write failed unexpectedly — {exc}"
 
 
+async def _run_fabric_pattern(args: dict, workshop: str) -> str:
+    """Fabric Pattern Writer (both workshops). Applies a PDA-Fabric prompt
+    pattern to the model-supplied content and returns the filled artifact.
+    The Fabric layer was specified in the governance corpus and never wired
+    until Step 14a.
+
+    Runs on the workshop's OWN backend — Private's content never leaves the
+    machine, matching _run_local_llm's boundary."""
+    catalog = _fabric_catalog()
+    if not catalog:
+        return "Workbench: no Fabric patterns are installed under PDA-Fabric/."
+
+    pattern_name = str(args.get("pattern_name", ""))
+    key, path = _resolve_pattern(pattern_name, catalog)
+    if key is None:
+        listing = ", ".join(f"{k} ({catalog[k].parent.name})" for k in sorted(catalog))
+        return (
+            "Workbench: no matching Fabric pattern found for "
+            f"'{pattern_name}'. Available patterns: {listing}."
+        )
+
+    content = str(args.get("content_input", "")).strip()
+    if not content:
+        return f"Workbench: Fabric pattern '{key}' has no input content to work from."
+    size = len(content.encode("utf-8"))
+    if size > _MAX_FABRIC_INPUT_BYTES:
+        return (
+            f"Workbench: input is {size} bytes, over the "
+            f"{_MAX_FABRIC_INPUT_BYTES}-byte cap for a Fabric pattern."
+        )
+
+    values = dict(_FABRIC_DEFAULTS)
+    for knob in ("audience", "focus", "tone", "priority"):
+        if args.get(knob):
+            values[knob] = str(args[knob])
+    values.update({
+        "content_input":    content,
+        "pattern_name":     key,
+        "pattern_category": path.parent.name,
+    })
+    prompt = _fill_pattern(path.read_text(encoding="utf-8"), values)
+    messages = [
+        {"role": "system", "content": _FABRIC_SYSTEM_PROMPT},
+        {"role": "user",   "content": prompt},
+    ]
+    try:
+        if workshop == "private":
+            filled = await _ollama_complete(_OLLAMA_HOST, _QWEN_MODEL, messages)
+        else:
+            filled = await _openai_complete(
+                _LITELLM_BASE_URL, _LITELLM_API_KEY, _LITELLM_DEFAULT_MODEL, messages
+            )
+    except Exception as exc:
+        raise ExecutionError(f"Fabric pattern '{key}' failed — {exc}")
+    return f"[Fabric — {key} ({path.parent.name})]\n{filled.strip()[:_MAX_OUTPUT]}"
+
+
 async def _run_llm_api(args: dict) -> str:
     """LiteLLM Router (Open only) — routes an approved prompt to LiteLLM's
     chat-completions endpoint. args.prompt is the clean instruction text
@@ -735,6 +794,7 @@ _HANDLERS = {
     "browser":        lambda tool, message, workshop, args: _run_browser(args),
     "workflow_engine": lambda tool, message, workshop, args: _run_workflow_engine(tool, args, workshop),
     "cli_launcher":   lambda tool, message, workshop, args: _run_cli_launcher(args),
+    "fabric_pattern": lambda tool, message, workshop, args: _run_fabric_pattern(args, workshop),
 }
 
 # Every executor_type run() actually dispatches to — derived from _HANDLERS so

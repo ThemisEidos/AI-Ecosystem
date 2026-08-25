@@ -557,6 +557,88 @@ def test_fabric_fill_pattern_substitutes_known_and_defaults():
     assert "D=unspecified" in out
 
 
+def test_fabric_executor_open_routes_through_litellm(monkeypatch):
+    captured = {}
+
+    async def fake_complete(base_url, api_key, model, messages, **kw):
+        captured["prompt"] = messages[1]["content"]
+        return "  finished report  "
+    monkeypatch.setattr(executor, "_openai_complete", fake_complete)
+    out = asyncio.run(executor.run(
+        {"executor_type": "fabric_pattern"}, "run", "open",
+        {"pattern_name": "report-summary", "content_input": "we shipped the link checker today"},
+    ))
+    assert "finished report" in out
+    assert "report-summary" in out
+    assert "we shipped the link checker today" in captured["prompt"]
+    assert "{{" not in captured["prompt"]
+
+
+def test_fabric_executor_private_routes_through_ollama(monkeypatch):
+    async def fake_complete(base_url, model, messages, **kw):
+        return "local draft"
+    monkeypatch.setattr(executor, "_ollama_complete", fake_complete)
+    out = asyncio.run(executor.run(
+        {"executor_type": "fabric_pattern"}, "run", "private",
+        {"pattern_name": "security-triage", "content_input": "odd inbound traffic on port 8788"},
+    ))
+    assert "local draft" in out
+    assert "security-triage" in out
+
+
+def test_fabric_executor_applies_overrides(monkeypatch):
+    captured = {}
+
+    async def fake_complete(base_url, api_key, model, messages, **kw):
+        captured["prompt"] = messages[1]["content"]
+        return "ok"
+    monkeypatch.setattr(executor, "_openai_complete", fake_complete)
+    asyncio.run(executor.run(
+        {"executor_type": "fabric_pattern"}, "run", "open",
+        {
+            "pattern_name": "report-summary",
+            "content_input": "quarterly numbers",
+            "audience": "the board",
+            "tone": "formal",
+        },
+    ))
+    assert "the board" in captured["prompt"]
+    assert "formal" in captured["prompt"]
+
+
+def test_fabric_executor_lists_patterns_when_name_unresolved():
+    out = asyncio.run(executor.run(
+        {"executor_type": "fabric_pattern"}, "run", "open",
+        {"pattern_name": "something nobody named", "content_input": "hi"},
+    ))
+    assert "report-summary" in out
+    assert "security-triage" in out
+    assert "use this exact" not in out.lower()
+
+
+def test_fabric_executor_rejects_oversized_input(monkeypatch):
+    monkeypatch.setattr(executor, "_MAX_FABRIC_INPUT_BYTES", 10)
+    out = asyncio.run(executor.run(
+        {"executor_type": "fabric_pattern"}, "run", "open",
+        {"pattern_name": "report-summary", "content_input": "x" * 50},
+    ))
+    assert "over the" in out
+
+
+def test_fabric_executor_raises_execution_error_on_backend_failure(monkeypatch):
+    async def boom(base_url, api_key, model, messages, **kw):
+        raise RuntimeError("gateway down")
+    monkeypatch.setattr(executor, "_openai_complete", boom)
+    try:
+        asyncio.run(executor.run(
+            {"executor_type": "fabric_pattern"}, "run", "open",
+            {"pattern_name": "report-summary", "content_input": "text"},
+        ))
+        assert False, "expected ExecutionError"
+    except executor.ExecutionError as exc:
+        assert "gateway down" in str(exc)
+
+
 def test_fabric_fill_pattern_prefers_provided_value_over_default():
     out = executor._fill_pattern("{{tone}}", {"tone": "formal"})
     assert out == "formal"
