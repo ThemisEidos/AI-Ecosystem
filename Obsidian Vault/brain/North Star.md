@@ -26,8 +26,28 @@ found no reference to that host or to Open's ports anywhere in it; confirmed unr
 and removed. Open's Open WebUI now carries exactly two connections: governed
 `cooper-core:8000/v1` and the 2026-08-04 sanctioned OpenRouter path. Full detail:
 PROGRESS.md's 2026-08-25 decision-log entry. No open items remain on 15a.
-**Next up: slice 14a (Fabric pattern executor)**, a light revision on top of 15a's new
-dispatch shape. **All five owner gates decided 2026-08-23** (G1: no inbound Open-drafted plans to Private; G2: brain stays
+
+**14a (Fabric pattern executor) shipped 2026-08-25, same session.** The 2026-08-04 plan
+predated 15a and was rewritten before any code — post-15a executors read validated
+`args: dict`, not a raw message to regex-parse. Built via subagent-driven-development
+(4 tasks, each task-reviewed clean, 248→263 tests); whole-branch review found and fixed
+1 Critical (`PDA-Fabric/` was gitignored and had never actually been committed — the
+branch's own Dockerfile fix only worked on the one machine with the untracked files
+present) and 1 Important (workshop routing failed open toward cloud instead of closed
+toward local). Live-verified both stacks via blocking API and real browser click-through
+— dispatch → halt → approve → filled artifact, no `{{placeholder}}` leftovers. Merged to
+`main`, 263/263 green. **Separate, unfixed finding surfaced during browser
+verification**: Open WebUI's own background housekeeping calls (title/tag/follow-up
+generation) share the same default `session_id="local"` as the visible chat and can
+silently overwrite — and then get approved in place of — a human's actual pending
+ticket. Reproduced once in ~4 browser attempts; confirmed by code trace plus `/pending`
+polling, not guessed. Full mechanism and evidence: `Gotchas.md`'s 2026-08-25 entry. This
+needs an owner decision on the right fix — it's an approval/session-architecture
+question, not a Fabric bug, and stays open across every workshop and every tool, not
+just this slice's. **Next up: 15c per the roadmap execution order**, unless the owner
+wants the approval-ticket finding addressed first.
+
+**All five owner gates decided 2026-08-23** (G1: no inbound Open-drafted plans to Private; G2: brain stays
 gpt-4o-mini; G3: session-plans amendment enacted, 15h unblocked; G4: SearXNG Open-only,
 Private gets no web search; G5: spend guard enacted, $15 lifetime OpenRouter key cap live).
 14f is pinned as a placeholder until the home-lab network exists. No governance blockers

@@ -12,7 +12,7 @@ Full scope plan: `PRD.md` (repo root). Full governance spec: `01_AI Ecosystem Ar
 
 ## Project summary
 
-COOPER (Command Operations Orchestrator for Planning, Execution, and Reporting) is a governed AI operations platform (owner: ThemisEidos). It exposes two workshops — Open (cloud-capable via LiteLLM, port 8001) and Private (local-only, Ollama `COOPER-Private`, port 8000) — each with a 6-level permission ladder and Category 1/2 data classification. The runtime is the FastAPI backend in `cooper-core/`, deployed as Docker Compose stacks; it owns conversation, classification (`decision.py`), the approval gate, and the tool registry (all 13 `executor_type`s wired). See `PRD.md` for the full plan.
+COOPER (Command Operations Orchestrator for Planning, Execution, and Reporting) is a governed AI operations platform (owner: ThemisEidos). It exposes two workshops — Open (cloud-capable via LiteLLM, port 8001) and Private (local-only, Ollama `COOPER-Private`, port 8000) — each with a 6-level permission ladder and Category 1/2 data classification. The runtime is the FastAPI backend in `cooper-core/`, deployed as Docker Compose stacks; it owns conversation, classification (`decision.py`), the approval gate, and the tool registry (all 14 `executor_type`s wired). See `PRD.md` for the full plan.
 
 ---
 
@@ -232,7 +232,7 @@ Secure Vault and StandardNotes are outside this repo entirely — COOPER must ne
 
 **Live (v2):** Open WebUI → cooper-core (FastAPI) per workshop. cooper-core owns
 conversation, turn classification (`decision.py`), the approval gate
-(dispatch → approve → execute), the tool registry (13 executor types), skills
+(dispatch → approve → execute), the tool registry (14 executor types), skills
 (draft → promote loop, stats in `cooper_memory.db`), and routes inference to
 in-container Ollama (Private) or LiteLLM → cloud (Open). n8n and signal-cli run as
 containers in the Open stack. SQLite memory travels in the

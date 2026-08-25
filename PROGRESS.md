@@ -51,7 +51,7 @@ Execution order: 15a → 14a(rev) → 15c → 14b → 15d → 15e → 14c(+15f-i
 15f → 15g → 15h. 15b anytime; 14f pinned until the home-lab network exists (2026-08-23).
 
 - [x] **15a — Native tool-calling dispatch** (M3→5; retires classifier dispatch; kills both 2026-08-04 gotchas as a class) — shipped 2026-08-24, live-verified both stacks (blocking + real SSE incl. preamble-then-dispatch), 3 post-review Importants closed in a fix-forward pass, itself reviewed clean (248/248). **Browser click-through per stack closed 2026-08-25** — see decision log; en route, found and fixed a real governance bypass on Private's Open WebUI (no cooper-core connection existed at all).
-- [ ] **14a — Fabric pattern executor** (existing plan gets a light revision on top of 15a)
+- [x] **14a — Fabric pattern executor** — shipped 2026-08-25, live-verified both stacks (blocking API + browser click-through, all 4 patterns reachable via native tool-calling). Revised plan (2026-08-04 original rewritten for 15a's args-based dispatch), 4 tasks + subagent-driven-development, whole-branch review found and fixed 1 Critical (`PDA-Fabric/` was gitignored and never committed — see decision log) + 1 Important (workshop routing failed open toward cloud). Separate, unfixed finding: an intermittent approval-ticket hijack via Open WebUI's own background calls — see Gotchas 2026-08-25, flagged for owner decision, not in scope for this slice.
 - [ ] **15b — Zero-touch Open WebUI provisioning** (M9→5; independent, anytime)
 - [ ] **15c — Per-role model routing** (implements `Scripts/PDA_ModelRouting.json`; LiteLLM fallback pools; Private E4B/12B role split — E4B benchmark is the entry gate)
 - [ ] **14b — Jobs harness + link-checker** (M2→3)
@@ -860,6 +860,52 @@ Execution order: 15a → 14a(rev) → 15c → 14b → 15d → 15e → 14c(+15f-i
   two connections: `http://cooper-core:8000/v1` (governed) and
   `https://openrouter.ai/api/v1` (the 2026-08-04 sanctioned ungoverned path). Next slice:
   14a.
+- **2026-08-25 · 14a shipped: Fabric pattern executor live on both stacks, whole-branch
+  review found and fixed 1 Critical + 1 Important.** The 2026-08-04 plan predated 15a's
+  native tool-calling shift and was built entirely around regex-parsing a raw chat
+  `message` (pattern name, content, `key=value` overrides all pulled from one free-text
+  string). Post-15a, executors receive validated, structured `args: dict` instead — so
+  the plan was rewritten in place
+  (`Docs/superpowers/plans/2026-08-25-step-14a-fabric-executor-revised.md`) before any
+  code: dropped the message-parsing helpers entirely, added a `parameters` JSON-Schema
+  block to both registry entries matching what `registry.validate_args` actually
+  understands, and had `_resolve_pattern` match a single `pattern_name` argument instead
+  of scanning a whole message. Built via subagent-driven-development in a worktree, 4
+  tasks (catalog+resolve, template fill, the executor handler, registry entries), each
+  independently task-reviewed clean (248→263 tests). Live verification (controller-run,
+  not delegated — needed Docker rebuilds of the real shared stacks and a browser) found
+  a real deployment gap immediately: `PDA-Fabric/` was never copied into the
+  `cooper-core` image (unlike `Config/`, `Scripts/`, `Skills/`) — fixed the Dockerfile,
+  then found the fix alone was a silent no-op because `.dockerignore` is a deny-by-default
+  allowlist that never allowlisted `PDA-Fabric` either — fixed that too. Both stacks then
+  confirmed live: dispatch → halt → approve → filled artifact with no stray
+  `{{placeholder}}` text, via both the blocking `/chat` API and a real browser round trip
+  on Open (`lite_llm_router`-style native tool-calling, `report-summary`/`review-checklist`
+  patterns) and Private (`review-checklist`/`research-synthesis`/`security-triage`
+  patterns, one skill-matched at 100% trust after a single prior run). **Final
+  whole-branch review (opus) found the actual root cause the two Docker fixes had only
+  patched around: `PDA-Fabric/` itself was gitignored and had never been committed to
+  git at all** — a stale v1-era "generated exports / local mirrors" classification.
+  Confirmed by reproducing the failure: `docker build` fails outright
+  (`"/PDA-Fabric": not found`) and 10 of the fabric tests fail on a genuinely fresh
+  checkout, since this branch's own Docker fixes only ever ran on the one machine where
+  the four untracked template files happened to already exist locally. Fixed by tracking
+  the four hand-written `.md` templates (36K total, no generated output) and dropping the
+  ignore line. Same review also flagged (Important) that `_run_fabric_pattern`'s
+  workshop-routing branch failed *open* toward cloud egress on an unrecognized workshop
+  value (`if workshop == "private": ollama else: openai`) rather than fail-*closed*
+  toward local, inconsistent with this repo's stated doctrine even though no live leak
+  existed (upstream `check_backend`/`check_tool` already enforce the boundary) — inverted
+  the conditional. Scoped re-review confirmed both fixes clean, no new breakage. Merged
+  to `main` via clean fast-forward, 263/263 green. **Separate finding, discovered during
+  browser verification, explicitly NOT fixed and NOT in scope for this slice**: an
+  intermittent approval-ticket hijack where Open WebUI's own background housekeeping
+  calls (title/tag/follow-up-suggestion generation) can silently overwrite and then get
+  approved in place of the human's actual pending ticket — see
+  `Obsidian Vault/brain/Gotchas.md`'s 2026-08-25 entry for the full mechanism and
+  evidence trail. This is a cross-cutting approval/session-architecture question, not a
+  Fabric bug, and needs an owner decision on the right fix. Next slice: per the roadmap
+  execution order, 15c (unless the owner prioritizes the approval-ticket finding first).
 
 ---
 

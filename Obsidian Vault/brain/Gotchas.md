@@ -324,3 +324,56 @@ checked as a standing practice**: verify Admin → Connections shows exactly the
 entry (plus any owner-sanctioned ungoverned path, e.g. Open's OpenRouter connection from
 2026-08-04) as part of any future session that does browser verification — this doesn't
 self-heal and a stack rebuild does not reset Open WebUI's SQLite volume.
+
+### 2026-08-25 · Open WebUI's own background calls can hijack a pending approval ticket
+
+Found live during 14a's browser verification (Fabric Pattern Writer). Sequence: sent a
+dispatch-shaped message on Open, got a correct halt (`Halt — Fabric Pattern Writer …
+requires approval`), typed `yes, go ahead`, and the reply that came back was
+`[LiteLLM Router — model: openai]` producing a thematic-tags list — not the fabric
+artifact, and not anything the human asked for. The approval was consumed by a
+completely different, unrequested tool call.
+
+**Mechanism, traced through the code, not guessed:** `approval.py`'s ticket store is
+keyed `(workshop, session_id)` with `session_id: str = "local"` as the default
+(`approval.py:30,46`). Open WebUI's `/v1/chat/completions` connection is a bare
+OpenAI-API client — the standard doesn't have a session-id concept, so Open WebUI never
+sends one, and *every* request it makes (the visible chat AND its own background
+housekeeping calls — title generation, tag generation, follow-up-suggestion generation,
+all fired via the same connection) lands on the identical key `(workshop, "local")`.
+`main.py:369` only treats an incoming message as an approval response if
+`approval.has_pending(...) and approval.is_response(message)` are both true; if a
+background call's prompt text doesn't match approve/deny, it falls through to a brand
+new `route_turn(...)` call **with the tool schemas still attached** (line 377-378) —
+and if the model decides that background prompt looks dispatch-shaped enough to invoke
+a tool, `approval.request()` (`approval.py:63`) unconditionally overwrites
+`_pending[(workshop, session_id)]` with the new ticket, no check for an existing one.
+The human's next `approve`/`deny` reply then resolves whatever ticket is live at that
+instant — which may no longer be the one they're looking at on screen.
+
+**Confirmed, not merely reasoned through**: polled `GET /pending` every second while a
+dispatch was in flight in the browser across several attempts. One run's ticket held
+steady the whole time (Fabric Pattern Writer, unchanged); a separate run showed the
+exact swap described above. **Reproduced once in roughly four browser attempts** — this
+is probabilistic (depends on whether a given background prompt happens to read as
+tool-call-shaped to the model), not deterministic, and does **not** reproduce via
+`curl`/`/chat` at all, since nothing fires the background calls outside a real browser
+client. That combination — rare, silent, no error surfaced, server logs show a normal
+200 OK for both the hijacking dispatch and its approval — makes it easy to miss
+entirely unless the actual returned content is checked against what was asked for.
+
+**Severity: this is worse than a UX glitch.** The human's consent (`yes, go ahead`) can
+be silently misapplied to an action they never saw and didn't intend to approve. It's
+scoped to whatever the hijacking background call's own prompt asks for — in the
+observed case, an already-approved-pattern (`lite_llm_router`) with harmless content —
+but the mechanism doesn't guarantee that in general; it depends entirely on what Open
+WebUI's own background prompt says and what the model decides to do with it.
+
+**Not fixed.** This is a cross-cutting approval/session-architecture question — not a
+14a/Fabric bug, not something to patch locally in one executor — and it needs an owner
+decision on the right shape of a fix (candidates, not evaluated: scope tickets by Open
+WebUI's `chat_id` if it sends one anywhere in the request; detect and skip Open WebUI's
+own housekeeping-call prompts before they reach the tool-calling path; make
+`approval.request()` refuse to overwrite a live ticket instead of clobbering it silently;
+require a stable session identifier from the client). Flagged to the owner in the
+2026-08-25 PROGRESS.md decision log.
