@@ -440,12 +440,12 @@ async def _run_fabric_pattern(args: dict, workshop: str) -> str:
         {"role": "user",   "content": prompt},
     ]
     try:
-        if workshop == "private":
-            filled = await _ollama_complete(_OLLAMA_HOST, _QWEN_MODEL, messages)
-        else:
+        if workshop == "open":
             filled = await _openai_complete(
                 _LITELLM_BASE_URL, _LITELLM_API_KEY, _LITELLM_DEFAULT_MODEL, messages
             )
+        else:
+            filled = await _ollama_complete(_OLLAMA_HOST, _QWEN_MODEL, messages)
     except Exception as exc:
         raise ExecutionError(f"Fabric pattern '{key}' failed — {exc}")
     return f"[Fabric — {key} ({path.parent.name})]\n{filled.strip()[:_MAX_OUTPUT]}"
