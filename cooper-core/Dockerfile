@@ -30,6 +30,7 @@ COPY Config/general_tool_registry.yaml Config/private_tool_registry.yaml Config/
 COPY Scripts/Test-Exec.ps1 Scripts/Test-PDAStack.ps1 /app/Scripts/
 COPY Scripts/Python/ /app/Scripts/Python/
 COPY Skills/ /app/Skills/
+COPY PDA-Fabric/ /app/PDA-Fabric/
 
 EXPOSE 8000
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
