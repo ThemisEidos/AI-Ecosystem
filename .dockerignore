@@ -4,6 +4,7 @@
 !Config
 !Scripts/Test-Exec.ps1
 !Scripts/Test-PDAStack.ps1
+!Scripts/PDA_ModelRouting.json
 !Scripts/Python
 !Skills
 !PDA-Fabric

@@ -27,7 +27,7 @@ COPY cooper-core/ .
 # _REPO_ROOT resolves to /app — these paths must mirror the repo layout (spec §5, §8.2-8.3)
 COPY Models/cooper-personality/Modelfile /app/Models/cooper-personality/Modelfile
 COPY Config/general_tool_registry.yaml Config/private_tool_registry.yaml Config/skills_registry.yaml /app/Config/
-COPY Scripts/Test-Exec.ps1 Scripts/Test-PDAStack.ps1 /app/Scripts/
+COPY Scripts/Test-Exec.ps1 Scripts/Test-PDAStack.ps1 Scripts/PDA_ModelRouting.json /app/Scripts/
 COPY Scripts/Python/ /app/Scripts/Python/
 COPY Skills/ /app/Skills/
 COPY PDA-Fabric/ /app/PDA-Fabric/
