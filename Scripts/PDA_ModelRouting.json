@@ -1,99 +1,42 @@
 {
-  "schema_version": "1.1",
-  "policy_name": "PDA Governance & Model Routing",
+  "schema_version": "2.0",
+  "policy_name": "COOPER Per-Role Model Routing",
   "policy_version": "1.0",
-  "routing_gateway": "litellm",
-  "command_aliases": {
-    "research": "/research",
-    "/research": "/research",
-    "research_synthesis": "/research",
-    "review": "/review",
-    "/review": "/review",
-    "draft": "/draft",
-    "/draft": "/draft",
-    "report": "/draft",
-    "report_generation": "/draft",
-    "execute": "/execute",
-    "/execute": "/execute"
-  },
-  "worker_command_map": {
-    "research-worker": "/research",
-    "review-worker": "/review",
-    "draft-worker": "/draft",
-    "execute-worker": "/execute",
-    "reporter-worker": "/draft"
-  },
-  "command_routes": {
-    "/research": {
-      "primary_model": "gemini",
-      "fallback_chain": [
-        "openrouter"
-      ],
-      "routing_surface": "cloud-capable",
-      "cloud_allowed": true,
-      "provider_families": [
-        "google",
-        "openrouter"
-      ],
-      "reason": "Research work should prefer Gemini and fall back to OpenRouter if the primary alias fails."
+  "roles": {
+    "classifier": {
+      "private": "COOPER-Private",
+      "open": "openai",
+      "notes": "Folded into 'brain' since 15a's native tool-calling dispatch retired the separate classify call. Kept as its own map entry for 15d/15e forward-compat; no independent call site today."
     },
-    "/review": {
-      "primary_model": "claude",
-      "fallback_chain": [
-        "openai"
-      ],
-      "routing_surface": "cloud-capable",
-      "cloud_allowed": true,
-      "provider_families": [
-        "anthropic",
-        "openai"
-      ],
-      "reason": "Review work should prefer Claude for critique quality and fall back to OpenAI if needed."
+    "brain": {
+      "private": "COOPER-Private",
+      "open": "openai",
+      "notes": "Main persona/dispatch call (decision.route_turn / route_turn_stream). COOPER-Private is aliased to gemma4:e4b-it-qat as of Step 15c (2026-08-30 benchmark: 100% GPU-resident, 46.5 tok/s vs 12b's 44%/56% CPU/GPU split at 8.7 tok/s, equal-or-better tool-call accuracy)."
     },
-    "/draft": {
-      "primary_model": "openai",
-      "fallback_chain": [
-        "claude"
-      ],
-      "routing_surface": "cloud-capable",
-      "cloud_allowed": true,
-      "provider_families": [
-        "openai",
-        "anthropic"
-      ],
-      "reason": "Drafting should prefer OpenAI for structured writing and fall back to Claude."
+    "planner": {
+      "private": "COOPER-Private",
+      "open": "openai",
+      "notes": "No call site yet — reserved for Step 15e (planner-executor). G2 (2026-08-23): starts as gpt-4o-mini on Open."
     },
-    "/execute": {
-      "primary_model": "local-llama",
-      "fallback_chain": [],
-      "routing_surface": "local-only",
-      "cloud_allowed": false,
-      "provider_families": [
-        "local"
-      ],
-      "reason": "Execution planning must stay on the local model."
-    }
-  },
-  "category_routes": {
-    "category_2": {
-      "primary_model": "local-llama",
-      "fallback_chain": [],
-      "routing_surface": "local-only",
-      "cloud_allowed": false,
-      "provider_families": [
-        "local"
-      ],
-      "reason": "Category 2 tasks are restricted to the local model with no cloud fallback."
+    "executor": {
+      "private": "COOPER-Private",
+      "open": "openai",
+      "notes": "No call site yet — reserved for Step 15e."
     },
-    "restricted_local": {
-      "primary_model": "local-llama",
-      "fallback_chain": [],
-      "routing_surface": "local-only",
-      "cloud_allowed": false,
-      "provider_families": [
-        "local"
-      ],
-      "reason": "Restricted-local tasks are local-only with no cloud fallback."
+    "reviewer": {
+      "private": "COOPER-Private",
+      "open": "openai",
+      "notes": "review.review(). Owner decision 2026-08-30: e4b on Private, not 12b, to avoid the measured ~5-13s VRAM swap cost between models on this 6GB-VRAM host."
+    },
+    "drafter": {
+      "private": "COOPER-Private",
+      "open": "openai",
+      "notes": "proposer.draft_skill()."
+    },
+    "archivist": {
+      "private": "COOPER-Private",
+      "open": "openai",
+      "notes": "archivist.remember()."
     }
   }
 }
