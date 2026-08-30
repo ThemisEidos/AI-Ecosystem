@@ -241,7 +241,14 @@ async def _handle_tool_call(
                 return f"Skill promotion rejected before approval: {exc}"
             except Exception as exc:
                 return f"Skill promotion rejected before approval (unexpected error): {exc}"
-        approval.request(WORKSHOP, tool, raw_message, session_id, args=args)
+        try:
+            approval.request(WORKSHOP, tool, raw_message, session_id, args=args)
+        except approval.ApprovalConflictError as exc:
+            existing_name = exc.existing.tool.get("name", exc.existing.tool.get("id"))
+            return (
+                f"Halt — {existing_name} is already waiting on your approval. "
+                f"Reply 'approve' or 'deny' before starting {tool.get('name', tool.get('id'))}."
+            )
         return (
             f"Halt — {tool.get('name', tool.get('id'))} "
             f"[{tool.get('drawer', 'Uncategorized')}, permission level {tool.get('permission_level', '?')}] "

@@ -123,6 +123,34 @@ def test_handle_tool_call_opens_ticket_with_rendered_args_preview(monkeypatch):
     assert ticket.args == {"filename": "x.md", "content": "y" * 100}
 
 
+def test_handle_tool_call_refuses_when_ticket_already_pending(monkeypatch):
+    # Regression: a second tool call for the same session while a ticket is
+    # already live (e.g. Open WebUI background housekeeping sharing
+    # session_id="local" with the visible chat) must not silently replace the
+    # human's pending ticket.
+    monkeypatch.setattr(main, "_API_KEYS", set())
+    monkeypatch.setattr(main.registry, "get_tool", lambda ws, tid: {
+        "id": "obsidian_note_writer", "name": "Obsidian Note Writer",
+        "workshop": "Open Workshop", "permission_level": 2,
+        "approval_required": True, "executor_type": "note_editor",
+        "drawer": "Knowledge Shelf",
+    })
+    monkeypatch.setattr(main.registry, "validate_args", lambda tool, args: [])
+    approval._pending.clear()
+    approval.request(main.WORKSHOP, {"id": "t1", "name": "First Tool"}, "first message", "s4")
+
+    reply = asyncio.run(main._handle_tool_call(
+        "obsidian_note_writer", {"filename": "x.md", "content": "y"}, "second message", "s4",
+    ))
+
+    assert "First Tool" in reply
+    assert "approve" in reply.lower() or "deny" in reply.lower()
+    # the original ticket is untouched, not replaced by the new tool call
+    ticket = approval.peek(main.WORKSHOP, "s4")
+    assert ticket is not None and ticket.tool.get("name") == "First Tool"
+    assert ticket.message == "first message"
+
+
 def test_approve_executes_with_ticket_stored_args(monkeypatch):
     monkeypatch.setattr(main, "_API_KEYS", set())
     tool = {"id": "obsidian_note_writer", "name": "Obsidian Note Writer",

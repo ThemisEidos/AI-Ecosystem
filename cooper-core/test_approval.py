@@ -1,5 +1,7 @@
 import time
 
+import pytest
+
 import approval
 
 
@@ -105,3 +107,31 @@ def test_ticket_stores_and_returns_args():
 def test_ticket_args_defaults_to_empty_dict():
     ticket = approval.request("open", _tool(), "do it", session_id="c2")
     assert ticket.args == {}
+
+
+def test_request_refuses_to_overwrite_live_ticket():
+    # Regression: a second request() for the same (workshop, session_id) used to
+    # silently replace a live ticket — e.g. Open WebUI's background housekeeping
+    # calls sharing session_id="local" with the visible chat could substitute
+    # themselves for a human's pending approval. It must now refuse instead.
+    approval.request("open", _tool(), "task a", session_id="s1")
+    with pytest.raises(approval.ApprovalConflictError) as exc_info:
+        approval.request("open", _tool(), "task b", session_id="s1")
+    assert exc_info.value.existing.message == "task a"
+    # the original ticket is untouched
+    ticket = approval.peek("open", "s1")
+    assert ticket is not None and ticket.message == "task a"
+
+
+def test_request_allows_new_ticket_after_prior_one_expires():
+    ticket = approval.request("open", _tool(), "task a", session_id="s1")
+    ticket.created_at = time.time() - (approval._TICKET_TTL_SECONDS + 1)
+    new_ticket = approval.request("open", _tool(), "task b", session_id="s1")
+    assert new_ticket.message == "task b"
+
+
+def test_request_allows_new_ticket_after_prior_one_consumed():
+    approval.request("open", _tool(), "task a", session_id="s1")
+    approval.consume("open", "s1")
+    new_ticket = approval.request("open", _tool(), "task b", session_id="s1")
+    assert new_ticket.message == "task b"

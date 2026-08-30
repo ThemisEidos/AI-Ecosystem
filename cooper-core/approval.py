@@ -34,6 +34,19 @@ class ApprovalTicket:
 _pending: Dict[tuple, ApprovalTicket] = {}  # (workshop, session_id) -> ticket
 
 
+class ApprovalConflictError(Exception):
+    """Raised by request() when a live ticket already occupies this (workshop,
+    session_id) slot. Callers must resolve (approve/deny/expire) the existing
+    ticket before a new one can be opened — see `existing`."""
+
+    def __init__(self, existing: ApprovalTicket):
+        self.existing = existing
+        super().__init__(
+            f"a ticket for {existing.tool.get('name', existing.tool.get('id'))} "
+            f"is already pending on {existing.workshop}/{existing.session_id}"
+        )
+
+
 def needs_approval(tool: dict) -> bool:
     """Level 2+ always gates, regardless of the registry flag (defense in depth)."""
     return bool(tool.get("approval_required")) or tool.get("permission_level", 0) >= 2
@@ -46,11 +59,16 @@ def request(
     session_id: str = "local",
     args: Optional[dict] = None,
 ) -> ApprovalTicket:
-    """Open a pending ticket for this (workshop, session), replacing any prior one.
-    Session binding (Step 13): only the session that opened a ticket can see or
-    consume it — client A can never approve client B's action. `args` carries
-    the tool_call's validated arguments through to execution on approve
-    (Step 15a) — `main.py` reads `ticket.args` in `_execute`."""
+    """Open a pending ticket for this (workshop, session). Refuses to overwrite a
+    still-live ticket — raises ApprovalConflictError instead, so a background call
+    sharing a session_id with a human's chat can't silently substitute itself for
+    a pending approval. Session binding (Step 13): only the session that opened a
+    ticket can see or consume it — client A can never approve client B's action.
+    `args` carries the tool_call's validated arguments through to execution on
+    approve (Step 15a) — `main.py` reads `ticket.args` in `_execute`."""
+    existing = _get_live(workshop, session_id)
+    if existing is not None:
+        raise ApprovalConflictError(existing)
     ticket = ApprovalTicket(
         id=uuid.uuid4().hex[:8],
         workshop=workshop,

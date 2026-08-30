@@ -369,11 +369,17 @@ observed case, an already-approved-pattern (`lite_llm_router`) with harmless con
 but the mechanism doesn't guarantee that in general; it depends entirely on what Open
 WebUI's own background prompt says and what the model decides to do with it.
 
-**Not fixed.** This is a cross-cutting approval/session-architecture question — not a
-14a/Fabric bug, not something to patch locally in one executor — and it needs an owner
-decision on the right shape of a fix (candidates, not evaluated: scope tickets by Open
-WebUI's `chat_id` if it sends one anywhere in the request; detect and skip Open WebUI's
-own housekeeping-call prompts before they reach the tool-calling path; make
-`approval.request()` refuse to overwrite a live ticket instead of clobbering it silently;
-require a stable session identifier from the client). Flagged to the owner in the
-2026-08-25 PROGRESS.md decision log.
+**Fixed 2026-08-30** — the narrow candidate from the list above: `approval.request()`
+now raises `ApprovalConflictError` instead of overwriting a live ticket for
+`(workshop, session_id)`; `main.py`'s `_handle_tool_call` catches it and tells the human
+what's already pending rather than silently dispatching over it. Verified at the
+mechanism level: unit tests (`test_approval.py`, `test_main_dispatch.py`) plus a live
+re-check inside both rebuilt containers — opened a ticket, attempted a second
+`request()` on the same session, confirmed the conflict raised and the original ticket's
+message/tool unchanged, on both Private and Open. **Caveat, stated honestly**: this
+confirms the root-cause mechanism is closed, but the original probabilistic browser
+repro above (~1-in-4, requires a real Open WebUI background call to fire and be judged
+tool-call-shaped by the model) was not re-attempted live — that path doesn't reproduce
+via `curl`/`/chat` at all (see above), so re-confirming it needs another live browser
+session with `claude-in-chrome`, not yet done this session. Full decision/implementation
+log: PROGRESS.md's 2026-08-30 entry.

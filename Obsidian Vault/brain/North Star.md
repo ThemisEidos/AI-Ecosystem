@@ -56,8 +56,15 @@ ticket while one is already pending for that `(workshop, session_id)` key, inste
 silently replacing it. Explicitly NOT doing: pattern-matching Open WebUI's own
 background-prompt templates (throwaway, dies with Open WebUI) or a full per-conversation
 session-id redesign (belongs in Cockpit's own design later, not retrofitted now). Full
-decision log: PROGRESS.md's 2026-08-25 entry. **Next up: this approval-ticket fix, then
-15c** per the roadmap execution order.
+decision log: PROGRESS.md's 2026-08-25 entry.
+
+**Fixed 2026-08-30, before 15c.** `approval.request()` now raises `ApprovalConflictError`
+instead of overwriting a live ticket for `(workshop, session_id)`; `_handle_tool_call`
+catches it and tells the human what's still pending instead of dispatching over it. 4 new
+tests, 267/267 green, live-reverified inside both rebuilt containers (Private and Open) —
+opened a ticket, attempted a second `request()` on the same session, confirmed the
+conflict raised and the original ticket untouched. Full detail: PROGRESS.md's 2026-08-30
+entry. **Next up: 15c** per the roadmap execution order.
 
 **All five owner gates decided 2026-08-23** (G1: no inbound Open-drafted plans to Private; G2: brain stays
 gpt-4o-mini; G3: session-plans amendment enacted, 15h unblocked; G4: SearXNG Open-only,

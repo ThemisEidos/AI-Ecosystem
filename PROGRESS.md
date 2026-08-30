@@ -938,6 +938,19 @@ Execution order: 15a → 14a(rev) → 15c → 14b → 15d → 15e → 14c(+15f-i
   starting 15c** — needs a test proving a second dispatch is rejected (not silently
   substituted) while a ticket is already pending, then live-reverify via curl that the
   original ticket survives an interleaving dispatch attempt.
+- **2026-08-30 · Approval-ticket overwrite fixed, before 15c.** `approval.request()`
+  (`approval.py`) now checks for a live ticket at `(workshop, session_id)` first and
+  raises `ApprovalConflictError` instead of silently overwriting it; `main.py`'s
+  `_handle_tool_call` catches it and replies naming the still-pending tool, telling the
+  human to approve/deny it before anything new can be dispatched — no ticket is lost or
+  substituted. 4 new tests (`test_approval.py`: refuses-to-overwrite, allows-after-expiry,
+  allows-after-consume; `test_main_dispatch.py`: dispatch-level conflict reply), full
+  suite 267/267 green. Live-reverified inside both running containers after
+  `--build cooper-core` on each stack (rebuild is required — `up -d` alone serves stale
+  code): opened a ticket, attempted a second `request()` for the same session, confirmed
+  `ApprovalConflictError` raised and the original ticket's message/tool unchanged —
+  verified on Private and Open. Scope matched the 2026-08-25 decision exactly: no
+  Open-WebUI-specific pattern matching, no session-id redesign. Next: 15c.
 
 ---
 
