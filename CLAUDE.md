@@ -26,7 +26,7 @@ COOPER (Command Operations Orchestrator for Planning, Execution, and Reporting) 
 | `Config/` | Workshop identity YAML, tool registries (`general_tool_registry.yaml`, `private_tool_registry.yaml`), `skills_registry.yaml`, workflow definitions (`workflows.yaml`) |
 | `Skills/` | Learned-skill store: `learned/` (promoted, governed by `Config/skills_registry.yaml`), `_drafts/` (auto-drafted by the self-improvement loop, inert until promoted) |
 | `litellm/` | LiteLLM config (`litellm_config.yaml`) and `.env.local` (cloud keys — gitignored) |
-| `Models/cooper-personality/` | Ollama Modelfile + personality JSON. At runtime `main.py` only extracts the SYSTEM prompt from the Modelfile; the `FROM gemma3:12b` line is legacy — the served weights are Ollama's `gemma4:12b` aliased as `COOPER-Private` |
+| `Models/cooper-personality/` | Ollama Modelfile + personality JSON. At runtime `main.py` only extracts the SYSTEM prompt from the Modelfile; the `FROM gemma3:12b` line is legacy — the served weights are Ollama's `gemma4:e4b-it-qat` aliased as `COOPER-Private` (Step 15c, 2026-08-30) |
 | `Open WebUI/` | Python Pipe function (`PDA_ChatBridge_Pipe.py`) from the v1 bridge; pytest test file |
 | `State/` | `COOPER_ProjectMemory.json`, `COOPER_Skills.json`, `Workflow_Evidence/` completion records |
 | `n8n Workflow/` | n8n workflow JSON exports (import via n8n UI) |
@@ -142,8 +142,8 @@ docker compose -f PDA-Runtime/docker-compose.private.yml up -d --build cooper-co
 Done by `setup-linux.sh`; manually it is:
 
 ```bash
-ollama pull gemma4:12b
-ollama cp gemma4:12b COOPER-Private
+ollama pull gemma4:e4b-it-qat
+ollama cp gemma4:e4b-it-qat COOPER-Private
 ollama pull nomic-embed-text     # semantic skill matching
 # OPTIONAL — legacy. `ollama create COOPER -f Models/cooper-personality/Modelfile` only
 # if you want `ollama run COOPER` for manual testing; the runtime doesn't use it.

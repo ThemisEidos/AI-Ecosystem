@@ -8,9 +8,10 @@ services:
       ai.ecosystem.stack: private
     environment:
       - OLLAMA_NO_CLOUD=true
-      # 6 GB VRAM is the binding constraint on this host: flash attention plus a
-      # q8_0 KV cache frees ~300 MiB, which is what lets a 12B quant stay fully
-      # GPU-resident instead of splitting layers to CPU.
+      # 6 GB VRAM is the binding constraint on this host. gemma4:e4b-it-qat (~3.1GB
+      # loaded) stays 100% GPU-resident; gemma4:12b does not — measured 44%/56%
+      # CPU/GPU split even with flash attention + q8_0 KV cache (2026-08-30 benchmark,
+      # PROGRESS.md). COOPER-Private is aliased to e4b as of Step 15c.
       - OLLAMA_FLASH_ATTENTION=1
       - OLLAMA_KV_CACHE_TYPE=q8_0
     volumes:
@@ -39,7 +40,7 @@ services:
       ai.ecosystem.stack: private
     environment:
       - OLLAMA_HOST=http://private-ollama:11434
-    entrypoint: ["sh", "-c", "ollama pull gemma4:12b && ollama cp gemma4:12b COOPER-Private && ollama pull nomic-embed-text"]
+    entrypoint: ["sh", "-c", "ollama pull gemma4:e4b-it-qat && ollama cp gemma4:e4b-it-qat COOPER-Private && ollama pull nomic-embed-text"]
     networks:
       - pda-private-net
     depends_on:

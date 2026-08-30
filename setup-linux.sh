@@ -82,8 +82,8 @@ else
     fi
 
     say "5/5 Pull the COOPER base model into host Ollama…"
-    ollama pull gemma4:12b
-    ollama list | grep -q '^COOPER-Private' || ollama cp gemma4:12b COOPER-Private
+    ollama pull gemma4:e4b-it-qat
+    ollama list | grep -q '^COOPER-Private' || ollama cp gemma4:e4b-it-qat COOPER-Private
     ollama pull nomic-embed-text   # semantic skill matching (COOPER_EMBED_MODEL)
 fi
 
