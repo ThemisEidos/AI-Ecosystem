@@ -339,21 +339,31 @@ def test_execute_passes_each_role_its_own_mapped_model(monkeypatch):
 
     monkeypatch.setattr(main.proposer, "draft_skill", fake_draft)
 
-    asyncio.run(main._execute(tool, "write it", "s5", {"filename": "x.md", "content": "hi"}))
-    # _post_dispatch runs as a fire-and-forget background task — pump the loop once
-    # so its awaits (which are already-resolved coroutines here) get to run.
-    asyncio.run(asyncio.sleep(0))
+    async def _run():
+        result = await main._execute(
+            tool, "write it", "s5", {"filename": "x.md", "content": "hi"}
+        )
+        # _post_dispatch runs as a fire-and-forget background task (asyncio.create_task
+        # inside _execute) — drain it in the SAME event loop before asserting. A second,
+        # separate asyncio.run() call cannot await a task created in the first call's
+        # loop, since that loop is already closed by the time the second one starts.
+        if main._BG_TASKS:
+            await asyncio.gather(*main._BG_TASKS)
+        return result
+
+    asyncio.run(_run())
 
     assert seen["reviewer_model"] == main.REVIEWER_MODEL
     assert seen.get("archivist_model") == main.ARCHIVIST_MODEL
     assert seen.get("drafter_model") == main.DRAFTER_MODEL
 ```
 
-  Note: `_post_dispatch` is scheduled via `asyncio.create_task` inside `_execute` — if
-  the background task hasn't completed by the time the test asserts, tighten this with
-  `await asyncio.gather(*main._BG_TASKS)` right before the asserts instead of a bare
-  `sleep(0)`. Check `main._BG_TASKS` (defined near `_queue_notice`) for the exact
-  mechanism before relying on either approach; use whichever reliably drains it.
+  Note: `_post_dispatch` is scheduled via `asyncio.create_task` inside `_execute`
+  (`main._BG_TASKS`, defined near `_queue_notice`, holds strong refs to in-flight
+  background tasks) — the `_run()` wrapper above awaits `_execute` and then the
+  background task within one single event loop, which is required: two separate
+  `asyncio.run()` calls do NOT share a loop, so a task created in the first is orphaned
+  (never awaited, may not even run to completion) by the time the second call starts.
 
 - [ ] **Step 2: Run to verify failure**
 
