@@ -189,6 +189,55 @@ def test_approve_executes_with_ticket_stored_args(monkeypatch):
     assert "wrote it" in reply
 
 
+def test_execute_passes_each_role_its_own_mapped_model(monkeypatch):
+    monkeypatch.setattr(main, "_API_KEYS", set())
+    tool = {"id": "obsidian_note_writer", "name": "Obsidian Note Writer",
+            "workshop": "Open Workshop", "executor_type": "note_editor"}
+
+    async def fake_run(t, message, workshop, args=None):
+        return "wrote it"
+
+    monkeypatch.setattr(main.executor, "run", fake_run)
+
+    seen = {}
+
+    async def fake_review(tool, message, raw_output, base_url, api_key, model, backend):
+        seen["reviewer_model"] = model
+        return main.review.ReviewVerdict(verdict="pass", reason="ok")
+
+    monkeypatch.setattr(main.review, "review", fake_review)
+
+    async def fake_remember(conn, tool, message, raw_output, verdict, workshop,
+                             base_url, api_key, model, backend):
+        seen["archivist_model"] = model
+
+    monkeypatch.setattr(main.archivist, "remember", fake_remember)
+
+    async def fake_draft(tool, message, raw_output, base_url, api_key, model, backend):
+        seen["drafter_model"] = model
+        return None
+
+    monkeypatch.setattr(main.proposer, "draft_skill", fake_draft)
+
+    async def _run():
+        result = await main._execute(
+            tool, "write it", "s5", {"filename": "x.md", "content": "hi"}
+        )
+        # _post_dispatch runs as a fire-and-forget background task (asyncio.create_task
+        # inside _execute) — drain it in the SAME event loop before asserting. A second,
+        # separate asyncio.run() call cannot await a task created in the first call's
+        # loop, since that loop is already closed by the time the second one starts.
+        if main._BG_TASKS:
+            await asyncio.gather(*main._BG_TASKS)
+        return result
+
+    asyncio.run(_run())
+
+    assert seen["reviewer_model"] == main.REVIEWER_MODEL
+    assert seen.get("archivist_model") == main.ARCHIVIST_MODEL
+    assert seen.get("drafter_model") == main.DRAFTER_MODEL
+
+
 def test_unknown_workflow_is_refused_without_opening_a_ticket():
     tool = main.registry.get_tool("open", "n8n_general_workflows")
     assert tool is not None

@@ -39,6 +39,7 @@ import embeddings
 import proposer
 import skills
 import gateway
+import model_routing
 
 # ── Config ─────────────────────────────────────────────────────────────────────
 _REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -54,19 +55,25 @@ OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
 OPENAI_BASE_URL = os.environ.get("OPENAI_BASE_URL", "http://litellm:4000/v1")
 OPENAI_API_KEY  = os.environ.get("OPENAI_API_KEY", "")
 
-# Per-workshop model and backend selection
+# Per-workshop backend selection
 if WORKSHOP == "private":
     BACKEND          = "ollama"
-    COOPER_MODEL     = os.environ.get("COOPER_MODEL", "COOPER-Private")
-    UTILITY_MODEL    = os.environ.get("COOPER_CLASSIFIER_MODEL", "COOPER-Private")
     BACKEND_URL      = OLLAMA_HOST
     BACKEND_KEY      = "ollama"
 else:  # open
     BACKEND          = "openai"
-    COOPER_MODEL     = os.environ.get("COOPER_MODEL", "openai")
-    UTILITY_MODEL    = os.environ.get("COOPER_CLASSIFIER_MODEL", "openai")
     BACKEND_URL      = OPENAI_BASE_URL
     BACKEND_KEY      = OPENAI_API_KEY
+
+# Per-role model routing (Step 15c): Scripts/PDA_ModelRouting.json is the source of
+# truth. COOPER_MODEL stays overridable via env var for the documented bare-metal dev
+# path (CLAUDE.md); the other three live roles resolve straight from the map — each
+# call site below names its own role explicitly so a future slice (15d/15e) can point
+# one role at a different alias by editing the JSON alone.
+COOPER_MODEL    = os.environ.get("COOPER_MODEL", model_routing.model_for("brain", WORKSHOP))
+REVIEWER_MODEL  = model_routing.model_for("reviewer", WORKSHOP)
+DRAFTER_MODEL   = model_routing.model_for("drafter", WORKSHOP)
+ARCHIVIST_MODEL = model_routing.model_for("archivist", WORKSHOP)
 
 # Semantic skill selection: embeddings via the workshop's own backend, keyword
 # fallback inside select_skill_semantic on any failure — so a missing embedding
@@ -285,7 +292,7 @@ async def _post_dispatch(tool: dict, message: str, raw_output: str, verdict, ses
         await archivist.remember(
             _ARCHIVIST_CONN, tool, message, raw_output, verdict, WORKSHOP,
             base_url=BACKEND_URL, api_key=BACKEND_KEY,
-            model=UTILITY_MODEL, backend=BACKEND,
+            model=ARCHIVIST_MODEL, backend=BACKEND,
         )
     except Exception as exc:
         print(f"  [!!] archivist.remember failed (non-fatal): {exc}")
@@ -295,7 +302,7 @@ async def _post_dispatch(tool: dict, message: str, raw_output: str, verdict, ses
             draft_dir = await proposer.draft_skill(
                 tool, message, raw_output,
                 base_url=BACKEND_URL, api_key=BACKEND_KEY,
-                model=UTILITY_MODEL, backend=BACKEND,
+                model=DRAFTER_MODEL, backend=BACKEND,
             )
             offer = proposer.offer_line(draft_dir).strip()
             if offer:
@@ -322,7 +329,7 @@ async def _execute(
         tool, message, raw_output,
         base_url=BACKEND_URL,
         api_key=BACKEND_KEY,
-        model=UTILITY_MODEL,
+        model=REVIEWER_MODEL,
         backend=BACKEND,
     )
 
@@ -396,7 +403,9 @@ async def lifespan(app: FastAPI):
     print(f"\n  workshop : {WORKSHOP}")
     print(f"  backend  : {BACKEND}")
     print(f"  model    : {COOPER_MODEL}")
-    print(f"  utility  : {UTILITY_MODEL}")
+    print(f"  reviewer : {REVIEWER_MODEL}")
+    print(f"  drafter  : {DRAFTER_MODEL}")
+    print(f"  archivist: {ARCHIVIST_MODEL}")
 
     if BACKEND == "ollama":
         async with httpx.AsyncClient(timeout=5.0) as client:
@@ -404,7 +413,7 @@ async def lifespan(app: FastAPI):
                 resp = await client.get(f"{OLLAMA_HOST}/api/tags")
                 models = [m["name"] for m in resp.json().get("models", [])]
                 known = {m.lower() for m in models} | {m.split(":")[0].lower() for m in models}
-                for name in {COOPER_MODEL, UTILITY_MODEL}:
+                for name in {COOPER_MODEL, REVIEWER_MODEL, DRAFTER_MODEL, ARCHIVIST_MODEL}:
                     ok = name.lower() in known
                     print(f"  {'[ok]' if ok else '[!!]'} ollama model: {name}")
             except Exception as exc:
@@ -458,12 +467,16 @@ app = FastAPI(title="COOPER Core", version="2.1.0", lifespan=lifespan)
 @app.get("/health")
 async def health():
     return {
-        "status":     "ok",
-        "workshop":   WORKSHOP,
-        "backend":    BACKEND,
-        "model":      COOPER_MODEL,
-        "classifier":    UTILITY_MODEL,  # deprecated key name — kept for one release, no confirmed consumer found (fix-forward Task 4)
-        "utility_model": UTILITY_MODEL,
+        "status":   "ok",
+        "workshop": WORKSHOP,
+        "backend":  BACKEND,
+        "model":    COOPER_MODEL,
+        "roles": {
+            "brain":     COOPER_MODEL,
+            "reviewer":  REVIEWER_MODEL,
+            "drafter":   DRAFTER_MODEL,
+            "archivist": ARCHIVIST_MODEL,
+        },
     }
 
 
