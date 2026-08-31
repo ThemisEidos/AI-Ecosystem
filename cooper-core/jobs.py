@@ -113,12 +113,13 @@ def list_exceptions(conn: sqlite3.Connection, status: str = "pending") -> List[d
     from archivist import _DB_LOCK
 
     with _DB_LOCK:
-        rows = conn.execute(
+        cur = conn.execute(
             "SELECT id, job_id, run_id, proposed_action, reason, status, created_at "
             "FROM job_exceptions WHERE status = ? ORDER BY created_at",
             (status,),
-        ).fetchall()
-    columns = ["id", "job_id", "run_id", "proposed_action", "reason", "status", "created_at"]
+        )
+        rows = cur.fetchall()
+        columns = [c[0] for c in cur.description]
     return [dict(zip(columns, row)) for row in rows]
 
 
