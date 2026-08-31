@@ -1,6 +1,8 @@
 import asyncio
 from pathlib import Path
 
+import pytest
+
 import executor
 import registry
 import skills as skills_mod
@@ -642,3 +644,95 @@ def test_fabric_executor_raises_execution_error_on_backend_failure(monkeypatch):
 def test_fabric_fill_pattern_prefers_provided_value_over_default():
     out = executor._fill_pattern("{{tone}}", {"tone": "formal"})
     assert out == "formal"
+
+
+def test_file_edit_writes_within_scope(tmp_path, monkeypatch):
+    monkeypatch.setattr(executor, "_REPO_ROOT", tmp_path)
+    args = {
+        "filename": "State/LinkAudit/links.csv",
+        "content": "url,status\nhttps://example.com,ok\n",
+        "write_scope": ["State/LinkAudit/links.csv"],
+    }
+    result = asyncio.run(executor._run_file_edit({}, "edit", "open", args))
+    assert "wrote" in result.lower() or "updated" in result.lower()
+    written = (tmp_path / "State/LinkAudit/links.csv").read_text()
+    assert written == args["content"]
+
+
+def test_file_edit_refuses_path_outside_write_scope(tmp_path, monkeypatch):
+    monkeypatch.setattr(executor, "_REPO_ROOT", tmp_path)
+    args = {
+        "filename": "PDA-Runtime/.env",
+        "content": "malicious",
+        "write_scope": ["State/LinkAudit/links.csv"],
+    }
+    with pytest.raises(executor.ExecutionError):
+        asyncio.run(executor._run_file_edit({}, "edit", "open", args))
+    assert not (tmp_path / "PDA-Runtime/.env").exists()
+
+
+def test_file_edit_refuses_path_traversal_even_if_it_resolves_into_scope(tmp_path, monkeypatch):
+    monkeypatch.setattr(executor, "_REPO_ROOT", tmp_path)
+    (tmp_path / "State/LinkAudit").mkdir(parents=True)
+    args = {
+        "filename": "State/LinkAudit/../../PDA-Runtime/.env",
+        "content": "malicious",
+        "write_scope": ["State/LinkAudit/links.csv"],
+    }
+    with pytest.raises(executor.ExecutionError):
+        asyncio.run(executor._run_file_edit({}, "edit", "open", args))
+
+
+def test_file_edit_refuses_when_write_scope_missing_or_empty():
+    with pytest.raises(executor.ExecutionError):
+        asyncio.run(executor._run_file_edit(
+            {}, "edit", "open", {"filename": "x.csv", "content": "y", "write_scope": []}
+        ))
+
+
+def test_file_edit_refuses_when_write_scope_entry_itself_traverses_out(tmp_path, monkeypatch):
+    """Adversarial case: even if the caller's write_scope list itself contains
+    a traversal entry (write_scope is caller-supplied, not LLM-supplied, but
+    defense in depth assumes it could be malformed), the resolve()-based
+    containment re-check must still refuse — the string-equality match alone
+    is not sufficient once the entry itself escapes the repo root."""
+    monkeypatch.setattr(executor, "_REPO_ROOT", tmp_path)
+    args = {
+        "filename": "../outside.txt",
+        "content": "malicious",
+        "write_scope": ["../outside.txt"],
+    }
+    with pytest.raises(executor.ExecutionError):
+        asyncio.run(executor._run_file_edit({}, "edit", "open", args))
+    assert not (tmp_path.parent / "outside.txt").exists()
+
+
+def test_file_edit_refuses_absolute_path_filename(tmp_path, monkeypatch):
+    """Adversarial case: an absolute-path filename that also happens to
+    literally match a write_scope entry (both caller-supplied) must still be
+    refused — pathlib's `/` operator replaces the whole path when the RHS is
+    absolute, so a naive `_REPO_ROOT / filename` join would silently escape
+    containment without the resolve()+relative_to() re-check."""
+    monkeypatch.setattr(executor, "_REPO_ROOT", tmp_path)
+    absolute_target = str(tmp_path.parent / "escaped.txt")
+    args = {
+        "filename": absolute_target,
+        "content": "malicious",
+        "write_scope": [absolute_target],
+    }
+    with pytest.raises(executor.ExecutionError):
+        asyncio.run(executor._run_file_edit({}, "edit", "open", args))
+    assert not Path(absolute_target).exists()
+
+
+def test_file_edit_refuses_non_list_write_scope():
+    with pytest.raises(executor.ExecutionError):
+        asyncio.run(executor._run_file_edit(
+            {}, "edit", "open",
+            {"filename": "x.csv", "content": "y", "write_scope": "State/LinkAudit/links.csv"},
+        ))
+
+
+def test_file_edit_wired_in_handlers_and_run():
+    assert "file_edit" in executor.WIRED_EXECUTOR_TYPES
+    assert executor._HANDLERS["file_edit"] is not None

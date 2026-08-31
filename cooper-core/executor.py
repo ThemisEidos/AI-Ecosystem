@@ -39,6 +39,12 @@ Supported executor_types:
                   registry's "Launcher handoff remains optional" note.
   fabric_pattern — applies a PDA-Fabric prompt pattern to model-supplied content on
                   the workshop's own backend (both workshops; Private stays local)
+  file_edit     — bounded write to a caller-supplied write_scope allowlist (Step 14b).
+                  NOT registered in any tool registry and never LLM-selectable — the
+                  job runner (jobs.py's run_job, not yet built as of this handler's
+                  addition) calls _run_file_edit directly, post-approval, passing its
+                  own write_scope. Containment is checked against that dynamic list,
+                  not a fixed module-level directory constant like every other handler.
 """
 import asyncio
 import os
@@ -72,6 +78,7 @@ _MAX_FETCH_BYTES = 262_144  # 256 KB of raw HTML before extraction
 _FETCH_TIMEOUT   = 20  # seconds — a research fetch should fail fast, not hang a turn
 
 _MAX_FABRIC_INPUT_BYTES = 65_536  # same cap as the note/DMZ writers
+_MAX_FILE_EDIT_CONTENT_BYTES = 262_144  # 256 KB — a job artifact, not a chat draft
 
 # The shipped patterns' optional knobs. Anything a pattern asks for that the
 # caller didn't supply resolves to "unspecified" rather than leaving a raw
@@ -774,6 +781,99 @@ async def _run_skill_promote(args: dict, workshop: str) -> str:
         return f"Workbench: skill promotion failed unexpectedly — {exc}"
 
 
+async def _run_file_edit(tool: dict, message: str, workshop: str, args: dict) -> str:
+    """Job-runner file writer (Step 14b). Not registered in any tool registry
+    and never chat-reachable — this is a capability the job runner (jobs.py's
+    run_job) invokes directly, post-approval, with its own caller-supplied
+    write_scope. It takes the full (tool, message, workshop, args) signature
+    directly, unlike the other handlers' inner _run_xxx(args) helpers, because
+    the caller invokes it as a plain function rather than only through
+    _HANDLERS/run().
+
+    Unlike every other handler in this file, the allowed write location is
+    NOT a fixed module-level constant — it is args["write_scope"], a
+    List[str] of exact relative paths from repo root, supplied by the
+    trusted CALLER (never by an LLM: the model never sees or sets
+    write_scope). A write is permitted only if `filename` exactly string-
+    matches one entry in write_scope — no glob, no prefix match, no
+    directory-traversal resolution is ever treated as a match.
+
+    Containment is enforced twice, deliberately:
+      1. Cheap string equality: filename must literally be a member of
+         write_scope. This alone already defeats a traversal string like
+         '../../PDA-Runtime/.env' when write_scope only names
+         'State/LinkAudit/links.csv' — the strings simply don't match.
+      2. A resolve()-based re-check against _REPO_ROOT (the same
+         .resolve() + relative_to() containment technique _run_filesystem
+         and _run_note_editor use against their own fixed directories),
+         confirming the resolved destination is still inside the repo root.
+         This is defense in depth for the case write_scope itself is ever
+         malformed or absolute-path-like — Path's `/` operator silently
+         replaces the whole path when the right-hand side is absolute, so
+         an absolute filename that happens to string-match an equally
+         absolute write_scope entry would otherwise slip past check 1 only
+         to land wherever the absolute path says, not under the repo.
+    """
+    filename = str(args.get("filename", "")).strip()
+    write_scope = args.get("write_scope")
+    content = args.get("content")
+
+    if not isinstance(write_scope, list) or not write_scope:
+        raise ExecutionError(
+            "file_edit: write_scope is missing, empty, or not a list — refusing "
+            f"to write '{filename}' with no caller-supplied allowlist."
+        )
+    if not filename:
+        raise ExecutionError("file_edit: no filename supplied.")
+    if content is None:
+        raise ExecutionError(f"file_edit: no content supplied for '{filename}'.")
+    content = str(content)
+    content_bytes = content.encode("utf-8")
+    if len(content_bytes) > _MAX_FILE_EDIT_CONTENT_BYTES:
+        raise ExecutionError(
+            f"file_edit: content for '{filename}' is {len(content_bytes)} bytes, "
+            f"over the {_MAX_FILE_EDIT_CONTENT_BYTES}-byte cap."
+        )
+
+    # Check 1 — cheap string-equality match against the caller's allowlist,
+    # before any filesystem resolution happens at all.
+    if filename not in write_scope:
+        raise ExecutionError(
+            f"file_edit: '{filename}' is not in the caller-supplied write_scope "
+            f"({', '.join(sorted(str(s) for s in write_scope))}) — refused."
+        )
+
+    # Check 2 — resolve()-based containment re-check against the repo root,
+    # defense in depth against a malformed/absolute write_scope entry (see
+    # docstring above). Path.resolve() also collapses any '..' segments and
+    # follows symlinks, so a traversal or symlink trick that somehow still
+    # produced a string match at check 1 is caught here too.
+    repo_root = _REPO_ROOT.resolve()
+    dest = (repo_root / filename).resolve()
+    try:
+        dest.relative_to(repo_root)
+    except ValueError:
+        raise ExecutionError(
+            f"file_edit: '{filename}' resolves outside the repo root — refused."
+        )
+
+    loop = asyncio.get_running_loop()
+
+    def _sync_write() -> str:
+        existed = dest.exists()
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text(content, encoding="utf-8")
+        verb = "Updated" if existed else "Wrote"
+        return f"{verb} '{filename}' ({len(content_bytes)} bytes)."
+
+    try:
+        return await loop.run_in_executor(None, _sync_write)
+    except ExecutionError:
+        raise
+    except Exception as exc:
+        raise ExecutionError(f"file_edit: write failed unexpectedly for '{filename}' — {exc}")
+
+
 # ── Dispatch table ────────────────────────────────────────────────────────
 # Adapter closures give every handler a uniform (tool, message, workshop, args)
 # call signature despite their differing native signatures. Some handlers are
@@ -795,6 +895,13 @@ _HANDLERS = {
     "workflow_engine": lambda tool, message, workshop, args: _run_workflow_engine(tool, args, workshop),
     "cli_launcher":   lambda tool, message, workshop, args: _run_cli_launcher(args),
     "fabric_pattern": lambda tool, message, workshop, args: _run_fabric_pattern(args, workshop),
+    # file_edit is intentionally NOT referenced by any tool registry YAML —
+    # it is a job-runner-only capability (Step 14b Task 6's jobs.py calls
+    # _run_file_edit directly), never chat-reachable, never LLM-selectable.
+    # It still gets a _HANDLERS entry (and so WIRED_EXECUTOR_TYPES) so the
+    # dispatch table stays the single source of truth for "what executor.run()
+    # can execute," matching every other handler's registration shape.
+    "file_edit":      lambda tool, message, workshop, args: _run_file_edit(tool, message, workshop, args),
 }
 
 # Every executor_type run() actually dispatches to — derived from _HANDLERS so
