@@ -110,6 +110,19 @@ services:
       - type: bind
         source: "../Config/skills_registry.yaml"
         target: "/app/Config/skills_registry.yaml"
+      # Step 14b jobs harness: jobs.py resolves Config/jobs_registry.yaml and
+      # State/ paths (link-checker's CSV, job evidence, job exceptions) from
+      # _REPO_ROOT (= /app in-container). Neither was ever bind-mounted before
+      # this job existed, so without these two mounts POST /jobs/run/{job_id}
+      # 404s "unknown job id" (registry unreadable -> fail-closed empty registry)
+      # instead of the intended "not approved" refusal, and a real run has no
+      # CSV to read/write. Discovered live during Task 8 verification, 2026-08-30.
+      - type: bind
+        source: "../Config/jobs_registry.yaml"
+        target: "/app/Config/jobs_registry.yaml"
+      - type: bind
+        source: "../State"
+        target: "/app/State"
     networks:
       - pda-open-net
     depends_on:

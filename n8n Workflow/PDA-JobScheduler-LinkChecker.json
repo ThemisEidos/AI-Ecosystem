@@ -1,0 +1,56 @@
+{
+  "id": "pda-jobscheduler-link-checker",
+  "name": "PDA Job Scheduler — Link Checker",
+  "active": false,
+  "nodes": [
+    {
+      "id": "pda-jobscheduler-cron-node",
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 3 * * *"
+            }
+          ]
+        }
+      },
+      "name": "Daily 03:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0]
+    },
+    {
+      "id": "pda-jobscheduler-http-node",
+      "parameters": {
+        "method": "POST",
+        "url": "http://cooper-core:8000/jobs/run/link-checker",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": false,
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "name": "Run link-checker Job",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [260, 0],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "COOPER Open API Key"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Daily 03:00": {
+      "main": [[{ "node": "Run link-checker Job", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {},
+  "staticData": null,
+  "pinData": {},
+  "versionId": "pda-jobscheduler-link-checker-v1"
+}

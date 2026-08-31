@@ -54,7 +54,10 @@ Execution order: 15a → 14a(rev) → 15c → 14b → 15d → 15e → 14c(+15f-i
 - [x] **14a — Fabric pattern executor** — shipped 2026-08-25, live-verified both stacks (blocking API + browser click-through, all 4 patterns reachable via native tool-calling). Revised plan (2026-08-04 original rewritten for 15a's args-based dispatch), 4 tasks + subagent-driven-development, whole-branch review found and fixed 1 Critical (`PDA-Fabric/` was gitignored and never committed — see decision log) + 1 Important (workshop routing failed open toward cloud). Separate, unfixed finding: an intermittent approval-ticket hijack via Open WebUI's own background calls — see Gotchas 2026-08-25, flagged for owner decision, not in scope for this slice.
 - [ ] **15b — Zero-touch Open WebUI provisioning** (M9→5; independent, anytime)
 - [x] **15c — Per-role model routing** (implements `Scripts/PDA_ModelRouting.json`; LiteLLM fallback pools; Private E4B/12B role split — E4B benchmark is the entry gate) ✓ 2026-08-30
-- [ ] **14b — Jobs harness + link-checker** (M2→3)
+- [x] **14b — Jobs harness + link-checker** (M2→3) ✓ mechanism shipped, live-verified,
+  inert 2026-08-30 — `approved: false`, n8n scheduler workflow built but not imported
+  (manual import still needed). Owner activation steps + the multi-day DoD clock: see
+  decision log.
 - [ ] **15d — Council subsystem** (M6→5; planning-time panel + tiered final review, verdicts in evidence)
 - [ ] **15e — Planner–executor** (M2→4; big brain drafts envelopes, cheap model executes)
 - [ ] **14c — SearXNG + web_search + PII job** (ships WITH 15f's injection canaries, not before)
@@ -1110,6 +1113,151 @@ Execution order: 15a → 14a(rev) → 15c → 14b → 15d → 15e → 14c(+15f-i
       (verified via `docker exec pda-private-ollama ollama list`), matching what Task 4
       actually made `setup-linux.sh` pull.
     - Full suite: 274/274 passing after all four fixes.
+
+- **2026-08-30 · 14b shipped — jobs harness mechanism live and live-verified, ships**
+  **inert (`approved: false`).** 8 tasks via subagent-driven-development on
+  `step-14b-jobs-harness`, each task independently reviewed clean; whole-plan review
+  283/283 → 315/315 as the harness grew (`cooper-core/jobs.py`: envelope hash-pinning,
+  exception queue, `run_job` orchestration, digest note; `POST /jobs/run/{job_id}` in
+  `main.py`; `Config/jobs_registry.yaml`'s `link-checker` entry; `State/LinkAudit/links.csv`
+  seed). Full suite at Task 8: **315 passed** (`cd cooper-core && .venv/bin/python -m
+  pytest -q`) — CLAUDE.md's stale "173 tests" claim corrected.
+  - **Task 4's Critical finding (fixed in-plan, `942d7d5`):** the job-runner's
+    `_run_file_edit` write-scope containment had a self-cancelling-`..` bypass — a
+    `write_scope` entry like `"State/LinkAudit/../../PDA-Runtime/.env"` passed both the
+    string-equality check (identical to `filename`) *and* the resolve-and-contain check
+    (the two `..` segments cancel back to a path still nominally under the repo root),
+    while actually landing on a completely different file than what `write_scope`
+    visually named. Found via live reproduction against a stand-in `.env`, closed by
+    rejecting any literal `..` path segment in `filename` or any `write_scope` entry
+    outright before either check runs (`executor.py::_run_file_edit`, "Check 0"). No
+    legitimate job `write_scope` ever needs a `..` segment.
+  - **Task 7's parked Important finding (not fixed, by design):** a pre-flight refusal
+    (`verify_job` says "not approved" or "hash mismatch") returns early from `run_job`
+    with **no evidence record and no exception-queue row** — nothing persisted anywhere
+    — so refused runs are invisible in the digest note even though `write_digest` runs
+    right after. Ruled park-don't-fix: (1) doesn't block this plan's DoD — the
+    successful-run mechanism (Task 6) and the exception-queue mechanism (Task 3, proven
+    live below) are both already real; (2) a clean fix needs actual design judgment
+    (generate a `run_id` before `verify_job` and write a `status: "refused"` evidence
+    record, which would also make the digest's dormant "needs attention" section live)
+    — not a mechanical patch; (3) low stakes right now — the job ships `approved: false`
+    by the owner's own decision, so "refused runs are invisible" only matters in a state
+    the owner configured and already knows about. Candidate for a small follow-up once
+    the job is actually approved and running for real.
+  - **Task 8 — live end-to-end verification against the real running Open stack.**
+    First real Docker exercise of this plan's code (Tasks 1-7 only ran the pytest
+    suite) surfaced a genuine infra gap none of the first 7 tasks' scope touched:
+    `PDA-Runtime/docker-compose.yml`'s `cooper-core` service never bind-mounted
+    `Config/jobs_registry.yaml` or `State/` at all — `jobs.py` resolves both from
+    `_REPO_ROOT` (`/app` in-container), and neither path existed in the running
+    container (`docker exec pda-open-cooper-core ls /app/State` → "No such file or
+    directory"). Without the mount, `POST /jobs/run/link-checker` would 404 "unknown
+    job id" (registry unreadable → fail-closed empty registry) instead of the intended
+    "not approved" refusal, and a real run would have no CSV to read or write. Added two
+    bind mounts to `docker-compose.yml` (`Config/jobs_registry.yaml` and `State/`,
+    mirroring the existing `Config/skills_registry.yaml` pattern) — mechanical plumbing
+    required for code that was already built and reviewed to actually run, not a
+    governance change.
+    - **Rebuild hit the same worktree/compose trap 15c's Task 6 documented**
+      (Gotchas.md 2026-08-30): this worktree lacks `litellm/.env.local`, so
+      `docker compose` refuses to parse `docker-compose.yml` at all — for any targeted
+      service — until that `env_file:` line is temporarily commented out. Followed the
+      proven procedure exactly: commented it out, rebuilt `cooper-core` with real
+      secrets read from the main checkout's `PDA-Runtime/.env` and exported inline,
+      confirmed compose's reconciliation also recreated `litellm` and stripped its real
+      keys (`docker exec pda-litellm printenv | grep -c API_KEY` → `0`), restored by
+      running `docker compose ... up -d litellm` from the **main checkout** (`4` keys
+      back, clean startup log, a real authenticated `POST /chat` on Open replying `"OK"`
+      end to end). Hit this same litellm-recreation step **twice more** across Steps 3
+      and 5 (each subsequent `cooper-core` rebuild also touched `litellm`'s config
+      hash) — restored the same way each time, confirmed 4/4 keys after each. Final
+      state: `docker-compose.yml`'s `env_file:` line reverted (uncommented), `git diff`
+      on it shows only the two new legitimate bind-mount lines.
+    - **Step 2 (refused, `approved: false`):** `curl -X POST
+      http://localhost:8001/jobs/run/link-checker` → `{"status":"refused","reason":"not
+      approved"}`, live, before any flag was touched.
+    - **Step 3 (real run, `approved: true` flipped locally, uncommitted):** rebuilt,
+      confirmed the live container's mounted registry showed `approved: true`, ran the
+      job for real: `{"status":"completed","run_id":"fc7743f09388","rows_checked":3,
+      "rows_changed":0,"exceptions_raised":0,"fetches_used":3,"fetches_capped":false,
+      "evidence_path":"/app/State/Workflow_Evidence/completion/
+      workflow_completion_link-checker_20260831T041920479Z.json"}`. Confirmed live: the
+      CSV's 3 placeholder rows got real `last_checked`/`status` values, a real evidence
+      record was written and passed `evidence.validate_completion`'s job-linked schema,
+      and a real digest note appeared at
+      `Obsidian Vault/00_Inbox/COOPER-Digest-2026-08-31.md` describing the run in prose.
+      All three (CSV mutation, evidence file, digest note) were then reverted/deleted —
+      test artifacts from a temporarily-flipped flag, not real production output; kept
+      only in this log as evidence the mechanism ran for real.
+    - **Step 4 (exception-queue path, deterministic, live):** rather than hoping the
+      placeholder URLs would trigger an out-of-scope write (they can't, by
+      construction), ran a small script inside the live `cooper-core` container against
+      the real `cooper_memory.db`, calling `jobs.csv_line_edit(...)` with a
+      deliberately-wrong `write_scope` excluding the real CSV path. Confirmed
+      `executor.ExecutionError` raised (`"'State/LinkAudit/links.csv' is not in the
+      caller-supplied write_scope"`), confirmed the CSV's sha256 on disk was byte-for-byte
+      unchanged before and after, called `jobs.enqueue_exception(...)`, and confirmed the
+      row was visible via `jobs.list_exceptions(conn, status="pending")` against the
+      live DB — the spec's literal DoD line ("an intentionally out-of-scope write lands
+      in the exception queue instead of happening"), live-proven. Dismissed the
+      synthetic test row afterward (`jobs.resolve_exception(..., "dismissed-test-artifact")`)
+      so it doesn't sit in the real pending queue or show up in a future digest.
+    - **Step 5 (revert):** `git checkout -- Config/jobs_registry.yaml` (back to
+      `approved: false`), rebuilt (litellm recreated + restored a third time, see
+      above), confirmed `{"status":"refused","reason":"not approved"}` live again.
+      Final live state confirmed: `docker exec pda-open-cooper-core grep approved
+      /app/Config/jobs_registry.yaml` → `approved: false`; `docker exec pda-litellm
+      printenv | grep -c API_KEY` → `4`; `docker ps` shows all Open-stack containers
+      healthy/up, none left in a broken state.
+    - **SSL/CA-bundle finding (Task 5's flagged concern, resolved):** Task 5's
+      implementer hit `SSL: CERTIFICATE_VERIFY_FAILED` testing `url_verify` against
+      `https://example.com` from their local dev `.venv` (no system CA bundle in that
+      sandbox). The deployed container does **not** have this problem: the real live
+      run above (Step 3) fetched 3 `https://` URLs successfully with no SSL errors, and
+      a direct check confirmed a working system CA bundle
+      (`/etc/ssl/certs/ca-certificates.crt` present, `ssl.get_default_verify_paths()`
+      resolves, a live `httpx.get('https://example.com')` inside the container returned
+      `200`). Confirmed local-dev-venv-only, not a production concern, matching what
+      Task 5 predicted but couldn't itself verify.
+    - **n8n scheduler workflow — built, NOT imported.** Built
+      `n8n Workflow/PDA-JobScheduler-LinkChecker.json` (Cron/Schedule Trigger, daily
+      03:00, matching the registry's `schedule_hint`, → HTTP Request POST to
+      `http://cooper-core:8000/jobs/run/link-checker` with `httpHeaderAuth`-credential
+      bearer auth — no secret embedded in the committed JSON; the owner creates the
+      credential in n8n's own UI post-import), top-level `"active": false`. Attempted
+      both import paths per the brief: **scripted import via n8n's REST API** — reachable
+      (`curl http://localhost:5678/api/v1/workflows` → `401` unauthenticated, confirming
+      the API itself is live) but the repo's on-file `n8n-api-key.txt` is rejected
+      (`401 {"message":"unauthorized"}` even after stripping a stray CRLF that was
+      causing a raw `400`) — stale/rotated, not usable as-is; **browser-based import via
+      `claude-in-chrome`** — the Chrome extension was not connected in this session
+      (`tabs_context_mcp` reported "Browser extension is not connected"), so UI import
+      could not be attempted, let alone verified. Reporting both honestly rather than
+      claiming either succeeded: **the workflow file exists at the specified path,
+      correctly built and deactivated, but is not yet imported into the running n8n
+      instance — the owner (or a future session with a working browser tool, or a
+      regenerated n8n API key) still needs to do the import.**
+  - **Final live state, confirmed:** `Config/jobs_registry.yaml`'s `approved` is `false`
+    (committed and live-matching); the n8n workflow JSON is committed, deactivated, and
+    not imported; `docker-compose.yml`'s only committed diff from before this task is
+    the two new `Config/jobs_registry.yaml` + `State/` bind mounts cooper-core actually
+    needs to run this job at all.
+  - **Owner activation steps, in order** (this plan cannot close the spec's "≥2
+    consecutive days unattended" DoD line — that clock can only start after all of
+    these, and necessarily outside any single execution session):
+    1. Review `Config/jobs_registry.yaml`'s `link-checker` entry (schedule, quota,
+       read/write scope, `permission_level`).
+    2. Replace the 3 placeholder rows in `State/LinkAudit/links.csv` with real links.
+    3. Flip `approved: true` in `Config/jobs_registry.yaml` and rebuild `cooper-core`
+       (its envelope hash is already pinned to the current entry — editing the CSV
+       doesn't touch the hash, but editing the registry entry itself would, so flip
+       `approved` last, after any registry edits, or the hash will need recomputing).
+    4. Import `n8n Workflow/PDA-JobScheduler-LinkChecker.json` into the running n8n
+       instance (browser: workflow menu → Import from File; or fix the stale API key
+       and script it) and create the `COOPER Open API Key` `httpHeaderAuth` credential
+       it references, then activate the workflow.
+    5. Only then does the daily-run, multi-day observation window actually start.
 
 ---
 

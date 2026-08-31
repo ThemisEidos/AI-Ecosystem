@@ -4,6 +4,46 @@
 
 ## Current Position
 
+**14b (jobs harness + link-checker) shipped 2026-08-30 — mechanism live and live-verified**
+**against the real running Open stack, ships inert (`approved: false`, n8n scheduler not**
+**activated).** 8 tasks via subagent-driven-development, each independently reviewed
+clean; full suite 315/315 at Task 8 (CLAUDE.md's stale "173 tests" claim corrected).
+`cooper-core/jobs.py` (envelope hash-pinning, exception queue, `run_job` orchestration,
+digest note), `POST /jobs/run/{job_id}`, and the `link-checker` job entry all exist and
+work for real — Task 8 proved every piece of the spec's DoD live: refusal with
+`approved: false` (`{"status":"refused","reason":"not approved"}`), a real completed run
+after temporarily flipping the flag locally (3 rows checked, CSV updated, evidence
+record written and schema-valid, digest note appeared with real prose), a deterministic
+live proof of the exception-queue path (a deliberately out-of-scope write raised
+`executor.ExecutionError`, nothing got written, the refusal landed in
+`jobs.list_exceptions`), and a clean revert back to refused. Along the way, Task 8 found
+and fixed a real infra gap none of Tasks 1-7 touched: `docker-compose.yml` never
+bind-mounted `Config/jobs_registry.yaml` or `State/` into the Open `cooper-core`
+container at all, so the job couldn't have run live before this fix regardless of the
+approval flag. Also hit 15c's Task 6 worktree/compose trap again (rebuilding from a
+worktree without `litellm/.env.local` forces a temporary `env_file:` comment-out, which
+recreates the already-running `litellm` and strips its real keys) — three separate
+times across this task's rebuild cycles, caught and restored from the main checkout each
+time, confirmed 4/4 keys and a real authenticated round trip after each. Task 4's plan
+review caught and fixed a real Critical (a self-cancelling `..` in `write_scope` could
+redirect a write to any file inside the repo, past both the string-equality and
+resolve-and-contain checks) before this ever ran live. Task 7 found and parked (not
+fixed — genuine design judgment needed, doesn't block this plan's DoD, low stakes while
+inert) a real Important: pre-flight-refused runs write no evidence and no exception
+row, so they're invisible in the digest. Confirmed the deployed container has no CA
+bundle problem (Task 5's dev-`.venv` `CERTIFICATE_VERIFY_FAILED` was local-sandbox-only —
+a live HTTPS fetch inside the container succeeded cleanly). Built
+`n8n Workflow/PDA-JobScheduler-LinkChecker.json` (Cron 03:00 → HTTP POST with
+`httpHeaderAuth` bearer, deactivated) but could **not** import it this session — n8n's
+REST API is reachable but the repo's on-file API key is stale/rejected, and the
+`claude-in-chrome` browser tool wasn't connected — the owner (or a future session with a
+working import path) still needs to do that. Full detail incl. every live-verification
+command and its real output: PROGRESS.md's 2026-08-30 (14b) entry. This plan cannot
+close the spec's "≥2 consecutive days unattended" DoD line by construction — that clock
+starts only after the owner's own activation steps (also in PROGRESS.md), which are
+necessarily outside any single execution session. **Next up: 15d** per the roadmap
+execution order.
+
 **15c (per-role model routing) shipped 2026-08-30, same session as the approval-ticket
 fix below.** 6 tasks via subagent-driven-development, each independently task-reviewed
 clean. Role→alias map (`Scripts/PDA_ModelRouting.json`, 7 roles) rewritten and read
@@ -41,7 +81,8 @@ replying `"OK"` end to end through cooper-core → LiteLLM → provider).
 `docker-compose.yml` reverted to its exact committed state (`git diff` clean). Both stacks'
 `/health` re-checked for real: Private's `roles` all `COOPER-Private`, **Open's `roles` all
 `openai`** — both now genuinely live, not just Private. Full detail: PROGRESS.md's
-2026-08-30 entry. **Next up: 14b** per the roadmap execution order.
+2026-08-30 entry. Next up per the roadmap execution order at the time: 14b — see the
+newer entry above for how that went.
 
 **15a (native tool-calling dispatch) fully DoD-closed 2026-08-25 — browser click-through
 verified on both stacks, a real governance bypass on Private found and fixed along the
