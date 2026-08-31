@@ -4,7 +4,7 @@ one. Pure lookup: (role, workshop) -> the model alias that role's call site shou
 to its backend."""
 import json
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _ROUTING_PATH = _REPO_ROOT / "Scripts" / "PDA_ModelRouting.json"
@@ -31,3 +31,14 @@ def model_for(role: str, workshop: str, routing: Optional[dict] = None) -> str:
             f"role '{role}' has no mapping for workshop '{workshop}'"
         )
     return entry[workshop]
+
+
+def council_roster(workshop: str, routing: Optional[dict] = None) -> List[str]:
+    """Resolve the council member roster for `workshop` ('private' or 'open')."""
+    routing = routing if routing is not None else load_routing()
+    rosters = routing.get("council_roster", {})
+    if workshop not in rosters:
+        raise ModelRoutingError(
+            f"no council_roster mapping for workshop '{workshop}'"
+        )
+    return list(rosters[workshop])

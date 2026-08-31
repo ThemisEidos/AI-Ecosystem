@@ -38,5 +38,10 @@
       "open": "openai",
       "notes": "archivist.remember()."
     }
+  },
+  "council_roster": {
+    "private": ["COOPER-Private", "COOPER-Private", "COOPER-Private"],
+    "open": ["openai", "claude", "gemini"],
+    "notes": "Step 15d. 3-5 diverse aliases per the spec. Private has one local model (G1, 2026-08-23: no cloud-routed planning on Private) so its roster repeats COOPER-Private at varied temperatures (council.py's _MEMBER_TEMPERATURES) for behavioral spread rather than true model diversity -- the documented honest ceiling per North Star's M6 traceability note ('if 4b review quality fails, honest ceiling is 4 -- same-model review'). Open's roster spans three distinct providers (OpenAI, Anthropic, Google) already configured in litellm/litellm_config.yaml."
   }
 }

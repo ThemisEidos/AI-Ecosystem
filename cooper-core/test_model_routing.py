@@ -47,3 +47,25 @@ def test_real_file_current_defaults():
     assert model_routing.model_for("brain", "open", routing) == "openai"
     assert model_routing.model_for("reviewer", "private", routing) == "COOPER-Private"
     assert model_routing.model_for("archivist", "open", routing) == "openai"
+
+
+def test_council_roster_returns_configured_list_for_workshop():
+    routing = {
+        "roles": {},
+        "council_roster": {"open": ["openai", "claude", "gemini"], "private": ["COOPER-Private"]},
+    }
+    assert model_routing.council_roster("open", routing) == ["openai", "claude", "gemini"]
+    assert model_routing.council_roster("private", routing) == ["COOPER-Private"]
+
+
+def test_council_roster_raises_for_unknown_workshop():
+    routing = {"roles": {}, "council_roster": {"open": ["openai"]}}
+    with pytest.raises(model_routing.ModelRoutingError):
+        model_routing.council_roster("private", routing)
+
+
+def test_council_roster_loads_from_real_routing_file():
+    roster = model_routing.council_roster("open")
+    assert len(roster) >= 3
+    roster = model_routing.council_roster("private")
+    assert len(roster) >= 1
