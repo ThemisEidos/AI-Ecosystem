@@ -557,12 +557,14 @@ async def critique_job(job_id: str):
         base_url=BACKEND_URL, api_key=BACKEND_KEY, backend=BACKEND,
     )
     verdict_dicts = council.verdicts_to_dicts(verdicts)
-    note_path = jobs.write_critique_note(job_id, verdict_dicts)
+    envelope_hash = jobs.compute_envelope_hash(job_entry)
+    note_path = jobs.write_critique_note(job_id, verdict_dicts, envelope_hash)
     return {
         "job_id": job_id,
         "objection": council.has_objection(verdicts),
         "verdicts": verdict_dicts,
         "note_path": str(note_path),
+        "envelope_hash": envelope_hash,
     }
 
 

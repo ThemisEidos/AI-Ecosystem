@@ -413,7 +413,7 @@ def test_write_critique_note_reports_objection(tmp_path, monkeypatch):
         {"member": "openai", "verdict": "pass", "reason": "looks fine"},
         {"member": "claude", "verdict": "flag", "reason": "write_scope too broad"},
     ]
-    path = jobs.write_critique_note("test-job", verdicts)
+    path = jobs.write_critique_note("test-job", verdicts, "deadbeef")
     assert path.exists()
     text = path.read_text(encoding="utf-8")
     assert "test-job" in text
@@ -424,7 +424,50 @@ def test_write_critique_note_reports_objection(tmp_path, monkeypatch):
 def test_write_critique_note_reports_clear_when_all_pass(tmp_path, monkeypatch):
     monkeypatch.setattr(jobs, "_DIGEST_DIR", tmp_path / "inbox")
     verdicts = [{"member": "openai", "verdict": "pass", "reason": "fine"}]
-    path = jobs.write_critique_note("test-job", verdicts)
+    path = jobs.write_critique_note("test-job", verdicts, "deadbeef")
     text = path.read_text(encoding="utf-8")
     assert "clear" in text.lower()
     assert "OBJECTION" not in text
+
+
+def test_write_critique_note_includes_envelope_hash(tmp_path, monkeypatch):
+    """Finding 3 (15d final review): the note must carry the envelope hash it
+    was critiqued against, so the owner can tell a stale note (hash doesn't
+    match the current envelope) from a fresh one."""
+    monkeypatch.setattr(jobs, "_DIGEST_DIR", tmp_path / "inbox")
+    verdicts = [{"member": "openai", "verdict": "pass", "reason": "fine"}]
+    path = jobs.write_critique_note("test-job", verdicts, "abc123deadbeef")
+    text = path.read_text(encoding="utf-8")
+    assert "abc123deadbeef" in text
+
+
+def test_run_job_council_final_review_fail_open(conn, tmp_path, monkeypatch):
+    """Finding 1 (15d final review): a council.final_review exception must not
+    lose the run's evidence record -- CSV writes / exception-queue inserts
+    already happened by that point. Fail open with a non-empty fallback
+    verdicts list, don't let run_job raise."""
+    monkeypatch.setattr(jobs, "_REPO_ROOT", tmp_path)
+    monkeypatch.setattr(executor, "_REPO_ROOT", tmp_path)
+
+    async def boom_final_review(*a, **k):
+        raise RuntimeError("model_routing.load_routing: truncated JSON")
+
+    monkeypatch.setattr(jobs.council, "final_review", boom_final_review)
+    csv_path = tmp_path / "State" / "LinkAudit" / "links.csv"
+    _write_links_csv(csv_path, [("https://a.example", "", "", "")])
+
+    job_entry = _approved_job()
+    monkeypatch.setattr(jobs, "load_registry", lambda path=None: {"jobs": [job_entry]})
+    monkeypatch.setattr(jobs, "url_verify", _fake_url_verify(reachable=True))
+
+    result = asyncio.run(jobs.run_job("link-checker", conn, **_RUN_JOB_KWARGS))
+
+    assert result["status"] == "completed"
+    record = json.loads(Path(result["evidence_path"]).read_text(encoding="utf-8"))
+    assert isinstance(record["verdicts"], list) and len(record["verdicts"]) > 0
+    fallback = record["verdicts"][0]
+    assert fallback["member"] == "council"
+    assert fallback["verdict"] == "flag"
+    assert "model_routing.load_routing: truncated JSON" in fallback["reason"]
+    errs = evidence.validate_completion(record, [])
+    assert errs == []

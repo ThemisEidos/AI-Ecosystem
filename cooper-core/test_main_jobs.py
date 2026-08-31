@@ -78,10 +78,11 @@ def test_critique_endpoint_returns_objection_and_writes_note(monkeypatch, tmp_pa
     monkeypatch.setattr(main, "_API_KEYS", set())
     monkeypatch.setattr(main, "_ALLOW_ANON", True)
     monkeypatch.setattr(main.jobs, "_DIGEST_DIR", tmp_path / "inbox")
-    monkeypatch.setattr(main.jobs, "get_job", lambda job_id, registry=None: {
-        "id": job_id, "workshop": "open", "permission_level": 3,
+    job_entry = {
+        "id": "test-job", "workshop": "open", "permission_level": 3,
         "write_scope": ["/"], "read_scope": [], "quota": {}, "approved": False,
-    })
+    }
+    monkeypatch.setattr(main.jobs, "get_job", lambda job_id, registry=None: job_entry)
 
     async def fake_critique_envelope(job_entry, workshop, **kw):
         return [
@@ -99,6 +100,12 @@ def test_critique_endpoint_returns_objection_and_writes_note(monkeypatch, tmp_pa
     assert body["objection"] is True
     assert len(body["verdicts"]) == 2
     assert Path(body["note_path"]).exists()
+    # Finding 3 (15d final review): the response and the written note both
+    # carry the envelope hash the critique ran against, so the owner can
+    # detect a stale critique (envelope edited since) before approving.
+    expected_hash = main.jobs.compute_envelope_hash(job_entry)
+    assert body["envelope_hash"] == expected_hash
+    assert expected_hash in Path(body["note_path"]).read_text(encoding="utf-8")
 
 
 def test_critique_endpoint_404s_for_unknown_job(monkeypatch):

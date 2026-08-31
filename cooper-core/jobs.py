@@ -397,10 +397,21 @@ async def run_job(
         + (f". {write_note}" if write_note else "")
     )
 
-    verdicts = await council.final_review(
-        job_entry, workshop, f"job run: {job_id}", notes,
-        base_url=base_url, api_key=api_key, backend=backend, reviewer_model=reviewer_model,
-    )
+    try:
+        verdicts = await council.final_review(
+            job_entry, workshop, f"job run: {job_id}", notes,
+            base_url=base_url, api_key=api_key, backend=backend, reviewer_model=reviewer_model,
+        )
+    except Exception as exc:
+        # Fail-open: the run's CSV writes / exception-queue inserts already
+        # happened above -- a broken council must not cost this run its
+        # evidence record. Same convention as review.review() and
+        # council._member_verdict(): catch, breadcrumb, produce a non-empty
+        # fallback so the evidence schema (which requires a non-empty
+        # verdicts list once present) still validates.
+        print(f"  [!!] council final_review fail-open: {exc}")
+        verdicts = [{"member": "council", "verdict": "flag",
+                     "reason": f"council unavailable (fail-open): {exc}"}]
 
     evidence_path = write_job_evidence(
         job_id=job_id,
@@ -513,20 +524,24 @@ def write_digest(conn: sqlite3.Connection, date: Optional[str] = None) -> Path:
     return out_path
 
 
-def write_critique_note(job_id: str, verdicts: List[dict]) -> Path:
+def write_critique_note(job_id: str, verdicts: List[dict], envelope_hash: str) -> Path:
     """Write the planning-time council's critique to the Obsidian inbox --
     the owner's approval prompt for job envelopes. There's no chat-based
     approval ticket for job entries (unlike tool calls); the owner reads
     this note, then hand-flips 'approved: true' in
     Config/jobs_registry.yaml themselves, same as today. One file per job id
     -- a re-critique overwrites the prior note so the owner always sees the
-    current envelope's critique, never a stale one."""
+    current envelope's critique, never a stale one -- which this note's
+    envelope_hash line lets the owner actually verify: if the hash here
+    doesn't match compute_envelope_hash() of the entry they're about to
+    approve, the envelope changed since this critique ran and it's stale."""
     objections = [v for v in verdicts if v.get("verdict") == "flag"]
     lines = [f"# Council Critique -- job `{job_id}`", ""]
     lines.append(
         f"## Verdict: {'OBJECTION' if objections else 'clear'} "
         f"({len(objections)}/{len(verdicts)} flagged)"
     )
+    lines.append(f"Envelope hash: `{envelope_hash}`")
     lines.append("")
     for v in verdicts:
         lines.append(f"- **{v.get('member')}**: {v.get('verdict')} -- {v.get('reason')}")

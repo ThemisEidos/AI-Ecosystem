@@ -1,4 +1,5 @@
 import asyncio
+import json
 import time
 
 import council
@@ -66,9 +67,9 @@ def test_member_verdict_fails_open_and_logs(monkeypatch, capsys):
 def test_critique_envelope_runs_each_roster_member(monkeypatch):
     calls = []
 
-    async def fake(system, user_msg, member, *, base_url, api_key, backend, temperature):
+    async def fake(system, user_msg, member, *, base_url, api_key, backend, temperature, label=None):
         calls.append(member)
-        return council.CouncilVerdict(member=member, verdict="pass", reason="ok")
+        return council.CouncilVerdict(member=label or member, verdict="pass", reason="ok")
 
     monkeypatch.setattr(council, "_member_verdict", fake)
     verdicts = asyncio.run(council.critique_envelope(
@@ -80,10 +81,10 @@ def test_critique_envelope_runs_each_roster_member(monkeypatch):
 
 
 def test_critique_envelope_surfaces_objection_from_seeded_flaw(monkeypatch):
-    async def fake(system, user_msg, member, *, base_url, api_key, backend, temperature):
+    async def fake(system, user_msg, member, *, base_url, api_key, backend, temperature, label=None):
         # simulate one member catching an over-broad write_scope mentioned in the envelope
         verdict = "flag" if "write_scope" in user_msg and "/" in user_msg else "pass"
-        return council.CouncilVerdict(member=member, verdict=verdict, reason="over-broad write_scope")
+        return council.CouncilVerdict(member=label or member, verdict=verdict, reason="over-broad write_scope")
 
     monkeypatch.setattr(council, "_member_verdict", fake)
     flawed = {**JOB, "write_scope": ["/"]}
@@ -97,9 +98,9 @@ def test_critique_envelope_surfaces_objection_from_seeded_flaw(monkeypatch):
 def test_final_review_uses_council_tier_for_file_writing_job(monkeypatch):
     calls = []
 
-    async def fake(system, user_msg, member, *, base_url, api_key, backend, temperature):
+    async def fake(system, user_msg, member, *, base_url, api_key, backend, temperature, label=None):
         calls.append(member)
-        return council.CouncilVerdict(member=member, verdict="pass", reason="ok")
+        return council.CouncilVerdict(member=label or member, verdict="pass", reason="ok")
 
     monkeypatch.setattr(council, "_member_verdict", fake)
     job = {**JOB, "permission_level": 3, "write_scope": ["a.csv"]}
@@ -134,9 +135,9 @@ def test_critique_envelope_runs_concurrently(monkeypatch):
     """
     delay_per_member = 0.05
 
-    async def fake_with_delay(system, user_msg, member, *, base_url, api_key, backend, temperature):
+    async def fake_with_delay(system, user_msg, member, *, base_url, api_key, backend, temperature, label=None):
         await asyncio.sleep(delay_per_member)
-        return council.CouncilVerdict(member=member, verdict="pass", reason="ok")
+        return council.CouncilVerdict(member=label or member, verdict="pass", reason="ok")
 
     monkeypatch.setattr(council, "_member_verdict", fake_with_delay)
     start = time.monotonic()
@@ -157,9 +158,9 @@ def test_final_review_runs_council_concurrently(monkeypatch):
     """Prove that final_review's council-tier calls run concurrently, not sequentially."""
     delay_per_member = 0.05
 
-    async def fake_with_delay(system, user_msg, member, *, base_url, api_key, backend, temperature):
+    async def fake_with_delay(system, user_msg, member, *, base_url, api_key, backend, temperature, label=None):
         await asyncio.sleep(delay_per_member)
-        return council.CouncilVerdict(member=member, verdict="pass", reason="ok")
+        return council.CouncilVerdict(member=label or member, verdict="pass", reason="ok")
 
     monkeypatch.setattr(council, "_member_verdict", fake_with_delay)
     job = {**JOB, "permission_level": 3, "write_scope": ["a.csv"]}
@@ -174,3 +175,82 @@ def test_final_review_runs_council_concurrently(monkeypatch):
     # Should be ~0.05s if concurrent, ~0.15s if sequential
     assert elapsed < 0.1, f"Expected concurrent ~0.05s, got {elapsed:.3f}s (may indicate sequential execution)"
     assert len(result) == 3
+
+
+# ── Duplicate-roster member disambiguation (finding 2, 15d final review) ────
+
+def test_disambiguate_labels_suffixes_duplicates_only():
+    labels = council._disambiguate_labels(["COOPER-Private", "COOPER-Private", "COOPER-Private"])
+    assert labels == ["COOPER-Private#1", "COOPER-Private#2", "COOPER-Private#3"]
+    assert len(set(labels)) == 3
+
+
+def test_disambiguate_labels_leaves_distinct_roster_unchanged():
+    assert council._disambiguate_labels(["openai", "claude", "gemini"]) == ["openai", "claude", "gemini"]
+
+
+def test_critique_envelope_duplicate_roster_produces_distinct_member_names(monkeypatch):
+    """Private's roster repeats the one local model 3x (owner-decided design --
+    no real model diversity available). The three verdicts must still be
+    individually identifiable in the evidence record / critique note."""
+    async def fake(system, user_msg, member, *, base_url, api_key, backend, temperature, label=None):
+        return council.CouncilVerdict(member=label or member, verdict="pass", reason="ok")
+
+    monkeypatch.setattr(council, "_member_verdict", fake)
+    verdicts = asyncio.run(council.critique_envelope(
+        JOB, "private", base_url="http://x", api_key="", backend="ollama",
+        roster=["COOPER-Private", "COOPER-Private", "COOPER-Private"],
+    ))
+    members = [v.member for v in verdicts]
+    assert len(set(members)) == 3
+    assert members == ["COOPER-Private#1", "COOPER-Private#2", "COOPER-Private#3"]
+
+
+def test_critique_envelope_no_duplicates_keeps_plain_alias_names(monkeypatch):
+    """Open's roster has no duplicates -- labels must stay the plain alias
+    (no regression from the disambiguation added for Private)."""
+    async def fake(system, user_msg, member, *, base_url, api_key, backend, temperature, label=None):
+        return council.CouncilVerdict(member=label or member, verdict="pass", reason="ok")
+
+    monkeypatch.setattr(council, "_member_verdict", fake)
+    verdicts = asyncio.run(council.critique_envelope(
+        JOB, "open", base_url="http://x", api_key="", backend="openai",
+        roster=["openai", "claude", "gemini"],
+    ))
+    assert [v.member for v in verdicts] == ["openai", "claude", "gemini"]
+
+
+def test_final_review_duplicate_roster_produces_distinct_member_names(monkeypatch):
+    async def fake(system, user_msg, member, *, base_url, api_key, backend, temperature, label=None):
+        return council.CouncilVerdict(member=label or member, verdict="pass", reason="ok")
+
+    monkeypatch.setattr(council, "_member_verdict", fake)
+    job = {**JOB, "permission_level": 3, "write_scope": ["a.csv"]}
+    result = asyncio.run(council.final_review(
+        job, "private", "job run: test-job", "ran fine",
+        base_url="http://x", api_key="", backend="ollama", reviewer_model="rev",
+        roster=["COOPER-Private", "COOPER-Private", "COOPER-Private"],
+    ))
+    members = [r["member"] for r in result]
+    assert len(set(members)) == 3
+    assert members == ["COOPER-Private#1", "COOPER-Private#2", "COOPER-Private#3"]
+
+
+def test_member_verdict_calls_backend_with_real_alias_not_disambiguated_label(monkeypatch):
+    """The disambiguated label is a display-only concern -- the backend call
+    itself must still target the real, unsuffixed model alias (sending
+    'COOPER-Private#1' to Ollama as a model name would break the call)."""
+    seen_models = []
+
+    async def fake_ollama_complete(base_url, model, messages, *, options=None, fmt=None):
+        seen_models.append(model)
+        return json.dumps({"verdict": "pass", "reason": "ok"})
+
+    monkeypatch.setattr(council, "_ollama_complete", fake_ollama_complete)
+    result = asyncio.run(council._member_verdict(
+        "system", "user", "COOPER-Private",
+        base_url="http://x", api_key="", backend="ollama", temperature=0.0,
+        label="COOPER-Private#2",
+    ))
+    assert seen_models == ["COOPER-Private"]
+    assert result.member == "COOPER-Private#2"
