@@ -191,6 +191,14 @@ def test_approve_executes_with_ticket_stored_args(monkeypatch):
 
 def test_execute_passes_each_role_its_own_mapped_model(monkeypatch):
     monkeypatch.setattr(main, "_API_KEYS", set())
+    # Every role currently maps to the identical alias in both workshops (e.g. "openai"
+    # on Open), so leaving the real constants in place would make the assertions below
+    # reduce to string-equals-itself and pass even with crossed call-site wiring.
+    # Monkeypatch distinct sentinels so a crossed REVIEWER_MODEL/DRAFTER_MODEL/
+    # ARCHIVIST_MODEL can actually be detected.
+    monkeypatch.setattr(main, "REVIEWER_MODEL", "sentinel-reviewer")
+    monkeypatch.setattr(main, "DRAFTER_MODEL", "sentinel-drafter")
+    monkeypatch.setattr(main, "ARCHIVIST_MODEL", "sentinel-archivist")
     tool = {"id": "obsidian_note_writer", "name": "Obsidian Note Writer",
             "workshop": "Open Workshop", "executor_type": "note_editor"}
 
