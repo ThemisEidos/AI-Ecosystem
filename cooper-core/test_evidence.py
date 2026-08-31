@@ -37,6 +37,51 @@ def test_invalid_fixture_fails(path):
     assert evidence.validate_record(record, context) != []
 
 
+def _job_completion(**overrides):
+    base = {
+        "workflow_id": "link-checker", "workflow_name": "CSV Link Checker",
+        "execution_id": "run-abc123", "status": "completed",
+        "completion_time": "2026-08-30T12:00:00Z", "workshop_id": "open",
+        "workshop_name": "Open Workshop", "approval_id": "",
+        "artifact_paths": ["State/LinkAudit/links.csv"],
+        "review_status": "pass", "user_accepted": True,
+        "job_id": "link-checker", "envelope_hash": "a" * 64, "run_id": "run-abc123",
+    }
+    base.update(overrides)
+    return base
+
+
+def test_job_linked_open_completion_valid_without_approval_id():
+    errs = evidence.validate_completion(_job_completion(), [])
+    assert errs == []
+
+
+def test_job_linked_completion_requires_envelope_hash():
+    rec = _job_completion()
+    del rec["envelope_hash"]
+    errs = evidence.validate_completion(rec, [])
+    assert any("envelope_hash" in e for e in errs)
+
+
+def test_job_linked_completion_requires_job_id_and_run_id_together():
+    rec = _job_completion()
+    del rec["run_id"]
+    errs = evidence.validate_completion(rec, [])
+    assert any("run_id" in e for e in errs)
+
+
+def test_non_job_open_completion_still_requires_approval_id():
+    # Regression: existing per-action-approval behavior must be untouched.
+    rec = _job_completion(job_id="", envelope_hash="", run_id="")
+    errs = evidence.validate_completion(rec, [])
+    assert any("requires an approval_id" in e for e in errs)
+
+
+def test_is_job_linked():
+    assert evidence.is_job_linked(_job_completion()) is True
+    assert evidence.is_job_linked(_job_completion(job_id="")) is False
+
+
 def test_cli_runner_flags_invalid_dir(tmp_path):
     proc = subprocess.run(
         [sys.executable, str(_REPO / "cooper-core" / "evidence.py"), str(FIXTURES)],

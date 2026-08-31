@@ -35,6 +35,12 @@ _APPROVAL_REQUIRED = {
     "approval_id": str, "workflow_id": str, "status": str,
     "requested_time": str, "reason": str,
 }
+_JOB_LINKAGE_REQUIRED = {"job_id": str, "envelope_hash": str, "run_id": str}
+
+
+def is_job_linked(record: dict) -> bool:
+    return bool(record.get("job_id"))
+
 
 _RESTRICTED_PREFIX = "Restricted DMZ Workspace/"
 _SENSITIVE_RE = re.compile(
@@ -80,6 +86,9 @@ def validate_completion(record: dict, context: List[dict]) -> List[str]:
 
     workshop = record["workshop_id"]
     approval_id = record["approval_id"]
+    job_linked = is_job_linked(record)
+    if job_linked:
+        errs += _schema_errors(record, _JOB_LINKAGE_REQUIRED)
     if approval_id:
         approval = _find_approval(approval_id, context)
         if approval is None:
@@ -95,7 +104,7 @@ def validate_completion(record: dict, context: List[dict]) -> List[str]:
                     f"consistency: approval '{approval_id}' status is "
                     f"'{approval.get('status')}' — a completion may only cite a completed approval"
                 )
-    elif workshop == "open":
+    elif workshop == "open" and not job_linked:
         errs.append("linkage: open-workshop completion requires an approval_id")
 
     for path in record["artifact_paths"]:
