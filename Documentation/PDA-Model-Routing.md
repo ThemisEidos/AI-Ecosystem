@@ -1,5 +1,10 @@
 # PDA Model Routing
 
+> **Superseded 2026-08-30 (Step 15c):** `Scripts/PDA_ModelRouting.json` was rewritten
+> for cooper-core's role→alias routing map; the `command_routes`/`category_routes`
+> schema this document describes no longer exists in that file. This document is
+> retained for historical reference to the retired v1 PowerShell router only.
+
 This document defines PDA Governance & Model Routing v1.
 
 ## Goal

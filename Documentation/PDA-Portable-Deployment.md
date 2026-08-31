@@ -47,7 +47,7 @@ server) does not need any of these.
 |---|---|---|
 | Python 3.11+ with `venv` + `pip` | run `cooper-core` bare-metal; run the pytest suite | `setup-linux.sh` (apt: `python3-venv`, `python3-pip`) |
 | Ollama (host install) | fast local inference for bare-metal dev | `setup-linux.sh` (official installer) |
-| Ollama model `gemma4:12b`, aliased `COOPER-Private` | COOPER's private-workshop model (~7.6 GB download) | `setup-linux.sh` (`ollama pull` + `ollama cp`) |
+| Ollama model `gemma4:e4b-it-qat`, aliased `COOPER-Private` | COOPER's private-workshop model (~6.1 GB download) | `setup-linux.sh` (`ollama pull` + `ollama cp`) |
 | PowerShell 7 (`pwsh`) | the `powershell` executor tools when running bare-metal (the Docker image installs its own) | `setup-linux.sh` (GitHub tarball — Microsoft's apt repo is SHA1-signed and rejected by modern apt, see `Gotchas.md` 2026-07-02) |
 | sqlite3 CLI | inspecting `cooper_memory.db` | `setup-linux.sh` (apt) |
 

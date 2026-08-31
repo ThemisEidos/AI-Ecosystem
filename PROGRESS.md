@@ -967,10 +967,23 @@ Execution order: 15a → 14a(rev) → 15c → 14b → 15d → 15e → 14c(+15f-i
     3.1GB + 12b's 7.9GB exceed this host's 6GB VRAM together).
   - **Task 1** rewrote `Scripts/PDA_ModelRouting.json` into a 7-role
     (`classifier, brain, planner, executor, reviewer, drafter, archivist`) → alias map,
-    replacing the unused legacy v1 schema. `classifier`/`planner`/`executor` are
-    intentionally map-only (no call site today — classifier folded into brain at 15a,
-    planner/executor don't exist until 15e), flagged in the JSON's own `notes` fields so
-    15d/15e's authors don't have to re-derive why. Reviewed clean.
+    deleting the old v1 schema (`command_routes`, `category_routes`,
+    `worker_command_map`, etc.). `classifier`/`planner`/`executor` are intentionally
+    map-only (no call site today — classifier folded into brain at 15a, planner/executor
+    don't exist until 15e), flagged in the JSON's own `notes` fields so 15d/15e's
+    authors don't have to re-derive why. Reviewed clean.
+    **Correction (final-review fix wave, 2026-08-30):** the deleted v1 schema was NOT
+    unused — it has real (now-broken) consumers: `Scripts/Get-PDAModelRoute.ps1` (hard-
+    throws `"Model routing policy is missing command_routes."`),
+    `Scripts/Get-PDADashboardStatus.ps1` and `Scripts/Update-PDADashboard.ps1` (silently
+    show empty routing tables), and `Scripts/Test-PDAModelFallback.ps1` (its fallback-
+    injection setup now no-ops). `Documentation/PDA-Model-Routing.md` still described the
+    deleted schema as current — marked superseded. **Owner decision: accept this
+    breakage** — it matches the repo's documented v1→v2 retirement story
+    (`Scripts/` is legacy, maintained not extended, per CLAUDE.md; v2/cooper-core never
+    consumed these enforcement rules for anything). Not fixing the v1 scripts, not
+    restoring any deleted keys — this is intentional, accepted v1 breakage, not an
+    oversight.
   - **Task 2** added `cooper-core/model_routing.py` (`model_for(role, workshop)`,
     `load_routing()`, `ModelRoutingError`) — a pure lookup over Task 1's JSON. 6 new
     tests. Reviewed clean.
@@ -1061,6 +1074,42 @@ Execution order: 15a → 14a(rev) → 15c → 14b → 15d → 15e → 14c(+15f-i
     mapped alias (Task 3's four independent module-level constants + dispatch-level
     tests, now confirmed live on both stacks' `/health`). Next: per the roadmap execution
     order, 14b.
+  - **Final-review fix wave (2026-08-30):** the whole-branch review raised 4 findings;
+    all 4 fixed in one wave.
+    - **Finding 1 (owner decision — make it true failover):** Task 5's same-`model_name`
+      pool (`openai` deployed twice — direct OpenAI + OpenRouter) defaulted to LiteLLM's
+      `simple-shuffle` 50/50 load-balancing, not failover — meaning ~half of all healthy
+      Open Workshop traffic would silently go through OpenRouter. **Reverted the pool**:
+      `litellm/litellm_config.yaml` now has a single `openai` deployment again, with
+      `openrouter` (the pre-existing standalone alias) added to the front of the
+      existing cross-alias `fallbacks:` chain (`openai: [openrouter, claude, gemini]`).
+      Fallbacks only ever fire on the primary's own deployment(s) failing — true
+      failover-only semantics, no healthy-state OpenRouter traffic. Live-verified against
+      the real Open stack (two-checkout mitigation, main checkout restored after):
+      10/10 calls to `openai` served by direct OpenAI in the healthy state (zero
+      OpenRouter); killing the primary key (explicit invalid literal, not a nonexistent
+      `os.environ/<var>` name — see Task 5's methodology finding above) produced
+      `Falling back to model_group = openrouter` in the logs and 100% successful
+      completions via OpenRouter, including one native tool-calling dispatch turn
+      (`finish_reason: "tool_calls"`) through the fallback path — the gap the reviewer
+      flagged as untested. Reverted the key and confirmed both deployments healthy
+      again; main checkout restored to original committed state.
+    - **Finding 2 (owner decision — accept v1 breakage, fix the docs):** PROGRESS.md's
+      Task 1 entry above corrected to name the real v1 consumers affected. Added a
+      superseded notice to the top of `Documentation/PDA-Model-Routing.md`.
+    - **Finding 3:** `test_execute_passes_each_role_its_own_mapped_model`
+      (`cooper-core/test_main_dispatch.py`) was tautological — every role maps to the
+      same alias today, so its assertions reduced to string-equals-itself. Fixed by
+      monkeypatching `REVIEWER_MODEL`/`DRAFTER_MODEL`/`ARCHIVIST_MODEL` to distinct
+      sentinel values before dispatch. Proved detection power: temporarily swapping
+      `ARCHIVIST_MODEL`/`DRAFTER_MODEL` at their `_post_dispatch` call sites made the
+      test fail (`assert 'sentinel-drafter' == 'sentinel-archivist'`); reverted and
+      confirmed passing again.
+    - **Finding 4:** `Documentation/PDA-Portable-Deployment.md`'s install-guide table
+      still named `gemma4:12b`/~7.6GB; corrected to `gemma4:e4b-it-qat`/~6.1GB
+      (verified via `docker exec pda-private-ollama ollama list`), matching what Task 4
+      actually made `setup-linux.sh` pull.
+    - Full suite: 274/274 passing after all four fixes.
 
 ---
 
