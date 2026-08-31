@@ -38,6 +38,7 @@ import archivist
 import embeddings
 import proposer
 import skills
+import jobs
 import gateway
 import model_routing
 
@@ -528,6 +529,15 @@ async def pending(session_id: str = Depends(_session_id)):
             "age_seconds":       round(time.time() - ticket.created_at, 1),
         },
     }
+
+
+# ── Jobs (Step 14b) ──────────────────────────────────────────────────────────
+@app.post("/jobs/run/{job_id}", dependencies=[Depends(_require_auth)])
+async def run_job(job_id: str):
+    job_entry = jobs.get_job(job_id)
+    if job_entry is None:
+        raise HTTPException(status_code=404, detail=f"unknown job id '{job_id}'")
+    return await jobs.run_job(job_id, _ARCHIVIST_CONN)
 
 
 # ── Workshop status ───────────────────────────────────────────────────────────

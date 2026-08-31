@@ -1,6 +1,12 @@
+import asyncio
+import json
+from pathlib import Path
+
 import pytest
 
 import archivist
+import evidence
+import executor
 import jobs
 
 
@@ -110,3 +116,177 @@ def test_csv_next_rows_returns_empty_when_all_checked_today(tmp_path):
 def test_url_verify_reports_unreachable_for_bad_host():
     result = jobs.url_verify("https://this-host-does-not-exist.invalid/", None)
     assert result["reachable"] is False
+
+
+# ── run_job orchestration (Task 6) ──────────────────────────────────────────
+
+def _approved_job(**overrides):
+    """A link-checker-shaped job entry, approved with a matching envelope_hash
+    computed AFTER overrides so a test can freely reshape read_scope/write_scope/
+    quota and still get a hash that verify_job accepts."""
+    entry = {
+        "id": "link-checker",
+        "workshop": "open",
+        "schedule_hint": "daily 03:00",
+        "steps": ["csv_next_rows", "url_verify", "csv_line_edit"],
+        "read_scope": ["State/LinkAudit/links.csv"],
+        "write_scope": ["State/LinkAudit/links.csv"],
+        "quota": {"rows_per_run": 10, "fetches_per_run": 30},
+        "permission_level": 3,
+        "approved": True,
+    }
+    entry.update(overrides)
+    entry["envelope_hash"] = jobs.compute_envelope_hash(entry)
+    return entry
+
+
+def _write_links_csv(path: Path, rows):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lines = ["url,last_checked,status,notes"]
+    for url, last_checked, status, notes in rows:
+        lines.append(f"{url},{last_checked},{status},{notes}")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _fake_url_verify(reachable=True, content_changed=None):
+    def _fn(url, expected_hash):
+        return {
+            "url": url,
+            "reachable": reachable,
+            "status_code": 200 if reachable else None,
+            "content_changed": content_changed,
+            "checked_at": "2026-08-30T00:00:00Z",
+        }
+    return _fn
+
+
+def test_run_job_refuses_unapproved_job(conn, tmp_path, monkeypatch):
+    registry = {"jobs": [{**MINIMAL_JOB, "approved": False, "id": "link-checker"}]}
+    monkeypatch.setattr(jobs, "load_registry", lambda path=None: registry)
+    result = asyncio.run(jobs.run_job("link-checker", conn))
+    assert result["status"] == "refused"
+    assert "not approved" in result["reason"].lower()
+
+
+def test_run_job_refuses_unknown_job_id(conn, tmp_path, monkeypatch):
+    monkeypatch.setattr(jobs, "load_registry", lambda path=None: {"jobs": []})
+    result = asyncio.run(jobs.run_job("does-not-exist", conn))
+    assert result["status"] == "refused"
+
+
+def test_run_job_enqueues_exception_for_out_of_scope_write(conn, tmp_path, monkeypatch):
+    # write_scope deliberately does NOT include the CSV path read_scope/csv_next_rows
+    # will actually target, so the csv_line_edit -> _run_file_edit call must raise
+    # ExecutionError, and run_job must catch it (not raise, not silently succeed).
+    monkeypatch.setattr(jobs, "_REPO_ROOT", tmp_path)
+    monkeypatch.setattr(executor, "_REPO_ROOT", tmp_path)
+    csv_path = tmp_path / "State" / "LinkAudit" / "links.csv"
+    original = "url,last_checked,status,notes\nhttps://a.example,,,\n"
+    _write_links_csv(csv_path, [("https://a.example", "", "", "")])
+    on_disk_before = csv_path.read_text()
+
+    job_entry = _approved_job(write_scope=["State/LinkAudit/other.csv"])
+    monkeypatch.setattr(jobs, "load_registry", lambda path=None: {"jobs": [job_entry]})
+    monkeypatch.setattr(jobs, "url_verify", _fake_url_verify())
+
+    result = asyncio.run(jobs.run_job("link-checker", conn))
+
+    assert result["status"] == "completed"
+    assert result["exceptions_raised"] == 1
+    pending = jobs.list_exceptions(conn, status="pending")
+    assert len(pending) == 1
+    assert pending[0]["job_id"] == "link-checker"
+    # The file was NOT written.
+    assert csv_path.read_text() == on_disk_before
+
+
+def test_run_job_full_success_writes_csv_and_evidence(conn, tmp_path, monkeypatch):
+    monkeypatch.setattr(jobs, "_REPO_ROOT", tmp_path)
+    monkeypatch.setattr(executor, "_REPO_ROOT", tmp_path)
+    csv_path = tmp_path / "State" / "LinkAudit" / "links.csv"
+    _write_links_csv(csv_path, [
+        ("https://a.example", "", "", ""),
+        ("https://b.example", "", "", ""),
+    ])
+
+    job_entry = _approved_job()
+    monkeypatch.setattr(jobs, "load_registry", lambda path=None: {"jobs": [job_entry]})
+    monkeypatch.setattr(jobs, "url_verify", _fake_url_verify(reachable=True))
+
+    result = asyncio.run(jobs.run_job("link-checker", conn))
+
+    assert result["status"] == "completed"
+    assert result["rows_checked"] == 2
+    assert result["exceptions_raised"] == 0
+    assert jobs.list_exceptions(conn, status="pending") == []
+
+    updated = csv_path.read_text()
+    assert "url,last_checked,status,notes" in updated
+    assert ",,,\n" not in updated  # both rows got last_checked/status filled in
+
+    evidence_path = Path(result["evidence_path"])
+    assert evidence_path.exists()
+    record = json.loads(evidence_path.read_text(encoding="utf-8"))
+    assert record["job_id"] == "link-checker"
+    assert record["run_id"] == result["run_id"]
+    assert record["envelope_hash"] == job_entry["envelope_hash"]
+    errs = evidence.validate_completion(record, [])
+    assert errs == []
+
+
+def test_run_job_respects_rows_per_run_quota(conn, tmp_path, monkeypatch):
+    monkeypatch.setattr(jobs, "_REPO_ROOT", tmp_path)
+    monkeypatch.setattr(executor, "_REPO_ROOT", tmp_path)
+    csv_path = tmp_path / "State" / "LinkAudit" / "links.csv"
+    _write_links_csv(csv_path, [
+        ("https://a.example", "", "", ""),
+        ("https://b.example", "", "", ""),
+        ("https://c.example", "", "", ""),
+    ])
+
+    job_entry = _approved_job(quota={"rows_per_run": 2, "fetches_per_run": 30})
+    monkeypatch.setattr(jobs, "load_registry", lambda path=None: {"jobs": [job_entry]})
+    monkeypatch.setattr(jobs, "url_verify", _fake_url_verify(reachable=True))
+
+    result = asyncio.run(jobs.run_job("link-checker", conn))
+
+    assert result["status"] == "completed"
+    assert result["rows_checked"] == 2
+
+    updated = csv_path.read_text()
+    # third row untouched — still no last_checked/status.
+    assert "https://c.example,,," in updated.replace("\r", "")
+
+
+def test_run_job_caps_fetches_at_fetches_per_run_quota(conn, tmp_path, monkeypatch):
+    monkeypatch.setattr(jobs, "_REPO_ROOT", tmp_path)
+    monkeypatch.setattr(executor, "_REPO_ROOT", tmp_path)
+    csv_path = tmp_path / "State" / "LinkAudit" / "links.csv"
+    _write_links_csv(csv_path, [
+        ("https://a.example", "", "", ""),
+        ("https://b.example", "", "", ""),
+        ("https://c.example", "", "", ""),
+    ])
+
+    job_entry = _approved_job(quota={"rows_per_run": 10, "fetches_per_run": 1})
+    monkeypatch.setattr(jobs, "load_registry", lambda path=None: {"jobs": [job_entry]})
+    monkeypatch.setattr(jobs, "url_verify", _fake_url_verify(reachable=True))
+
+    result = asyncio.run(jobs.run_job("link-checker", conn))
+
+    assert result["status"] == "completed"
+    assert result["rows_checked"] == 1
+
+
+def test_run_job_counts_rows_changed(conn, tmp_path, monkeypatch):
+    monkeypatch.setattr(jobs, "_REPO_ROOT", tmp_path)
+    monkeypatch.setattr(executor, "_REPO_ROOT", tmp_path)
+    csv_path = tmp_path / "State" / "LinkAudit" / "links.csv"
+    _write_links_csv(csv_path, [("https://a.example", "", "", "")])
+
+    job_entry = _approved_job()
+    monkeypatch.setattr(jobs, "load_registry", lambda path=None: {"jobs": [job_entry]})
+    monkeypatch.setattr(jobs, "url_verify", _fake_url_verify(reachable=True, content_changed=True))
+
+    result = asyncio.run(jobs.run_job("link-checker", conn))
+    assert result["rows_changed"] == 1
