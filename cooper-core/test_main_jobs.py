@@ -30,9 +30,15 @@ def test_post_jobs_run_returns_run_job_result(monkeypatch):
         }
 
     monkeypatch.setattr(main.jobs, "run_job", fake_run_job)
+    digest_calls = []
+    monkeypatch.setattr(
+        main.jobs, "write_digest", lambda conn: digest_calls.append(conn) or "/tmp/fake-digest.md"
+    )
 
     with TestClient(main.app) as client:
         resp = client.post("/jobs/run/link-checker")
+
+    assert digest_calls == [main._ARCHIVIST_CONN]
 
     assert resp.status_code == 200
     body = resp.json()

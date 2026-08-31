@@ -278,6 +278,68 @@ def test_run_job_caps_fetches_at_fetches_per_run_quota(conn, tmp_path, monkeypat
     assert result["rows_checked"] == 1
 
 
+# ── write_digest (Task 7) ────────────────────────────────────────────────────
+
+def test_write_digest_includes_todays_job_runs_and_pending_exceptions(conn, tmp_path, monkeypatch):
+    import datetime
+
+    monkeypatch.setattr(jobs, "_EVIDENCE_DIR", tmp_path / "evidence")
+    monkeypatch.setattr(jobs, "_DIGEST_DIR", tmp_path / "inbox")
+    (tmp_path / "evidence").mkdir()
+    (tmp_path / "inbox").mkdir()
+
+    today = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
+    evidence_record = {
+        "workflow_id": "link-checker",
+        "workflow_name": "link-checker",
+        "execution_id": "20260830T000000000Z",
+        "status": "completed",
+        "completion_time": f"{today}T00:00:00.000000Z",
+        "workshop_id": "open",
+        "workshop_name": "Open Workshop",
+        "approval_id": "",
+        "artifact_paths": ["State/LinkAudit/links.csv"],
+        "review_status": "unknown",
+        "user_accepted": False,
+        "notes": "run_id=run-1: checked 2 row(s), 1 changed, 2 fetch(es) used.",
+        "job_id": "link-checker",
+        "envelope_hash": "abc123",
+        "run_id": "run-1",
+    }
+    (tmp_path / "evidence" / "workflow_completion_link-checker_20260830T000000000Z.json").write_text(
+        json.dumps(evidence_record), encoding="utf-8"
+    )
+    # A non-job-linked completion record (no job_id) must not appear as a job run.
+    (tmp_path / "evidence" / "workflow_completion_other_20260830T010000000Z.json").write_text(
+        json.dumps({**evidence_record, "job_id": "", "workflow_id": "manual-thing"}),
+        encoding="utf-8",
+    )
+
+    # write one fake today-dated job evidence record + one pending exception, then:
+    jobs.enqueue_exception(conn, "link-checker", "run-1", "action", "reason")
+    path = jobs.write_digest(conn)
+    text = path.read_text()
+    assert "link-checker" in text
+    assert "reason" in text
+    assert "manual-thing" not in text
+    assert path.name == f"COOPER-Digest-{today}.md"
+
+
+def test_write_digest_is_idempotent_per_day(conn, tmp_path, monkeypatch):
+    monkeypatch.setattr(jobs, "_EVIDENCE_DIR", tmp_path / "evidence")
+    monkeypatch.setattr(jobs, "_DIGEST_DIR", tmp_path / "inbox")
+    (tmp_path / "evidence").mkdir()
+    (tmp_path / "inbox").mkdir()
+
+    jobs.write_digest(conn)
+    jobs.enqueue_exception(conn, "link-checker", "run-2", "action", "second run")
+    path_two = jobs.write_digest(conn)
+
+    files = list((tmp_path / "inbox").glob("COOPER-Digest-*.md"))
+    assert len(files) == 1
+    assert "second run" in path_two.read_text()
+
+
 def test_run_job_counts_rows_changed(conn, tmp_path, monkeypatch):
     monkeypatch.setattr(jobs, "_REPO_ROOT", tmp_path)
     monkeypatch.setattr(executor, "_REPO_ROOT", tmp_path)

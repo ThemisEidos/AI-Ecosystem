@@ -33,6 +33,14 @@ import executor
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _REGISTRY_PATH = _REPO_ROOT / "Config" / "jobs_registry.yaml"
 
+# write_job_evidence computes its own output dir inline (from _REPO_ROOT, so
+# Task 6's tests can relocate it by monkeypatching _REPO_ROOT). These two are
+# separate, dedicated constants for write_digest to read/write through — same
+# monkeypatch-a-module-constant pattern as _REGISTRY_PATH above, but pointed at
+# by name rather than derived through _REPO_ROOT at call time.
+_EVIDENCE_DIR = _REPO_ROOT / "State" / "Workflow_Evidence" / "completion"
+_DIGEST_DIR = _REPO_ROOT / "Obsidian Vault" / "00_Inbox"
+
 # url_verify: short, bounded — a job step must fail fast, not hang a run.
 _URL_VERIFY_TIMEOUT = 5.0
 
@@ -395,3 +403,92 @@ async def run_job(job_id: str, conn: sqlite3.Connection, registry_path: Optional
         "fetches_capped": fetches_capped,
         "evidence_path": str(evidence_path),
     }
+
+
+def _todays_job_evidence(day: str) -> List[dict]:
+    """Every job-linked completion record under _EVIDENCE_DIR whose
+    completion_time falls on `day` (UTC 'YYYY-MM-DD'). Records with no job_id
+    (ordinary, non-job workflow completions) are excluded — the digest is a
+    jobs status report, not a general evidence viewer. Malformed/unreadable
+    files are skipped rather than failing the whole digest (best-effort,
+    matching url_verify's degrade-don't-propagate convention elsewhere in this
+    module)."""
+    records: List[dict] = []
+    if not _EVIDENCE_DIR.exists():
+        return records
+    for path in sorted(_EVIDENCE_DIR.glob("*.json")):
+        try:
+            record = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(record, dict) or not record.get("job_id"):
+            continue
+        if not str(record.get("completion_time", "")).startswith(day):
+            continue
+        records.append(record)
+    return records
+
+
+def write_digest(conn: sqlite3.Connection, date: Optional[str] = None) -> Path:
+    """Write/overwrite the day's Obsidian inbox digest note — one file per day
+    (Obsidian Vault/00_Inbox/COOPER-Digest-<date>.md), so the owner reads one
+    note instead of N job-run logs. Idempotent per day: re-running jobs later
+    the same day calls this again and it updates the same file in place
+    (deterministic filename from `date`, plain overwrite — no append, no
+    duplicate). `date` defaults to today (UTC, 'YYYY-MM-DD'); a caller can pass
+    a specific day for testing or backfill.
+
+    Covers, per the spec: which jobs ran today (job-linked completion records
+    under _EVIDENCE_DIR dated today), what changed (each record's own `notes`
+    summary — evidence.py only requires the strict completion schema fields,
+    extra fields like `notes` pass through untouched), pending exceptions
+    (jobs.list_exceptions(conn, status="pending")), and anything needing
+    attention (any today's run whose status isn't "completed", or that itself
+    raised an exception this run).
+    """
+    day = date or datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
+    runs = _todays_job_evidence(day)
+    pending = list_exceptions(conn, status="pending")
+    needs_attention = [r for r in runs if r.get("status") != "completed"]
+
+    lines = [f"# COOPER Job Digest — {day}", ""]
+
+    lines.append(f"## Jobs run today ({len(runs)})")
+    if runs:
+        for r in runs:
+            lines.append(
+                f"- **{r.get('job_id')}** (run `{r.get('run_id', '')}`, "
+                f"{r.get('status', 'unknown')}) — {r.get('notes') or 'no summary recorded'}"
+            )
+    else:
+        lines.append("- no job runs recorded today.")
+    lines.append("")
+
+    lines.append(f"## Pending exceptions ({len(pending)})")
+    if pending:
+        for e in pending:
+            lines.append(
+                f"- **{e.get('job_id')}** (run `{e.get('run_id', '')}`): "
+                f"{e.get('proposed_action')} — {e.get('reason')}"
+            )
+    else:
+        lines.append("- none.")
+    lines.append("")
+
+    lines.append(f"## Needs attention ({len(needs_attention)})")
+    if needs_attention:
+        for r in needs_attention:
+            lines.append(
+                f"- **{r.get('job_id')}** (run `{r.get('run_id', '')}`) — "
+                f"status: {r.get('status')}. {r.get('notes') or ''}"
+            )
+    else:
+        lines.append("- none — every job run today completed cleanly.")
+    lines.append("")
+
+    text = "\n".join(lines).rstrip() + "\n"
+
+    _DIGEST_DIR.mkdir(parents=True, exist_ok=True)
+    out_path = _DIGEST_DIR / f"COOPER-Digest-{day}.md"
+    out_path.write_text(text, encoding="utf-8")
+    return out_path
