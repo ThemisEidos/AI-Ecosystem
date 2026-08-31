@@ -422,3 +422,45 @@ SDK does its own env-var fallback discovery — the absence has to be verified a
 that actually makes the call, not just at the layer that's supposed to supply it. Flagged
 as worthwhile by both the Task 5 implementer and Task 5's reviewer but out of scope for
 either to write down; recorded here at 15c's Task 6 (docs) instead.
+
+### 2026-08-30 · `docker compose up --build <one-service>` can silently recreate a DIFFERENT, already-running service and strip its secrets
+
+Found live during 15c Task 6's fix-round, rebuilding Open's `cooper-core` from this
+worktree (which lacks the gitignored `PDA-Runtime/.env` and `litellm/.env.local`).
+`docker-compose.yml`'s `litellm` service declares `env_file: ../litellm/.env.local`; that
+file doesn't exist in the worktree, and `docker compose` refuses to parse the **entire**
+file over one missing `env_file` reference, regardless of which service is actually
+targeted (`up -d --build cooper-core` still fails on `litellm`'s directive). Worked around
+it by temporarily commenting out just that one `env_file` line so compose could parse, ran
+`up -d --build cooper-core` — and compose recreated **both** `cooper-core` (the intended
+target) **and** the already-running `litellm` container, even though only `cooper-core` was
+named on the command line. Because the `env_file` line was commented out, the recreated
+`litellm` came up with **zero** of its real provider keys.
+
+**Mechanism:** `docker compose up -d --build <service>` only *builds* the named service,
+but its reconciliation pass still compares every service's *declared* config (the whole
+file, as just parsed) against each container's *currently applied* config, and recreates
+any container whose effective config no longer matches — not just the one named on the
+command line. Editing one line for one service's env-file list changed `litellm`'s
+declared config hash, so compose treated `litellm` as needing recreation too, silently,
+with no confirmation prompt and no service name on the command line to warn otherwise.
+
+**Confirmed, not assumed:** `docker exec pda-litellm printenv | grep -c API_KEY` → `0`
+immediately after the incident (should be `4`). Caught within seconds by checking this
+directly rather than trusting `docker ps`'s "healthy"/"Up" status, which showed nothing
+wrong — LiteLLM starts and serves normally even fully unauthenticated to its upstream
+providers; the break only surfaces on the first real inference call.
+
+**Fix, live-verified:** recreate the damaged service from a checkout where its real
+env file genuinely exists — here, `docker compose -f PDA-Runtime/docker-compose.yml up -d
+litellm` run from the **main checkout**, not the worktree. Confirmed restored via the same
+`printenv | grep -c API_KEY` check (`4`, matching pre-incident) and a real end-to-end
+authenticated `POST /chat` on Open replying correctly. The compose-file edit itself was
+then reverted (`git checkout --`) and confirmed clean.
+
+**Takeaway for any future worktree-based rebuild that touches a multi-service compose
+file:** a `docker compose up -d --build <target>` from a worktree missing one or more
+services' secret files is not safely scoped to that target — it can implicitly recreate
+and break *any* other service in the same file whose declared config you had to touch
+(even temporarily) to get compose to parse at all. Verify every *other* running service's
+critical env/state immediately after such a rebuild, not just the one you meant to touch.

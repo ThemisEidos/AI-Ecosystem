@@ -1014,32 +1014,53 @@ Execution order: 15a → 14a(rev) → 15c → 14b → 15d → 15e → 14c(+15f-i
     present in the container's process env, bypassing LiteLLM's own unresolved reference —
     had to use an explicit invalid literal key instead to genuinely simulate a dead/revoked
     key. See Gotchas.md's 2026-08-30 entry for the full mechanism. Reviewed clean.
-  - **Task 6 (this entry)** ran the full-suite regression pass one more time from a clean
-    checkout state — **274 passed** (`cd cooper-core && .venv/bin/python -m pytest -q`),
-    matching Task 3's count exactly (no code changes in Tasks 4-6). Live-verified both
-    stacks' `/health` side by side:
+  - **Task 6** ran the full-suite regression pass one more time from a clean checkout
+    state — **274 passed** (`cd cooper-core && .venv/bin/python -m pytest -q`), matching
+    Task 3's count exactly (no code changes in Tasks 4-6). First live-verify of both
+    stacks' `/health` found a real gap: Open still showed the pre-15c `classifier`/
+    `utility_model` schema, not the new `roles` dict — its `cooper-core` container had
+    never been rebuilt by this plan (only Task 5's `litellm` container was recreated,
+    then reverted). Ruled in-scope to close rather than leave documented-but-unfixed,
+    since Task 3's `/health` change applies to both workshops and "15c shipped" would
+    otherwise be inaccurate for half the system. Rebuilt Open's `cooper-core` for real,
+    using Task 4's proven pattern (real secrets read from the main checkout's
+    `PDA-Runtime/.env` via `grep`, exported inline into the same shell command as the
+    `docker compose up -d --build cooper-core` invocation — never written to disk, never
+    sourced from a worktree copy). Hit one new wrinkle Task 4 didn't: the compose file
+    also declares `env_file: ../litellm/.env.local` for the `litellm` service, and that
+    file — also gitignored, also DO-NOT-TOUCH — doesn't exist in this worktree either, so
+    `docker compose` refused to parse the file at all, for *any* targeted service.
+    Temporarily commented out just that `env_file` line (docker-compose.yml is not a
+    secrets file — the two-line comment-out touched no credentials) to let compose parse;
+    the rebuild then succeeded, but compose's reconciliation also recreated the running
+    `litellm` container (its declared config had changed) — **stripping its real
+    provider keys**, confirmed live: `docker exec pda-litellm printenv | grep -c API_KEY`
+    → `0`. Caught immediately via that same check, not assumed fine. Fixed by running
+    `docker compose -f PDA-Runtime/docker-compose.yml up -d litellm` from the **main
+    checkout** (not the worktree), where the real `litellm/.env.local` physically exists
+    on disk — recreated `litellm` again with its real keys restored (`printenv | grep -c
+    API_KEY` → `4`, matching pre-incident count), confirmed via a clean debug-log
+    startup (`Initialized Model List [...]`, no errors) and a real authenticated round
+    trip: `POST /chat` on Open replied `"OK"` with `decision:"answer"` — proof the whole
+    chain (cooper-core → LiteLLM → real provider) was intact. Reverted the
+    docker-compose.yml comment-out via `git checkout --`, confirmed `git diff`/`git
+    status` on it both clean. Re-ran the full suite (still 274/274) and the side-by-side
+    `/health` check for real:
     ```
     Private (:8000): {"status":"ok","workshop":"private","backend":"ollama","model":"COOPER-Private","roles":{"brain":"COOPER-Private","reviewer":"COOPER-Private","drafter":"COOPER-Private","archivist":"COOPER-Private"}}
-    Open (:8001):    {"status":"ok","workshop":"open","backend":"openai","model":"openai","classifier":"openai","utility_model":"openai"}
+    Open (:8001):    {"status":"ok","workshop":"open","backend":"openai","model":"openai","roles":{"brain":"openai","reviewer":"openai","drafter":"openai","archivist":"openai"}}
     ```
-    Private's `roles` dict confirms all 4 live roles resolved to `COOPER-Private`, as
-    expected. Open shows the pre-15c `classifier`/`utility_model` schema, not the new
-    `roles` dict — its `cooper-core` container was never rebuilt by this plan (only
-    Task 5's `litellm` container was recreated, then reverted); the 2026-08-30
-    approval-ticket-fix session did rebuild Open earlier the same day, so what's running
-    is that fix plus pre-15c routing code. Confirmed this is a deployment-timing gap, not a
-    functional gap: `Scripts/PDA_ModelRouting.json` maps every one of the 7 roles to
-    `"openai"` on the `open` workshop, identical to the value the old `classifier`/
-    `utility_model` fields already carried — so Open's behavior is unchanged either way.
-    Rebuilding Open to pick up Task 3's code (and expose the new `/health` shape) is
-    low-risk and can happen the next time Open's `cooper-core` is touched; not forced here
-    to avoid re-triggering Task 4's worktree-`.env` live-auth hiccup for a docs-only task.
-  - Both stacks' live containers are otherwise healthy and reflect all of Tasks 1-5's
-    changes. 15c's DoD is satisfied: role→alias map live (Task 1-2), Private E4B/12B split
-    decided and live with the benchmark as its entry gate (Task 4), LiteLLM fallback pools
-    live-DoD-tested (Task 5), each role provably resolves to its own mapped alias (Task 3's
-    four independent module-level constants + dispatch-level tests). Next: per the roadmap
-    execution order, 14b.
+    Both stacks now genuinely show the `roles` dict live — Private all `COOPER-Private`,
+    Open all `openai`, exactly as the brief expected. `docker ps` confirms both
+    `pda-open-cooper-core` (healthy) and `pda-litellm` up and stable afterward.
+  - Both stacks' live containers are healthy and reflect all of Tasks 1-5's changes,
+    fully rebuilt where 15c's code touched them. 15c's DoD is satisfied: role→alias map
+    live on both workshops (Task 1-2-3, now live-confirmed on Open too), Private E4B/12B
+    split decided and live with the benchmark as its entry gate (Task 4), LiteLLM
+    fallback pools live-DoD-tested (Task 5), each role provably resolves to its own
+    mapped alias (Task 3's four independent module-level constants + dispatch-level
+    tests, now confirmed live on both stacks' `/health`). Next: per the roadmap execution
+    order, 14b.
 
 ---
 

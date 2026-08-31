@@ -25,11 +25,23 @@ provider key mid-conversation → turn completes via fallback, logged) was live-
 reverted, surfacing a genuine methodology finding — see Gotchas.md's 2026-08-30 entry
 (`os.environ/<nonexistent-var>` doesn't actually break a LiteLLM deployment's auth, because
 the underlying SDK auto-discovers the real key still in the process env). Final regression:
-274/274 green; both stacks' `/health` live-checked side by side — Private's `roles` dict
-all `COOPER-Private` as expected, Open still shows the pre-15c `classifier`/`utility_model`
-schema (its `cooper-core` container wasn't rebuilt by this plan, only `litellm` was) but is
-functionally identical since every role maps to `"openai"` either way. Full detail:
-PROGRESS.md's 2026-08-30 entry. **Next up: 14b** per the roadmap execution order.
+274/274 green. First live `/health` pass found Open's `cooper-core` still on stale pre-15c
+code (never rebuilt by this plan) — ruled in-scope to close, since Task 3's `roles` change
+applies to both workshops. Rebuilt Open for real using Task 4's exact safe pattern (real
+secrets read from the main checkout's `.env`, exported inline, never written to disk or
+sourced from the worktree). Hit one new wrinkle along the way: `docker-compose.yml` also
+needs `litellm/.env.local` (also gitignored, also absent from the worktree) just to parse,
+regardless of target service — working around that briefly (temporary comment-out of one
+`env_file` line, reverted after) caused compose to also recreate the *already-running*
+`litellm` container, silently stripping its real provider keys. Caught immediately
+(`docker exec pda-litellm printenv | grep -c API_KEY` → `0`), fixed by recreating `litellm`
+from the **main checkout** (where its real `.env.local` physically exists), restored and
+confirmed live (`4` keys back, clean startup log, a real authenticated `POST /chat` on Open
+replying `"OK"` end to end through cooper-core → LiteLLM → provider).
+`docker-compose.yml` reverted to its exact committed state (`git diff` clean). Both stacks'
+`/health` re-checked for real: Private's `roles` all `COOPER-Private`, **Open's `roles` all
+`openai`** — both now genuinely live, not just Private. Full detail: PROGRESS.md's
+2026-08-30 entry. **Next up: 14b** per the roadmap execution order.
 
 **15a (native tool-calling dispatch) fully DoD-closed 2026-08-25 — browser click-through
 verified on both stacks, a real governance bypass on Private found and fixed along the
