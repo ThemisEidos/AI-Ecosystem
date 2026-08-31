@@ -511,3 +511,29 @@ def write_digest(conn: sqlite3.Connection, date: Optional[str] = None) -> Path:
     out_path = _DIGEST_DIR / f"COOPER-Digest-{day}.md"
     out_path.write_text(text, encoding="utf-8")
     return out_path
+
+
+def write_critique_note(job_id: str, verdicts: List[dict]) -> Path:
+    """Write the planning-time council's critique to the Obsidian inbox --
+    the owner's approval prompt for job envelopes. There's no chat-based
+    approval ticket for job entries (unlike tool calls); the owner reads
+    this note, then hand-flips 'approved: true' in
+    Config/jobs_registry.yaml themselves, same as today. One file per job id
+    -- a re-critique overwrites the prior note so the owner always sees the
+    current envelope's critique, never a stale one."""
+    objections = [v for v in verdicts if v.get("verdict") == "flag"]
+    lines = [f"# Council Critique -- job `{job_id}`", ""]
+    lines.append(
+        f"## Verdict: {'OBJECTION' if objections else 'clear'} "
+        f"({len(objections)}/{len(verdicts)} flagged)"
+    )
+    lines.append("")
+    for v in verdicts:
+        lines.append(f"- **{v.get('member')}**: {v.get('verdict')} -- {v.get('reason')}")
+    lines.append("")
+    text = "\n".join(lines).rstrip() + "\n"
+
+    _DIGEST_DIR.mkdir(parents=True, exist_ok=True)
+    out_path = _DIGEST_DIR / f"COOPER-Job-Critique-{job_id}.md"
+    out_path.write_text(text, encoding="utf-8")
+    return out_path

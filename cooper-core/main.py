@@ -39,6 +39,7 @@ import embeddings
 import proposer
 import skills
 import jobs
+import council
 import gateway
 import model_routing
 
@@ -544,6 +545,25 @@ async def run_job(job_id: str):
     )
     jobs.write_digest(_ARCHIVIST_CONN)
     return result
+
+
+@app.post("/jobs/critique/{job_id}", dependencies=[Depends(_require_auth)])
+async def critique_job(job_id: str):
+    job_entry = jobs.get_job(job_id)
+    if job_entry is None:
+        raise HTTPException(status_code=404, detail=f"unknown job id '{job_id}'")
+    verdicts = await council.critique_envelope(
+        job_entry, WORKSHOP,
+        base_url=BACKEND_URL, api_key=BACKEND_KEY, backend=BACKEND,
+    )
+    verdict_dicts = council.verdicts_to_dicts(verdicts)
+    note_path = jobs.write_critique_note(job_id, verdict_dicts)
+    return {
+        "job_id": job_id,
+        "objection": council.has_objection(verdicts),
+        "verdicts": verdict_dicts,
+        "note_path": str(note_path),
+    }
 
 
 # ── Workshop status ───────────────────────────────────────────────────────────

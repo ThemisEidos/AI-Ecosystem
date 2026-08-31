@@ -1,5 +1,6 @@
 """main.py jobs wiring: POST /jobs/run/{job_id} (Step 14b Task 6)."""
 import os
+from pathlib import Path
 
 os.environ.setdefault("WORKSHOP", "open")
 os.environ.setdefault("COOPER_ALLOW_ANON", "1")
@@ -71,3 +72,41 @@ def test_post_jobs_run_requires_auth(monkeypatch):
         resp = client.post("/jobs/run/link-checker")
 
     assert resp.status_code == 401
+
+
+def test_critique_endpoint_returns_objection_and_writes_note(monkeypatch, tmp_path):
+    monkeypatch.setattr(main, "_API_KEYS", set())
+    monkeypatch.setattr(main, "_ALLOW_ANON", True)
+    monkeypatch.setattr(main.jobs, "_DIGEST_DIR", tmp_path / "inbox")
+    monkeypatch.setattr(main.jobs, "get_job", lambda job_id, registry=None: {
+        "id": job_id, "workshop": "open", "permission_level": 3,
+        "write_scope": ["/"], "read_scope": [], "quota": {}, "approved": False,
+    })
+
+    async def fake_critique_envelope(job_entry, workshop, **kw):
+        return [
+            main.council.CouncilVerdict(member="openai", verdict="pass", reason="ok"),
+            main.council.CouncilVerdict(member="claude", verdict="flag", reason="write_scope is repo-wide"),
+        ]
+
+    monkeypatch.setattr(main.council, "critique_envelope", fake_critique_envelope)
+
+    with TestClient(main.app) as client:
+        resp = client.post("/jobs/critique/test-job")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["objection"] is True
+    assert len(body["verdicts"]) == 2
+    assert Path(body["note_path"]).exists()
+
+
+def test_critique_endpoint_404s_for_unknown_job(monkeypatch):
+    monkeypatch.setattr(main, "_API_KEYS", set())
+    monkeypatch.setattr(main, "_ALLOW_ANON", True)
+    monkeypatch.setattr(main.jobs, "get_job", lambda job_id, registry=None: None)
+
+    with TestClient(main.app) as client:
+        resp = client.post("/jobs/critique/nonexistent")
+
+    assert resp.status_code == 404

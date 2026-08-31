@@ -405,3 +405,26 @@ def test_run_job_counts_rows_changed(conn, tmp_path, monkeypatch):
 
     result = asyncio.run(jobs.run_job("link-checker", conn, **_RUN_JOB_KWARGS))
     assert result["rows_changed"] == 1
+
+
+def test_write_critique_note_reports_objection(tmp_path, monkeypatch):
+    monkeypatch.setattr(jobs, "_DIGEST_DIR", tmp_path / "inbox")
+    verdicts = [
+        {"member": "openai", "verdict": "pass", "reason": "looks fine"},
+        {"member": "claude", "verdict": "flag", "reason": "write_scope too broad"},
+    ]
+    path = jobs.write_critique_note("test-job", verdicts)
+    assert path.exists()
+    text = path.read_text(encoding="utf-8")
+    assert "test-job" in text
+    assert "OBJECTION" in text
+    assert "claude" in text and "write_scope too broad" in text
+
+
+def test_write_critique_note_reports_clear_when_all_pass(tmp_path, monkeypatch):
+    monkeypatch.setattr(jobs, "_DIGEST_DIR", tmp_path / "inbox")
+    verdicts = [{"member": "openai", "verdict": "pass", "reason": "fine"}]
+    path = jobs.write_critique_note("test-job", verdicts)
+    text = path.read_text(encoding="utf-8")
+    assert "clear" in text.lower()
+    assert "OBJECTION" not in text
