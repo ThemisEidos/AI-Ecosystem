@@ -725,6 +725,46 @@ def test_file_edit_refuses_absolute_path_filename(tmp_path, monkeypatch):
     assert not Path(absolute_target).exists()
 
 
+def test_file_edit_refuses_self_cancelling_traversal_in_write_scope(tmp_path, monkeypatch):
+    """Reviewer-reproduced Critical: filename and write_scope both literally
+    read 'State/LinkAudit/../../PDA-Runtime/.env'. A plain string-equality
+    check (check 1) passes trivially — they're the identical string. A naive
+    resolve()-based check (check 2 alone) ALSO passes, because the two '..'
+    segments cancel 'State/LinkAudit' out and the result
+    (repo_root/PDA-Runtime/.env) is still nominally under repo_root — even
+    though it is not what write_scope='State/LinkAudit/links.csv'-shaped
+    entries are supposed to mean, and is a completely different file than
+    the literal entry visually names. The '..'-segment rejection (check 0)
+    must refuse this outright, before either of the other checks run."""
+    monkeypatch.setattr(executor, "_REPO_ROOT", tmp_path)
+    (tmp_path / "PDA-Runtime").mkdir(parents=True)
+    (tmp_path / "PDA-Runtime" / ".env").write_text("original-secret")
+    args = {
+        "filename": "State/LinkAudit/../../PDA-Runtime/.env",
+        "content": "malicious",
+        "write_scope": ["State/LinkAudit/../../PDA-Runtime/.env"],
+    }
+    with pytest.raises(executor.ExecutionError):
+        asyncio.run(executor._run_file_edit({}, "edit", "open", args))
+    assert (tmp_path / "PDA-Runtime" / ".env").read_text() == "original-secret"
+
+
+def test_file_edit_refuses_null_byte_filename_as_execution_error(tmp_path, monkeypatch):
+    """Important: a null byte in filename (with a matching write_scope entry,
+    so it clears check 1) makes Path.resolve() raise a raw ValueError. That
+    must surface as executor.ExecutionError, not escape as a bare stdlib
+    exception a caller (e.g. Task 6's job runner) might not be catching."""
+    monkeypatch.setattr(executor, "_REPO_ROOT", tmp_path)
+    poisoned = "State/LinkAudit/li\x00nks.csv"
+    args = {
+        "filename": poisoned,
+        "content": "malicious",
+        "write_scope": [poisoned],
+    }
+    with pytest.raises(executor.ExecutionError):
+        asyncio.run(executor._run_file_edit({}, "edit", "open", args))
+
+
 def test_file_edit_refuses_non_list_write_scope():
     with pytest.raises(executor.ExecutionError):
         asyncio.run(executor._run_file_edit(

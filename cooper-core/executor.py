@@ -798,7 +798,21 @@ async def _run_file_edit(tool: dict, message: str, workshop: str, args: dict) ->
     matches one entry in write_scope — no glob, no prefix match, no
     directory-traversal resolution is ever treated as a match.
 
-    Containment is enforced twice, deliberately:
+    Containment is enforced in three steps, deliberately:
+      0. Reject any literal '..' path segment in filename or in ANY
+         write_scope entry, before anything else. This closes a
+         self-cancelling-traversal case a naive two-check design misses:
+         filename="State/LinkAudit/../../PDA-Runtime/.env" with an
+         IDENTICAL write_scope entry passes a plain string-equality check
+         (they're the same string) AND passes a naive "resolves somewhere
+         under repo root" check (the two '..' segments cancel back to
+         PDA-Runtime/.env, which is still nominally under the repo root) —
+         while actually landing on a completely different file than what
+         write_scope visually names. The promised guarantee is "resolves to
+         EXACTLY what write_scope names," not merely "resolves to somewhere
+         under repo root"; those are different invariants. No legitimate
+         job write_scope ever needs a '..' segment, so refusing it outright
+         is a tightening, not a functional regression.
       1. Cheap string equality: filename must literally be a member of
          write_scope. This alone already defeats a traversal string like
          '../../PDA-Runtime/.env' when write_scope only names
@@ -812,9 +826,13 @@ async def _run_file_edit(tool: dict, message: str, workshop: str, args: dict) ->
          replaces the whole path when the right-hand side is absolute, so
          an absolute filename that happens to string-match an equally
          absolute write_scope entry would otherwise slip past check 1 only
-         to land wherever the absolute path says, not under the repo.
+         to land wherever the absolute path says, not under the repo. This
+         step also catches path-resolution failures outright (e.g. an
+         embedded null byte raises ValueError from Path.resolve() itself,
+         before relative_to() is even reached) and converts them to
+         ExecutionError rather than letting a bare stdlib exception escape.
     """
-    filename = str(args.get("filename", "")).strip()
+    filename = str(args.get("filename", ""))
     write_scope = args.get("write_scope")
     content = args.get("content")
 
@@ -835,6 +853,22 @@ async def _run_file_edit(tool: dict, message: str, workshop: str, args: dict) ->
             f"over the {_MAX_FILE_EDIT_CONTENT_BYTES}-byte cap."
         )
 
+    # Check 0 — reject any '..' path segment in filename or any write_scope
+    # entry outright. See docstring: this is what closes the self-cancelling
+    # traversal case that a string-match + "resolves under repo root" check
+    # alone does not catch.
+    if ".." in Path(filename).parts:
+        raise ExecutionError(
+            f"file_edit: '{filename}' contains a '..' path segment — refused."
+        )
+    for entry in write_scope:
+        entry_str = str(entry)
+        if ".." in Path(entry_str).parts:
+            raise ExecutionError(
+                f"file_edit: write_scope entry '{entry_str}' contains a '..' "
+                "path segment — refused."
+            )
+
     # Check 1 — cheap string-equality match against the caller's allowlist,
     # before any filesystem resolution happens at all.
     if filename not in write_scope:
@@ -845,16 +879,19 @@ async def _run_file_edit(tool: dict, message: str, workshop: str, args: dict) ->
 
     # Check 2 — resolve()-based containment re-check against the repo root,
     # defense in depth against a malformed/absolute write_scope entry (see
-    # docstring above). Path.resolve() also collapses any '..' segments and
-    # follows symlinks, so a traversal or symlink trick that somehow still
-    # produced a string match at check 1 is caught here too.
+    # docstring above). Path.resolve() also follows symlinks, so a symlink
+    # trick that somehow still produced a string match at check 1 is caught
+    # here too. Both the resolve() call and the relative_to() call are
+    # inside this try/except — resolve() itself can raise ValueError (e.g.
+    # an embedded null byte), and that must become ExecutionError too, not
+    # escape as a bare stdlib exception.
     repo_root = _REPO_ROOT.resolve()
-    dest = (repo_root / filename).resolve()
     try:
+        dest = (repo_root / filename).resolve()
         dest.relative_to(repo_root)
-    except ValueError:
+    except ValueError as exc:
         raise ExecutionError(
-            f"file_edit: '{filename}' resolves outside the repo root — refused."
+            f"file_edit: '{filename}' failed path containment — refused ({exc})."
         )
 
     loop = asyncio.get_running_loop()
