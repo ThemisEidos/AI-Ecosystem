@@ -13,6 +13,8 @@ proposed but could not take on its own authority.
 
 Spec: Docs/superpowers/specs/2026-08-30-step-14b-jobs-harness-design.md.
 """
+import csv
+import datetime
 import hashlib
 import json
 import sqlite3
@@ -20,10 +22,14 @@ import time
 from pathlib import Path
 from typing import List, Optional
 
+import httpx
 import yaml
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _REGISTRY_PATH = _REPO_ROOT / "Config" / "jobs_registry.yaml"
+
+# url_verify: short, bounded — a job step must fail fast, not hang a run.
+_URL_VERIFY_TIMEOUT = 5.0
 
 # Hashing the hash would be circular, and 'approved' must be flippable by the
 # approval step without changing the hash it gates.
@@ -132,3 +138,70 @@ def resolve_exception(conn: sqlite3.Connection, exception_id: int, status: str) 
             "UPDATE job_exceptions SET status = ? WHERE id = ?", (status, exception_id)
         )
         conn.commit()
+
+
+def _is_sha256_hex(value: str) -> bool:
+    """True if value looks like a sha256 hex digest — the heuristic csv_next_rows
+    uses to tell a prior content hash (stashed in the CSV's own 'status' column)
+    apart from a plain status word like 'ok' or 'unreachable'."""
+    return len(value) == 64 and all(c in "0123456789abcdef" for c in value.lower())
+
+
+def csv_next_rows(csv_path: Path, max_rows: int) -> List[dict]:
+    """Read the link-checker CSV and return up to max_rows rows not yet checked
+    today (UTC), each as {"row_index", "url", "content_hash"}. row_index is the
+    0-based position among data rows (header excluded) — csv_line_edit (Task 6)
+    uses it to target the right line for its own targeted rewrite. content_hash
+    is the prior content hash for that URL if the 'status' column holds one
+    (sha256 hex digest) from an earlier run, else "" (first-ever check, or the
+    last run only recorded a plain status word). Does not mutate the file —
+    that's csv_line_edit's job, driven by run_job (Task 6)."""
+    today = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
+    rows: List[dict] = []
+    with open(csv_path, newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for row_index, row in enumerate(reader):
+            if len(rows) >= max_rows:
+                break
+            last_checked = (row.get("last_checked") or "").strip()
+            if last_checked == today:
+                continue
+            status = (row.get("status") or "").strip()
+            content_hash = status if _is_sha256_hex(status) else ""
+            rows.append({
+                "row_index": row_index,
+                "url": (row.get("url") or "").strip(),
+                "content_hash": content_hash,
+            })
+    return rows
+
+
+def url_verify(url: str, expected_content_hash: Optional[str]) -> dict:
+    """One bounded HTTP GET (httpx, short timeout, following redirects but not
+    infinite loops — httpx caps redirect count itself) to check a link is
+    reachable and, if a prior content hash was supplied, whether the content
+    changed. Best-effort/background convention: any failure (bad host, DNS,
+    timeout, TLS, too-many-redirects, ...) degrades to reachable: False rather
+    than propagating — matching archivist.recall's try/except in main.py."""
+    checked_at = _now()
+    try:
+        response = httpx.get(url, timeout=_URL_VERIFY_TIMEOUT, follow_redirects=True)
+    except Exception as exc:
+        print(f"  [!!] url_verify: '{url}' unreachable (non-fatal): {exc}")
+        return {
+            "url": url,
+            "reachable": False,
+            "status_code": None,
+            "content_changed": None,
+            "checked_at": checked_at,
+        }
+
+    content_hash = hashlib.sha256(response.text.encode("utf-8")).hexdigest()
+    content_changed = (content_hash != expected_content_hash) if expected_content_hash else None
+    return {
+        "url": url,
+        "reachable": True,
+        "status_code": response.status_code,
+        "content_changed": content_changed,
+        "checked_at": checked_at,
+    }

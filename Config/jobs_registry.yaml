@@ -1,1 +1,13 @@
-jobs: []
+jobs:
+  - id: link-checker
+    workshop: open
+    schedule_hint: "daily 03:00"
+    steps: [csv_next_rows, url_verify, csv_line_edit]
+    read_scope: ["State/LinkAudit/links.csv"]
+    write_scope: ["State/LinkAudit/links.csv"]
+    quota:
+      rows_per_run: 10
+      fetches_per_run: 30
+    permission_level: 3
+    approved: false
+    envelope_hash: "377acb15e2a3670835c7158af0be5db419374b67993a994af1e91fdef73591ff"

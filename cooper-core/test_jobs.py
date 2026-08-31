@@ -84,3 +84,29 @@ def test_resolve_exception_changes_status(conn):
     jobs.resolve_exception(conn, exc_id, "dismissed")
     assert jobs.list_exceptions(conn, status="pending") == []
     assert len(jobs.list_exceptions(conn, status="dismissed")) == 1
+
+
+def test_csv_next_rows_returns_unchecked_rows_up_to_max(tmp_path):
+    csv_path = tmp_path / "links.csv"
+    csv_path.write_text(
+        "url,last_checked,status,notes\n"
+        "https://a.example,,,\n"
+        "https://b.example,,,\n"
+        "https://c.example,2026-08-29,ok,\n"
+    )
+    rows = jobs.csv_next_rows(csv_path, max_rows=1)
+    assert len(rows) == 1
+    assert rows[0]["url"] == "https://a.example"
+
+
+def test_csv_next_rows_returns_empty_when_all_checked_today(tmp_path):
+    import datetime
+    today = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
+    csv_path = tmp_path / "links.csv"
+    csv_path.write_text(f"url,last_checked,status,notes\nhttps://a.example,{today},ok,\n")
+    assert jobs.csv_next_rows(csv_path, max_rows=10) == []
+
+
+def test_url_verify_reports_unreachable_for_bad_host():
+    result = jobs.url_verify("https://this-host-does-not-exist.invalid/", None)
+    assert result["reachable"] is False
