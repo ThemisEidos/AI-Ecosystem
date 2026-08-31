@@ -1,8 +1,41 @@
 # North Star — COOPER Project Direction
 
-> Updated 2026-08-30. Source of truth: PROGRESS.md + PRD.md.
+> Updated 2026-08-31. Source of truth: PROGRESS.md + PRD.md.
 
 ## Current Position
+
+**15d (council subsystem) shipped 2026-08-31 — live and live-verified against the real**
+**running Open stack.** 6 tasks, each independently task-reviewed clean; full suite grew
+315 → 343 (`cd cooper-core && .venv/bin/python -m pytest -q`). `council.py` added
+`critique_envelope()` (planning-time panel, exposed via `POST /jobs/critique/{job_id}`)
+and a tiered `final_review()` wired into `run_job`, writing named per-member verdicts into
+the completion evidence record; every member call is independent and concurrent
+(`asyncio.gather`), and a broken member fails open (`verdict="pass"`, error in `reason`) so
+it can never suppress a real objection. **Design decision carried from the plan's Global
+Constraints:** Private has one real model (`COOPER-Private`/`gemma4:e4b-it-qat`, 15c) and
+G1 (2026-08-23) already rules out cloud-routed planning on Private, so
+`council_roster.private` repeats `COOPER-Private` three times at varied temperatures
+(behavioral spread, not true diversity) — the honest ceiling this project's own M6
+traceability note already named. Open's roster is three real providers:
+`["openai", "claude", "gemini"]`. Live-verified for real on the running Open stack (Task 6):
+a synthetic over-broad-`write_scope` job's planning-time critique came back `"objection":
+true` with all 3 Open members flagging it by name and reason, and the note landed in the
+Obsidian inbox; a synthetic passing L4+ job's completion evidence carried a real 3-entry
+`verdicts` array (`openai`/`claude`/`gemini`, each with `verdict` + `reason`). Rebuilding
+`cooper-core` from this worktree hit the known worktree/compose trap (Gotchas.md
+2026-08-30 — missing `litellm/.env.local` forces a temporary `env_file:` comment-out,
+which recreates the already-running `litellm` and strips its keys) plus a related but
+previously-undocumented wrinkle: the worktree also lacks `PDA-Runtime/.env`, and
+`docker-compose.yml`'s `cooper-core` service silently falls back to the insecure
+`"cooper-local"` default for its own client-auth key and its LiteLLM key rather than
+erroring — worked around with `--env-file <main-checkout>/PDA-Runtime/.env` (path-only,
+never read) on every compose call, confirmed via a real authenticated round trip and
+matching API-key env-var counts throughout. Every temporary change (the two synthetic job
+entries, the `docker-compose.yml` comment-out) fully reverted and confirmed clean. Full
+detail incl. every live-verification command and its real output: PROGRESS.md's
+2026-08-31 (15d) entry and
+`.superpowers/sdd/2026-08-31-step-15d-council-subsystem/task-6-report.md`. **Next up:
+15e** per the roadmap execution order.
 
 **14b (jobs harness + link-checker) shipped 2026-08-30 — mechanism live and live-verified**
 **against the real running Open stack, ships inert (`approved: false`, n8n scheduler not**

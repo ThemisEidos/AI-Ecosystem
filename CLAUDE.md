@@ -171,7 +171,7 @@ key — the only evidence is `"GET /v1/models HTTP/1.1" 401 Unauthorized` in
 ## Running tests
 
 ```bash
-# Full cooper-core suite — 315 tests, ~1.5 s (run from cooper-core/)
+# Full cooper-core suite — 343 tests, ~1.5 s (run from cooper-core/)
 cd cooper-core && .venv/bin/python -m pytest
 
 # v1 Pipe unit tests (legacy bridge, run from repo root)

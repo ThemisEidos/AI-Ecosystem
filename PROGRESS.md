@@ -58,7 +58,7 @@ Execution order: 15a → 14a(rev) → 15c → 14b → 15d → 15e → 14c(+15f-i
   inert 2026-08-30 — `approved: false`, n8n scheduler workflow built but not imported
   (manual import still needed). Owner activation steps + the multi-day DoD clock: see
   decision log.
-- [ ] **15d — Council subsystem** (M6→5; planning-time panel + tiered final review, verdicts in evidence)
+- [x] **15d — Council subsystem** (M6→5; planning-time panel + tiered final review, verdicts in evidence) ✓ 2026-08-31
 - [ ] **15e — Planner–executor** (M2→4; big brain drafts envelopes, cheap model executes)
 - [ ] **14c — SearXNG + web_search + PII job** (ships WITH 15f's injection canaries, not before)
 - [ ] **14d — Bounded loop + opt-out documenter job**
@@ -1258,6 +1258,101 @@ Execution order: 15a → 14a(rev) → 15c → 14b → 15d → 15e → 14c(+15f-i
        and script it) and create the `COOPER Open API Key` `httpHeaderAuth` credential
        it references, then activate the workflow.
     5. Only then does the daily-run, multi-day observation window actually start.
+
+- **2026-08-31 · 15d shipped — council subsystem live and live-verified against the**
+  **real running Open stack.** 6 tasks on `step-15d-council-subsystem`, each
+  independently task-reviewed clean. `model_routing.council_roster(workshop)` (Task 1)
+  reads a new `council_roster` block in `Scripts/PDA_ModelRouting.json`; `council.py`
+  (Task 2) added `critique_envelope()` (planning-time panel) and a tiered `final_review()`
+  — every member call runs concurrently via `asyncio.gather`, no member sees another's
+  verdict, and a broken member fails open (`verdict="pass"`, error text in `reason`) so one
+  silently-broken member can never suppress a real objection from another (`has_objection`
+  fires on any single flag). `evidence.py` (Task 3) validates an optional per-member
+  `verdicts` array on completion records. `jobs.py`'s `run_job` (Task 4) now calls
+  `council.final_review` after a job's steps complete and writes its verdicts into the
+  evidence record. `POST /jobs/critique/{job_id}` (Task 5) exposes the planning-time panel
+  as a standalone endpoint. Full suite at Task 5: 315 → grew task by task; **343 passed**
+  confirmed again at Task 6 (below), no regressions.
+  - **Design decision carried from the plan's Global Constraints (not new this task):**
+    Private has exactly one real model (`COOPER-Private` / `gemma4:e4b-it-qat`, Step 15c)
+    and G1 (2026-08-23) already ruled out cloud-routed planning on Private, so there is no
+    local model diversity to draw a panel from. `council_roster.private` in
+    `Scripts/PDA_ModelRouting.json` repeats `COOPER-Private` three times at three different
+    temperatures (`council.py`'s `_MEMBER_TEMPERATURES` — behavioral spread, not true model
+    diversity) rather than fabricating a roster that doesn't exist. This is the honest
+    ceiling North Star's own M6 traceability note already named: *"if 4b review quality
+    fails, honest ceiling is 4 — same-model review."* Open's roster is three real,
+    independent providers already wired in `litellm/litellm_config.yaml`:
+    `["openai", "claude", "gemini"]`.
+  - **Task 6 — live end-to-end verification against the real running Open stack**
+    (`.superpowers/sdd/2026-08-31-step-15d-council-subsystem/task-6-report.md` has full
+    command-by-command output). Rebuilt `pda-open-cooper-core` from this worktree's code
+    (`docker compose -f PDA-Runtime/docker-compose.yml ... up -d --build cooper-core`),
+    hitting the same worktree/compose trap 15c Task 6 and 14b Task 8 already documented
+    (Gotchas.md 2026-08-30): this worktree lacks `litellm/.env.local`, so compose refuses
+    to parse the file at all until that `env_file:` line is temporarily commented out.
+    Fixed exactly as documented, and confirmed the collateral damage recurred as expected
+    — compose's reconciliation also recreated the already-running `litellm` and stripped
+    its 4 real provider keys (`docker exec pda-litellm printenv | grep -c API_KEY` → `0`),
+    restored by re-running `up -d litellm` from the **main checkout** (`4` keys back,
+    confirmed via a real authenticated `POST /chat` reply through cooper-core → LiteLLM →
+    provider). **New wrinkle beyond the existing Gotcha, found and worked around live:**
+    this worktree also lacks `PDA-Runtime/.env` itself (not just `litellm/.env.local`).
+    `docker-compose.yml`'s `cooper-core` service doesn't use `env_file:` for its own
+    secrets — it interpolates `${COOPER_API_KEYS:-}`, `${LITELLM_MASTER_KEY:-cooper-local}`,
+    etc. directly — so compose doesn't hard-fail on the missing file, it just silently
+    substitutes the insecure defaults (verified via a redacted `docker compose config`
+    dry-run: `COOPER_API_KEY: cooper-local`, `COOPER_API_KEYS: ""`). Left as-is, the
+    `--build cooper-core` in Step 1 would have quietly swapped the live Open cooper-core's
+    real client auth key and its own LiteLLM auth key for the `"cooper-local"` placeholder
+    — breaking real client auth and breaking cooper-core→LiteLLM calls with a 401, with no
+    error at build time. Worked around by passing `--env-file
+    /home/zb6/Documents/Projects/01_AI_Ecosystem/PDA-Runtime/.env` (the **main checkout's**
+    real file, referenced by path only — never opened, read, or copied) on every compose
+    invocation against the worktree for the rest of this task, restoring the real
+    interpolated values without ever touching the DO-NOT-TOUCH secret file's contents.
+    Confirmed working via a real end-to-end `POST /chat` reply immediately after the
+    rebuild, and via matching `API_KEY` env-var counts throughout (open cooper-core: `3`,
+    litellm: `4`, matching the pre-task baseline at every checkpoint). Not yet added to
+    Gotchas.md — flagged here for the owner/next session, since the fix (`--env-file
+    <main-checkout>/PDA-Runtime/.env`) is a clean, general pattern for this class of
+    worktree rebuild and belongs there.
+    - **Step 2 (planning-time critique on a seeded flaw):** added a throwaway
+      `15d-test-flawed-envelope` job (`permission_level: 3`, `write_scope: ["/"]` —
+      deliberately over-broad) to `Config/jobs_registry.yaml`, restarted cooper-core,
+      called `POST /jobs/critique/15d-test-flawed-envelope`. Real result: `"objection":
+      true`, all 3 Open roster members flagged it —
+      openai: *"write_scope is broader than necessary"*; claude: *"write_scope grants root
+      write access but permission_level 3 is too low for filesystem writes and steps only
+      contain noop which needs no write access"*; gemini: *"write_scope is broader than job
+      purpose needs for a noop step"*. The note landed at
+      `Obsidian Vault/00_Inbox/COOPER-Job-Critique-15d-test-flawed-envelope.md` with the
+      same 3/3-flagged verdict summary.
+    - **Step 3 (passing L4+ job, named per-member verdicts in evidence):** replaced it
+      with `15d-test-l4-job` (`permission_level: 4`, `approved: true`, empty scopes,
+      `steps: [noop]`, real `envelope_hash` computed via `jobs.compute_envelope_hash`),
+      restarted cooper-core, called `POST /jobs/run/15d-test-l4-job` → `"status":
+      "completed"`. The written evidence record
+      (`State/Workflow_Evidence/completion/workflow_completion_15d-test-l4-job_*.json`)
+      carried a real `"verdicts"` array with exactly 3 entries — `openai`, `claude`,
+      `gemini` — each with a non-empty `member`, `verdict` (all `"flag"` this run, since 0
+      rows were processed — a legitimate reviewer finding, not a harness bug) and a
+      `reason` (e.g. claude: *"zero rows checked indicates job did not execute or found no
+      data to process"*). Proves the tiered `final_review` → evidence-write path end to
+      end, with `steps: [noop]` and empty scopes meaning zero risk of the job's own
+      `run_job` loop touching any real file.
+    - **Step 4 (revert):** `git checkout -- Config/jobs_registry.yaml` and `git checkout --
+      PDA-Runtime/docker-compose.yml` both confirmed clean via `git status --short`; the
+      critique note and the synthetic evidence file both deleted; also deleted an
+      unanticipated but expected byproduct — cooper-core's own daily digest note
+      (`Obsidian Vault/00_Inbox/COOPER-Digest-2026-08-31.md`), auto-written by the run in
+      Step 3 and referencing only the synthetic job, so it was cleaned up too even though
+      the brief's Step 4 didn't name it explicitly. cooper-core restarted, `/health` still
+      `ok`, `open-cooper-core`/`litellm` API-key counts still `3`/`4` (unchanged from
+      baseline throughout).
+    - **Step 5:** full suite re-run clean from the reverted state: **343 passed**
+      (`cd cooper-core && .venv/bin/python -m pytest -q`) — CLAUDE.md's stale "315 tests"
+      claim corrected to 343 as part of this task's Step 6.
 
 ---
 
