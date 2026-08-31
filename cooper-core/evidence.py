@@ -36,6 +36,8 @@ _APPROVAL_REQUIRED = {
     "requested_time": str, "reason": str,
 }
 _JOB_LINKAGE_REQUIRED = {"job_id": str, "envelope_hash": str, "run_id": str}
+_VERDICT_ITEM_REQUIRED = {"member": str, "verdict": str, "reason": str}
+_VALID_VERDICT_VALUES = {"pass", "flag"}
 
 
 def is_job_linked(record: dict) -> bool:
@@ -71,6 +73,30 @@ def _sensitive_errors(record: dict) -> List[str]:
     return []
 
 
+def _verdicts_errors(record: dict) -> List[str]:
+    """Optional field: when present, 'verdicts' must be a non-empty list of
+    {"member","verdict","reason"} dicts with verdict in {"pass","flag"}.
+    Hygiene applies to each member's reason text too -- an LLM verdict is
+    still untrusted input."""
+    if "verdicts" not in record:
+        return []
+    verdicts = record["verdicts"]
+    if not isinstance(verdicts, list) or not verdicts:
+        return ["schema: field 'verdicts' must be a non-empty list"]
+    errs: List[str] = []
+    for i, item in enumerate(verdicts):
+        if not isinstance(item, dict):
+            errs.append(f"schema: verdicts[{i}] is not an object")
+            continue
+        errs += [f"schema: verdicts[{i}].{e}" for e in _schema_errors(item, _VERDICT_ITEM_REQUIRED)]
+        if item.get("verdict") not in _VALID_VERDICT_VALUES:
+            errs.append(f"schema: verdicts[{i}].verdict must be 'pass' or 'flag'")
+        reason = item.get("reason")
+        if isinstance(reason, str) and _SENSITIVE_RE.search(reason):
+            errs.append(f"hygiene: sensitive marker in verdicts[{i}].reason")
+    return errs
+
+
 def _find_approval(approval_id: str, context: List[dict]) -> Optional[dict]:
     for r in context:
         if not is_completion(r) and r.get("approval_id") == approval_id:
@@ -83,6 +109,7 @@ def validate_completion(record: dict, context: List[dict]) -> List[str]:
     if errs:
         return errs
     errs += _sensitive_errors(record)
+    errs += _verdicts_errors(record)
 
     workshop = record["workshop_id"]
     approval_id = record["approval_id"]

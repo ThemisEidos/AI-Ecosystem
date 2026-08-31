@@ -109,3 +109,54 @@ def test_cli_runner_flags_invalid_dir(tmp_path):
         capture_output=True, text=True,
     )
     assert proc.returncode == 0
+
+
+def _valid_completion(**overrides):
+    record = {
+        "workflow_id": "wf-1", "workflow_name": "Test", "execution_id": "exec-1",
+        "status": "completed", "completion_time": "2026-08-31T00:00:00.000000Z",
+        "workshop_id": "open", "workshop_name": "Open Workshop", "approval_id": "",
+        "artifact_paths": [], "review_status": "unknown", "user_accepted": False,
+        "job_id": "test-job", "envelope_hash": "abc123", "run_id": "run-1",
+    }
+    record.update(overrides)
+    return record
+
+
+def test_verdicts_field_absent_is_valid():
+    record = _valid_completion()
+    assert evidence.validate_completion(record, []) == []
+
+
+def test_verdicts_field_valid_when_well_shaped():
+    record = _valid_completion(verdicts=[
+        {"member": "openai", "verdict": "pass", "reason": "looks fine"},
+        {"member": "claude", "verdict": "flag", "reason": "quota concern"},
+    ])
+    assert evidence.validate_completion(record, []) == []
+
+
+def test_verdicts_field_rejects_empty_list():
+    record = _valid_completion(verdicts=[])
+    errs = evidence.validate_completion(record, [])
+    assert any("verdicts" in e for e in errs)
+
+
+def test_verdicts_field_rejects_missing_subfield():
+    record = _valid_completion(verdicts=[{"member": "openai", "verdict": "pass"}])
+    errs = evidence.validate_completion(record, [])
+    assert any("reason" in e for e in errs)
+
+
+def test_verdicts_field_rejects_invalid_verdict_value():
+    record = _valid_completion(verdicts=[{"member": "openai", "verdict": "maybe", "reason": "x"}])
+    errs = evidence.validate_completion(record, [])
+    assert any("verdict" in e for e in errs)
+
+
+def test_verdicts_field_hygiene_checks_reason_text():
+    record = _valid_completion(verdicts=[
+        {"member": "openai", "verdict": "flag", "reason": "found api_key=sk-abc123 in output"}
+    ])
+    errs = evidence.validate_completion(record, [])
+    assert any("hygiene" in e for e in errs)
