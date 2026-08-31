@@ -5,9 +5,20 @@ from pathlib import Path
 import pytest
 
 import archivist
+import council
 import evidence
 import executor
 import jobs
+
+
+async def _fake_final_review(*a, **k):
+    return [{"member": "test-reviewer", "verdict": "pass", "reason": "ok"}]
+
+
+_RUN_JOB_KWARGS = dict(
+    base_url="http://test", api_key="test-key", backend="ollama",
+    workshop="open", reviewer_model="test-reviewer-model",
+)
 
 
 MINIMAL_JOB = {
@@ -148,6 +159,19 @@ def _write_links_csv(path: Path, rows):
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+def test_write_job_evidence_includes_verdicts():
+    job_entry = _approved_job()
+    verdicts = [{"member": "openai", "verdict": "pass", "reason": "ok"}]
+    path = jobs.write_job_evidence(
+        job_id="link-checker", run_id="run-1", job_entry=job_entry,
+        status="completed", artifact_paths=["State/LinkAudit/links.csv"],
+        notes="test run", verdicts=verdicts,
+    )
+    record = json.loads(path.read_text(encoding="utf-8"))
+    assert record["verdicts"] == verdicts
+    path.unlink()
+
+
 def _fake_url_verify(reachable=True, content_changed=None):
     def _fn(url, expected_hash):
         return {
@@ -163,25 +187,22 @@ def _fake_url_verify(reachable=True, content_changed=None):
 def test_run_job_refuses_unapproved_job(conn, tmp_path, monkeypatch):
     registry = {"jobs": [{**MINIMAL_JOB, "approved": False, "id": "link-checker"}]}
     monkeypatch.setattr(jobs, "load_registry", lambda path=None: registry)
-    result = asyncio.run(jobs.run_job("link-checker", conn))
+    result = asyncio.run(jobs.run_job("link-checker", conn, **_RUN_JOB_KWARGS))
     assert result["status"] == "refused"
     assert "not approved" in result["reason"].lower()
 
 
 def test_run_job_refuses_unknown_job_id(conn, tmp_path, monkeypatch):
     monkeypatch.setattr(jobs, "load_registry", lambda path=None: {"jobs": []})
-    result = asyncio.run(jobs.run_job("does-not-exist", conn))
+    result = asyncio.run(jobs.run_job("does-not-exist", conn, **_RUN_JOB_KWARGS))
     assert result["status"] == "refused"
 
 
 def test_run_job_enqueues_exception_for_out_of_scope_write(conn, tmp_path, monkeypatch):
-    # write_scope deliberately does NOT include the CSV path read_scope/csv_next_rows
-    # will actually target, so the csv_line_edit -> _run_file_edit call must raise
-    # ExecutionError, and run_job must catch it (not raise, not silently succeed).
     monkeypatch.setattr(jobs, "_REPO_ROOT", tmp_path)
     monkeypatch.setattr(executor, "_REPO_ROOT", tmp_path)
+    monkeypatch.setattr(jobs.council, "final_review", _fake_final_review)
     csv_path = tmp_path / "State" / "LinkAudit" / "links.csv"
-    original = "url,last_checked,status,notes\nhttps://a.example,,,\n"
     _write_links_csv(csv_path, [("https://a.example", "", "", "")])
     on_disk_before = csv_path.read_text()
 
@@ -189,20 +210,20 @@ def test_run_job_enqueues_exception_for_out_of_scope_write(conn, tmp_path, monke
     monkeypatch.setattr(jobs, "load_registry", lambda path=None: {"jobs": [job_entry]})
     monkeypatch.setattr(jobs, "url_verify", _fake_url_verify())
 
-    result = asyncio.run(jobs.run_job("link-checker", conn))
+    result = asyncio.run(jobs.run_job("link-checker", conn, **_RUN_JOB_KWARGS))
 
     assert result["status"] == "completed"
     assert result["exceptions_raised"] == 1
     pending = jobs.list_exceptions(conn, status="pending")
     assert len(pending) == 1
     assert pending[0]["job_id"] == "link-checker"
-    # The file was NOT written.
     assert csv_path.read_text() == on_disk_before
 
 
 def test_run_job_full_success_writes_csv_and_evidence(conn, tmp_path, monkeypatch):
     monkeypatch.setattr(jobs, "_REPO_ROOT", tmp_path)
     monkeypatch.setattr(executor, "_REPO_ROOT", tmp_path)
+    monkeypatch.setattr(jobs.council, "final_review", _fake_final_review)
     csv_path = tmp_path / "State" / "LinkAudit" / "links.csv"
     _write_links_csv(csv_path, [
         ("https://a.example", "", "", ""),
@@ -213,7 +234,7 @@ def test_run_job_full_success_writes_csv_and_evidence(conn, tmp_path, monkeypatc
     monkeypatch.setattr(jobs, "load_registry", lambda path=None: {"jobs": [job_entry]})
     monkeypatch.setattr(jobs, "url_verify", _fake_url_verify(reachable=True))
 
-    result = asyncio.run(jobs.run_job("link-checker", conn))
+    result = asyncio.run(jobs.run_job("link-checker", conn, **_RUN_JOB_KWARGS))
 
     assert result["status"] == "completed"
     assert result["rows_checked"] == 2
@@ -222,7 +243,7 @@ def test_run_job_full_success_writes_csv_and_evidence(conn, tmp_path, monkeypatc
 
     updated = csv_path.read_text()
     assert "url,last_checked,status,notes" in updated
-    assert ",,,\n" not in updated  # both rows got last_checked/status filled in
+    assert ",,,\n" not in updated
 
     evidence_path = Path(result["evidence_path"])
     assert evidence_path.exists()
@@ -230,6 +251,36 @@ def test_run_job_full_success_writes_csv_and_evidence(conn, tmp_path, monkeypatc
     assert record["job_id"] == "link-checker"
     assert record["run_id"] == result["run_id"]
     assert record["envelope_hash"] == job_entry["envelope_hash"]
+    assert record["verdicts"] == [{"member": "test-reviewer", "verdict": "pass", "reason": "ok"}]
+    errs = evidence.validate_completion(record, [])
+    assert errs == []
+
+
+def test_run_job_council_tier_produces_named_per_member_verdicts(conn, tmp_path, monkeypatch):
+    monkeypatch.setattr(jobs, "_REPO_ROOT", tmp_path)
+    monkeypatch.setattr(executor, "_REPO_ROOT", tmp_path)
+
+    async def fake_council_final_review(job_entry, workshop, message, raw_output, **kw):
+        assert council.needs_council_tier(job_entry)  # link-checker writes files -> council tier
+        return [
+            {"member": "openai", "verdict": "pass", "reason": "ok"},
+            {"member": "claude", "verdict": "pass", "reason": "ok"},
+            {"member": "gemini", "verdict": "pass", "reason": "ok"},
+        ]
+
+    monkeypatch.setattr(jobs.council, "final_review", fake_council_final_review)
+    csv_path = tmp_path / "State" / "LinkAudit" / "links.csv"
+    _write_links_csv(csv_path, [("https://a.example", "", "", "")])
+
+    job_entry = _approved_job()
+    monkeypatch.setattr(jobs, "load_registry", lambda path=None: {"jobs": [job_entry]})
+    monkeypatch.setattr(jobs, "url_verify", _fake_url_verify(reachable=True))
+
+    result = asyncio.run(jobs.run_job("link-checker", conn, **_RUN_JOB_KWARGS))
+
+    record = json.loads(Path(result["evidence_path"]).read_text(encoding="utf-8"))
+    assert len(record["verdicts"]) == 3
+    assert {v["member"] for v in record["verdicts"]} == {"openai", "claude", "gemini"}
     errs = evidence.validate_completion(record, [])
     assert errs == []
 
@@ -237,6 +288,7 @@ def test_run_job_full_success_writes_csv_and_evidence(conn, tmp_path, monkeypatc
 def test_run_job_respects_rows_per_run_quota(conn, tmp_path, monkeypatch):
     monkeypatch.setattr(jobs, "_REPO_ROOT", tmp_path)
     monkeypatch.setattr(executor, "_REPO_ROOT", tmp_path)
+    monkeypatch.setattr(jobs.council, "final_review", _fake_final_review)
     csv_path = tmp_path / "State" / "LinkAudit" / "links.csv"
     _write_links_csv(csv_path, [
         ("https://a.example", "", "", ""),
@@ -248,19 +300,19 @@ def test_run_job_respects_rows_per_run_quota(conn, tmp_path, monkeypatch):
     monkeypatch.setattr(jobs, "load_registry", lambda path=None: {"jobs": [job_entry]})
     monkeypatch.setattr(jobs, "url_verify", _fake_url_verify(reachable=True))
 
-    result = asyncio.run(jobs.run_job("link-checker", conn))
+    result = asyncio.run(jobs.run_job("link-checker", conn, **_RUN_JOB_KWARGS))
 
     assert result["status"] == "completed"
     assert result["rows_checked"] == 2
 
     updated = csv_path.read_text()
-    # third row untouched — still no last_checked/status.
     assert "https://c.example,,," in updated.replace("\r", "")
 
 
 def test_run_job_caps_fetches_at_fetches_per_run_quota(conn, tmp_path, monkeypatch):
     monkeypatch.setattr(jobs, "_REPO_ROOT", tmp_path)
     monkeypatch.setattr(executor, "_REPO_ROOT", tmp_path)
+    monkeypatch.setattr(jobs.council, "final_review", _fake_final_review)
     csv_path = tmp_path / "State" / "LinkAudit" / "links.csv"
     _write_links_csv(csv_path, [
         ("https://a.example", "", "", ""),
@@ -272,7 +324,7 @@ def test_run_job_caps_fetches_at_fetches_per_run_quota(conn, tmp_path, monkeypat
     monkeypatch.setattr(jobs, "load_registry", lambda path=None: {"jobs": [job_entry]})
     monkeypatch.setattr(jobs, "url_verify", _fake_url_verify(reachable=True))
 
-    result = asyncio.run(jobs.run_job("link-checker", conn))
+    result = asyncio.run(jobs.run_job("link-checker", conn, **_RUN_JOB_KWARGS))
 
     assert result["status"] == "completed"
     assert result["rows_checked"] == 1
@@ -343,6 +395,7 @@ def test_write_digest_is_idempotent_per_day(conn, tmp_path, monkeypatch):
 def test_run_job_counts_rows_changed(conn, tmp_path, monkeypatch):
     monkeypatch.setattr(jobs, "_REPO_ROOT", tmp_path)
     monkeypatch.setattr(executor, "_REPO_ROOT", tmp_path)
+    monkeypatch.setattr(jobs.council, "final_review", _fake_final_review)
     csv_path = tmp_path / "State" / "LinkAudit" / "links.csv"
     _write_links_csv(csv_path, [("https://a.example", "", "", "")])
 
@@ -350,5 +403,5 @@ def test_run_job_counts_rows_changed(conn, tmp_path, monkeypatch):
     monkeypatch.setattr(jobs, "load_registry", lambda path=None: {"jobs": [job_entry]})
     monkeypatch.setattr(jobs, "url_verify", _fake_url_verify(reachable=True, content_changed=True))
 
-    result = asyncio.run(jobs.run_job("link-checker", conn))
+    result = asyncio.run(jobs.run_job("link-checker", conn, **_RUN_JOB_KWARGS))
     assert result["rows_changed"] == 1

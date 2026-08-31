@@ -537,7 +537,11 @@ async def run_job(job_id: str):
     job_entry = jobs.get_job(job_id)
     if job_entry is None:
         raise HTTPException(status_code=404, detail=f"unknown job id '{job_id}'")
-    result = await jobs.run_job(job_id, _ARCHIVIST_CONN)
+    result = await jobs.run_job(
+        job_id, _ARCHIVIST_CONN,
+        base_url=BACKEND_URL, api_key=BACKEND_KEY, backend=BACKEND,
+        workshop=WORKSHOP, reviewer_model=REVIEWER_MODEL,
+    )
     jobs.write_digest(_ARCHIVIST_CONN)
     return result
 

@@ -15,9 +15,14 @@ def test_post_jobs_run_returns_run_job_result(monkeypatch):
     monkeypatch.setattr(main, "_ALLOW_ANON", True)
     monkeypatch.setattr(main.jobs, "get_job", lambda job_id, registry=None: {"id": job_id})
 
-    async def fake_run_job(job_id, conn):
+    async def fake_run_job(job_id, conn, **kwargs):
         assert job_id == "link-checker"
         assert conn is main._ARCHIVIST_CONN
+        assert kwargs == {
+            "base_url": main.BACKEND_URL, "api_key": main.BACKEND_KEY,
+            "backend": main.BACKEND, "workshop": main.WORKSHOP,
+            "reviewer_model": main.REVIEWER_MODEL,
+        }
         return {
             "status": "completed",
             "run_id": "abc123",

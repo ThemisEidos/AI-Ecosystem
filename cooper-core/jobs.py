@@ -28,6 +28,7 @@ from typing import List, Optional
 import httpx
 import yaml
 
+import council
 import executor
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -266,6 +267,7 @@ def write_job_evidence(
     status: str,
     artifact_paths: List[str],
     notes: str,
+    verdicts: List[dict],
 ) -> Path:
     """Write a job-linked completion record (Task 2's job-linkage schema:
     job_id/envelope_hash/run_id all present and non-empty) to
@@ -293,6 +295,7 @@ def write_job_evidence(
         "job_id": job_id,
         "envelope_hash": job_entry.get("envelope_hash", ""),
         "run_id": run_id,
+        "verdicts": verdicts,
     }
     evidence_dir = _REPO_ROOT / "State" / "Workflow_Evidence" / "completion"
     evidence_dir.mkdir(parents=True, exist_ok=True)
@@ -301,7 +304,17 @@ def write_job_evidence(
     return out_path
 
 
-async def run_job(job_id: str, conn: sqlite3.Connection, registry_path: Optional[Path] = None) -> dict:
+async def run_job(
+    job_id: str,
+    conn: sqlite3.Connection,
+    *,
+    base_url: str,
+    api_key: str,
+    backend: str,
+    workshop: str,
+    reviewer_model: str,
+    registry_path: Optional[Path] = None,
+) -> dict:
     """The link-checker job's full per-run orchestration (Step 14b Task 6).
     async def because it awaits executor._run_file_edit (already async) and,
     for each row's link check, awaits asyncio.to_thread(url_verify, ...) —
@@ -384,6 +397,11 @@ async def run_job(job_id: str, conn: sqlite3.Connection, registry_path: Optional
         + (f". {write_note}" if write_note else "")
     )
 
+    verdicts = await council.final_review(
+        job_entry, workshop, f"job run: {job_id}", notes,
+        base_url=base_url, api_key=api_key, backend=backend, reviewer_model=reviewer_model,
+    )
+
     evidence_path = write_job_evidence(
         job_id=job_id,
         run_id=run_id,
@@ -391,6 +409,7 @@ async def run_job(job_id: str, conn: sqlite3.Connection, registry_path: Optional
         status="completed",
         artifact_paths=[csv_rel_path] if csv_rel_path else [],
         notes=notes,
+        verdicts=verdicts,
     )
 
     return {
