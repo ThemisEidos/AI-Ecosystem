@@ -820,9 +820,18 @@ contract, not verbatim code to paste):
    record, nothing executed.
 2. Generate `run_id = uuid.uuid4().hex[:12]`.
 3. For the link-checker job specifically: call `csv_next_rows` bounded by
-   `quota["rows_per_run"]`; for each row, call `url_verify`; track total fetches against
-   `quota["fetches_per_run"]` — if a run would exceed it, stop processing further rows
-   (don't raise, just cap) and note this in the run summary.
+   `quota["rows_per_run"]`; for each row, call `url_verify` **via
+   `await asyncio.to_thread(url_verify, url, expected_hash)`** — `url_verify` is a
+   synchronous, blocking `httpx.get` call (Task 5), and `run_job` is `async def` inside
+   a live FastAPI server; calling a blocking HTTP request directly inside an `async def`
+   would stall the event loop (and every concurrent chat request cooper-core is serving)
+   for the full duration of each fetch. This repo already uses exactly this
+   `asyncio.to_thread(...)` pattern elsewhere for sync/blocking calls from async code
+   (see `main.py`'s `archivist.recall`/`archivist.index_brain` call sites) — match it,
+   don't invent a different mechanism, and don't convert `url_verify` itself to `async
+   def` (Task 5's test calls it directly, synchronously, with no `asyncio.run`). Track
+   total fetches against `quota["fetches_per_run"]` — if a run would exceed it, stop
+   processing further rows (don't raise, just cap) and note this in the run summary.
 4. Build updated CSV content (new `last_checked`/`status` values for the rows just
    checked) and write it via `executor._run_file_edit` (async — this function is
    already `async def` per Task 4's tests using `asyncio.run`, so `run_job` itself
