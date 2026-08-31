@@ -53,7 +53,7 @@ Execution order: 15a → 14a(rev) → 15c → 14b → 15d → 15e → 14c(+15f-i
 - [x] **15a — Native tool-calling dispatch** (M3→5; retires classifier dispatch; kills both 2026-08-04 gotchas as a class) — shipped 2026-08-24, live-verified both stacks (blocking + real SSE incl. preamble-then-dispatch), 3 post-review Importants closed in a fix-forward pass, itself reviewed clean (248/248). **Browser click-through per stack closed 2026-08-25** — see decision log; en route, found and fixed a real governance bypass on Private's Open WebUI (no cooper-core connection existed at all).
 - [x] **14a — Fabric pattern executor** — shipped 2026-08-25, live-verified both stacks (blocking API + browser click-through, all 4 patterns reachable via native tool-calling). Revised plan (2026-08-04 original rewritten for 15a's args-based dispatch), 4 tasks + subagent-driven-development, whole-branch review found and fixed 1 Critical (`PDA-Fabric/` was gitignored and never committed — see decision log) + 1 Important (workshop routing failed open toward cloud). Separate, unfixed finding: an intermittent approval-ticket hijack via Open WebUI's own background calls — see Gotchas 2026-08-25, flagged for owner decision, not in scope for this slice.
 - [ ] **15b — Zero-touch Open WebUI provisioning** (M9→5; independent, anytime)
-- [ ] **15c — Per-role model routing** (implements `Scripts/PDA_ModelRouting.json`; LiteLLM fallback pools; Private E4B/12B role split — E4B benchmark is the entry gate)
+- [x] **15c — Per-role model routing** (implements `Scripts/PDA_ModelRouting.json`; LiteLLM fallback pools; Private E4B/12B role split — E4B benchmark is the entry gate) ✓ 2026-08-30
 - [ ] **14b — Jobs harness + link-checker** (M2→3)
 - [ ] **15d — Council subsystem** (M6→5; planning-time panel + tiered final review, verdicts in evidence)
 - [ ] **15e — Planner–executor** (M2→4; big brain drafts envelopes, cheap model executes)
@@ -951,6 +951,95 @@ Execution order: 15a → 14a(rev) → 15c → 14b → 15d → 15e → 14c(+15f-i
   `ApprovalConflictError` raised and the original ticket's message/tool unchanged —
   verified on Private and Open. Scope matched the 2026-08-25 decision exactly: no
   Open-WebUI-specific pattern matching, no session-id redesign. Next: 15c.
+- **2026-08-30 · 15c shipped — per-role model routing, E4B live on Private, LiteLLM
+  fallback pool on Open.** 6 tasks via subagent-driven-development, each independently
+  task-reviewed clean on `step-15c-model-routing`.
+  - **E4B benchmark (entry gate, run earlier this session before this plan existed):**
+    `gemma4:e4b-it-qat` — 100% GPU-resident (3.1GB loaded), 46.5 tok/s avg, 11/11 (100%)
+    tool-call accuracy against the real private registry schemas. `gemma4:12b` — 44%/56%
+    CPU/GPU split (not fully resident despite flash-attention + q8_0 KV cache), 8.7 tok/s
+    avg, 10/11 (91%) accuracy (misrouted one case — a Qwen-assistant request to
+    `status_summary_private`). Model-swap cost measured at ~5-13s per direction.
+  - **Owner decision (via AskUserQuestion mid-session):** Private routes ALL four live
+    roles (brain, reviewer, drafter, archivist) to `gemma4:e4b-it-qat` — not a 12b-for-
+    reviewer split — specifically to avoid paying the VRAM swap cost every dispatch turn
+    (execute → review → archivist/drafter would otherwise swap models twice, since e4b's
+    3.1GB + 12b's 7.9GB exceed this host's 6GB VRAM together).
+  - **Task 1** rewrote `Scripts/PDA_ModelRouting.json` into a 7-role
+    (`classifier, brain, planner, executor, reviewer, drafter, archivist`) → alias map,
+    replacing the unused legacy v1 schema. `classifier`/`planner`/`executor` are
+    intentionally map-only (no call site today — classifier folded into brain at 15a,
+    planner/executor don't exist until 15e), flagged in the JSON's own `notes` fields so
+    15d/15e's authors don't have to re-derive why. Reviewed clean.
+  - **Task 2** added `cooper-core/model_routing.py` (`model_for(role, workshop)`,
+    `load_routing()`, `ModelRoutingError`) — a pure lookup over Task 1's JSON. 6 new
+    tests. Reviewed clean.
+  - **Task 3** wired `main.py`'s four live roles (brain/reviewer/drafter/archivist) to
+    resolve independently via `model_routing.model_for(...)`, replacing the old single
+    shared `UTILITY_MODEL` global (removed entirely — already flagged unused). `/health`
+    now exposes a `"roles"` dict. Reviewed clean, full suite 274/274 at the time.
+  - **Task 4** repointed the `COOPER-Private` Ollama alias from `gemma4:12b` to
+    `gemma4:e4b-it-qat` (`docker-compose.private.yml`, `setup-linux.sh`, `CLAUDE.md`).
+    Live-verified on the real running Private stack: `ollama list` showed
+    `COOPER-Private`'s ID exactly matching `gemma4:e4b-it-qat`'s ID; `/health` showed all
+    4 roles as `COOPER-Private`; a real end-to-end dispatch turn (`status_summary_private`)
+    succeeded with no errors. Also found and fixed a real packaging gap live:
+    `cooper-core/Dockerfile` and `.dockerignore` never shipped `Scripts/PDA_ModelRouting.json`
+    into the image (Task 3's new hard runtime dependency), causing a crash-loop on the
+    first real `--build` of this branch — fixed in a separate commit. Also hit and fixed a
+    transient live-auth break (rebuilding from a git worktree, which lacks the gitignored
+    `PDA-Runtime/.env`, briefly emptied `COOPER_API_KEYS` on the real running container) —
+    caught immediately, restored, verified. Reviewed clean.
+  - **Task 5** added a second LiteLLM deployment
+    (`openrouter/openai/gpt-4o-mini`) under the existing `openai` model_name in
+    `litellm/litellm_config.yaml`, giving the `openai` alias a same-model failover pool
+    ahead of the existing cross-alias `fallbacks:` chain (`openai → [claude, gemini]`,
+    left untouched). Live-verified the spec's literal DoD ("kill one provider key
+    mid-conversation → turn still completes via fallback, logged") against the real
+    running Open stack: broke the primary deployment's key with an explicit invalid
+    literal, confirmed calls kept succeeding — served via OpenRouter (`gen-`-prefixed
+    response ids) vs the normal direct-OpenAI `chatcmpl-`-prefixed ids — then fully
+    reverted. Log evidence (`docker logs pda-litellm`):
+    ```
+    LiteLLM Router:INFO router.py:2934 - litellm.acompletion(model=openai/gpt-4o-mini) Exception litellm.AuthenticationError: AuthenticationError: OpenAIException - Incorrect API key provided: sk-delib*************************************
+    LiteLLM Router:DEBUG cooldown_handlers.py:216 - percent fails for deployment = 23e5d935a5138e57f3f4538011b483525ad39429e70dbcd00d44c16a25bb3fc2, percent fails = 1.0, num successes = 0, num fails = 1
+    LiteLLM Router:DEBUG cooldown_handlers.py:287 - Attempting to add 23e5d935a5138e57f3f4538011b483525ad39429e70dbcd00d44c16a25bb3fc2 to cooldown list
+    LiteLLM Router:DEBUG router.py:10718 - cooldown deployments: ['23e5d935a5138e57f3f4538011b483525ad39429e70dbcd00d44c16a25bb3fc2']
+    LiteLLM Router:INFO router.py:2905 - litellm.acompletion(model=openrouter/openai/gpt-4o-mini) 200 OK
+    ```
+    Same pattern (auth failure → cooldown → routed only to the surviving deployment → 200
+    OK) repeated across all 5 test calls. A genuine methodology finding surfaced: pointing
+    a LiteLLM deployment's `api_key` at a nonexistent `os.environ/<var>` name does NOT
+    actually break it, because the underlying OpenAI SDK auto-discovers the real key still
+    present in the container's process env, bypassing LiteLLM's own unresolved reference —
+    had to use an explicit invalid literal key instead to genuinely simulate a dead/revoked
+    key. See Gotchas.md's 2026-08-30 entry for the full mechanism. Reviewed clean.
+  - **Task 6 (this entry)** ran the full-suite regression pass one more time from a clean
+    checkout state — **274 passed** (`cd cooper-core && .venv/bin/python -m pytest -q`),
+    matching Task 3's count exactly (no code changes in Tasks 4-6). Live-verified both
+    stacks' `/health` side by side:
+    ```
+    Private (:8000): {"status":"ok","workshop":"private","backend":"ollama","model":"COOPER-Private","roles":{"brain":"COOPER-Private","reviewer":"COOPER-Private","drafter":"COOPER-Private","archivist":"COOPER-Private"}}
+    Open (:8001):    {"status":"ok","workshop":"open","backend":"openai","model":"openai","classifier":"openai","utility_model":"openai"}
+    ```
+    Private's `roles` dict confirms all 4 live roles resolved to `COOPER-Private`, as
+    expected. Open shows the pre-15c `classifier`/`utility_model` schema, not the new
+    `roles` dict — its `cooper-core` container was never rebuilt by this plan (only
+    Task 5's `litellm` container was recreated, then reverted); the 2026-08-30
+    approval-ticket-fix session did rebuild Open earlier the same day, so what's running
+    is that fix plus pre-15c routing code. Confirmed this is a deployment-timing gap, not a
+    functional gap: `Scripts/PDA_ModelRouting.json` maps every one of the 7 roles to
+    `"openai"` on the `open` workshop, identical to the value the old `classifier`/
+    `utility_model` fields already carried — so Open's behavior is unchanged either way.
+    Rebuilding Open to pick up Task 3's code (and expose the new `/health` shape) is
+    low-risk and can happen the next time Open's `cooper-core` is touched; not forced here
+    to avoid re-triggering Task 4's worktree-`.env` live-auth hiccup for a docs-only task.
+  - Both stacks' live containers are otherwise healthy and reflect all of Tasks 1-5's
+    changes. 15c's DoD is satisfied: role→alias map live (Task 1-2), Private E4B/12B split
+    decided and live with the benchmark as its entry gate (Task 4), LiteLLM fallback pools
+    live-DoD-tested (Task 5), each role provably resolves to its own mapped alias (Task 3's
+    four independent module-level constants + dispatch-level tests). Next: per the roadmap
+    execution order, 14b.
 
 ---
 

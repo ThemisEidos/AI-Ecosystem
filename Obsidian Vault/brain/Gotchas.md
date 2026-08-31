@@ -383,3 +383,42 @@ tool-call-shaped by the model) was not re-attempted live — that path doesn't r
 via `curl`/`/chat` at all (see above), so re-confirming it needs another live browser
 session with `claude-in-chrome`, not yet done this session. Full decision/implementation
 log: PROGRESS.md's 2026-08-30 entry.
+
+### 2026-08-30 · A nonexistent `os.environ/<var>` in a LiteLLM deployment's `api_key` does NOT actually break auth
+
+Found live during 15c Task 5, testing the DoD "kill one provider key mid-conversation →
+turn still completes via fallback, logged" against a real second `openai/gpt-4o-mini`
+LiteLLM deployment (the same-alias fallback pool added ahead of the existing cross-alias
+`fallbacks:` chain). First attempt: pointed the primary deployment's `api_key` at
+`os.environ/DOES_NOT_EXIST` — an env var name that genuinely does not exist in the
+container. Expected an `AuthenticationError` and a failover. Got neither: every call kept
+succeeding through the *primary* deployment (`chatcmpl-...` ids, not the fallback pool's
+`gen-...` OpenRouter ids) — auth never actually broke.
+
+**Root cause, confirmed by inspecting the container, not guessed:** LiteLLM's own
+`os.environ/<name>` resolution failing (name not found) does not translate into "no key
+passed." The underlying OpenAI SDK client that LiteLLM hands the call off to performs its
+*own* independent env-var auto-discovery (`OPENAI_API_KEY` in the process environment) and
+silently uses that instead — the real, still-valid key was present in `pda-litellm`'s
+process env under its normal name the whole time, just not under the fake name LiteLLM was
+told to look up. LiteLLM's own resolution failure never reaches the SDK as a hard error; it
+degrades into "let the SDK's own fallback figure it out," which it does, successfully.
+
+**Fix for testing "what if this key is dead/revoked":** don't point `api_key` at a
+nonexistent or unset env var name — point it at an explicit **invalid literal key value**
+(e.g. `"sk-deliberately-invalid-..."`). That forces LiteLLM to pass a real (but wrong)
+key string explicitly, which the SDK cannot auto-discover around, producing a genuine
+`AuthenticationError` from the provider. Confirmed this version worked: `docker logs
+pda-litellm` showed the real failure → router cooldown → successful failover sequence
+(`litellm.AuthenticationError: ... Incorrect API key provided: sk-delib***` →
+`Attempting to add <deployment-hash> to cooldown list` → subsequent calls routed only to
+the surviving deployment, 200 OK), and 5/5 live calls during the break all came back via
+the fallback pool. Full DoD test detail: PROGRESS.md's 2026-08-30 (15c) entry,
+`.superpowers/sdd/2026-08-30-step-15c-per-role-model-routing/task-5-report.md`.
+
+**Why this matters beyond this one test:** any config or infra check reasoning "this
+env var doesn't exist, so the credential must be absent" is unsound wherever the consuming
+SDK does its own env-var fallback discovery — the absence has to be verified at the layer
+that actually makes the call, not just at the layer that's supposed to supply it. Flagged
+as worthwhile by both the Task 5 implementer and Task 5's reviewer but out of scope for
+either to write down; recorded here at 15c's Task 6 (docs) instead.

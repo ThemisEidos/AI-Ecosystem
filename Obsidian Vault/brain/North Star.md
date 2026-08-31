@@ -1,8 +1,35 @@
 # North Star — COOPER Project Direction
 
-> Updated 2026-08-24. Source of truth: PROGRESS.md + PRD.md.
+> Updated 2026-08-30. Source of truth: PROGRESS.md + PRD.md.
 
 ## Current Position
+
+**15c (per-role model routing) shipped 2026-08-30, same session as the approval-ticket
+fix below.** 6 tasks via subagent-driven-development, each independently task-reviewed
+clean. Role→alias map (`Scripts/PDA_ModelRouting.json`, 7 roles) rewritten and read
+through a new pure-lookup module (`cooper-core/model_routing.py`); `main.py`'s four live
+roles (brain/reviewer/drafter/archivist) now resolve independently instead of sharing one
+`UTILITY_MODEL` global, and `/health` exposes a `"roles"` dict. **Owner decision (via
+AskUserQuestion):** Private routes all four live roles to `gemma4:e4b-it-qat`, not a
+12b-for-reviewer split — the E4B benchmark (100% GPU-resident, 46.5 tok/s, 11/11 tool-call
+accuracy, vs 12b's 44%/56% CPU/GPU split, 8.7 tok/s, 10/11) was the entry gate, and the
+~5-13s measured model-swap cost per direction is why *everything* stays on e4b rather than
+paying that cost every dispatch turn. `COOPER-Private`'s Ollama alias repointed to
+`gemma4:e4b-it-qat` and live-verified on the real Private stack (a real dispatch turn
+succeeded end to end); found and fixed a real packaging gap along the way (`Dockerfile`/
+`.dockerignore` never shipped `Scripts/PDA_ModelRouting.json`, causing a crash-loop on
+first `--build`) plus a transient live-auth hiccup (worktree rebuild briefly emptied
+`COOPER_API_KEYS`), both caught and fixed live. Open got a same-alias LiteLLM fallback pool
+(`openrouter/openai/gpt-4o-mini` behind `openai`); the spec's literal DoD (kill one
+provider key mid-conversation → turn completes via fallback, logged) was live-executed and
+reverted, surfacing a genuine methodology finding — see Gotchas.md's 2026-08-30 entry
+(`os.environ/<nonexistent-var>` doesn't actually break a LiteLLM deployment's auth, because
+the underlying SDK auto-discovers the real key still in the process env). Final regression:
+274/274 green; both stacks' `/health` live-checked side by side — Private's `roles` dict
+all `COOPER-Private` as expected, Open still shows the pre-15c `classifier`/`utility_model`
+schema (its `cooper-core` container wasn't rebuilt by this plan, only `litellm` was) but is
+functionally identical since every role maps to `"openai"` either way. Full detail:
+PROGRESS.md's 2026-08-30 entry. **Next up: 14b** per the roadmap execution order.
 
 **15a (native tool-calling dispatch) fully DoD-closed 2026-08-25 — browser click-through
 verified on both stacks, a real governance bypass on Private found and fixed along the
