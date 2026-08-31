@@ -1358,3 +1358,23 @@ Governance gates from the Step 15 spec §6 — each blocks only its named slice:
 - ~~**G4**~~ **DECIDED 2026-08-23: Open only** — Private gets no web search; revisitable later by owner choice. 14c fully unblocked.
 - ~~**G5**~~ **CLOSED 2026-08-23:** dashboard key limit set to $15 lifetime (never resets, verified live via `/api/v1/auth/key`: `limit_reset: null`, $7.91 already counted → ~$7.09 headroom); auto top-up off. Burn alert (trigger: remaining < $5) joins the digest job at 14b.
 - **14f — PINNED (owner direction 2026-08-23):** the home-lab network is not built yet. Not a decision gate anymore — a placeholder: when the home-lab project starts, revisit the data-source choice (router syslog / Pi-hole / other) and integrate COOPER then.
+- **15e scope — PAUSED 2026-08-31, awaiting owner decision, not a formal G-gate.** Research
+  is done (spec fully read: `Docs/superpowers/specs/2026-08-18-step-15-max-metrics-design.md`
+  §3's 15e row + target architecture diagram; no G1-G5 gate blocks it — G1/G2 already decide
+  two of its sub-questions). No plan file or code written yet. The open question: 14b's
+  `run_job` is hardcoded to one job shape (CSV read → URL check → write back) and does not
+  generically dispatch a job's declared `steps` field. The spec's literal target architecture
+  wants a genuinely generic executor: an LLM interprets each drafted step's natural-language
+  instructions via the existing tool registry (`executor.py`) at runtime, bounded only by the
+  envelope's read/write scope + quota + exception queue enforced in code, with **no per-step
+  human approval** — real autonomous tool execution, a materially larger and more
+  security-sensitive surface than 15a-15d. Options put to the owner: (a) **narrow** — the
+  planner only drafts new jobs of the same shape `run_job` already knows how to execute
+  (parameterized CSV-monitor jobs); no new autonomous tool-calling surface, satisfies a
+  literal reading of the DoD without the security lift. (b) **full spec** — build the
+  generic step-executor per the target architecture diagram; matches the DoD and the M2
+  metric target (3→4) as written, but needs careful scoping of which tools/permission
+  levels it may touch unattended before implementation starts. (c) discuss further. Next
+  session resumes by asking the owner to choose, then (if (a) or (b)) writes and runs a full
+  implementation plan the same way 15d was executed (subagent-driven-development, live
+  verification against the real running Open stack, final whole-branch review).

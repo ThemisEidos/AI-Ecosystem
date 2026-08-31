@@ -33,9 +33,25 @@ never read) on every compose call, confirmed via a real authenticated round trip
 matching API-key env-var counts throughout. Every temporary change (the two synthetic job
 entries, the `docker-compose.yml` comment-out) fully reverted and confirmed clean. Full
 detail incl. every live-verification command and its real output: PROGRESS.md's
-2026-08-31 (15d) entry and
-`.superpowers/sdd/2026-08-31-step-15d-council-subsystem/task-6-report.md`. **Next up:
-15e** per the roadmap execution order.
+2026-08-31 (15d) entry (git history — the SDD workspace itself was deleted per the
+finishing-a-development-branch convention once the branch merged clean).
+
+**Next up: 15e — paused at a scope decision, not yet started.** Research done (spec fully
+read, no governance gate blocks it — G1/G2 already decided and directly shape it), but no
+plan file or code exists yet. **Session paused here 2026-08-31 because 15e's actual
+execution mechanism is genuinely ambiguous in the spec** and has real security stakes:
+today's `run_job` (14b) is hardcoded to one job shape (read CSV → check URLs → write
+back) and does not generically dispatch a job's declared `steps`. The spec's full vision
+is a *generic* autonomous executor — an LLM interprets each drafted step's natural-language
+instructions via the existing tool registry (`executor.py`) at runtime, bounded only by the
+envelope's read/write scope + quota + exception queue in code, with no per-step human
+approval. That's a materially bigger and more security-sensitive build than anything in
+15a-15d. Before writing an implementation plan, the owner needs to choose scope: (a)
+narrow — planner only drafts new jobs of the same shape `run_job` already knows how to
+execute (parameterized CSV-monitor jobs), no new autonomous tool-calling surface; (b) full
+spec — build the genuinely generic step-executor per the target architecture diagram; (c)
+discuss further before deciding. See PROGRESS.md's "Blocked / needs owner input" section
+for the full question as posed.
 
 **14b (jobs harness + link-checker) shipped 2026-08-30 — mechanism live and live-verified**
 **against the real running Open stack, ships inert (`approved: false`, n8n scheduler not**
