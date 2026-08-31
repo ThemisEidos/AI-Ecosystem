@@ -89,6 +89,9 @@ def validate_completion(record: dict, context: List[dict]) -> List[str]:
     job_linked = is_job_linked(record)
     if job_linked:
         errs += _schema_errors(record, _JOB_LINKAGE_REQUIRED)
+        for field in _JOB_LINKAGE_REQUIRED:
+            if field in record and not record[field]:
+                errs.append(f"schema: field '{field}' must not be empty for a job-linked completion")
     if approval_id:
         approval = _find_approval(approval_id, context)
         if approval is None:

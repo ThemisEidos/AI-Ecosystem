@@ -82,6 +82,15 @@ def test_is_job_linked():
     assert evidence.is_job_linked(_job_completion(job_id="")) is False
 
 
+def test_job_linked_completion_rejects_empty_envelope_hash():
+    # Present, correct type, but empty — envelope_hash is meant to
+    # cryptographically tie the record to an approved job envelope, so an
+    # empty value must not silently validate.
+    rec = _job_completion(envelope_hash="")
+    errs = evidence.validate_completion(rec, [])
+    assert any("envelope_hash" in e and "must not be empty" in e for e in errs)
+
+
 def test_cli_runner_flags_invalid_dir(tmp_path):
     proc = subprocess.run(
         [sys.executable, str(_REPO / "cooper-core" / "evidence.py"), str(FIXTURES)],
