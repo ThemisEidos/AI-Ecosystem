@@ -75,6 +75,15 @@ CREATE TABLE IF NOT EXISTS skillmd_stats (
     activation_count INTEGER NOT NULL DEFAULT 0,
     last_activated   TEXT
 );
+CREATE TABLE IF NOT EXISTS job_exceptions (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_id           TEXT NOT NULL,
+    run_id           TEXT NOT NULL,
+    proposed_action  TEXT NOT NULL,
+    reason           TEXT NOT NULL,
+    status           TEXT NOT NULL DEFAULT 'pending',
+    created_at       TEXT NOT NULL
+);
 """
 
 

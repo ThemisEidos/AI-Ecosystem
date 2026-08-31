@@ -380,3 +380,9 @@ def test_default_db_path_falls_back_without_env(monkeypatch):
     importlib.reload(archivist_mod)
     assert archivist_mod._DEFAULT_DB_PATH.name == "cooper_memory.db"
     assert archivist_mod._DEFAULT_DB_PATH.parent == archivist_mod.Path(archivist_mod.__file__).resolve().parent
+
+
+def test_init_db_creates_job_exceptions_table(conn):
+    """Test that init_db creates the job_exceptions table with correct columns."""
+    cols = [r[1] for r in conn.execute("PRAGMA table_info(job_exceptions)").fetchall()]
+    assert cols == ["id", "job_id", "run_id", "proposed_action", "reason", "status", "created_at"]
