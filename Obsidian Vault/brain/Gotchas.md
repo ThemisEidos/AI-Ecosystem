@@ -464,3 +464,72 @@ services' secret files is not safely scoped to that target — it can implicitly
 and break *any* other service in the same file whose declared config you had to touch
 (even temporarily) to get compose to parse at all. Verify every *other* running service's
 critical env/state immediately after such a rebuild, not just the one you meant to touch.
+
+### 2026-08-31 · A worktree missing `PDA-Runtime/.env` silently downgrades `cooper-core`'s own auth key to the insecure `"cooper-local"` default — no build-time error
+
+Found live during 15d Task 6, rebuilding Open's `cooper-core` from the
+`step-15d-council-subsystem` worktree — the same worktree/rebuild situation as the
+2026-08-30 entry above, but this is a *different* mechanism than that entry's `litellm`
+collateral-recreate trap, and needs its own separate fix.
+
+The 2026-08-30 entry covers `litellm`'s `env_file: ../litellm/.env.local` directive, which
+makes `docker compose` refuse to *parse the file at all* when that file is missing — a
+loud, unmissable failure. This entry covers the opposite failure mode: `cooper-core`'s own
+service block doesn't use `env_file:` for its secrets at all — it interpolates them
+directly, e.g. `- COOPER_API_KEYS=${COOPER_API_KEYS:-}` and
+`- OPENAI_API_KEY=${LITELLM_MASTER_KEY:-cooper-local}` (`PDA-Runtime/docker-compose.yml`).
+Compose's variable-substitution mechanism resolves `${VAR:-default}` from the shell
+environment or a `.env` file in the project directory (`PDA-Runtime/.env`) — and if
+*neither* exists, it does not error. It just silently falls back to each default:
+`COOPER_API_KEYS` → empty string, and `LITELLM_MASTER_KEY` (and therefore
+`OPENAI_API_KEY`, cooper-core's own outbound key for talking to LiteLLM) → the literal
+placeholder `"cooper-local"`. This worktree, like the one in the 2026-08-30 entry, lacks
+`PDA-Runtime/.env` (gitignored, DO-NOT-TOUCH, never present in a fresh worktree) — so
+running the 2026-08-30 entry's own literal fix (comment out `litellm`'s `env_file:` line,
+then `up -d --build cooper-core`) would have "succeeded" with no error at all, while
+silently replacing the **live, already-running** `cooper-core`'s real client-auth key and
+its own LiteLLM auth key with the insecure default.
+
+**Confirmed, not assumed, before ever running `up`:** a redacted `docker compose config`
+dry-run (after the 2026-08-30 mitigation's `env_file:` comment-out, so it could parse at
+all) showed, for the `cooper-core` service:
+```
+COOPER_API_KEY: cooper-local
+COOPER_API_KEYS: ""
+OPENAI_API_KEY: cooper-local     # cooper-core's own outbound key to litellm
+```
+Had the rebuild proceeded on top of this, the live container would have ended up
+requiring only `"cooper-local"` for client auth (rejecting the real, already-issued
+`COOPER_API_KEYS` value with 401) *and* would have been rejected by `litellm` itself with
+401 on every outbound call (`litellm`'s real master key does not equal `"cooper-local"`) —
+breaking both directions of the live stack's auth, invisibly, with `docker compose`
+reporting success throughout.
+
+**Fix, live-verified:** pass `--env-file <main-checkout>/PDA-Runtime/.env` on every
+`docker compose` invocation run against the worktree — e.g.
+```bash
+docker compose -f PDA-Runtime/docker-compose.yml \
+  --env-file /home/zb6/Documents/Projects/01_AI_Ecosystem/PDA-Runtime/.env \
+  up -d --build cooper-core
+```
+`--env-file` only points compose at the dotenv file it uses for `${VAR}` interpolation —
+it is unrelated to the `env_file:` service directive from the 2026-08-30 entry, and does
+**not** require reading, printing, or copying the file: compose resolves it internally,
+by path. Confirmed it restored the real values with a second redacted `docker compose
+config` dry-run: `COOPER_API_KEYS` and the litellm-facing `OPENAI_API_KEY` both changed
+away from their default values (`grep -c "OPENAI_API_KEY: cooper-local"` → `0`, vs `2`
+without `--env-file`), then confirmed for real end-to-end after the rebuild: a real
+`POST /chat` against the rebuilt worktree code, authenticated with the real key grepped
+from the main checkout's `.env`, replied successfully through cooper-core → LiteLLM →
+provider, and `docker exec pda-open-cooper-core printenv | grep -c API_KEY` matched the
+pre-rebuild baseline (`3`) exactly.
+
+**Takeaway, combined with the 2026-08-30 entry:** any worktree-based `docker compose`
+rebuild that touches this repo's Open stack needs *both* mitigations together — comment
+out `litellm`'s `env_file:` line so compose can parse at all (2026-08-30 entry), **and**
+pass `--env-file <main-checkout>/PDA-Runtime/.env` so `cooper-core`'s own interpolated
+secrets resolve to their real values instead of silently downgrading to
+`"cooper-local"` (this entry). Skipping either one produces no error message — only a
+live auth break, discoverable only by checking (not assuming) the resolved config or the
+running container's actual behavior. Full transcript:
+`.superpowers/sdd/2026-08-31-step-15d-council-subsystem/task-6-report.md`'s Step 1.

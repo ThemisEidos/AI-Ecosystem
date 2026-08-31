@@ -1296,27 +1296,19 @@ Execution order: 15a → 14a(rev) → 15c → 14b → 15d → 15e → 14c(+15f-i
     its 4 real provider keys (`docker exec pda-litellm printenv | grep -c API_KEY` → `0`),
     restored by re-running `up -d litellm` from the **main checkout** (`4` keys back,
     confirmed via a real authenticated `POST /chat` reply through cooper-core → LiteLLM →
-    provider). **New wrinkle beyond the existing Gotcha, found and worked around live:**
-    this worktree also lacks `PDA-Runtime/.env` itself (not just `litellm/.env.local`).
-    `docker-compose.yml`'s `cooper-core` service doesn't use `env_file:` for its own
-    secrets — it interpolates `${COOPER_API_KEYS:-}`, `${LITELLM_MASTER_KEY:-cooper-local}`,
-    etc. directly — so compose doesn't hard-fail on the missing file, it just silently
-    substitutes the insecure defaults (verified via a redacted `docker compose config`
-    dry-run: `COOPER_API_KEY: cooper-local`, `COOPER_API_KEYS: ""`). Left as-is, the
-    `--build cooper-core` in Step 1 would have quietly swapped the live Open cooper-core's
-    real client auth key and its own LiteLLM auth key for the `"cooper-local"` placeholder
-    — breaking real client auth and breaking cooper-core→LiteLLM calls with a 401, with no
-    error at build time. Worked around by passing `--env-file
-    /home/zb6/Documents/Projects/01_AI_Ecosystem/PDA-Runtime/.env` (the **main checkout's**
-    real file, referenced by path only — never opened, read, or copied) on every compose
-    invocation against the worktree for the rest of this task, restoring the real
-    interpolated values without ever touching the DO-NOT-TOUCH secret file's contents.
-    Confirmed working via a real end-to-end `POST /chat` reply immediately after the
-    rebuild, and via matching `API_KEY` env-var counts throughout (open cooper-core: `3`,
-    litellm: `4`, matching the pre-task baseline at every checkpoint). Not yet added to
-    Gotchas.md — flagged here for the owner/next session, since the fix (`--env-file
-    <main-checkout>/PDA-Runtime/.env`) is a clean, general pattern for this class of
-    worktree rebuild and belongs there.
+    provider). **New wrinkle beyond the existing Gotcha, found and worked around live —
+    now documented as its own entry, Gotchas.md 2026-08-31:** this worktree also lacks
+    `PDA-Runtime/.env` itself (not just `litellm/.env.local`), and `cooper-core`'s own
+    service block interpolates its secrets directly (`${COOPER_API_KEYS:-}`,
+    `${LITELLM_MASTER_KEY:-cooper-local}`) rather than via `env_file:` — so compose
+    doesn't hard-fail on the missing file, it silently substitutes the insecure
+    `"cooper-local"` default with no build-time error, which would have broken both real
+    client auth and cooper-core→LiteLLM calls on the live container. Fix: pass `--env-file
+    <main-checkout>/PDA-Runtime/.env` (path only, never read) on every compose invocation
+    against the worktree — verified via a `docker compose config` dry-run before `up`, and
+    confirmed live via a real `POST /chat` reply and matching `API_KEY` counts throughout
+    (open cooper-core `3`, litellm `4`, unchanged from baseline). Full mechanism, dry-run
+    output, and takeaway: Gotchas.md's 2026-08-31 entry.
     - **Step 2 (planning-time critique on a seeded flaw):** added a throwaway
       `15d-test-flawed-envelope` job (`permission_level: 3`, `write_scope: ["/"]` —
       deliberately over-broad) to `Config/jobs_registry.yaml`, restarted cooper-core,
