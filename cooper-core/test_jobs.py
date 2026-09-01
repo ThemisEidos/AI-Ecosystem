@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 
 import pytest
+import yaml
 
 import archivist
 import council
@@ -74,6 +75,41 @@ def test_get_job_returns_none_for_unknown_id():
     registry = {"jobs": [MINIMAL_JOB]}
     assert jobs.get_job("nonexistent", registry) is None
     assert jobs.get_job("test-job", registry) == MINIMAL_JOB
+
+
+def test_append_job_entry_writes_new_entry_to_empty_registry(tmp_path):
+    registry_path = tmp_path / "jobs_registry.yaml"
+    entry = {**MINIMAL_JOB, "id": "new-job"}
+    jobs.append_job_entry(entry, registry_path=registry_path)
+
+    reg = jobs.load_registry(registry_path)
+    assert jobs.get_job("new-job", reg) == entry
+
+
+def test_append_job_entry_preserves_other_existing_entries(tmp_path):
+    registry_path = tmp_path / "jobs_registry.yaml"
+    registry_path.write_text(
+        yaml.safe_dump({"jobs": [{**MINIMAL_JOB, "id": "existing-job"}]}), encoding="utf-8"
+    )
+    jobs.append_job_entry({**MINIMAL_JOB, "id": "new-job"}, registry_path=registry_path)
+
+    reg = jobs.load_registry(registry_path)
+    assert jobs.get_job("existing-job", reg) is not None
+    assert jobs.get_job("new-job", reg) is not None
+    assert len(reg["jobs"]) == 2
+
+
+def test_append_job_entry_replaces_existing_entry_with_same_id(tmp_path):
+    registry_path = tmp_path / "jobs_registry.yaml"
+    registry_path.write_text(
+        yaml.safe_dump({"jobs": [{**MINIMAL_JOB, "id": "dup-job", "schedule_hint": "old"}]}),
+        encoding="utf-8",
+    )
+    jobs.append_job_entry({**MINIMAL_JOB, "id": "dup-job", "schedule_hint": "new"}, registry_path=registry_path)
+
+    reg = jobs.load_registry(registry_path)
+    assert len(reg["jobs"]) == 1
+    assert jobs.get_job("dup-job", reg)["schedule_hint"] == "new"
 
 
 @pytest.fixture
