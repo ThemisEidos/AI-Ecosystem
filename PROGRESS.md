@@ -1378,3 +1378,11 @@ Governance gates from the Step 15 spec §6 — each blocks only its named slice:
   session resumes by asking the owner to choose, then (if (a) or (b)) writes and runs a full
   implementation plan the same way 15d was executed (subagent-driven-development, live
   verification against the real running Open stack, final whole-branch review).
+- **15e scope — DECIDED 2026-09-01: (a) narrow.** Owner chose the narrow option: the
+  planner only drafts new jobs of the same shape `run_job` (14b) already knows how to
+  execute (parameterized CSV-monitor jobs). No new autonomous tool-calling surface, no
+  generic step-executor, no unattended LLM tool-selection. Satisfies a literal reading of
+  the 15e DoD without opening the larger security surface described above; the full-spec
+  generic executor remains available to revisit later by owner choice if the narrow build
+  proves insufficient. Next: write and run a full implementation plan for narrow-scope 15e
+  the same way 15d was executed.
