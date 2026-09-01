@@ -127,3 +127,51 @@ def test_draft_envelope_defaults_quota_on_bad_values(tmp_path):
 def test_slugify_matches_proposer_convention():
     assert planner.slugify("Newsletter Links!!") == "newsletter-links"
     assert planner.slugify("") == "unnamed-job"
+
+
+def test_draft_envelope_wraps_backend_exception_in_planner_error(tmp_path):
+    """Finding 1: a raw exception from extract_fn (LiteLLM 429/5xx, timeout,
+    malformed JSON, ...) must surface as PlannerError, not escape raw — and
+    the registry must be untouched."""
+    _write_csv(tmp_path / "State" / "LinkAudit" / "links.csv")
+    registry_path = tmp_path / "Config" / "jobs_registry.yaml"
+    registry_path.parent.mkdir(parents=True, exist_ok=True)
+
+    async def _boom(*a, **k):
+        raise RuntimeError("simulated 429")
+
+    with pytest.raises(planner.PlannerError, match="planner backend call failed"):
+        _draft(tmp_path, extract=_boom)
+
+    assert not registry_path.exists() or jobs.load_registry(registry_path)["jobs"] == []
+
+
+def test_draft_envelope_rejects_non_object_json(tmp_path):
+    """Finding 1: valid JSON that isn't an object (e.g. a bare list) must
+    raise PlannerError before any .get() call touches it."""
+    _write_csv(tmp_path / "State" / "LinkAudit" / "links.csv")
+    registry_path = tmp_path / "Config" / "jobs_registry.yaml"
+    registry_path.parent.mkdir(parents=True, exist_ok=True)
+
+    async def _list_draft(*a, **k):
+        return [1, 2, 3]
+
+    with pytest.raises(planner.PlannerError, match="non-object JSON"):
+        _draft(tmp_path, extract=_list_draft)
+
+    assert not registry_path.exists() or jobs.load_registry(registry_path)["jobs"] == []
+
+
+def test_draft_envelope_caps_id_and_schedule_hint_length(tmp_path):
+    """Finding 2: a pathological LLM response echoing back a long id/
+    schedule_hint must be truncated before it can overflow a filesystem
+    filename limit downstream (jobs.write_critique_note)."""
+    _write_csv(tmp_path / "State" / "LinkAudit" / "links.csv")
+    long_id = "newsletter-links-" + ("x" * 200)
+    long_hint = "daily at 03:00 " + ("y" * 300)
+    entry = _draft(tmp_path, extract=fake_extract(id=long_id, schedule_hint=long_hint))
+
+    assert len(entry["id"]) <= 60
+    assert len(entry["schedule_hint"]) <= 120
+    assert entry["id"] == planner.slugify(long_id)[:60]
+    assert entry["schedule_hint"] == long_hint.strip()[:120]

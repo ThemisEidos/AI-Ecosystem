@@ -156,9 +156,14 @@ async def draft_envelope(
     drafted id collides with an already-registered job."""
     root = repo_root or _REPO_ROOT
     extract_fn = extract_fn or _extract_fields
-    draft = await extract_fn(goal, base_url=base_url, api_key=api_key, model=model, backend=backend)
+    try:
+        draft = await extract_fn(goal, base_url=base_url, api_key=api_key, model=model, backend=backend)
+    except Exception as exc:
+        raise PlannerError(f"planner backend call failed: {exc}")
+    if not isinstance(draft, dict):
+        raise PlannerError("planner returned non-object JSON")
 
-    job_id = slugify(str(draft.get("id", "")))
+    job_id = slugify(str(draft.get("id", "")))[:60]
     existing = jobs.load_registry(registry_path)
     if jobs.get_job(job_id, existing) is not None:
         raise PlannerError(
@@ -171,7 +176,7 @@ async def draft_envelope(
         draft.get("fetches_per_run"), minimum=rows_per_run, maximum=_MAX_FETCHES_PER_RUN,
         default=max(rows_per_run, 30),
     )
-    schedule_hint = str(draft.get("schedule_hint", "")).strip() or "manual"
+    schedule_hint = str(draft.get("schedule_hint", "")).strip()[:120] or "manual"
 
     job_entry = {
         "id": job_id,
