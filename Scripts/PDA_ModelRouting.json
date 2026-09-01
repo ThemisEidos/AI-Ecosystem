@@ -16,7 +16,7 @@
     "planner": {
       "private": "COOPER-Private",
       "open": "openai",
-      "notes": "No call site yet — reserved for Step 15e (planner-executor). G2 (2026-08-23): starts as gpt-4o-mini on Open."
+      "notes": "Call site: planner.draft_envelope(), invoked once per POST /jobs/draft (Step 15e, narrow scope — 2026-09-01). Never called during job execution (run_job, jobs.py, is unmodified)."
     },
     "executor": {
       "private": "COOPER-Private",
