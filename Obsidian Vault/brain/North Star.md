@@ -1,6 +1,6 @@
 # North Star — COOPER Project Direction
 
-> Updated 2026-08-31. Source of truth: PROGRESS.md + PRD.md.
+> Updated 2026-09-01. Source of truth: PROGRESS.md + PRD.md.
 
 ## Current Position
 
@@ -36,18 +36,53 @@ detail incl. every live-verification command and its real output: PROGRESS.md's
 2026-08-31 (15d) entry (git history — the SDD workspace itself was deleted per the
 finishing-a-development-branch convention once the branch merged clean).
 
-**Next up: 15e — scope DECIDED 2026-09-01, plan not yet written.** Owner chose **(a)
-narrow**: the planner only drafts new jobs of the same shape `run_job` (14b) already knows
-how to execute (parameterized CSV-monitor jobs) — no new autonomous tool-calling surface,
-no generic step-executor, no unattended LLM tool-selection. This satisfies a literal
-reading of the 15e DoD without opening the larger security surface a full generic executor
-would (an LLM picking tools per drafted step at runtime with no per-step human approval).
-The full-spec option remains available to revisit later by owner choice if narrow proves
-insufficient. Full option text and rationale: PROGRESS.md's "Blocked / needs owner input"
-section (15e scope entries, 2026-08-31 pause + 2026-09-01 decision). Next action: write and
-run a full implementation plan for narrow-scope 15e, same process as 15d
-(subagent-driven-development, live verification against the real running Open stack, final
-whole-branch review).
+**15e (narrow scope) shipped 2026-09-01 — planner drafting live and live-verified against**
+**the real running Private stack.** Owner chose **(a) narrow** (2026-09-01): the planner
+only drafts new jobs of the same shape `run_job` (14b) already knows how to execute
+(parameterized CSV-monitor jobs) — no new autonomous tool-calling surface, no generic
+step-executor, no unattended LLM tool-selection. 3 tasks on `step-15e-narrow-planner`, each
+independently task-reviewed clean, plus a final whole-branch review (opus) and one bundled
+fix round; full suite 351 → 371. `jobs.append_job_entry()` is the registry writer 15e
+needed; `cooper-core/planner.py` (new) is `draft_envelope()`/`PlannerError` — **the
+security-critical property, independently verified twice** (task review + final review,
+both traced every `.get()` call): a drafted job's `steps`/`permission_level`/`workshop` are
+fixed in code and can never be set from the planner LLM's output, proven by a hostile-input
+test. `main.py` wires `POST /jobs/draft`, with `PLANNER_MODEL` resolved via the existing
+`model_routing.model_for("planner", WORKSHOP)` role map (G2) and a shared
+`_critique_and_note()` helper so drafting and manual critique share one code path with
+`POST /jobs/critique/{job_id}`. Final review found one real Important gap — no exception
+guard around the backend LLM call (a LiteLLM 429/timeout would've leaked as a raw HTTP 500
+instead of a clean 422) — fixed in one bundled round, one scoped re-review confirmed clean.
+
+**Live verification deviated from the plan's Open-stack text, ruled and recorded live:**
+repeated Bash permission denials on any command touching `PDA-Runtime/.env` or
+`litellm/.env.local` made the Open-stack path infeasible without direct user action; the
+owner chose verifying against the **Private** stack instead (the code path under test is
+workshop-agnostic — the only Open-specific piece, which model alias gets called, is a
+config-level G2 difference, not a code branch; Private needs zero cloud secrets).
+Real live result: `POST /jobs/draft` with a real throwaway CSV → HTTP 200, a real drafted
+envelope (all code-fixed values confirmed live) reviewed by 3 real `COOPER-Private` council
+members (all `pass`), `approved: false`, hash-pinned, matching critique note — confirmed via
+`docker exec`. **Found and disclosed, not fixed:** the container's `jobs_registry.yaml`
+never contained the pre-existing `link-checker` entry — `cooper-core/Dockerfile` never
+bakes `Config/jobs_registry.yaml` into the image at all, a pre-existing 14b/15d
+Docker-packaging gap, not a regression from this work.
+
+**What this closes and does NOT close, stated plainly:** this closes 15e's *drafting* half
+only. It does **not** close the spec's full 15e row — no per-step natural-language
+instructions are drafted (steps are fixed, not generated), no executor loop exists
+(`executor` role still has "No call site yet"), and `/jobs/draft` is API-only, not
+chat-reachable. The DoD's "big-brain alias called zero times during execution" line is
+satisfied *vacuously* (no executor-alias call path exists to split from) — confirmed by
+code inspection, not a live LiteLLM log trace (that needs the Open stack, blocked this
+session by the secrets-access wall). **M2 should not be marked closed to 4 on this work
+alone.** Full-spec generic step-executor remains available to revisit later by owner
+choice. Full detail incl. every live-verification command and its real output:
+PROGRESS.md's 2026-09-01 (15e) entry (git history — the SDD workspace itself was deleted
+per the finishing-a-development-branch convention once the branch merged clean).
+
+**Next up: 14c(+15f-i)** per the spec's execution order
+(`15a → 14a(revised) → 15c → 14b → 15d → 15e → 14c(+15f-i) → 14d → 14e → 15f(ii,iii) → 15g → 15h`).
 
 **14b (jobs harness + link-checker) shipped 2026-08-30 — mechanism live and live-verified**
 **against the real running Open stack, ships inert (`approved: false`, n8n scheduler not**
