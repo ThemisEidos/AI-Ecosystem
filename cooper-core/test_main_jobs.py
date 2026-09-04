@@ -117,3 +117,78 @@ def test_critique_endpoint_404s_for_unknown_job(monkeypatch):
         resp = client.post("/jobs/critique/nonexistent")
 
     assert resp.status_code == 404
+
+
+def test_post_jobs_draft_returns_envelope_and_critique(monkeypatch, tmp_path):
+    monkeypatch.setattr(main, "_API_KEYS", set())
+    monkeypatch.setattr(main, "_ALLOW_ANON", True)
+    monkeypatch.setattr(main.jobs, "_DIGEST_DIR", tmp_path / "inbox")
+
+    drafted_entry = {
+        "id": "newsletter-links", "workshop": "open", "schedule_hint": "daily 03:00",
+        "steps": ["csv_next_rows", "url_verify", "csv_line_edit"],
+        "read_scope": ["State/LinkAudit/links.csv"], "write_scope": ["State/LinkAudit/links.csv"],
+        "quota": {"rows_per_run": 10, "fetches_per_run": 30},
+        "permission_level": 3, "approved": False,
+    }
+    drafted_entry["envelope_hash"] = main.jobs.compute_envelope_hash(drafted_entry)
+
+    async def fake_draft_envelope(goal, **kw):
+        assert goal == "watch the newsletter links CSV"
+        assert kw["model"] == main.PLANNER_MODEL
+        return drafted_entry
+
+    async def fake_critique_envelope(job_entry, workshop, **kw):
+        assert job_entry == drafted_entry
+        return [main.council.CouncilVerdict(member="openai", verdict="pass", reason="looks proportionate")]
+
+    monkeypatch.setattr(main.planner, "draft_envelope", fake_draft_envelope)
+    monkeypatch.setattr(main.council, "critique_envelope", fake_critique_envelope)
+
+    with TestClient(main.app) as client:
+        resp = client.post("/jobs/draft", json={"goal": "watch the newsletter links CSV"})
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["job_entry"] == drafted_entry
+    assert body["job_id"] == "newsletter-links"
+    assert body["objection"] is False
+    assert len(body["verdicts"]) == 1
+    assert body["envelope_hash"] == drafted_entry["envelope_hash"]
+    assert Path(body["note_path"]).exists()
+
+
+def test_post_jobs_draft_422s_on_planner_error(monkeypatch):
+    monkeypatch.setattr(main, "_API_KEYS", set())
+    monkeypatch.setattr(main, "_ALLOW_ANON", True)
+
+    async def boom(goal, **kw):
+        raise main.planner.PlannerError("goal did not name an existing CSV file to monitor")
+
+    monkeypatch.setattr(main.planner, "draft_envelope", boom)
+
+    with TestClient(main.app) as client:
+        resp = client.post("/jobs/draft", json={"goal": "do something vague"})
+
+    assert resp.status_code == 422
+    assert "did not name" in resp.json()["detail"]
+
+
+def test_post_jobs_draft_requires_auth(monkeypatch):
+    monkeypatch.setattr(main, "_API_KEYS", {"secret-key"})
+    monkeypatch.setattr(main, "_ALLOW_ANON", False)
+
+    with TestClient(main.app) as client:
+        resp = client.post("/jobs/draft", json={"goal": "watch a CSV"})
+
+    assert resp.status_code == 401
+
+
+def test_post_jobs_draft_rejects_empty_goal(monkeypatch):
+    monkeypatch.setattr(main, "_API_KEYS", set())
+    monkeypatch.setattr(main, "_ALLOW_ANON", True)
+
+    with TestClient(main.app) as client:
+        resp = client.post("/jobs/draft", json={"goal": ""})
+
+    assert resp.status_code == 422

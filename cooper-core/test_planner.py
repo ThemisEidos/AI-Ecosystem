@@ -1,0 +1,177 @@
+"""Tests for narrow-scope job drafting (Step 15e, narrow — owner decision 2026-09-01)."""
+import asyncio
+
+import pytest
+import yaml
+
+import jobs
+import planner
+
+
+FAKE_DRAFT = {
+    "id": "newsletter-links",
+    "csv_path": "State/LinkAudit/links.csv",
+    "rows_per_run": 10,
+    "fetches_per_run": 30,
+    "schedule_hint": "daily 03:00",
+}
+
+
+def fake_extract(**overrides):
+    async def _inner(*args, **kwargs):
+        return {**FAKE_DRAFT, **overrides}
+    return _inner
+
+
+def run(coro):
+    return asyncio.run(coro)
+
+
+def _write_csv(path, header="url,last_checked,status,notes\n"):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(header + "https://a.example,,,\n", encoding="utf-8")
+
+
+def _draft(tmp_path, *, extract=None, goal="watch the newsletter links CSV"):
+    registry_path = tmp_path / "Config" / "jobs_registry.yaml"
+    registry_path.parent.mkdir(parents=True, exist_ok=True)
+    return run(planner.draft_envelope(
+        goal, workshop="open",
+        base_url="", api_key="", model="", backend="ollama",
+        repo_root=tmp_path, registry_path=registry_path,
+        extract_fn=extract or fake_extract(),
+    ))
+
+
+def test_draft_envelope_persists_fixed_csv_monitor_shape(tmp_path):
+    _write_csv(tmp_path / "State" / "LinkAudit" / "links.csv")
+    entry = _draft(tmp_path)
+
+    assert entry["id"] == "newsletter-links"
+    assert entry["workshop"] == "open"
+    assert entry["steps"] == ["csv_next_rows", "url_verify", "csv_line_edit"]
+    assert entry["permission_level"] == 3
+    assert entry["approved"] is False
+    assert entry["read_scope"] == ["State/LinkAudit/links.csv"]
+    assert entry["write_scope"] == ["State/LinkAudit/links.csv"]
+    assert entry["envelope_hash"] == jobs.compute_envelope_hash(entry)
+
+    registry = jobs.load_registry(tmp_path / "Config" / "jobs_registry.yaml")
+    assert jobs.get_job("newsletter-links", registry) == entry
+
+
+def test_draft_envelope_ignores_llm_chosen_steps_and_permission_level(tmp_path):
+    """The narrow-scope invariant: even if the LLM output carried extra keys
+    trying to widen the job shape, draft_envelope must never read them —
+    steps/permission_level/workshop are fixed in code, not in the schema."""
+    _write_csv(tmp_path / "State" / "LinkAudit" / "links.csv")
+    hostile = fake_extract(steps=["shell_exec"], permission_level=6, workshop="private")
+    entry = _draft(tmp_path, extract=hostile)
+
+    assert entry["steps"] == ["csv_next_rows", "url_verify", "csv_line_edit"]
+    assert entry["permission_level"] == 3
+    assert entry["workshop"] == "open"
+
+
+def test_draft_envelope_rejects_empty_csv_path(tmp_path):
+    with pytest.raises(planner.PlannerError, match="did not name"):
+        _draft(tmp_path, extract=fake_extract(csv_path=""))
+
+
+def test_draft_envelope_rejects_path_outside_repo(tmp_path):
+    with pytest.raises(planner.PlannerError, match="not a safe repo-relative"):
+        _draft(tmp_path, extract=fake_extract(csv_path="../outside.csv"))
+
+
+def test_draft_envelope_rejects_nonexistent_csv(tmp_path):
+    with pytest.raises(planner.PlannerError, match="does not exist"):
+        _draft(tmp_path, extract=fake_extract(csv_path="State/LinkAudit/missing.csv"))
+
+
+def test_draft_envelope_rejects_csv_without_url_column(tmp_path):
+    csv_path = tmp_path / "State" / "LinkAudit" / "notes.csv"
+    _write_csv(csv_path, header="topic,body\n")
+    with pytest.raises(planner.PlannerError, match="no 'url' column"):
+        _draft(tmp_path, extract=fake_extract(csv_path="State/LinkAudit/notes.csv"))
+
+
+def test_draft_envelope_rejects_duplicate_job_id(tmp_path):
+    _write_csv(tmp_path / "State" / "LinkAudit" / "links.csv")
+    registry_path = tmp_path / "Config" / "jobs_registry.yaml"
+    registry_path.parent.mkdir(parents=True, exist_ok=True)
+    registry_path.write_text(
+        yaml.safe_dump({"jobs": [{"id": "newsletter-links", "workshop": "open"}]}), encoding="utf-8"
+    )
+    with pytest.raises(planner.PlannerError, match="already exists"):
+        _draft(tmp_path)
+
+    # Must not have touched the existing entry.
+    reg = jobs.load_registry(registry_path)
+    assert len(reg["jobs"]) == 1
+
+
+def test_draft_envelope_clamps_quota_to_max(tmp_path):
+    _write_csv(tmp_path / "State" / "LinkAudit" / "links.csv")
+    entry = _draft(tmp_path, extract=fake_extract(rows_per_run=99999, fetches_per_run=99999))
+    assert entry["quota"]["rows_per_run"] == planner._MAX_ROWS_PER_RUN
+    assert entry["quota"]["fetches_per_run"] == planner._MAX_FETCHES_PER_RUN
+
+
+def test_draft_envelope_defaults_quota_on_bad_values(tmp_path):
+    _write_csv(tmp_path / "State" / "LinkAudit" / "links.csv")
+    entry = _draft(tmp_path, extract=fake_extract(rows_per_run="not-a-number", fetches_per_run=None))
+    assert entry["quota"]["rows_per_run"] == 10
+    assert entry["quota"]["fetches_per_run"] >= entry["quota"]["rows_per_run"]
+
+
+def test_slugify_matches_proposer_convention():
+    assert planner.slugify("Newsletter Links!!") == "newsletter-links"
+    assert planner.slugify("") == "unnamed-job"
+
+
+def test_draft_envelope_wraps_backend_exception_in_planner_error(tmp_path):
+    """Finding 1: a raw exception from extract_fn (LiteLLM 429/5xx, timeout,
+    malformed JSON, ...) must surface as PlannerError, not escape raw — and
+    the registry must be untouched."""
+    _write_csv(tmp_path / "State" / "LinkAudit" / "links.csv")
+    registry_path = tmp_path / "Config" / "jobs_registry.yaml"
+    registry_path.parent.mkdir(parents=True, exist_ok=True)
+
+    async def _boom(*a, **k):
+        raise RuntimeError("simulated 429")
+
+    with pytest.raises(planner.PlannerError, match="planner backend call failed"):
+        _draft(tmp_path, extract=_boom)
+
+    assert not registry_path.exists() or jobs.load_registry(registry_path)["jobs"] == []
+
+
+def test_draft_envelope_rejects_non_object_json(tmp_path):
+    """Finding 1: valid JSON that isn't an object (e.g. a bare list) must
+    raise PlannerError before any .get() call touches it."""
+    _write_csv(tmp_path / "State" / "LinkAudit" / "links.csv")
+    registry_path = tmp_path / "Config" / "jobs_registry.yaml"
+    registry_path.parent.mkdir(parents=True, exist_ok=True)
+
+    async def _list_draft(*a, **k):
+        return [1, 2, 3]
+
+    with pytest.raises(planner.PlannerError, match="non-object JSON"):
+        _draft(tmp_path, extract=_list_draft)
+
+    assert not registry_path.exists() or jobs.load_registry(registry_path)["jobs"] == []
+
+
+def test_draft_envelope_caps_id_and_schedule_hint_length(tmp_path):
+    """Finding 2: a pathological LLM response echoing back a long id/
+    schedule_hint must be truncated before it can overflow a filesystem
+    filename limit downstream (jobs.write_critique_note)."""
+    _write_csv(tmp_path / "State" / "LinkAudit" / "links.csv")
+    long_id = "newsletter-links-" + ("x" * 200)
+    long_hint = "daily at 03:00 " + ("y" * 300)
+    entry = _draft(tmp_path, extract=fake_extract(id=long_id, schedule_hint=long_hint))
+
+    assert len(entry["id"]) <= 60
+    assert len(entry["schedule_hint"]) <= 120
+    assert entry["id"] == planner.slugify(long_id)[:60]
+    assert entry["schedule_hint"] == long_hint.strip()[:120]

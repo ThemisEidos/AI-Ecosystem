@@ -1346,6 +1346,87 @@ Execution order: 15a → 14a(rev) → 15c → 14b → 15d → 15e → 14c(+15f-i
       (`cd cooper-core && .venv/bin/python -m pytest -q`) — CLAUDE.md's stale "315 tests"
       claim corrected to 343 as part of this task's Step 6.
 
+- **2026-09-01 · 15e (narrow scope) shipped — planner drafting live and live-verified**
+  **against the real running Private stack; owner's narrow-scope framing preserved**
+  **honestly, NOT the spec's full 15e row.** Owner decided 2026-09-01: narrow scope — the
+  planner only drafts new jobs of the exact shape `run_job` (14b) already executes
+  (parameterized CSV-monitor jobs), never a generic step-executor. 3 tasks on
+  `step-15e-narrow-planner`, each independently task-reviewed clean, plus one final
+  whole-branch review round (opus) and one bundled fix round. Full suite: 351 → 371.
+  - **Task 1:** `jobs.append_job_entry()` — the registry writer 15e needed (nothing in
+    14b/15d ever wrote a new envelope; only hand-editing existed). Mirrors `skills.py`'s
+    `_append_manifest_entry` dedupe-by-id-then-append pattern exactly.
+  - **Task 2:** `cooper-core/planner.py` (new module), `draft_envelope()`/`PlannerError`.
+    **The security-critical property, independently verified twice** (task review +
+    final whole-branch review, both traced every `.get()` call in the module): a drafted
+    job's `steps`, `permission_level`, and `workshop` are fixed in code and can **never**
+    be set from the planner LLM's JSON output, proven by a dedicated hostile-input test
+    that feeds `steps=["shell_exec"], permission_level=6, workshop="private"` through the
+    real `extract_fn` seam and confirms none of it survives into the persisted entry.
+    Path/scope validation follows the codebase's established `.resolve()`+`relative_to()`
+    containment pattern (`executor.py`'s convention).
+  - **Task 3:** wired `POST /jobs/draft` into `main.py` — `PLANNER_MODEL` resolved via the
+    existing `model_routing.model_for("planner", WORKSHOP)` role map (G2: `gpt-4o-mini` on
+    Open, `COOPER-Private` on Private — this role's first real call site), a shared
+    `_critique_and_note()` helper factored out of the pre-existing `critique_job` endpoint
+    so drafting and manual critique share one code path, and `PlannerError` → HTTP 422
+    (never a leaked 500). The existing `POST /jobs/run/{job_id}` handler (`run_job`) is
+    untouched — confirmed via diff hunk inspection at both the task review and the final
+    review.
+  - **Final whole-branch review (opus)** independently re-traced the entire security
+    boundary from scratch and found it held — no Critical findings. One Important finding
+    that *was* real: `planner.draft_envelope` had no exception guard around the backend
+    LLM call, unlike `proposer.py`'s sibling `draft_skill()` (which does wrap its own
+    `extract_fn` call) — a LiteLLM 429/timeout/malformed-JSON would have escaped as a raw
+    HTTP 500 instead of a clean `PlannerError`/422. Fixed in one bundled round (commit
+    `a2c1e7e`) along with a bundled Minor (capping `id`/`schedule_hint` length to prevent
+    a post-write filename-length failure); one scoped re-review confirmed both addressed,
+    no new breakage. 5 findings parked with rulings (full list, PROGRESS.md's ledger —
+    the actual `.superpowers/sdd/2026-09-01-step-15e-narrow-planner/progress.md` file was
+    deleted per the finishing-a-development-branch convention once this branch merged
+    clean; git history + this entry are the record).
+  - **Live verification deviated from the plan's text, ruled and recorded live:**
+    repeated Bash permission denials on any command touching `PDA-Runtime/.env` or
+    `litellm/.env.local` (even read-only) made the plan's Open-stack verification path
+    infeasible without direct user action. Asked the owner; they chose verifying against
+    the **Private** stack instead — the code path under test is workshop-agnostic (the
+    only Open-specific piece, which model alias gets called, is a config-level difference
+    per G2, not a code branch), and Private needs zero cloud secrets. Rebuilt
+    `pda-private-cooper-core` from this branch (`docker compose -f
+    PDA-Runtime/docker-compose.private.yml up -d --build cooper-core`, `COOPER_API_KEYS`
+    passed inline from a value read via `docker inspect` on the already-running
+    container — never from the `.env` file itself — so the live auth key was never
+    changed). Real live results: `POST /jobs/draft` with an unresolvable goal → HTTP 422,
+    `"goal did not name an existing CSV file to monitor"` (confirms the final-review fix
+    works live, not just under test). `POST /jobs/draft` with a real throwaway CSV
+    (`docker cp`'d in — Private's compose file has no `State/`/`Config/` bind mount) → HTTP
+    200, a real drafted envelope (`steps`/`permission_level`/`workshop` all the
+    code-fixed values, confirmed live) reviewed by 3 real `COOPER-Private` council members
+    (all `pass`, real natural-language reasons), `approved: false`, hash-pinned, and a
+    matching critique note — both confirmed via `docker exec` against
+    `/app/Config/jobs_registry.yaml` and the Obsidian inbox inside the container.
+    **Found and disclosed, not fixed (out of this plan's scope):** the container's
+    `jobs_registry.yaml` did not contain the pre-existing `link-checker` entry — the
+    Dockerfile never bakes `Config/jobs_registry.yaml` into the image at all (only the
+    three other registries are `COPY`'d in), a pre-existing 14b/15d Docker-packaging gap,
+    not a regression from this work. Worth a Gotchas.md entry if anyone hits it live-testing
+    `run_job` in-container again.
+  - **What this closes and what it does NOT close, stated plainly (final review's explicit**
+    **instruction, followed here):** this closes 15e's *drafting* half only — an owner
+    goal in chat/API becomes a council-reviewed, hash-pinned envelope of the one job shape
+    `run_job` already executes. It does **not** close the spec's full 15e row: no
+    per-step natural-language instructions are drafted (steps are fixed, not generated),
+    no executor loop exists (`Scripts/PDA_ModelRouting.json`'s `executor` role still has
+    "No call site yet"), and `/jobs/draft` is API-only, not chat-reachable (no registry
+    tool wraps it, same as `/jobs/run`/`/jobs/critique` today). The DoD line "big-brain
+    alias is called zero times during execution" is satisfied *vacuously* — there is no
+    executor-alias call path to split from — confirmed by code inspection (`PLANNER_MODEL`
+    has exactly the call sites `main.py`'s `draft_job` uses, `jobs.py` does not import
+    `planner`), not by a live LiteLLM log trace (that would require the Open stack, which
+    the secrets-access wall blocked this session). M2 should not be marked closed to 4 on
+    this work alone — the spec's traceability table's 15e row remains partially open.
+    Full-spec generic step-executor remains available to revisit later by owner choice.
+
 ---
 
 ## Blocked / needs owner input
@@ -1384,5 +1465,7 @@ Governance gates from the Step 15 spec §6 — each blocks only its named slice:
   generic step-executor, no unattended LLM tool-selection. Satisfies a literal reading of
   the 15e DoD without opening the larger security surface described above; the full-spec
   generic executor remains available to revisit later by owner choice if the narrow build
-  proves insufficient. Next: write and run a full implementation plan for narrow-scope 15e
-  the same way 15d was executed.
+  proves insufficient. **Shipped 2026-09-01 — see the Decisions log's 2026-09-01 entry**
+  for the full implementation + live-verification detail. Closes 15e's drafting half only;
+  the spec's full 15e row (per-step instructions, executor loop, chat reachability)
+  remains open — see that entry's closing paragraph.

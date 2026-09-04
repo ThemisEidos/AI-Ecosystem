@@ -37,6 +37,7 @@ import workshop
 import archivist
 import embeddings
 import proposer
+import planner
 import skills
 import jobs
 import council
@@ -76,6 +77,7 @@ COOPER_MODEL    = os.environ.get("COOPER_MODEL", model_routing.model_for("brain"
 REVIEWER_MODEL  = model_routing.model_for("reviewer", WORKSHOP)
 DRAFTER_MODEL   = model_routing.model_for("drafter", WORKSHOP)
 ARCHIVIST_MODEL = model_routing.model_for("archivist", WORKSHOP)
+PLANNER_MODEL   = model_routing.model_for("planner", WORKSHOP)
 
 # Semantic skill selection: embeddings via the workshop's own backend, keyword
 # fallback inside select_skill_semantic on any failure — so a missing embedding
@@ -111,6 +113,7 @@ SYSTEM_PROMPT = _load_system_prompt()
 
 # ── Archivist (Step 8) ───────────────────────────────────────────────────────────
 _ARCHIVIST_CONN = archivist.get_conn()
+archivist.init_db(_ARCHIVIST_CONN)  # schema must exist before lifespan, not only after it
 
 _EMBED_FN = embeddings.make_fetcher(BACKEND, BACKEND_URL, BACKEND_KEY, EMBED_MODEL)
 
@@ -408,6 +411,7 @@ async def lifespan(app: FastAPI):
     print(f"  reviewer : {REVIEWER_MODEL}")
     print(f"  drafter  : {DRAFTER_MODEL}")
     print(f"  archivist: {ARCHIVIST_MODEL}")
+    print(f"  planner  : {PLANNER_MODEL}")
 
     if BACKEND == "ollama":
         async with httpx.AsyncClient(timeout=5.0) as client:
@@ -415,7 +419,7 @@ async def lifespan(app: FastAPI):
                 resp = await client.get(f"{OLLAMA_HOST}/api/tags")
                 models = [m["name"] for m in resp.json().get("models", [])]
                 known = {m.lower() for m in models} | {m.split(":")[0].lower() for m in models}
-                for name in {COOPER_MODEL, REVIEWER_MODEL, DRAFTER_MODEL, ARCHIVIST_MODEL}:
+                for name in {COOPER_MODEL, REVIEWER_MODEL, DRAFTER_MODEL, ARCHIVIST_MODEL, PLANNER_MODEL}:
                     ok = name.lower() in known
                     print(f"  {'[ok]' if ok else '[!!]'} ollama model: {name}")
             except Exception as exc:
@@ -547,11 +551,7 @@ async def run_job(job_id: str):
     return result
 
 
-@app.post("/jobs/critique/{job_id}", dependencies=[Depends(_require_auth)])
-async def critique_job(job_id: str):
-    job_entry = jobs.get_job(job_id)
-    if job_entry is None:
-        raise HTTPException(status_code=404, detail=f"unknown job id '{job_id}'")
+async def _critique_and_note(job_id: str, job_entry: dict) -> dict:
     verdicts = await council.critique_envelope(
         job_entry, WORKSHOP,
         base_url=BACKEND_URL, api_key=BACKEND_KEY, backend=BACKEND,
@@ -566,6 +566,32 @@ async def critique_job(job_id: str):
         "note_path": str(note_path),
         "envelope_hash": envelope_hash,
     }
+
+
+@app.post("/jobs/critique/{job_id}", dependencies=[Depends(_require_auth)])
+async def critique_job(job_id: str):
+    job_entry = jobs.get_job(job_id)
+    if job_entry is None:
+        raise HTTPException(status_code=404, detail=f"unknown job id '{job_id}'")
+    return await _critique_and_note(job_id, job_entry)
+
+
+class JobDraftRequest(BaseModel):
+    goal: str = Field(..., min_length=1, max_length=2000)
+
+
+@app.post("/jobs/draft", dependencies=[Depends(_require_auth)])
+async def draft_job(body: JobDraftRequest):
+    try:
+        job_entry = await planner.draft_envelope(
+            body.goal, workshop=WORKSHOP,
+            base_url=BACKEND_URL, api_key=BACKEND_KEY,
+            model=PLANNER_MODEL, backend=BACKEND,
+        )
+    except planner.PlannerError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    critique = await _critique_and_note(job_entry["id"], job_entry)
+    return {"job_entry": job_entry, **critique}
 
 
 # ── Workshop status ───────────────────────────────────────────────────────────

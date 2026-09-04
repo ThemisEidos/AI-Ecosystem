@@ -83,6 +83,23 @@ def get_job(job_id: str, registry: Optional[dict] = None) -> Optional[dict]:
     return None
 
 
+def append_job_entry(entry: dict, registry_path: Optional[Path] = None) -> None:
+    """Persist one job envelope into Config/jobs_registry.yaml, replacing any
+    existing entry with the same id. Same dedupe-by-id-then-append-then-
+    safe_dump pattern as skills.py's _append_manifest_entry (Step 11) — the
+    only registry writer jobs.py has today; everything else (load_registry,
+    get_job) only reads."""
+    p = registry_path or _REGISTRY_PATH
+    data = {}
+    if p.exists():
+        data = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+    entries = [e for e in (data.get("jobs") or []) if e.get("id") != entry["id"]]
+    entries.append(entry)
+    data["jobs"] = entries
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+
+
 def compute_envelope_hash(job_entry: dict) -> str:
     """SHA-256 hex digest over the job entry's canonical JSON, excluding the
     entry's own envelope_hash and approved keys (spec: any edit to an approved
