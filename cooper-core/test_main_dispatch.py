@@ -21,6 +21,19 @@ _TOOL = {
 }
 
 
+def test_archivist_conn_has_schema_without_lifespan():
+    """main._ARCHIVIST_CONN's schema must exist as soon as the module is
+    imported, not only after FastAPI's startup/lifespan event fires. Any
+    caller that reaches archivist.get_skill()/remember() without going
+    through `with TestClient(...)` (as this file's tests below do, calling
+    main._handle_tool_call directly) would otherwise hit a fresh, schema-less
+    sqlite file on a clean checkout with no pre-existing cooper_memory.db."""
+    row = main._ARCHIVIST_CONN.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='skills'"
+    ).fetchone()
+    assert row is not None
+
+
 def test_execute_returns_before_memory_and_draft_run(monkeypatch):
     """The reply must not wait on archivist.remember / proposer.draft_skill —
     they run in the background; the draft offer arrives as a session notice."""

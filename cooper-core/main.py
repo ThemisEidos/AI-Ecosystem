@@ -113,6 +113,7 @@ SYSTEM_PROMPT = _load_system_prompt()
 
 # ── Archivist (Step 8) ───────────────────────────────────────────────────────────
 _ARCHIVIST_CONN = archivist.get_conn()
+archivist.init_db(_ARCHIVIST_CONN)  # schema must exist before lifespan, not only after it
 
 _EMBED_FN = embeddings.make_fetcher(BACKEND, BACKEND_URL, BACKEND_KEY, EMBED_MODEL)
 
