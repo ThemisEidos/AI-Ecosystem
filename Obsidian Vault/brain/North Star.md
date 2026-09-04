@@ -36,6 +36,29 @@ detail incl. every live-verification command and its real output: PROGRESS.md's
 2026-08-31 (15d) entry (git history — the SDD workspace itself was deleted per the
 finishing-a-development-branch convention once the branch merged clean).
 
+**Merged to `main` 2026-09-03 (PR #1, commit `7424f69`) — and along the way, found and fixed**
+**a real month-long CI gap, not just landed the code below.** PR #1's own CI came back
+FAILURE on both runs despite its body's local claim of "371/371 passing" —
+`archivist.init_db()` only ran inside `main.py`'s FastAPI lifespan handler, so two
+`test_main_dispatch.py` tests that call `main._handle_tool_call()` directly (never through
+`with TestClient(...)`) hit `sqlite3.OperationalError: no such table: skills` on a genuinely
+clean checkout. Confirmed this predates 15e entirely — a clean clone of `main`'s pre-15e tip
+failed the identical two tests. Deeper still: `gh run list --branch main` showed **no CI run
+on any push to `main` between 2026-08-02 and 2026-09-01** — 14b, 15c, and 15d all merged
+without CI ever actually checking them; local runs were silently backed by a stale,
+gitignored `cooper_memory.db` already carrying the schema from months of prior runs, never a
+fresh one. Fixed by making `archivist.init_db()` run eagerly the moment `_ARCHIVIST_CONN` is
+created rather than only in the lifespan handler (idempotent — the lifespan's own call stays
+as a harmless no-op after that); added a regression test
+(`test_archivist_conn_has_schema_without_lifespan`). Verified 372/372 on a truly clean
+`git clone`, then real CI green on the pushed fix commit, then merged, then re-confirmed CI
+green on `main`'s new tip and 372/372 locally post-pull. Full trail: Gotchas.md's 2026-09-03
+entry. **CI on `main` is trustworthy again as of this merge** — worth spot-checking
+`gh run list --branch main` periodically going forward, not just per-PR `gh pr checks`, since
+this exact failure mode (a workflow going quiet with no visible symptom) could recur
+silently. **Next up: no plan written yet for whatever comes after 15e** — either the
+full-spec generic step-executor (owner's call, see below) or the next roadmap slice.
+
 **15e (narrow scope) shipped 2026-09-01 — planner drafting live and live-verified against**
 **the real running Private stack.** Owner chose **(a) narrow** (2026-09-01): the planner
 only drafts new jobs of the same shape `run_job` (14b) already knows how to execute

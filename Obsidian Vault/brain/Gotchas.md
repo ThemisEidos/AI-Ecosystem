@@ -581,3 +581,35 @@ building a new LLM-extraction module modeled on an existing one, diff the *publi
 function's error-handling shape against the new module's public function, not just the
 private helper against private helper — the exception boundary is usually one frame higher
 than the JSON-parsing code itself.
+
+### 2026-09-03 · "371/371 passing" claims were never CI-verified — a stale local `cooper_memory.db` masked a real schema-init bug, and CI silently stopped running on `main` for a month
+
+`archivist.init_db()` (creates the `skills`/`decisions`/etc. tables) previously ran only
+inside `main.py`'s FastAPI startup/lifespan handler. Any test or caller that reaches
+`archivist.get_skill()`/`remember()` via `_ARCHIVIST_CONN` without that lifespan firing —
+e.g. `test_main_dispatch.py`'s two tests that call `main._handle_tool_call()` directly via
+`asyncio.run`, never through `with TestClient(app) as client:` — hit
+`sqlite3.OperationalError: no such table: skills` on a schema-less connection. This was
+invisible on the dev machine because `cooper-core/cooper_memory.db` is gitignored (`*.db`)
+and has carried real tables from months of manual runs; every local `pytest` run silently
+reused that pre-existing schema instead of exercising a fresh one. Found while checking PR
+#1 (Step 15e narrow): its CI came back FAILURE on both runs despite the PR body's claimed
+"371/371 passing" — that claim was true only against the stale local DB. Confirmed via a
+genuinely clean `git clone` (no `cooper_memory.db` present) that **`main`'s tip already
+failed the same two tests before this PR touched anything** — this predates 15e entirely.
+Deeper finding: `gh run list --branch main` showed **zero CI runs on any push to `main`
+between 2026-08-02 and 2026-09-01** — meaning 14b, 15c, and 15d all merged without CI ever
+actually checking them; only local runs (masked by the same stale-db issue) backed those
+"shipped" claims. Fixed by moving `archivist.init_db(_ARCHIVIST_CONN)` to run immediately
+after the connection is created (`main.py`, right after `_ARCHIVIST_CONN = archivist.get_conn()`)
+instead of solely in the lifespan handler — it's idempotent (`CREATE TABLE IF NOT EXISTS`),
+so calling it again in the lifespan handler is harmless and was left in place. Added a
+regression test (`test_archivist_conn_has_schema_without_lifespan`) asserting the `skills`
+table exists on `main._ARCHIVIST_CONN` with no `TestClient` context involved. Verified via
+a truly clean `git clone` of the fixed branch (372/372, 0 pre-existing db file), then via
+real CI on the pushed commit (green), then merged (PR #1, commit `7424f69`), then re-pulled
+`main` and confirmed CI green on the merge commit itself. **Takeaway:** a "tests pass" claim
+that was only ever run against a long-lived dev machine, never a clean checkout, can hide a
+real bug indefinitely — and `gh run list` is worth checking periodically, not just PR-level
+`gh pr checks`, since a workflow can go quiet on `main` with no visible symptom until the
+next PR happens to need it.
