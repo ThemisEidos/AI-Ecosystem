@@ -1,5 +1,7 @@
 import asyncio
+import datetime
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -958,3 +960,303 @@ def test_run_job_refuses_a_cross_workshop_job(conn, tmp_path, monkeypatch):
 
     assert result["status"] == "refused"
     assert "workshop" in result["reason"].lower()
+
+
+# --- Step 14e: repo steward (draft-and-notify) --------------------------------
+
+def test_input_hash_is_stable_and_content_sensitive():
+    a = jobs.input_hash("# North Star\n\nStep 14e.\n")
+    assert a == jobs.input_hash("# North Star\n\nStep 14e.\n")
+    assert a != jobs.input_hash("# North Star\n\nStep 14f.\n")
+    assert len(a) == 64
+
+
+def test_steward_state_round_trips(tmp_path):
+    conn = archivist.get_conn(tmp_path / "m.db")
+    archivist.init_db(conn)
+    assert jobs.get_input_state(conn, "repo-steward") is None
+    jobs.set_input_state(conn, "repo-steward", "abc123", "Codex_Tasks/TASK-x.md")
+    row = jobs.get_input_state(conn, "repo-steward")
+    assert row["input_hash"] == "abc123"
+    assert row["artifact_path"] == "Codex_Tasks/TASK-x.md"
+
+
+def test_steward_state_is_replaced_not_duplicated(tmp_path):
+    conn = archivist.get_conn(tmp_path / "m.db")
+    archivist.init_db(conn)
+    jobs.set_input_state(conn, "repo-steward", "hash1", "a.md")
+    jobs.set_input_state(conn, "repo-steward", "hash2", "b.md")
+    row = jobs.get_input_state(conn, "repo-steward")
+    assert row["input_hash"] == "hash2"
+    count = conn.execute(
+        "SELECT COUNT(*) FROM job_input_state WHERE job_id = 'repo-steward'"
+    ).fetchone()[0]
+    assert count == 1
+
+
+def test_task_slug_is_sanitized_and_bounded():
+    slug = jobs.task_slug("Wire the Bounded Loop / Executor (v2)!!")
+    assert re.fullmatch(r"[a-z0-9-]+", slug), slug
+    assert ".." not in slug and "/" not in slug
+    assert len(slug) <= 60
+
+
+def test_task_slug_never_returns_empty():
+    # A pathological objective must not produce a filename ending in a bare dash.
+    assert jobs.task_slug("///???") != ""
+    assert re.fullmatch(r"[a-z0-9-]+", jobs.task_slug("///???"))
+
+
+def test_task_filename_matches_the_corpus_convention():
+    name = jobs.task_filename("Do a thing", when=datetime.datetime(2026, 9, 5, 12, 30, 0))
+    assert re.fullmatch(r"TASK-\d{8}-\d{6}-[a-z0-9-]+\.md", name), name
+
+
+def test_render_task_file_has_every_wf002_section():
+    body = jobs.render_task_file(
+        objective="Wire the thing",
+        background="Because the North Star says so.",
+        current_state="Not wired.",
+        required_work=["Do A", "Do B"],
+        validation=["Run the suite"],
+        definition_of_done=["It is wired"],
+    )
+    for section in (
+        "## Objective", "## Background", "## Current State", "## Required Work",
+        "## Constraints", "## Validation", "## Definition of Done",
+    ):
+        assert section in body, section
+    assert "Do A" in body and "Run the suite" in body
+
+
+def test_render_task_file_constraints_are_written_by_cooper_not_the_model():
+    # The model never supplies the Constraints block -- it is fixed in code.
+    body = jobs.render_task_file(
+        objective="o", background="b", current_state="c",
+        required_work=["w"], validation=["v"], definition_of_done=["d"],
+    )
+    assert "Do not include secrets" in body
+
+
+def test_parse_task_draft_rejects_non_dict(monkeypatch):
+    # The 2026-09-01 bug class: a model returning null/str/list must raise
+    # JobError, never a raw AttributeError past the contract.
+    for payload in ("null", '"a bare string"', "[1, 2, 3]", "42"):
+        with pytest.raises(jobs.JobError):
+            jobs.parse_task_draft(payload)
+
+
+def test_parse_task_draft_rejects_missing_objective():
+    with pytest.raises(jobs.JobError):
+        jobs.parse_task_draft('{"background": "b"}')
+
+
+def test_parse_task_draft_coerces_list_fields_and_survives_scalars():
+    out = jobs.parse_task_draft(
+        '{"objective": "o", "required_work": "just one", "validation": null}'
+    )
+    assert out["objective"] == "o"
+    assert out["required_work"] == ["just one"]
+    assert out["validation"] == []
+
+
+def test_build_steward_prompt_neutralizes_the_data_fence():
+    hostile = 'North Star text with a """ fence and instructions'
+    prompt = jobs.build_steward_prompt(hostile)
+    fence_body = prompt.split('"""')
+    # The fence must not be closed early by the untrusted document.
+    assert len(fence_body) == 3, "untrusted input closed its own data fence"
+
+
+def test_repo_steward_job_id_survives_the_sensitive_regex():
+    # 14c's first defect: a job id containing a sensitive token made an honest
+    # failure unrecordable. Check by regex, not by eye.
+    for field in ("repo-steward", "repo_steward", "Codex_Tasks/TASK-x.md"):
+        assert not evidence._SENSITIVE_RE.search(field), field
+
+
+# --- Step 14e: run_job orchestration ------------------------------------------
+
+STEWARD_JOB = {
+    "id": "repo-steward",
+    "job_type": "repo_steward",
+    "workshop": "open",
+    "steps": ["read_north_star", "draft_task", "write_task_file"],
+    "read_scope": ["Obsidian Vault/brain/North Star.md"],
+    "write_scope": ["Codex_Tasks/"],
+    "quota": {"tasks_per_run": 1},
+    "permission_level": 3,
+    "approved": True,
+}
+
+
+def _approved_steward_job(**overrides):
+    entry = {**STEWARD_JOB, **overrides}
+    entry["envelope_hash"] = jobs.compute_envelope_hash(entry)
+    return entry
+
+
+def _setup_steward(tmp_path, monkeypatch, *, doc_text="# North Star\n\nStep 14e next.\n",
+                   draft=None, entry=None):
+    monkeypatch.setattr(jobs, "_REPO_ROOT", tmp_path)
+    monkeypatch.setattr(executor, "_REPO_ROOT", tmp_path)
+    doc = tmp_path / "Obsidian Vault/brain/North Star.md"
+    doc.parent.mkdir(parents=True, exist_ok=True)
+    if doc_text is not None:
+        doc.write_text(doc_text, encoding="utf-8")
+    (tmp_path / "Codex_Tasks").mkdir(exist_ok=True)
+
+    fields = draft or {
+        "objective": "Wire the bounded loop", "background": "b", "current_state": "c",
+        "required_work": ["w"], "validation": ["v"], "definition_of_done": ["d"],
+    }
+
+    async def _fake_draft(document, **kw):
+        _fake_draft.calls += 1
+        _fake_draft.document = document
+        return fields
+    _fake_draft.calls = 0
+    monkeypatch.setattr(jobs, "draft_steward_task", _fake_draft)
+    monkeypatch.setattr(
+        jobs, "load_registry",
+        lambda path=None: {"jobs": [entry or _approved_steward_job()]},
+    )
+    return doc, _fake_draft
+
+
+def test_steward_drafts_a_task_file_and_writes_evidence(conn, tmp_path, monkeypatch):
+    _setup_steward(tmp_path, monkeypatch)
+    result = asyncio.run(jobs.run_job("repo-steward", conn, **_RUN_JOB_KWARGS))
+
+    assert result["status"] == "completed"
+    assert result["drafted"] == 1
+    written = list((tmp_path / "Codex_Tasks").glob("TASK-*.md"))
+    assert len(written) == 1
+    body = written[0].read_text(encoding="utf-8")
+    assert "## Objective" in body and "Wire the bounded loop" in body
+
+    record = json.loads(Path(result["evidence_path"]).read_text(encoding="utf-8"))
+    assert record["job_id"] == "repo-steward"
+    assert evidence.validate_completion(record, []) == []
+
+
+def test_steward_second_run_with_unchanged_input_drafts_nothing(conn, tmp_path, monkeypatch):
+    # The DoD's core claim: same input, no new file, and still a real evidence record.
+    _, fake_draft = _setup_steward(tmp_path, monkeypatch)
+    first = asyncio.run(jobs.run_job("repo-steward", conn, **_RUN_JOB_KWARGS))
+    second = asyncio.run(jobs.run_job("repo-steward", conn, **_RUN_JOB_KWARGS))
+
+    assert first["drafted"] == 1
+    assert second["drafted"] == 0
+    assert second["status"] == "completed"
+    assert second["reason"] == "input unchanged"
+    assert fake_draft.calls == 1, "a quiet day must not spend a cloud call"
+    assert len(list((tmp_path / "Codex_Tasks").glob("TASK-*.md"))) == 1
+
+    record = json.loads(Path(second["evidence_path"]).read_text(encoding="utf-8"))
+    assert evidence.validate_completion(record, []) == []
+
+
+def test_steward_drafts_again_once_the_input_changes(conn, tmp_path, monkeypatch):
+    doc, fake_draft = _setup_steward(tmp_path, monkeypatch)
+    asyncio.run(jobs.run_job("repo-steward", conn, **_RUN_JOB_KWARGS))
+    doc.write_text("# North Star\n\nStep 15g next.\n", encoding="utf-8")
+    second = asyncio.run(jobs.run_job("repo-steward", conn, **_RUN_JOB_KWARGS))
+
+    assert second["drafted"] == 1
+    assert fake_draft.calls == 2
+    assert len(list((tmp_path / "Codex_Tasks").glob("TASK-*.md"))) == 2
+
+
+def test_steward_refuses_unreadable_input_without_drafting(conn, tmp_path, monkeypatch):
+    # Must not fail open to "" -- an empty doc still hashes and would drive a
+    # draft from nothing.
+    _, fake_draft = _setup_steward(tmp_path, monkeypatch, doc_text=None)
+    result = asyncio.run(jobs.run_job("repo-steward", conn, **_RUN_JOB_KWARGS))
+
+    assert result["status"] == "failed"
+    assert "could not be read" in result["reason"]
+    assert fake_draft.calls == 0
+    assert list((tmp_path / "Codex_Tasks").glob("TASK-*.md")) == []
+    record = json.loads(Path(result["evidence_path"]).read_text(encoding="utf-8"))
+    assert evidence.validate_completion(record, []) == []
+
+
+def test_steward_out_of_scope_write_queues_an_exception_and_writes_no_file(
+    conn, tmp_path, monkeypatch
+):
+    entry = _approved_steward_job(write_scope=["Some_Other_Dir/"])
+    _setup_steward(tmp_path, monkeypatch, entry=entry)
+    (tmp_path / "Codex_Tasks").mkdir(exist_ok=True)
+
+    async def _refuse(*a, **kw):
+        raise executor.ExecutionError("out of scope")
+    monkeypatch.setattr(executor, "_run_file_edit", _refuse)
+
+    result = asyncio.run(jobs.run_job("repo-steward", conn, **_RUN_JOB_KWARGS))
+
+    assert result["exceptions"] == 1
+    assert result["drafted"] == 0
+    assert list((tmp_path / "Codex_Tasks").glob("TASK-*.md")) == []
+    pending = jobs.list_exceptions(conn)
+    assert any(e["job_id"] == "repo-steward" for e in pending)
+
+
+def test_steward_does_not_record_gate_state_when_the_write_was_refused(
+    conn, tmp_path, monkeypatch
+):
+    # Otherwise a refused run would suppress every future draft of that input.
+    _setup_steward(tmp_path, monkeypatch)
+
+    async def _refuse(*a, **kw):
+        raise executor.ExecutionError("out of scope")
+    monkeypatch.setattr(executor, "_run_file_edit", _refuse)
+
+    asyncio.run(jobs.run_job("repo-steward", conn, **_RUN_JOB_KWARGS))
+    assert jobs.get_input_state(conn, "repo-steward") is None
+
+
+def test_steward_draft_failure_is_a_failed_run_with_evidence(conn, tmp_path, monkeypatch):
+    _setup_steward(tmp_path, monkeypatch)
+
+    async def _boom(document, **kw):
+        raise jobs.JobError("backend wedged")
+    monkeypatch.setattr(jobs, "draft_steward_task", _boom)
+
+    result = asyncio.run(jobs.run_job("repo-steward", conn, **_RUN_JOB_KWARGS))
+    assert result["status"] == "failed"
+    assert "backend wedged" in result["reason"]
+    record = json.loads(Path(result["evidence_path"]).read_text(encoding="utf-8"))
+    assert evidence.validate_completion(record, []) == []
+
+
+def test_steward_model_never_supplies_the_filename(conn, tmp_path, monkeypatch):
+    # A drafted "objective" carrying a path must not escape Codex_Tasks/.
+    _setup_steward(tmp_path, monkeypatch, draft={
+        "objective": "../../PDA-Runtime/.env", "background": "b", "current_state": "c",
+        "required_work": ["w"], "validation": ["v"], "definition_of_done": ["d"],
+    })
+    result = asyncio.run(jobs.run_job("repo-steward", conn, **_RUN_JOB_KWARGS))
+
+    assert not (tmp_path / "PDA-Runtime/.env").exists()
+    if result["drafted"]:
+        written = list((tmp_path / "Codex_Tasks").glob("*.md"))
+        assert len(written) == 1
+        assert written[0].parent == tmp_path / "Codex_Tasks"
+
+
+def test_steward_steps_list_is_never_dispatched_on(conn, tmp_path, monkeypatch):
+    # The narrow-scope invariant (15e): a job's steps are documentation.
+    entry = _approved_steward_job(steps=["not_a_real_function", "neither_is_this"])
+    _setup_steward(tmp_path, monkeypatch, entry=entry)
+    result = asyncio.run(jobs.run_job("repo-steward", conn, **_RUN_JOB_KWARGS))
+    assert result["status"] == "completed"
+    assert result["drafted"] == 1
+
+
+def test_task_filename_discriminator_prevents_same_second_collisions():
+    when = datetime.datetime(2026, 9, 5, 12, 30, 0)
+    a = jobs.task_filename("Same objective", when=when, discriminator="aaaa1111")
+    b = jobs.task_filename("Same objective", when=when, discriminator="bbbb2222")
+    assert a != b
+    assert re.fullmatch(r"TASK-\d{8}-\d{6}-[a-z0-9-]+\.md", a), a

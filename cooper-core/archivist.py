@@ -85,6 +85,14 @@ CREATE TABLE IF NOT EXISTS job_exceptions (
     status           TEXT NOT NULL DEFAULT 'pending',
     created_at       TEXT NOT NULL
 );
+-- Step 14e: one row per job that gates on whether its input changed since the
+-- last successful draft. Keyed by job id, so a job has exactly one gate state.
+CREATE TABLE IF NOT EXISTS job_input_state (
+    job_id           TEXT PRIMARY KEY,
+    input_hash       TEXT NOT NULL,
+    artifact_path    TEXT NOT NULL,
+    updated_at       TEXT NOT NULL
+);
 """
 
 

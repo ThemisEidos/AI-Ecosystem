@@ -34,3 +34,20 @@ jobs:
   permission_level: 3
   approved: false
   envelope_hash: 203ebfcb75536fa7626ac14dad3a03e6f222d86cc32db4d3a7c746a2bb3f2e12
+- id: repo-steward
+  job_type: repo_steward
+  workshop: open
+  schedule_hint: daily 07:00
+  steps:
+  - read_north_star
+  - draft_task
+  - write_task_file
+  read_scope:
+  - Obsidian Vault/brain/North Star.md
+  write_scope:
+  - Codex_Tasks/
+  quota:
+    tasks_per_run: 1
+  permission_level: 3
+  approved: false
+  envelope_hash: 39f9dfcd6a5a2a9349cec5106545d60d20117da568554346832f019c6650c190
