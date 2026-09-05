@@ -882,3 +882,34 @@ def test_web_search_skips_results_missing_a_url(monkeypatch):
 
 def test_web_search_is_wired_in_handlers():
     assert "web_search" in executor.WIRED_EXECUTOR_TYPES
+
+
+def test_web_search_handler_honours_runs_string_contract(monkeypatch):
+    """executor.run() is annotated -> str and every caller treats the result as
+    text. _run_web_search returns a list for jobs.py, which calls it directly —
+    so the _HANDLERS entry must adapt it rather than leak a list through run()."""
+    payload = {"results": [
+        {"title": "Broker A", "url": "https://a.example", "content": "sells data"},
+    ]}
+    monkeypatch.setattr(
+        executor.httpx, "AsyncClient",
+        lambda **kw: _fake_searx_client(_FakeSearxResponse(payload))(),
+    )
+    out = asyncio.run(executor.run(
+        {"executor_type": "web_search"}, "look it up", "open", {"query": "data broker"},
+    ))
+    assert isinstance(out, str)
+    assert "Broker A" in out
+    assert "https://a.example" in out
+
+
+def test_web_search_handler_renders_an_empty_result_set_as_text(monkeypatch):
+    monkeypatch.setattr(
+        executor.httpx, "AsyncClient",
+        lambda **kw: _fake_searx_client(_FakeSearxResponse({"results": []}))(),
+    )
+    out = asyncio.run(executor.run(
+        {"executor_type": "web_search"}, "look it up", "open", {"query": "nothing"},
+    ))
+    assert isinstance(out, str)
+    assert "no results" in out.lower()

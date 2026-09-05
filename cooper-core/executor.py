@@ -557,6 +557,25 @@ async def _run_web_search(query: str, max_results: int = _MAX_SEARCH_RESULTS) ->
     return results
 
 
+async def _web_search_as_text(query: str, max_results: int = _MAX_SEARCH_RESULTS) -> str:
+    """run()'s string-contract adapter for _run_web_search.
+
+    _run_web_search returns a list because its only real caller (jobs.py's
+    data-broker pipeline) needs structured results. run() is annotated -> str
+    and every one of its callers treats the result as text, so the dispatch
+    table must adapt rather than leak a list through it. Unreachable today --
+    no tool registry names web_search -- but the dispatch table is the single
+    source of truth for what run() can execute, so its entries must honour
+    run()'s contract."""
+    results = await _run_web_search(query, max_results)
+    if not results:
+        return f"[Web Search — {query}]\nNo results."
+    lines = "\n".join(
+        f"- {r['title']}\n  {r['url']}\n  {r['snippet']}" for r in results
+    )
+    return f"[Web Search — {query}]\n{lines}"[:_MAX_OUTPUT]
+
+
 async def _run_workflow_engine(tool: dict, args: dict, workshop: str) -> str:
     """n8n workflow trigger (Open only — no reachable instance from
     Private). allowed_workflows maps a workflow id to a webhook path; per
@@ -989,7 +1008,7 @@ _HANDLERS = {
     # registry YAML — Step 14c's pii_research job (jobs.py) calls
     # _run_web_search directly. It gets a _HANDLERS entry so the dispatch table
     # stays the single source of truth for "what executor.run() can execute."
-    "web_search":     lambda tool, message, workshop, args: _run_web_search(
+    "web_search":     lambda tool, message, workshop, args: _web_search_as_text(
         str(args.get("query", "")), int(args.get("max_results", _MAX_SEARCH_RESULTS))
     ),
 }

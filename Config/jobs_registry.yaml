@@ -23,15 +23,14 @@ jobs:
   schedule_hint: daily, randomized 00:00-06:00
   steps:
   - web_search
-  - pii_extract
-  - note_append
+  - extract_entries
+  - append_note
   read_scope:
   - Obsidian Vault/02_Projects/opt-out/Data-Brokers.md
   write_scope:
   - Obsidian Vault/02_Projects/opt-out/Data-Brokers.md
   quota:
-    queries_per_run: 1
     entries_per_run: 5
   permission_level: 3
   approved: false
-  envelope_hash: a41c2e5f196e5ab314b08e7770b8027cf6a5370428be0cc56703a3496e2826e2
+  envelope_hash: 203ebfcb75536fa7626ac14dad3a03e6f222d86cc32db4d3a7c746a2bb3f2e12
