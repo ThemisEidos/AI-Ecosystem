@@ -32,6 +32,7 @@ import yaml
 import council
 import executor
 from decision import _ollama_complete, _openai_complete
+import retry_policy
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _REGISTRY_PATH = _REPO_ROOT / "Config" / "jobs_registry.yaml"
@@ -480,8 +481,17 @@ async def extract_pii_entries(
             base_url, model, messages, options={"temperature": 0}, fmt=_PII_SCHEMA,
         )
 
+    async def _attempt():
+        return await (complete_fn(messages) if complete_fn else _default_complete())
+
     try:
-        raw = await (complete_fn(messages) if complete_fn else _default_complete())
+        # Drafter budget (Step 15f-ii): this call reads untrusted web content
+        # from a cloud provider, where a transient 429 is the common fault --
+        # hence two retries rather than one. Without a budget a wedged provider
+        # held the whole job run open.
+        raw = await retry_policy.call_with_budget(
+            _attempt, retry_policy.budget_for("drafter")
+        )
         payload = json.loads(raw)
     except Exception as exc:
         raise JobError(f"entry extraction backend call failed: {exc}")

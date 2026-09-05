@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Awaitable, Callable, List, Optional, Tuple, Union
 
 from decision import _ollama_complete, _openai_complete
+import retry_policy
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _DEFAULT_DB_PATH = Path(os.environ.get("COOPER_DB_PATH") or (Path(__file__).resolve().parent / "cooper_memory.db"))
@@ -339,9 +340,9 @@ async def _extract(
         {"role": "system", "content": _EXTRACT_SYSTEM},
         {"role": "user", "content": f"Request: {message}\n\nResult:\n{raw_output[:2000]}"},
     ]
-    try:
+    async def _complete():
         if backend == "openai":
-            raw = await _openai_complete(
+            return await _openai_complete(
                 base_url, api_key, model, messages,
                 temperature=0,
                 response_format={
@@ -363,7 +364,7 @@ async def _extract(
                 },
             )
         else:
-            raw = await _ollama_complete(
+            return await _ollama_complete(
                 base_url, model, messages,
                 options={"temperature": 0},
                 fmt={
@@ -376,6 +377,13 @@ async def _extract(
                     "required": ["summary", "tags", "outcome"],
                 },
             )
+
+    try:
+        # A background memory write must never hold a turn open past its
+        # budget (Step 15f-ii); the archivist role's budget is the shortest.
+        raw = await retry_policy.call_with_budget(
+            _complete, retry_policy.budget_for("archivist")
+        )
         return json.loads(raw)
     except Exception:
         # Empty dict lets remember() fall back to the reviewer's verdict instead

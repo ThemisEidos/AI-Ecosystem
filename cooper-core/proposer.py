@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Awaitable, Callable, Optional
 
 from decision import _ollama_complete, _openai_complete
+import retry_policy
 import skills
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -66,18 +67,22 @@ async def _extract_draft(
         {"role": "system", "content": _DRAFT_SYSTEM},
         {"role": "user", "content": f"Request: {message}\n\nResult:\n{raw_output[:2000]}"},
     ]
-    if backend == "openai":
-        raw = await _openai_complete(
-            base_url, api_key, model, msgs, temperature=0,
-            response_format={"type": "json_schema", "json_schema": {
-                "name": "skill_draft", "strict": True,
-                "schema": {**_DRAFT_SCHEMA, "additionalProperties": False},
-            }},
-        )
-    else:
-        raw = await _ollama_complete(
+    async def _complete():
+        if backend == "openai":
+            return await _openai_complete(
+                base_url, api_key, model, msgs, temperature=0,
+                response_format={"type": "json_schema", "json_schema": {
+                    "name": "skill_draft", "strict": True,
+                    "schema": {**_DRAFT_SCHEMA, "additionalProperties": False},
+                }},
+            )
+        return await _ollama_complete(
             base_url, model, msgs, options={"temperature": 0}, fmt=_DRAFT_SCHEMA,
         )
+
+    raw = await retry_policy.call_with_budget(
+        _complete, retry_policy.budget_for("drafter")
+    )
     return json.loads(raw)
 
 

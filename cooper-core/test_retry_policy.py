@@ -162,3 +162,100 @@ def test_total_wall_clock_is_bounded_by_the_budget():
     """The whole point: a stage's worst case must be computable in advance."""
     budget = retry_policy.Budget(timeout=0.05, max_retries=2, backoff_base=0.0)
     assert budget.worst_case_seconds() == pytest.approx(0.15, abs=0.01)
+
+
+# ── call-site wiring (Step 15f-ii) ───────────────────────────────────────
+def _budget_spy(module, seen):
+    """Wrap a module's call_with_budget so a test can see which budget it used
+    without changing behaviour."""
+    real = retry_policy.call_with_budget
+
+    async def spy(operation, budget):
+        seen["timeout"] = budget.timeout
+        seen["retries"] = budget.max_retries
+        return await real(operation, budget)
+
+    return spy
+
+
+def test_archivist_extraction_runs_under_the_archivist_budget(monkeypatch):
+    """A background memory write must never hold a turn open longer than its
+    declared budget."""
+    import archivist
+    seen = {}
+
+    async def ok(*a, **k):
+        return json.dumps({"summary": "s", "tags": "t", "outcome": "success"})
+
+    monkeypatch.setattr(archivist, "_ollama_complete", ok)
+    monkeypatch.setattr(archivist.retry_policy, "call_with_budget", _budget_spy(archivist, seen))
+    asyncio.run(archivist._extract(
+        "msg", "out", base_url="", api_key="", model="m", backend="ollama",
+    ))
+    assert seen["timeout"] == retry_policy.budget_for("archivist").timeout
+
+
+def test_archivist_extraction_still_fails_safe_on_a_hang(monkeypatch):
+    """Fail-safe returns {} so remember() falls back to the reviewer's verdict
+    rather than fabricating a success record — that must survive the budget."""
+    import archivist
+
+    async def hangs(*a, **k):
+        await asyncio.sleep(30)
+
+    monkeypatch.setattr(archivist, "_ollama_complete", hangs)
+    monkeypatch.setattr(
+        archivist.retry_policy, "budget_for",
+        lambda role, **k: retry_policy.Budget(timeout=0.05, max_retries=0, backoff_base=0.0),
+    )
+    out = asyncio.run(archivist._extract(
+        "msg", "out", base_url="", api_key="", model="m", backend="ollama",
+    ))
+    assert out == {}
+
+
+def test_proposer_draft_runs_under_the_drafter_budget(monkeypatch):
+    import proposer
+    seen = {}
+
+    async def ok(*a, **k):
+        return json.dumps({"name": "n", "description": "d", "when_to_use": "w", "body": "b"})
+
+    monkeypatch.setattr(proposer, "_ollama_complete", ok)
+    monkeypatch.setattr(proposer.retry_policy, "call_with_budget", _budget_spy(proposer, seen))
+    asyncio.run(proposer._extract_draft(
+        "msg", "out", base_url="", api_key="", model="m", backend="ollama",
+    ))
+    assert seen["timeout"] == retry_policy.budget_for("drafter").timeout
+    assert seen["retries"] == retry_policy.budget_for("drafter").max_retries
+
+
+def test_planner_extraction_runs_under_the_planner_budget(monkeypatch):
+    import planner
+    seen = {}
+
+    async def ok(*a, **k):
+        return json.dumps({"id": "i", "csv_path": "p.csv", "rows_per_run": 1,
+                           "fetches_per_run": 1, "schedule_hint": "daily"})
+
+    monkeypatch.setattr(planner, "_ollama_complete", ok)
+    monkeypatch.setattr(planner.retry_policy, "call_with_budget", _budget_spy(planner, seen))
+    asyncio.run(planner._extract_fields(
+        "goal", base_url="", api_key="", model="m", backend="ollama",
+    ))
+    assert seen["timeout"] == retry_policy.budget_for("planner").timeout
+
+
+def test_data_broker_extraction_runs_under_the_drafter_budget(monkeypatch):
+    import jobs
+    seen = {}
+
+    async def ok(*a, **k):
+        return json.dumps({"entries": []})
+
+    monkeypatch.setattr(jobs.retry_policy, "call_with_budget", _budget_spy(jobs, seen))
+    asyncio.run(jobs.extract_pii_entries(
+        "q", [{"title": "t", "url": "https://a.example", "snippet": "s"}], [],
+        base_url="", api_key="", model="m", backend="ollama", complete_fn=ok,
+    ))
+    assert seen["timeout"] == retry_policy.budget_for("drafter").timeout

@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Optional
 
 from decision import _ollama_complete, _openai_complete
+import retry_policy
 import jobs
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -87,18 +88,22 @@ async def _extract_fields(
         {"role": "system", "content": _DRAFT_SYSTEM},
         {"role": "user", "content": f"Goal: {goal}"},
     ]
-    if backend == "openai":
-        raw = await _openai_complete(
-            base_url, api_key, model, messages, temperature=0,
-            response_format={"type": "json_schema", "json_schema": {
-                "name": "job_draft", "strict": True,
-                "schema": {**_DRAFT_SCHEMA, "additionalProperties": False},
-            }},
-        )
-    else:
-        raw = await _ollama_complete(
+    async def _complete():
+        if backend == "openai":
+            return await _openai_complete(
+                base_url, api_key, model, messages, temperature=0,
+                response_format={"type": "json_schema", "json_schema": {
+                    "name": "job_draft", "strict": True,
+                    "schema": {**_DRAFT_SCHEMA, "additionalProperties": False},
+                }},
+            )
+        return await _ollama_complete(
             base_url, model, messages, options={"temperature": 0}, fmt=_DRAFT_SCHEMA,
         )
+
+    raw = await retry_policy.call_with_budget(
+        _complete, retry_policy.budget_for("planner")
+    )
     return json.loads(raw)
 
 
