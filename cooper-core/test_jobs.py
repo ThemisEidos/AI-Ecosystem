@@ -788,9 +788,12 @@ def test_run_job_data_broker_research_failed_extraction_writes_valid_evidence(co
     assert evidence.validate_completion(record, []) == []      # the actual regression guard
 
 
-def test_run_job_pii_research_note_read_fails_open_on_bad_encoding(conn, tmp_path, monkeypatch):
-    """A note that exists but can't be decoded as UTF-8 must not crash the run —
-    same fail-open convention as existing_entry_sites, applied to the append-time read."""
+def test_run_job_data_broker_research_refuses_to_overwrite_unreadable_note(conn, tmp_path, monkeypatch):
+    """A note that exists with real prior content, but can't be decoded as UTF-8 (e.g.
+    hand-edited/pasted from a Windows source and saved Latin-1), must be refused and
+    queued as an exception — NOT fail open to an empty base, which would make the
+    write below a silent full overwrite and destroy every prior entry while still
+    reporting 'completed'. The prior bytes on disk must be byte-for-byte unchanged."""
     note, _, _ = _setup_pii(
         tmp_path, monkeypatch,
         search_results=[{"title": "A", "url": "https://a.example", "snippet": "x"}],
@@ -798,15 +801,21 @@ def test_run_job_pii_research_note_read_fails_open_on_bad_encoding(conn, tmp_pat
                     "source_url": "https://a.example"}],
     )
     note.parent.mkdir(parents=True, exist_ok=True)
-    note.write_bytes(b"\xff\xfe not valid utf-8 \x00\x01")
+    prior_bytes = "**Site:** OldBroker Café\n**Collects:** emails\n**Source:** https://old.example\n".encode("latin-1")
+    note.write_bytes(prior_bytes)
     monkeypatch.setattr(jobs, "load_registry", lambda path=None: {"jobs": [_approved_pii_job()]})
 
     result = asyncio.run(jobs.run_job("data-broker-research", conn, **_RUN_JOB_KWARGS))
 
     assert result["status"] == "completed"
-    assert result["entries_added"] == 1
-    text = note.read_text(encoding="utf-8")
-    assert "**Site:** Acme" in text
+    assert result["entries_added"] == 0
+    assert result["exceptions_raised"] == 1
+    pending = jobs.list_exceptions(conn, status="pending")
+    assert len(pending) == 1
+    assert "data-broker-research" == pending[0]["job_id"]
+    # The actual regression guard: the prior note content must be untouched, byte
+    # for byte -- not decoded, not re-encoded, not replaced with new-only content.
+    assert note.read_bytes() == prior_bytes
 
 
 def test_run_job_still_runs_csv_link_check_by_default(conn, tmp_path, monkeypatch):

@@ -632,28 +632,45 @@ async def _run_pii_research(
         header = "" if note_path.exists() else "# Data Brokers\n\n"
         try:
             existing_text = note_path.read_text(encoding="utf-8") if note_path.exists() else ""
-        except (OSError, UnicodeDecodeError):
-            # Fail open on the read side, same convention as existing_entry_sites
-            # a few lines above: an unreadable/non-UTF-8 note must not crash the
-            # run -- worst case we overwrite from an empty base instead of 500ing.
-            existing_text = ""
-        updated = existing_text + header + "\n" + format_pii_entries(entries, today)
-        try:
-            await executor._run_file_edit(
-                {"name": "pii_note_append"}, f"job run: {job_id}", workshop,
-                {"filename": note_rel_path, "content": updated, "write_scope": write_scope},
-            )
-            write_note = f"appended {len(entries)} entry(ies) to '{note_rel_path}'."
-        except executor.ExecutionError as exc:
+        except (OSError, UnicodeDecodeError) as exc:
+            # Refuse-and-queue, NOT fail-open: this note is an append-only log,
+            # and falling back to an empty base here would make the write below
+            # a full overwrite -- destroying every prior entry while reporting
+            # "completed". Reading a str can fail (decode); writing one can't
+            # (encode), so there is no symmetric write-side failure that would
+            # otherwise catch this and route it to the except-ExecutionError
+            # arm below. Mirrors that arm's exception-queue shape instead of
+            # crashing or overwriting.
             exceptions_raised += 1
             refused_count = len(entries)
-            entries = []          # nothing landed -- do not report them as added
+            entries = []
             enqueue_exception(
                 conn, job_id, run_id,
                 proposed_action=f"append {refused_count} entry(ies) to '{note_rel_path}'",
-                reason=str(exc),
+                reason=f"note exists but could not be read ({exc}) — refusing to overwrite",
             )
-            write_note = f"write to '{note_rel_path}' refused and queued as an exception: {exc}"
+            write_note = (
+                f"write to '{note_rel_path}' refused: existing note unreadable, "
+                "overwriting it would have destroyed prior entries."
+            )
+        else:
+            updated = existing_text + header + "\n" + format_pii_entries(entries, today)
+            try:
+                await executor._run_file_edit(
+                    {"name": "pii_note_append"}, f"job run: {job_id}", workshop,
+                    {"filename": note_rel_path, "content": updated, "write_scope": write_scope},
+                )
+                write_note = f"appended {len(entries)} entry(ies) to '{note_rel_path}'."
+            except executor.ExecutionError as exc:
+                exceptions_raised += 1
+                refused_count = len(entries)
+                entries = []          # nothing landed -- do not report them as added
+                enqueue_exception(
+                    conn, job_id, run_id,
+                    proposed_action=f"append {refused_count} entry(ies) to '{note_rel_path}'",
+                    reason=str(exc),
+                )
+                write_note = f"write to '{note_rel_path}' refused and queued as an exception: {exc}"
 
     notes = (
         f"run_id={run_id}: query '{query}', {len(results)} result(s), "
