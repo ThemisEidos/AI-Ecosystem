@@ -91,6 +91,13 @@ def test_job_linked_completion_rejects_empty_envelope_hash():
     assert any("envelope_hash" in e and "must not be empty" in e for e in errs)
 
 
+@pytest.mark.skipif(
+    not FIXTURES.exists(),
+    reason="Tests/Fixtures/ is deliberately not shipped in the cooper-core image "
+           "(.dockerignore allowlist), so this fixture-backed CLI test cannot run "
+           "in-container. Skipping is honest; shipping test fixtures into a production "
+           "image to make it pass would not be.",
+)
 def test_cli_runner_flags_invalid_dir(tmp_path):
     proc = subprocess.run(
         [sys.executable, str(_REPO / "cooper-core" / "evidence.py"), str(FIXTURES)],

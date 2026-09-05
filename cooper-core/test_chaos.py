@@ -11,6 +11,7 @@ Spec: Docs/superpowers/specs/2026-08-18-step-15-max-metrics-design.md, 15f(iii).
 """
 import asyncio
 import json
+import os
 import sqlite3
 from pathlib import Path
 
@@ -197,6 +198,12 @@ def test_disk_full_on_a_job_write_is_queued_not_crashed(tmp_path, monkeypatch):
     assert evidence.validate_completion(record, []) == []
 
 
+@pytest.mark.skipif(
+    os.geteuid() == 0,
+    reason="root ignores file permission bits, so this fault cannot be injected as root "
+           "(the cooper-core container runs as root; this asserts real behaviour for the "
+           "non-root case rather than pretending to cover it)",
+)
 def test_unwritable_destination_surfaces_as_execution_error(tmp_path, monkeypatch):
     """A read-only filesystem must raise ExecutionError, not silently no-op."""
     monkeypatch.setattr(executor, "_REPO_ROOT", tmp_path)
