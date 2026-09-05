@@ -495,6 +495,14 @@ async def extract_pii_entries(
         payload = json.loads(raw)
     except Exception as exc:
         raise JobError(f"entry extraction backend call failed: {exc}")
+    if not isinstance(payload, dict):
+        # `null`, a bare string, or a list is valid JSON but not the object this
+        # expects -- without this the next line raises a raw AttributeError that
+        # escapes _run_pii_research's (JobError, ExecutionError) handler and
+        # becomes an HTTP 500. Same guard planner.draft_envelope already had;
+        # its absence here was the asymmetry (found by the 15f-iii chaos suite,
+        # and the same bug class as Gotchas 2026-09-01).
+        raise JobError("entry extraction returned non-object JSON")
 
     already = {s.strip().lower() for s in existing_sites}
     entries: List[dict] = []
