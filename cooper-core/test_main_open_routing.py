@@ -1,10 +1,11 @@
 """Open-workshop routing must default through LiteLLM, not directly to OpenAI."""
+import os
 import pathlib
 import subprocess
 import sys
 import textwrap
 
-import main  # ambient import — WORKSHOP is unset in the test environment, defaults to "open"
+import main  # ambient import — conftest.py pins WORKSHOP=open before this runs
 
 _COOPER_CORE_DIR = pathlib.Path(__file__).resolve().parent
 
@@ -52,3 +53,16 @@ def test_private_workshop_unaffected():
     values = _run_main_import_with_env({"WORKSHOP": "private"})
     assert values["COOPER_MODEL"] == "COOPER-Private"
     assert values["BACKEND_URL"] == "http://localhost:11434"
+
+
+def test_suite_pins_workshop_open_regardless_of_ambient_env():
+    """The pin itself (2026-09-05).
+
+    Without it the suite inherits the container's WORKSHOP and 12 tests fail on
+    the Private stack against byte-identical code -- which made the in-image
+    packaging check cry wolf on one of the two stacks. Guarding the pin here
+    means a future change that drops it fails loudly rather than only showing up
+    as a dozen mystery failures in one container.
+    """
+    assert os.environ["WORKSHOP"] == "open"
+    assert main.WORKSHOP == "open"

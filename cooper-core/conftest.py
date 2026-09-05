@@ -6,6 +6,25 @@ resolver). Tests must not depend on the machine's name resolution."""
 import dataclasses
 import os
 
+# The suite's assertions are written against the OPEN workshop: test_main_*.py
+# and test_gateway.py assert Open routing, the general tool registry and the
+# LiteLLM base URL. main.py reads WORKSHOP once, at import time, so whatever is
+# in the ambient environment when pytest starts decides what those tests see.
+#
+# Several test modules already tried to pin this with
+# os.environ.setdefault("WORKSHOP", "open") — but setdefault is a no-op when the
+# variable is ALREADY set, which is exactly the case that matters: running the
+# suite inside pda-private-cooper-core (WORKSHOP=private) turned 12 tests red
+# while the code was byte-identical to the green Open container. The in-image
+# suite is the project's packaging check, so a check that cries wolf on one of
+# the two stacks is worse than no check. Gotchas 2026-09-05.
+#
+# Assign, don't setdefault. A test that wants a different workshop must not rely
+# on ambient env either — test_main_open_routing.py's _run_main_import_with_env
+# re-imports main in a subprocess with an explicit env dict, which is the
+# supported way to exercise the private configuration.
+os.environ["WORKSHOP"] = "open"
+
 os.environ.setdefault("GIT_AUTHOR_NAME", "cooper-tests")
 os.environ.setdefault("GIT_AUTHOR_EMAIL", "cooper-tests@localhost")
 os.environ.setdefault("GIT_COMMITTER_NAME", "cooper-tests")
