@@ -33,5 +33,5 @@ jobs:
     queries_per_run: 1
     entries_per_run: 5
   permission_level: 3
-  approved: false
+  approved: true
   envelope_hash: a41c2e5f196e5ab314b08e7770b8027cf6a5370428be0cc56703a3496e2826e2

@@ -118,6 +118,9 @@ services:
         source: "../Obsidian Vault/00_Inbox"
         target: "/app/Obsidian Vault/00_Inbox"
       - type: bind
+        source: "../Obsidian Vault/02_Projects/opt-out"
+        target: "/app/Obsidian Vault/02_Projects/opt-out"
+      - type: bind
         source: "../Codex_Tasks"
         target: "/app/Codex_Tasks"
       - type: bind
