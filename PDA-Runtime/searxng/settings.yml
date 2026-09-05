@@ -1,0 +1,29 @@
+# SearXNG settings for COOPER-Open (Step 14c).
+# Open stack ONLY — G4 (2026-08-23) keeps Private without a web-search path.
+# Reachable only on pda-open-net at http://searxng:8080; no host port is published.
+use_default_settings: true
+
+server:
+  # Not a credential for any external service: SearXNG requires this to sign its
+  # own internal request tokens. Committed deliberately.
+  secret_key: "cooper-open-searxng-local-instance"
+  limiter: false          # no bot-limiting needed: the only client is cooper-core
+  image_proxy: false
+
+search:
+  # JSON is off by default upstream; _run_web_search depends on it.
+  formats:
+    - html
+    - json
+  safe_search: 0
+  autocomplete: ""
+
+engines:
+  - name: google
+    disabled: false
+  - name: duckduckgo
+    disabled: false
+  - name: bing
+    disabled: false
+  - name: wikipedia
+    disabled: false
