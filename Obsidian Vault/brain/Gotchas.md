@@ -771,3 +771,38 @@ Not a production defect: `evidence.py`'s runtime behaviour needs no fixtures, an
 data from a production image is correct. The defect is that the exclusion is invisible. The fix is
 to make the empty case loud (a module-level skip when `FIXTURES` is missing, mirroring the pattern
 already in the same file) — never to ship the fixtures to make a number match.
+
+### 2026-09-05 · The in-image suite false-alarms on the Private container — the tests assume `WORKSHOP=open`
+
+Immediately after adopting "run the suite inside the image" as the standard packaging check
+(entry above), running it against **Private** gave `12 failed, 452 passed, 4 skipped` while
+**Open** gave `464 passed, 4 skipped` — from the same image build and the same source.
+
+It is the ambient `WORKSHOP` env var, nothing else. `docker exec` inherits the container's
+environment, and `pda-private-cooper-core` sets `WORKSHOP=private`; a dozen tests
+(`test_main_open_routing.py`, `test_main_dispatch.py`, `test_main_skills.py`,
+`test_gateway.py`) assert Open-workshop routing, the general tool registry, or
+`OPENAI_BASE_URL` defaults, and are silently coupled to that variable. Proof, one command:
+
+```bash
+docker exec    pda-private-cooper-core sh -c 'cd /app/cooper-core && python -m pytest -q'
+#   -> 12 failed, 452 passed, 4 skipped
+docker exec -e WORKSHOP=open pda-private-cooper-core sh -c 'cd /app/cooper-core && python -m pytest -q'
+#   -> 464 passed, 4 skipped     (identical image, identical code)
+```
+
+**So the in-image packaging check must pass `-e WORKSHOP=open` when run against the Private
+container**, or it reports a dozen failures that mean nothing about packaging. The
+`docker run --rm --entrypoint sh <image> ...` form documented in the entry above does not hit
+this, because a bare `docker run` gets the Dockerfile's env, not the Private service's compose
+overrides — the trap is specific to `docker exec` against a *running* Private container.
+
+Not a production defect: the runtime reads `WORKSHOP` deliberately and both stacks are healthy.
+The defect is in the tests — they depend on an ambient env var instead of setting it explicitly
+(a `conftest.py` fixture pinning `WORKSHOP` for the workshop-coupled tests would remove the
+coupling). Pre-existing, unrelated to any 15f change, and unfixed as of this entry.
+
+**The wider lesson, second one in a day about this same check:** the in-image suite was adopted
+because it catches what local green cannot, but it is not a neutral oracle. It can go quiet
+(empty `parametrize`, entry above) *and* it can cry wolf (ambient env). Read what it says before
+believing either its green or its red.

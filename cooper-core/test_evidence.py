@@ -22,14 +22,45 @@ def _records(files):
     return [json.loads(f.read_text(encoding="utf-8")) for f in files]
 
 
-@pytest.mark.parametrize("path", VALID_FILES, ids=lambda p: p.name)
+def _fixture_params(files, corpus):
+    """Parametrize over `files`, but never silently to zero cases.
+
+    `Tests/Fixtures/` is deliberately absent from the cooper-core image
+    (.dockerignore allowlist), so these globs come back empty in-container. An
+    empty `parametrize` list does not skip and does not error — it collects zero
+    tests and the run is green, which is how 13 tests went missing from the
+    in-image suite unnoticed until 2026-09-05 (Gotchas). Emit one explicitly
+    skipped case instead, so the absence is visible in the count.
+    """
+    if files:
+        return list(files)
+    return [
+        pytest.param(
+            None,
+            marks=pytest.mark.skip(
+                reason=f"{corpus} fixture corpus absent ({FIXTURES}) — expected in the "
+                       "cooper-core image, where Tests/Fixtures/ is deliberately not "
+                       "shipped. Skipping is honest; shipping test fixtures into a "
+                       "production image to make this pass would not be."
+            ),
+        )
+    ]
+
+
+def _fixture_id(path):
+    return path.name if path is not None else "corpus-absent"
+
+
+@pytest.mark.parametrize("path", _fixture_params(VALID_FILES, "valid"), ids=_fixture_id)
 def test_valid_fixture_passes(path):
     context = _records(VALID_FILES)
     record = json.loads(path.read_text(encoding="utf-8"))
     assert evidence.validate_record(record, context) == []
 
 
-@pytest.mark.parametrize("path", INVALID_FILES, ids=lambda p: p.name)
+@pytest.mark.parametrize(
+    "path", _fixture_params(INVALID_FILES, "invalid"), ids=_fixture_id
+)
 def test_invalid_fixture_fails(path):
     # union context: paired halves of a broken linkage live in Invalid/ too
     context = _records(VALID_FILES + INVALID_FILES)
@@ -212,3 +243,30 @@ def test_legacy_flag_does_not_waive_schema_requirements():
     del record["execution_id"]
     errs = evidence.validate_completion(record, [])
     assert any("execution_id" in e for e in errs)
+
+
+# --- the guard itself (2026-09-05) -------------------------------------------
+# These must run everywhere, including in-container where the corpus is absent —
+# they are the reason an empty corpus can no longer collect to zero unnoticed.
+
+def test_fixture_params_passes_through_a_real_corpus():
+    files = [Path("a.json"), Path("b.json")]
+    assert _fixture_params(files, "valid") == files
+
+
+def test_fixture_params_emits_one_skipped_case_when_corpus_absent():
+    params = _fixture_params([], "valid")
+    assert len(params) == 1, "an absent corpus must still collect exactly one case"
+    marks = params[0].marks
+    assert any(m.name == "skip" for m in marks), "the stand-in case must be skipped"
+
+
+def test_fixture_params_skip_reason_names_the_corpus_and_the_path():
+    reason = _fixture_params([], "invalid")[0].marks[0].kwargs["reason"]
+    assert "invalid" in reason
+    assert str(FIXTURES) in reason
+
+
+def test_fixture_id_handles_both_real_paths_and_the_stand_in():
+    assert _fixture_id(Path("/x/WF-003.json")) == "WF-003.json"
+    assert _fixture_id(None) == "corpus-absent"

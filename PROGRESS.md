@@ -1491,6 +1491,36 @@ Execution order: 15a → 14a(rev) → 15c → 14b → 15d → 15e → 14c(+15f-i
   with a module-level skip mirroring the existing `skipif`, never by shipping fixtures into
   the image to make a number match. Logged in Gotchas 2026-09-05.
 
+- **2026-09-05 · Fixed: an absent fixture corpus now collects a visible skip instead of
+  nothing.** `test_evidence.py` gained `_fixture_params()`, which returns the globbed file
+  list when it is non-empty and otherwise a single `pytest.param(None,
+  marks=pytest.mark.skip(...))` whose reason names the corpus and the absolute path it
+  looked for. Both parametrized tests route through it; `_fixture_id()` renders the stand-in
+  as `corpus-absent`. Four tests cover the guard itself and run everywhere, including
+  in-container — they are the reason an empty corpus cannot silently collect to zero again.
+  Deliberately *not* fixed by shipping `Tests/Fixtures/` into the image: excluding test data
+  from a production image is correct, and making a count match by weakening that would be the
+  wrong repair.
+  **Counts now reconcile exactly.** Dev 481 collected / 481 passed (was 477; +4 guards).
+  In-image 468 collected / 464 passed / 4 skipped. The 13-test gap is unchanged in size but is
+  now fully explained: dev has 15 real fixture cases (3 valid + 12 invalid), the image has 2
+  named sentinels, 15 - 2 = 13. Both stacks rebuilt so the two images carry identical code.
+- **2026-09-05 · The in-image check false-alarms against the Private container — it assumes
+  `WORKSHOP=open`.** Found within an hour of adopting that check as standard. Private returned
+  `12 failed, 452 passed, 4 skipped`; Open returned `464 passed, 4 skipped` from the same build.
+  Cause is entirely the ambient env var — `docker exec` inherits the container's environment
+  and the Private service sets `WORKSHOP=private`, while a dozen tests in
+  `test_main_open_routing.py`, `test_main_dispatch.py`, `test_main_skills.py` and
+  `test_gateway.py` assert Open routing, the general tool registry, or `OPENAI_BASE_URL`
+  defaults. `docker exec -e WORKSHOP=open <private container> ... pytest -q` returns
+  `464 passed, 4 skipped`, identical to Open — same image, same code, one variable.
+  Pre-existing and unrelated to 15f; none of the 12 are in the file this session touched.
+  **Not a production defect** (the runtime reads `WORKSHOP` by design; both stacks are
+  healthy and were live-verified after the rebuild). The defect is that those tests depend on
+  an ambient variable rather than pinning it — a `conftest.py` fixture would decouple them.
+  **Unfixed, owner's call.** Until then, the in-image packaging check must pass
+  `-e WORKSHOP=open` when run against the Private container. Logged in Gotchas 2026-09-05.
+
 ---
 
 ## Blocked / needs owner input
