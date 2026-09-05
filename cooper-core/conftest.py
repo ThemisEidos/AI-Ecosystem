@@ -23,6 +23,14 @@ import os
 # on ambient env either — test_main_open_routing.py's _run_main_import_with_env
 # re-imports main in a subprocess with an explicit env dict, which is the
 # supported way to exercise the private configuration.
+# Stash the ambient value BEFORE pinning. test_packaging.py needs to know which
+# real container it is running in (Open and Private legitimately ship different
+# config sets, and on Private the ABSENCE of the job configs is what keeps G4
+# holding) -- but every other test needs the pin above. "unset" means a dev
+# checkout rather than a container.
+os.environ["COOPER_TEST_HOST_WORKSHOP"] = (
+    os.environ.get("WORKSHOP", "").strip().lower() or "unset"
+)
 os.environ["WORKSHOP"] = "open"
 
 os.environ.setdefault("GIT_AUTHOR_NAME", "cooper-tests")

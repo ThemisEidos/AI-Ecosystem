@@ -21,6 +21,7 @@ Adding a config file the runtime reads? Add it to _REQUIRED_RUNTIME_FILES. The
 drift guard at the bottom fails if you forget.
 """
 import json
+import os
 import re
 from pathlib import Path
 
@@ -33,17 +34,35 @@ _SRC_DIR = Path(__file__).resolve().parent
 # (relative path, parser) -- parser is the thing that proves the file is not
 # merely present but usable. A truncated or empty file packages just as
 # "successfully" as a good one.
+# Which container are we in? conftest.py pins WORKSHOP=open for the rest of the
+# suite, so the ambient value is stashed there before the pin. "unset" = a dev
+# checkout, where the whole repo is on disk.
+HOST_WORKSHOP = os.environ.get("COOPER_TEST_HOST_WORKSHOP", "unset")
+
+# Config every workshop's runtime reads. These must be IN the image.
 _REQUIRED_RUNTIME_FILES = [
     ("Scripts/PDA_RetryPolicy.json", "json"),
     ("Scripts/PDA_ModelRouting.json", "json"),
-    ("Config/pii_research_queries.json", "json"),
-    ("Config/jobs_registry.yaml", "yaml"),
     ("Config/skills_registry.yaml", "yaml"),
     ("Config/general_tool_registry.yaml", "yaml"),
     ("Config/private_tool_registry.yaml", "yaml"),
-    ("Config/cooper_workshop_identities.yaml", "yaml"),
     ("Models/cooper-personality/Modelfile", "text"),
 ]
+
+# Open-only job config, supplied by bind mounts in docker-compose.yml rather
+# than baked into the image. On PRIVATE these must be ABSENT: nothing mounts
+# them there, and that omission is what keeps G4 (owner decision 2026-08-23:
+# Private gets no web search, no data-broker job) holding at the filesystem
+# layer as well as in verify_job's workshop check. A Private container that
+# gained these files would be a real boundary regression, so the check asserts
+# the absence rather than skipping it.
+_OPEN_ONLY_JOB_FILES = [
+    ("Config/jobs_registry.yaml", "yaml"),
+    ("Config/pii_research_queries.json", "json"),
+]
+
+if HOST_WORKSHOP != "private":
+    _REQUIRED_RUNTIME_FILES = _REQUIRED_RUNTIME_FILES + _OPEN_ONLY_JOB_FILES
 
 
 @pytest.mark.parametrize("rel,_kind", _REQUIRED_RUNTIME_FILES, ids=lambda v: v if isinstance(v, str) else "")
@@ -128,7 +147,8 @@ def test_no_runtime_config_file_escapes_the_packaging_check():
         "State/Workflow_Evidence/completion",
     }
     declared = {p for p in _declared_paths() if p not in excluded}
-    covered = {rel for rel, _ in _REQUIRED_RUNTIME_FILES}
+    covered = ({rel for rel, _ in _REQUIRED_RUNTIME_FILES}
+               | {rel for rel, _ in _OPEN_ONLY_JOB_FILES})
     uncovered = {
         p for p in declared - covered
         if not p.endswith((".db", ".log", ".md", ".csv"))
@@ -136,4 +156,25 @@ def test_no_runtime_config_file_escapes_the_packaging_check():
     assert not uncovered, (
         "these config files are read by runtime source but are not in "
         f"_REQUIRED_RUNTIME_FILES, so nothing checks they were packaged: {sorted(uncovered)}"
+    )
+
+
+@pytest.mark.skipif(
+    HOST_WORKSHOP != "private",
+    reason="G4 boundary assertion; only meaningful inside the Private container",
+)
+@pytest.mark.parametrize("rel,_kind", _OPEN_ONLY_JOB_FILES, ids=lambda v: v if isinstance(v, str) else "")
+def test_private_workshop_has_no_job_config(rel, _kind):
+    """G4 at the filesystem layer (owner decision 2026-08-23).
+
+    Private gets no web search and no data-broker job. verify_job enforces the
+    workshop boundary in code (2026-09-05), but this asserts the second, older
+    line of defence: the Private container simply cannot see the job registry,
+    so there is nothing for a mount change to accidentally make runnable. If
+    this ever fails, someone added a mount and G4 now rests on the code check
+    alone -- which is a decision to make deliberately, not to discover later.
+    """
+    assert not (_REPO / rel).exists(), (
+        f"{rel} is present in the PRIVATE container. G4 says Private gets no "
+        "job config; this file being here widens what Private can run."
     )
