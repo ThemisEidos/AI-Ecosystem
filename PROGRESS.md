@@ -60,7 +60,7 @@ Execution order: 15a → 14a(rev) → 15c → 14b → 15d → 15e → 14c(+15f-i
   decision log.
 - [x] **15d — Council subsystem** (M6→5; planning-time panel + tiered final review, verdicts in evidence) ✓ 2026-08-31
 - [ ] **15e — Planner–executor** (M2→4; big brain drafts envelopes, cheap model executes)
-- [ ] **14c — SearXNG + web_search + PII job** (ships WITH 15f's injection canaries, not before)
+- [x] **14c — SearXNG + web_search + data-broker job** (+15f-i injection canaries) ✓ 2026-09-04
 - [ ] **14d — Bounded loop + opt-out documenter job**
 - [ ] **14e — Repo steward, draft-and-notify**
 - [ ] **15f — Robustness: retry policy implemented, chaos tests** (M8→5)
@@ -1469,3 +1469,54 @@ Governance gates from the Step 15 spec §6 — each blocks only its named slice:
   for the full implementation + live-verification detail. Closes 15e's drafting half only;
   the spec's full 15e row (per-step instructions, executor loop, chat reachability)
   remains open — see that entry's closing paragraph.
+
+- **2026-09-04 · 14c shipped (+15f-i): web search, the data-broker research job, and the
+  injection-canary suite — live-verified on the running Open stack.** 6 tasks, executed
+  subagent-driven with a task review after each and a whole-branch review at the end;
+  415 tests (was 372). Ships: a `searxng` container on the Open stack only (G4 — internal
+  network, no host port), a `web_search` executor_type backed by its JSON API
+  (job-runner-only, deliberately absent from every tool registry so no chat model can select
+  it — same treatment `file_edit` gets), a second **hardcoded** `job_type` branch in
+  `run_job` (`pii_research`, job id `data-broker-research`), and
+  `cooper-core/test_injection_canaries.py` covering the `web_search`/`browser`/
+  `fabric_pattern` paths. **The narrow-scope invariant from 15e holds:** a job's `steps`
+  list is still documentation — verified by the final review that nothing reads it at
+  runtime — and no LLM selects a tool. The 14b CSV branch was renamed to
+  `_run_csv_link_check` with its body byte-for-byte identical (diffed and confirmed).
+  - **Live results (Open stack, real SearXNG + real cloud drafter):** two runs appended 5
+    entries with no duplicates and a rotating query (`data broker opt out list` →
+    `people search site remove personal information`); a third run after the persistence fix
+    landed 3 entries on the host. Every entry carries a real source URL — wired.com's opt-out
+    guide, `github.com/yaelwrites/big-ass-data-broker-opt-out-list`,
+    `suppression.peopleconnect.us`, `incogni.com`. All three evidence records validate.
+    `pda-litellm` held all 4 provider keys across every rebuild — the 2026-08-30
+    sibling-recreate trap did not fire.
+  - **Three real security/correctness defects were found by review, not by tests, and all
+    three were in the plan as written:**
+    1. *Evidence hygiene on the failure path.* `evidence._SENSITIVE_RE` matches `\bPII\b`
+       case-insensitively and scans every top-level string field of a record. The job id and
+       an error string both carried `pii`, so any extraction 429/timeout wrote an evidence
+       record that failed `validate_completion` on two counts — an honest failure was
+       literally unrecordable. Fixed by renaming (`data-broker-research`, `Data-Brokers.md`,
+       "entry extraction backend call failed") rather than relaxing the regex: that regex is
+       a governance mechanism and amending it is an owner decision.
+    2. *Vault-note data loss.* An intermediate fix made an unreadable note fail open to an
+       empty string; because the note exists, the "append" then became a full overwrite. A
+       reviewer reproduced it — a real Latin-1 note was silently destroyed while the run
+       reported `completed`. The asymmetry worth remembering: reading a str requires
+       *decoding* (can fail), writing one requires only *encoding* (cannot), so a note
+       unreadable as UTF-8 is always still writable and no write-side failure catches it.
+       Now refuse-and-queue, pinned by a byte-for-byte prior-content assertion.
+    3. *Prompt-fence escape.* `build_pii_prompt` interpolated untrusted title/url/snippet
+       verbatim into its `"""`-fenced data block, so a snippet containing the delimiter could
+       close the fence early. Found by the canary suite doing exactly its job. Fixed at the
+       source (`_neutralize_delimiter`), never by weakening an assertion. Every canary was
+       mutation-tested — the reviewer broke the leak-detection helper in three different wrong
+       directions and confirmed the suite catches each.
+  - **What this does NOT close.** No n8n scheduler ships for this job, so the spec's
+    "runs at a randomized time" clause is **unmet** — the job is manual-trigger-only today.
+    `data-broker-research` is committed **`approved: false`**: there is no approval API, so
+    editing that field *is* the approval act and it is the owner's to perform.
+    `quota.queries_per_run` is declared but not enforced (one query per run is hardcoded).
+    Also surfaced, pre-existing and unrelated: 12 legacy WF-001/002/005 evidence fixtures
+    fail validation, so a whole-directory `evidence.py` run exits 1.
