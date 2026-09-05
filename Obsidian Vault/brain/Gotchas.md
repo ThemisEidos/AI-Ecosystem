@@ -697,3 +697,34 @@ over same-length single-character edits, and clear `__pycache__` as part of the 
 not just the file copy. A same-size mutation plus a fast restore is indistinguishable from a
 real bug by every normal diagnostic — grep, `git diff`, and reading the code all say the file
 is clean, because it is.
+
+### 2026-09-05 · A fail-open config reader hides its own packaging gap — `PDA_RetryPolicy.json` was missing from the image and every budget silently reverted to defaults
+
+`retry_policy.load_policy()` fails open to `{}` when the policy file is unreadable, so
+`budget_for()` quietly returns built-in fallbacks instead of the declared per-role budgets.
+That is the right runtime behaviour — a missing retry policy must not take the runtime down —
+but it means a packaging gap produces **no error, no warning, and a working system**. The
+whole of 15f(ii) would have shipped as a no-op in production while passing 477 tests on the
+dev machine.
+
+**How it surfaced:** running the suite *inside the built image* rather than only locally.
+The container reported `brain 60s x 2 attempts`; the dev machine reported `90s x 2`. Nothing
+else differed. Local tests cannot catch this class by construction — they read the file from
+the repo, which is exactly the copy the container lacks.
+
+**Two layers were both wrong,** which is why the obvious single fix failed:
+1. `cooper-core/Dockerfile` copied only `PDA_ModelRouting.json` out of `Scripts/`.
+2. `.dockerignore` is **deny-all (`*`) plus an explicit allowlist** — so even after adding
+   the `COPY`, the file never reached the build context and the build failed outright with
+   `"/Scripts/PDA_RetryPolicy.json": not found`. Both the allowlist and the `COPY` need the
+   entry.
+
+**Same class as 14c's `pii_research_queries.json` gap** (a config that only ever reached the
+container via a one-shot `docker cp` during live verification). Twice in two days.
+
+**Takeaway:** any config file read by a fail-open reader needs a packaging assertion, because
+its failure mode is silence rather than a crash. The cheap general check is to run the test
+suite inside the built image (`docker run --rm --entrypoint sh <image> -c "cd /app/cooper-core
+&& python -m pytest -q"`) — it costs seconds, touches no running container, and catches
+missing-file classes that no amount of local green can. Worth doing before any "shipped"
+claim that involves a new config file.
