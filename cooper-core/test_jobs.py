@@ -584,3 +584,261 @@ def test_format_pii_entries_renders_all_fields(tmp_path):
 
 def test_format_pii_entries_returns_empty_string_for_no_entries():
     assert jobs.format_pii_entries([], "2026-09-04") == ""
+
+
+# ── pii_research job branch (Step 14c) ───────────────────────────────────
+PII_JOB = {
+    "id": "data-broker-research",
+    "job_type": "pii_research",
+    "workshop": "open",
+    "schedule_hint": "daily, randomized 00:00-06:00",
+    "steps": ["web_search", "pii_extract", "note_append"],
+    "read_scope": ["Obsidian Vault/02_Projects/opt-out/Data-Brokers.md"],
+    "write_scope": ["Obsidian Vault/02_Projects/opt-out/Data-Brokers.md"],
+    "quota": {"queries_per_run": 1, "entries_per_run": 5},
+    "permission_level": 3,
+    "approved": True,
+}
+
+
+def _approved_pii_job(**overrides):
+    entry = {**PII_JOB, **overrides}
+    entry["envelope_hash"] = jobs.compute_envelope_hash(entry)
+    return entry
+
+
+def _fake_search(results):
+    async def _inner(query, max_results=10):
+        _inner.query = query
+        return results
+    return _inner
+
+
+def _fake_extract(entries):
+    async def _inner(query, results, existing_sites, **kw):
+        _inner.existing_sites = existing_sites
+        return entries
+    return _inner
+
+
+def _setup_pii(tmp_path, monkeypatch, *, search_results, extracted, note_text=None):
+    monkeypatch.setattr(jobs, "_REPO_ROOT", tmp_path)
+    monkeypatch.setattr(executor, "_REPO_ROOT", tmp_path)
+    monkeypatch.setattr(jobs.council, "final_review", _fake_final_review)
+    queries = _write_queries(tmp_path, ["data broker opt out list"])
+    monkeypatch.setattr(jobs, "_QUERIES_PATH", queries)
+    search = _fake_search(search_results)
+    extract = _fake_extract(extracted)
+    monkeypatch.setattr(jobs.executor, "_run_web_search", search)
+    monkeypatch.setattr(jobs, "extract_pii_entries", extract)
+    note = tmp_path / "Obsidian Vault" / "02_Projects" / "opt-out" / "Data-Brokers.md"
+    if note_text is not None:
+        note.parent.mkdir(parents=True, exist_ok=True)
+        note.write_text(note_text, encoding="utf-8")
+    return note, search, extract
+
+
+def test_run_job_pii_research_appends_entry_and_writes_evidence(conn, tmp_path, monkeypatch):
+    note, search, _ = _setup_pii(
+        tmp_path, monkeypatch,
+        search_results=[{"title": "Acme", "url": "https://a.example", "snippet": "sells data"}],
+        extracted=[{"site": "Acme Data", "what_it_collects": "emails",
+                    "source_url": "https://a.example"}],
+    )
+    job_entry = _approved_pii_job()
+    monkeypatch.setattr(jobs, "load_registry", lambda path=None: {"jobs": [job_entry]})
+
+    result = asyncio.run(jobs.run_job("data-broker-research", conn, **_RUN_JOB_KWARGS))
+
+    assert result["status"] == "completed"
+    assert result["entries_added"] == 1
+    assert result["results_found"] == 1
+    assert result["query"] == "data broker opt out list"
+    assert search.query == "data broker opt out list"
+
+    text = note.read_text(encoding="utf-8")
+    assert "**Site:** Acme Data" in text
+    assert "**Source:** https://a.example" in text
+
+    record = json.loads(Path(result["evidence_path"]).read_text(encoding="utf-8"))
+    assert record["job_id"] == "data-broker-research"
+    assert record["run_id"] == result["run_id"]
+    assert evidence.validate_completion(record, []) == []
+
+
+def test_run_job_pii_research_passes_existing_sites_for_dedupe(conn, tmp_path, monkeypatch):
+    _, _, extract = _setup_pii(
+        tmp_path, monkeypatch,
+        search_results=[{"title": "B", "url": "https://b.example", "snippet": "x"}],
+        extracted=[],
+        note_text="**Site:** Acme Data\n**Collects:** emails\n**Source:** https://a.example\n",
+    )
+    monkeypatch.setattr(jobs, "load_registry", lambda path=None: {"jobs": [_approved_pii_job()]})
+
+    asyncio.run(jobs.run_job("data-broker-research", conn, **_RUN_JOB_KWARGS))
+
+    assert extract.existing_sites == ["Acme Data"]
+
+
+def test_run_job_pii_research_zero_findings_is_a_successful_run(conn, tmp_path, monkeypatch):
+    note, _, _ = _setup_pii(
+        tmp_path, monkeypatch,
+        search_results=[{"title": "B", "url": "https://b.example", "snippet": "x"}],
+        extracted=[],
+    )
+    monkeypatch.setattr(jobs, "load_registry", lambda path=None: {"jobs": [_approved_pii_job()]})
+
+    result = asyncio.run(jobs.run_job("data-broker-research", conn, **_RUN_JOB_KWARGS))
+
+    assert result["status"] == "completed"
+    assert result["entries_added"] == 0
+    assert not note.exists()
+    record = json.loads(Path(result["evidence_path"]).read_text(encoding="utf-8"))
+    assert evidence.validate_completion(record, []) == []
+
+
+def test_run_job_pii_research_caps_entries_at_quota(conn, tmp_path, monkeypatch):
+    note, _, _ = _setup_pii(
+        tmp_path, monkeypatch,
+        search_results=[{"title": "R", "url": "https://r.example", "snippet": "x"}],
+        extracted=[
+            {"site": f"Broker {i}", "what_it_collects": "data",
+             "source_url": f"https://{i}.example"}
+            for i in range(9)
+        ],
+    )
+    monkeypatch.setattr(
+        jobs, "load_registry",
+        lambda path=None: {"jobs": [_approved_pii_job(
+            quota={"queries_per_run": 1, "entries_per_run": 3})]},
+    )
+
+    result = asyncio.run(jobs.run_job("data-broker-research", conn, **_RUN_JOB_KWARGS))
+
+    assert result["entries_added"] == 3
+    assert note.read_text(encoding="utf-8").count("**Site:**") == 3
+
+
+def test_run_job_pii_research_queues_exception_for_out_of_scope_write(conn, tmp_path, monkeypatch):
+    _setup_pii(
+        tmp_path, monkeypatch,
+        search_results=[{"title": "A", "url": "https://a.example", "snippet": "x"}],
+        extracted=[{"site": "Acme", "what_it_collects": "emails",
+                    "source_url": "https://a.example"}],
+    )
+    job_entry = _approved_pii_job(write_scope=["State/SomewhereElse.md"])
+    monkeypatch.setattr(jobs, "load_registry", lambda path=None: {"jobs": [job_entry]})
+
+    result = asyncio.run(jobs.run_job("data-broker-research", conn, **_RUN_JOB_KWARGS))
+
+    assert result["status"] == "completed"
+    assert result["exceptions_raised"] == 1
+    assert len(jobs.list_exceptions(conn, status="pending")) == 1
+
+
+def test_run_job_pii_research_surfaces_search_failure_without_crashing(conn, tmp_path, monkeypatch):
+    _setup_pii(tmp_path, monkeypatch, search_results=[], extracted=[])
+
+    async def _boom(query, max_results=10):
+        raise executor.ExecutionError("searxng unreachable")
+
+    monkeypatch.setattr(jobs.executor, "_run_web_search", _boom)
+    monkeypatch.setattr(jobs, "load_registry", lambda path=None: {"jobs": [_approved_pii_job()]})
+
+    result = asyncio.run(jobs.run_job("data-broker-research", conn, **_RUN_JOB_KWARGS))
+
+    assert result["status"] == "failed"
+    assert "searxng unreachable" in result["reason"]
+    record = json.loads(Path(result["evidence_path"]).read_text(encoding="utf-8"))
+    assert record["status"] == "failed"
+    assert evidence.validate_completion(record, []) == []
+
+
+def test_run_job_still_runs_csv_link_check_by_default(conn, tmp_path, monkeypatch):
+    """An entry with no job_type field keeps the 14b behavior — no silent break."""
+    monkeypatch.setattr(jobs, "_REPO_ROOT", tmp_path)
+    monkeypatch.setattr(executor, "_REPO_ROOT", tmp_path)
+    monkeypatch.setattr(jobs.council, "final_review", _fake_final_review)
+    csv_path = tmp_path / "State" / "LinkAudit" / "links.csv"
+    _write_links_csv(csv_path, [("https://a.example", "", "", "")])
+    job_entry = _approved_job()
+    assert "job_type" not in job_entry
+    monkeypatch.setattr(jobs, "load_registry", lambda path=None: {"jobs": [job_entry]})
+    monkeypatch.setattr(jobs, "url_verify", _fake_url_verify(reachable=True))
+
+    result = asyncio.run(jobs.run_job("link-checker", conn, **_RUN_JOB_KWARGS))
+
+    assert result["status"] == "completed"
+    assert result["rows_checked"] == 1
+
+
+def test_extract_pii_entries_drops_entries_missing_required_fields():
+    async def fake_backend(*a, **k):
+        return json.dumps({"entries": [
+            {"site": "Good", "what_it_collects": "emails", "source_url": "https://g.example"},
+            {"site": "No URL", "what_it_collects": "emails"},
+            {"what_it_collects": "emails", "source_url": "https://n.example"},
+        ]})
+
+    entries = asyncio.run(jobs.extract_pii_entries(
+        "q", [{"title": "t", "url": "https://g.example", "snippet": "s"}], [],
+        base_url="", api_key="", model="m", backend="ollama", complete_fn=fake_backend,
+    ))
+    assert entries == [
+        {"site": "Good", "what_it_collects": "emails", "source_url": "https://g.example"}
+    ]
+
+
+def test_extract_pii_entries_drops_sites_already_recorded():
+    async def fake_backend(*a, **k):
+        return json.dumps({"entries": [
+            {"site": "Acme Data", "what_it_collects": "emails", "source_url": "https://a.example"},
+            {"site": "Fresh Co", "what_it_collects": "phones", "source_url": "https://f.example"},
+        ]})
+
+    entries = asyncio.run(jobs.extract_pii_entries(
+        "q", [{"title": "t", "url": "https://a.example", "snippet": "s"}], ["acme data"],
+        base_url="", api_key="", model="m", backend="ollama", complete_fn=fake_backend,
+    ))
+    assert [e["site"] for e in entries] == ["Fresh Co"]
+
+
+def test_extract_pii_entries_flattens_newlines_that_would_forge_an_entry():
+    """A site name carrying a newline + a second '**Site:**' marker must not be able
+    to forge an extra entry in the vault note (untrusted-content injection vector)."""
+    async def fake_backend(*a, **k):
+        return json.dumps({"entries": [
+            {"site": "Acme Data\n**Site:** Phantom Broker",
+             "what_it_collects": "emails", "source_url": "https://a.example"},
+        ]})
+
+    entries = asyncio.run(jobs.extract_pii_entries(
+        "q", [{"title": "t", "url": "https://a.example", "snippet": "s"}], [],
+        base_url="", api_key="", model="m", backend="ollama", complete_fn=fake_backend,
+    ))
+    assert len(entries) == 1
+    assert "\n" not in entries[0]["site"]
+    block = jobs.format_pii_entries(entries, "2026-09-04")
+    assert len(jobs._PII_SITE_RE.findall(block)) == 1
+
+
+def test_extract_pii_entries_raises_job_error_on_backend_failure():
+    async def boom(*a, **k):
+        raise RuntimeError("429 rate limited")
+
+    with pytest.raises(jobs.JobError, match="429"):
+        asyncio.run(jobs.extract_pii_entries(
+            "q", [{"title": "t", "url": "https://a.example", "snippet": "s"}], [],
+            base_url="", api_key="", model="m", backend="ollama", complete_fn=boom,
+        ))
+
+
+def test_extract_pii_entries_returns_empty_without_calling_backend_on_no_results():
+    async def must_not_run(*a, **k):
+        raise AssertionError("backend must not be called when there are no results")
+
+    entries = asyncio.run(jobs.extract_pii_entries(
+        "q", [], [], base_url="", api_key="", model="m",
+        backend="ollama", complete_fn=must_not_run,
+    ))
+    assert entries == []

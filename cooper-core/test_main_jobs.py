@@ -22,7 +22,7 @@ def test_post_jobs_run_returns_run_job_result(monkeypatch):
         assert kwargs == {
             "base_url": main.BACKEND_URL, "api_key": main.BACKEND_KEY,
             "backend": main.BACKEND, "workshop": main.WORKSHOP,
-            "reviewer_model": main.REVIEWER_MODEL,
+            "reviewer_model": main.REVIEWER_MODEL, "drafter_model": main.DRAFTER_MODEL,
         }
         return {
             "status": "completed",
