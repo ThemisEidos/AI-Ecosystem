@@ -819,3 +819,47 @@ means the same thing on both stacks. A side effect worth noting: the private-env
 because it catches what local green cannot, but it is not a neutral oracle. It can go quiet
 (empty `parametrize`, entry above) *and* it can cry wolf (ambient env). Read what it says before
 believing either its green or its red.
+
+
+### 2026-09-05 · The silent-empty class: four instances in one day, and how to find the rest
+
+Four separate defects this session shared one shape — **a check or a load that produces
+nothing, and reports nothing about producing nothing**:
+
+1. `Config/pii_research_queries.json` and `Scripts/PDA_RetryPolicy.json` missing from the
+   built image. Readers fail open by design, so a declared policy silently became a
+   built-in fallback. 15f-ii would have shipped as a total no-op with a green suite.
+2. `test_evidence.py` parametrizing over a glob of a directory not shipped in the image.
+   An empty `parametrize` collects **zero** cases — no skip, no error. 13 tests vanished.
+3. `evidence.py`'s directory runner counting deliberate negative fixtures as failures,
+   which put a wrong "12 legacy fixtures still fail" line into PROGRESS.md that then
+   survived unchallenged for a day.
+4. `archivist.index_brain` returning early on a missing brain directory. `brain_fts` stays
+   empty, `recall()` answers nothing forever, and startup still logs
+   `[ok] archivist: schema ready, brain indexed`.
+
+**The tell they share:** the failure mode is *absence*, and absence has no exception, no
+stack trace and no red test. Every one of them looked exactly like a healthy system.
+
+**What actually finds them — compare counts, never just statuses.** A green run means "every
+test that got collected passed", which is not the same as "everything passed". The habit that
+worked:
+
+```bash
+# per-file collected counts, dev vs image -- totals hide the shape
+python -m pytest --collect-only -q | grep "::" | cut -d: -f1 | sort | uniq -c
+```
+
+and then *account for every difference*. Today that discipline produced: dev 541 collected,
+Open 528 (−13 deliberately unshipped fixtures), Private 524 (−4 Open-only configs). Three
+numbers, every gap explained. Any unexplained delta is a defect or a misunderstanding, and
+both are worth finding.
+
+**What was built so this class fails loudly from now on:** `cooper-core/test_packaging.py`
+asserts every runtime config is present AND parseable, that the Fabric patterns and brain
+corpus are non-empty, and that the loaded retry budgets match the policy *file's* values so
+a fallback cannot pose as a loaded policy. It carries a drift guard that fails if runtime
+source starts reading a config the manifest does not cover — without which the manifest
+would rot into the same silence it exists to prevent. Both halves are mutation-tested;
+the first attempt at that mutation test used a `-k` filter that matched nothing and had to
+be redone, which is itself an instance of the class.
