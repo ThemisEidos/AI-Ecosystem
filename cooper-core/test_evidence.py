@@ -129,13 +129,22 @@ def test_job_linked_completion_rejects_empty_envelope_hash():
            "in-container. Skipping is honest; shipping test fixtures into a production "
            "image to make it pass would not be.",
 )
-def test_cli_runner_flags_invalid_dir(tmp_path):
+def test_cli_runner_reports_negative_fixtures_as_expected_not_as_failures(tmp_path):
+    """Updated 2026-09-05. This previously asserted returncode == 1 "because
+    Invalid/ records are present" — pinning the very conflation that made a
+    healthy corpus look broken and put "12 legacy fixtures still fail" into
+    PROGRESS.md. The corpus is fine; the runner could not tell a broken record
+    from one that is SUPPOSED to be broken. The contract asserted here is
+    strictly stronger: the full corpus exits 0, every negative is confirmed
+    still-negative, and none has quietly started validating.
+    """
     proc = subprocess.run(
         [sys.executable, str(_REPO / "cooper-core" / "evidence.py"), str(FIXTURES)],
         capture_output=True, text=True,
     )
-    assert proc.returncode == 1                    # Invalid/ records present
-    assert "Invalid/" in proc.stdout or "invalid" in proc.stdout.lower()
+    assert proc.returncode == 0, proc.stdout
+    assert "invalid as expected" in proc.stdout
+    assert "0 unexpectedly valid" in proc.stdout
 
     # a directory holding only the valid records exits 0
     clean = tmp_path / "clean"
@@ -270,3 +279,59 @@ def test_fixture_params_skip_reason_names_the_corpus_and_the_path():
 def test_fixture_id_handles_both_real_paths_and_the_stand_in():
     assert _fixture_id(Path("/x/WF-003.json")) == "WF-003.json"
     assert _fixture_id(None) == "corpus-absent"
+
+
+# --- negative fixtures are expectations, not failures (2026-09-05) ------------
+# evidence.py's directory runner rglob'd everything, so a corpus containing
+# deliberate negative fixtures under Invalid/ reported them as failures and
+# exited 1. That is not a broken corpus -- it is the runner unable to tell
+# "this record is broken" from "this record is SUPPOSED to be broken". The
+# misreading was carried in PROGRESS.md as "12 legacy fixtures still fail".
+# The runner now asserts negatives ARE negative, which additionally catches a
+# real regression: a governance rule relaxed until a negative fixture starts
+# passing.
+
+def _write(path, payload):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+
+def _valid_completion(**overrides):
+    return {**_job_completion(), **overrides}
+
+
+def test_runner_treats_invalid_subdir_as_expected_failures(tmp_path, capsys):
+    _write(tmp_path / "good.json", _valid_completion())
+    _write(tmp_path / "Invalid" / "bad.json", _valid_completion(envelope_hash=""))
+    rc = evidence.main(["evidence.py", str(tmp_path)])
+    out = capsys.readouterr().out
+    assert rc == 0, out
+    assert "1/1 records valid" in out
+    assert "1 negative fixture" in out
+
+
+def test_runner_fails_when_a_negative_fixture_unexpectedly_validates(tmp_path, capsys):
+    # The regression this buys: relax a governance rule until a fixture that
+    # must fail starts passing, and the runner says so instead of going green.
+    _write(tmp_path / "Invalid" / "not-actually-invalid.json", _valid_completion())
+    rc = evidence.main(["evidence.py", str(tmp_path)])
+    out = capsys.readouterr().out
+    assert rc == 1
+    assert "unexpectedly valid" in out.lower()
+
+
+def test_runner_still_fails_on_a_genuinely_invalid_positive_record(tmp_path, capsys):
+    _write(tmp_path / "broken.json", _valid_completion(envelope_hash=""))
+    rc = evidence.main(["evidence.py", str(tmp_path)])
+    assert rc == 1
+    assert "[FAIL]" in capsys.readouterr().out
+
+
+def test_runner_on_the_real_fixture_corpus_is_clean(capsys):
+    # The concrete claim the PROGRESS.md note got wrong.
+    if not FIXTURES.exists():
+        pytest.skip("fixture corpus not shipped in the cooper-core image")
+    rc = evidence.main(["evidence.py", str(FIXTURES)])
+    out = capsys.readouterr().out
+    assert rc == 0, out
+    assert "12 negative fixture" in out

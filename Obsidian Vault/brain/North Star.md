@@ -172,8 +172,12 @@ the approval act and it is yours; no n8n scheduler ships, so the DoD's "randomiz
 clause is unmet and the job is manual-trigger-only; `run_job` does not enforce an envelope's
 `workshop` field, so G4 currently holds by a mount omission rather than a code check; the
 vault note is created `root:root` so Obsidian can read but not save it without a one-time
-`sudo chown`; and 12 legacy WF-001/002/005 evidence fixtures still fail validation, which
-makes a whole-directory `evidence.py` run exit 1.
+`sudo chown`. (The "12 legacy evidence fixtures still fail validation" item that stood here
+was a **misdiagnosis, corrected 2026-09-05**: all 12 are deliberate negative fixtures under
+`Tests/Fixtures/Workflow_Evidence/Invalid/`, each named for the rule it breaks. The corpus was
+never broken — `evidence.py`'s directory runner just could not tell a broken record from one
+that is supposed to be broken. Fixed, and it now also catches a negative fixture that starts
+unexpectedly validating.)
 
 **Merged to `main` 2026-09-03 (PR #1, commit `7424f69`) — and along the way, found and fixed**
 **a real month-long CI gap, not just landed the code below.** PR #1's own CI came back

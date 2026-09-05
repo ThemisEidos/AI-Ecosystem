@@ -1676,6 +1676,17 @@ Governance gates from the Step 15 spec §6 — each blocks only its named slice:
     `quota.queries_per_run` is declared but not enforced (one query per run is hardcoded).
     Also surfaced, pre-existing and unrelated: 12 legacy WF-001/002/005 evidence fixtures
     fail validation, so a whole-directory `evidence.py` run exits 1.
+    **CORRECTED 2026-09-05 — this was a misdiagnosis, and the corpus was never broken.**
+    All 12 live under `Tests/Fixtures/Workflow_Evidence/Invalid/` and are deliberate
+    NEGATIVE fixtures, each named for the rule it breaks (`-missing-approval`,
+    `-mismatched-workflow`, `-sensitive-marker`, ...). They are supposed to fail; that is
+    their entire job. The actual defect was in `evidence.py`'s directory runner, which
+    `rglob`'d everything and could not tell a broken record from one that is *supposed* to
+    be broken. Fixed: the runner now treats anything under `Invalid/` as a negative fixture
+    and asserts it is still invalid, which buys a real regression check — a governance rule
+    relaxed until a negative fixture starts VALIDATING is now a failure instead of silence.
+    The corpus reports `3/3 records valid` + `12 negative fixture(s): 12 invalid as
+    expected, 0 unexpectedly valid`, exit 0.
 
 - **2026-09-05 · 15f(ii) shipped: PDA_RetryPolicy.json implemented and wired — per-stage
   timeout/retry budgets, live-verified against real inference.** Autonomous session while

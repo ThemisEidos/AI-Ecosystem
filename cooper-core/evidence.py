@@ -197,6 +197,26 @@ def validate_record(record: dict, context: List[dict]) -> List[str]:
     return validate_approval(record, context)
 
 
+_NEGATIVE_FIXTURE_DIR = "Invalid"
+
+
+def _is_negative_fixture(path: Path, root: Path) -> bool:
+    """True if `path` sits under an `Invalid/` directory inside `root`.
+
+    The repo's fixture convention, already relied on by test_evidence.py: files
+    under Invalid/ are deliberate negatives, each named for the rule it breaks
+    (-missing-approval, -mismatched-workflow, -sensitive-marker, ...). Only
+    directory components BELOW root are considered, so pointing the runner at a
+    directory that happens to be called Invalid does not silently invert every
+    record it contains.
+    """
+    try:
+        rel = path.relative_to(root)
+    except ValueError:
+        return False
+    return _NEGATIVE_FIXTURE_DIR in rel.parts[:-1]
+
+
 def main(argv: List[str]) -> int:
     if len(argv) != 2:
         print("usage: python evidence.py <evidence-dir>")
@@ -214,6 +234,9 @@ def main(argv: List[str]) -> int:
         except (OSError, json.JSONDecodeError) as exc:
             by_file[f] = exc
     failed = 0
+    positives = 0
+    negatives_ok = 0
+    negatives_bad = 0
     for f in files:
         rec = by_file[f]
         errs = (
@@ -221,6 +244,22 @@ def main(argv: List[str]) -> int:
             else validate_record(rec, records)
         )
         rel = f.relative_to(root)
+        if _is_negative_fixture(f, root):
+            # A record under an Invalid/ directory is a NEGATIVE fixture: it is
+            # supposed to fail. Reporting it as a failure made a healthy corpus
+            # look broken and exit 1 (the misreading PROGRESS.md carried as "12
+            # legacy fixtures still fail"). Asserting the opposite is the useful
+            # check: a negative that starts VALIDATING means a rule was relaxed
+            # until it stopped catching what it exists to catch.
+            if errs:
+                negatives_ok += 1
+                print(f"[neg ] {rel} — invalid as expected")
+            else:
+                negatives_bad += 1
+                failed += 1
+                print(f"[FAIL] {rel} — negative fixture is unexpectedly VALID")
+            continue
+        positives += 1
         if errs:
             failed += 1
             print(f"[FAIL] {rel}")
@@ -228,7 +267,13 @@ def main(argv: List[str]) -> int:
                 print(f"       - {e}")
         else:
             print(f"[ ok ] {rel}")
-    print(f"\n{len(files) - failed}/{len(files)} records valid")
+    valid_positives = positives - (failed - negatives_bad)
+    print(f"\n{valid_positives}/{positives} records valid")
+    if negatives_ok or negatives_bad:
+        print(
+            f"{negatives_ok + negatives_bad} negative fixture(s): "
+            f"{negatives_ok} invalid as expected, {negatives_bad} unexpectedly valid"
+        )
     return 1 if failed else 0
 
 
