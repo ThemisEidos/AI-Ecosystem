@@ -1,7 +1,10 @@
 {
   "default_max_retries": 2,
   "dead_letter_folder": "PDA-Tasks/dead-letter",
-  "retryable_statuses": ["failed", "error"],
+  "retryable_statuses": [
+    "failed",
+    "error"
+  ],
   "non_retryable_reasons": [
     "category_policy_blocked",
     "missing_source_path",
@@ -15,5 +18,44 @@
     "review-worker": 2,
     "execute-worker": 0,
     "fabric-worker": 1
+  },
+  "_comment_v2": "Step 15f-ii: the 'roles' map below is read by cooper-core/retry_policy.py and keys off the same role names as PDA_ModelRouting.json. The legacy 'workers' map and 'dead_letter_folder' describe the retired v1 PowerShell workers and are left intact for the Scripts/ that still read them -- v2 has roles, not workers. Timeouts are per ATTEMPT, so a role's worst case is timeout * (1 + max_retries); they are set generously enough for local gemma inference on the 6GB Private host (~46 tok/s measured, Step 15c) rather than tuned for cloud latency.",
+  "default_timeout_seconds": 60,
+  "roles": {
+    "classifier": {
+      "timeout_seconds": 30,
+      "max_retries": 1,
+      "notes": "No independent call site since 15a folded it into brain."
+    },
+    "brain": {
+      "timeout_seconds": 90,
+      "max_retries": 1,
+      "notes": "User-facing turn; local inference can be slow, so not aggressive."
+    },
+    "planner": {
+      "timeout_seconds": 120,
+      "max_retries": 1,
+      "notes": "Envelope drafting is the longest single generation."
+    },
+    "executor": {
+      "timeout_seconds": 90,
+      "max_retries": 1,
+      "notes": "Reserved -- no call site yet."
+    },
+    "reviewer": {
+      "timeout_seconds": 60,
+      "max_retries": 1,
+      "notes": "review.review() and council members; members run concurrently, so wall clock is the slowest member, not the sum."
+    },
+    "drafter": {
+      "timeout_seconds": 90,
+      "max_retries": 2,
+      "notes": "proposer.draft_skill() and the data-broker extraction call. Two retries: cloud 429s are the common transient here."
+    },
+    "archivist": {
+      "timeout_seconds": 30,
+      "max_retries": 1,
+      "notes": "Background memory write; must never hold a turn open."
+    }
   }
 }
