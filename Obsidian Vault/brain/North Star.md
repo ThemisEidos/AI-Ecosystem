@@ -1,6 +1,6 @@
 # North Star — COOPER Project Direction
 
-> Updated 2026-09-01. Source of truth: PROGRESS.md + PRD.md.
+> Updated 2026-09-05. Source of truth: PROGRESS.md + PRD.md.
 
 ## Current Position
 
@@ -35,6 +35,47 @@ entries, the `docker-compose.yml` comment-out) fully reverted and confirmed clea
 detail incl. every live-verification command and its real output: PROGRESS.md's
 2026-08-31 (15d) entry (git history — the SDD workspace itself was deleted per the
 finishing-a-development-branch convention once the branch merged clean).
+
+**15f (robustness) COMPLETE 2026-09-05 — all three parts. Autonomous session; 477 tests**
+**(was 372 at session start), every push CI-green, running stacks never touched.**
+15f(i) injection canaries shipped with 14c; 15f(ii) implements the long-unread
+`Scripts/PDA_RetryPolicy.json` as per-role timeout/retry budgets wired into every LLM call
+site including the streaming chat path; 15f(iii) is an 18-test chaos suite.
+
+**Three things worth carrying forward from it:**
+
+1. **A fail-open config reader hides its own packaging gap.** `PDA_RetryPolicy.json` was
+   missing from the built image, so every declared budget silently reverted to built-in
+   fallbacks — no error, no warning, a working system, and 477 green tests on the dev
+   machine. 15f(ii) would have shipped as a complete no-op. Caught only by running the suite
+   *inside the image* (container said `brain 60s x 2`, dev machine said `90s x 2`). Two
+   layers were both wrong: the Dockerfile `COPY` **and** `.dockerignore`'s deny-all
+   allowlist. **Second occurrence in two days** — 14c's queries file was the first. Any
+   config read by a fail-open reader now needs a packaging check; the cheap one is
+   `docker run --rm --entrypoint sh <image> -c "cd /app/cooper-core && python -m pytest -q"`.
+2. **The 2026-09-01 bug class recurred a third time.** The chaos suite found
+   `extract_pii_entries` guarding its backend call and `json.loads` but not the type
+   assumption one line later, so a model returning `null` raised a raw `AttributeError`
+   past the `JobError` contract into an HTTP 500. Each time, the tell has been an asymmetry
+   with a sibling module that already had the guard.
+3. **Budgets are a governance fix, not just a latency one.** `review` and `council` both
+   fail open by design, so before this a single transient 429 became `verdict="pass"` — an
+   approval nobody gave, and for council an objection that never reached the owner.
+
+**Live-verified against real inference, not mocks:** real reviewer verdict 13.8s under a 60s
+budget; real 27-chunk stream, first token 8.7s under a 90s per-chunk budget; a genuinely
+unroutable backend bounded at exactly 2.0s against a 2.0s budget.
+
+**IMPORTANT — the running containers still hold pre-15f code.** These changes go live only on
+`docker compose -f PDA-Runtime/docker-compose.yml up -d --build cooper-core`, deliberately not
+run while the owner was away.
+
+**Open, owner's call:** 14d is next in the roadmap order but its DoD consumes the
+data-broker list the owner moved to another project (2026-09-05) — the bounded-loop mechanism
+is still valuable, the job on top of it may not be. `run_job` now enforces the workshop
+boundary in code (owner decision 2026-09-05), so G4 no longer holds by mount omission. No
+n8n scheduler ships for the data-broker job, so its "randomized time" DoD clause is unmet and
+it is manual-trigger-only. Both registry jobs are `approved: false`.
 
 **14c shipped 2026-09-04 (+15f-i) — web search, the data-broker research job, and the**
 **injection-canary suite, live-verified on the running Open stack.** Branch
