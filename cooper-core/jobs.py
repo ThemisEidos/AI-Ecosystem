@@ -451,7 +451,7 @@ async def extract_pii_entries(
         raw = await (complete_fn(messages) if complete_fn else _default_complete())
         payload = json.loads(raw)
     except Exception as exc:
-        raise JobError(f"pii extraction backend call failed: {exc}")
+        raise JobError(f"entry extraction backend call failed: {exc}")
 
     already = {s.strip().lower() for s in existing_sites}
     entries: List[dict] = []
@@ -630,7 +630,13 @@ async def _run_pii_research(
     write_note = ""
     if entries and note_path is not None:
         header = "" if note_path.exists() else "# Data Brokers\n\n"
-        existing_text = note_path.read_text(encoding="utf-8") if note_path.exists() else ""
+        try:
+            existing_text = note_path.read_text(encoding="utf-8") if note_path.exists() else ""
+        except (OSError, UnicodeDecodeError):
+            # Fail open on the read side, same convention as existing_entry_sites
+            # a few lines above: an unreadable/non-UTF-8 note must not crash the
+            # run -- worst case we overwrite from an empty base instead of 500ing.
+            existing_text = ""
         updated = existing_text + header + "\n" + format_pii_entries(entries, today)
         try:
             await executor._run_file_edit(

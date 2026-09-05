@@ -754,6 +754,61 @@ def test_run_job_pii_research_surfaces_search_failure_without_crashing(conn, tmp
     assert evidence.validate_completion(record, []) == []
 
 
+def test_run_job_data_broker_research_failed_extraction_writes_valid_evidence(conn, tmp_path, monkeypatch):
+    """An extraction backend failure must still produce a SCHEMA-VALID evidence record —
+    an honest failure has to be recordable.
+
+    Deliberately does NOT monkeypatch jobs.extract_pii_entries away (that would bypass
+    the exact code under review — its JobError message wording — and the test would
+    pass unconditionally). Instead it drives the REAL extract_pii_entries by making the
+    underlying backend call raise, so the assembled failure message actually flows
+    through run_job into the evidence record's notes/verdicts fields, where
+    evidence._sensitive_errors scans it."""
+    monkeypatch.setattr(jobs, "_REPO_ROOT", tmp_path)
+    monkeypatch.setattr(executor, "_REPO_ROOT", tmp_path)
+    monkeypatch.setattr(jobs.council, "final_review", _fake_final_review)
+    queries = _write_queries(tmp_path, ["data broker opt out list"])
+    monkeypatch.setattr(jobs, "_QUERIES_PATH", queries)
+    monkeypatch.setattr(
+        jobs.executor, "_run_web_search",
+        _fake_search([{"title": "A", "url": "https://a.example", "snippet": "x"}]),
+    )
+
+    async def boom_backend(*a, **k):
+        raise RuntimeError("429 rate limited")
+
+    monkeypatch.setattr(jobs, "_ollama_complete", boom_backend)
+    monkeypatch.setattr(jobs, "load_registry", lambda path=None: {"jobs": [_approved_pii_job()]})
+
+    result = asyncio.run(jobs.run_job("data-broker-research", conn, **_RUN_JOB_KWARGS))
+
+    assert result["status"] == "failed"
+    record = json.loads(Path(result["evidence_path"]).read_text(encoding="utf-8"))
+    assert record["status"] == "failed"
+    assert evidence.validate_completion(record, []) == []      # the actual regression guard
+
+
+def test_run_job_pii_research_note_read_fails_open_on_bad_encoding(conn, tmp_path, monkeypatch):
+    """A note that exists but can't be decoded as UTF-8 must not crash the run —
+    same fail-open convention as existing_entry_sites, applied to the append-time read."""
+    note, _, _ = _setup_pii(
+        tmp_path, monkeypatch,
+        search_results=[{"title": "A", "url": "https://a.example", "snippet": "x"}],
+        extracted=[{"site": "Acme", "what_it_collects": "emails",
+                    "source_url": "https://a.example"}],
+    )
+    note.parent.mkdir(parents=True, exist_ok=True)
+    note.write_bytes(b"\xff\xfe not valid utf-8 \x00\x01")
+    monkeypatch.setattr(jobs, "load_registry", lambda path=None: {"jobs": [_approved_pii_job()]})
+
+    result = asyncio.run(jobs.run_job("data-broker-research", conn, **_RUN_JOB_KWARGS))
+
+    assert result["status"] == "completed"
+    assert result["entries_added"] == 1
+    text = note.read_text(encoding="utf-8")
+    assert "**Site:** Acme" in text
+
+
 def test_run_job_still_runs_csv_link_check_by_default(conn, tmp_path, monkeypatch):
     """An entry with no job_type field keeps the 14b behavior — no silent break."""
     monkeypatch.setattr(jobs, "_REPO_ROOT", tmp_path)
