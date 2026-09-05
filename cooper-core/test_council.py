@@ -254,3 +254,71 @@ def test_member_verdict_calls_backend_with_real_alias_not_disambiguated_label(mo
     ))
     assert seen_models == ["COOPER-Private"]
     assert result.member == "COOPER-Private#2"
+
+
+# ── per-stage budgets (Step 15f-ii) ──────────────────────────────────────
+def test_council_member_fails_open_within_its_budget_instead_of_hanging(monkeypatch):
+    """Council runs N members concurrently; before budgets each could hold the
+    gather open for the client's full hardcoded timeout."""
+    import retry_policy
+
+    async def hangs(*a, **k):
+        await asyncio.sleep(30)
+
+    monkeypatch.setattr(council, "_ollama_complete", hangs)
+    budget = retry_policy.Budget(timeout=0.05, max_retries=0, backoff_base=0.0)
+
+    v = asyncio.run(council._member_verdict(
+        "sys", "user", "model-a",
+        base_url="", api_key="", backend="ollama", temperature=0, budget=budget,
+    ))
+    assert v.verdict == "pass"                 # fail-open preserved
+    assert "fail-open" in v.reason.lower()
+    assert v.member == "model-a"
+
+
+def test_council_member_retries_a_transient_failure_and_returns_a_real_verdict(monkeypatch):
+    """A blip must not silently become an unreviewed pass -- that is an
+    objection nobody raised."""
+    import retry_policy
+    attempts = []
+
+    async def flaky(*a, **k):
+        attempts.append(1)
+        if len(attempts) == 1:
+            raise RuntimeError("429 rate limited")
+        return json.dumps({"verdict": "flag", "reason": "write_scope too broad"})
+
+    monkeypatch.setattr(council, "_ollama_complete", flaky)
+    budget = retry_policy.Budget(timeout=5.0, max_retries=1, backoff_base=0.0)
+
+    v = asyncio.run(council._member_verdict(
+        "sys", "user", "model-a",
+        base_url="", api_key="", backend="ollama", temperature=0, budget=budget,
+    ))
+    assert len(attempts) == 2
+    assert v.verdict == "flag"
+    assert v.reason == "write_scope too broad"
+
+
+def test_council_member_defaults_to_the_reviewer_role_budget(monkeypatch):
+    import retry_policy
+    seen = {}
+
+    async def ok(*a, **k):
+        return json.dumps({"verdict": "pass", "reason": "fine"})
+
+    real = retry_policy.call_with_budget
+
+    async def spy(operation, budget):
+        seen["timeout"] = budget.timeout
+        return await real(operation, budget)
+
+    monkeypatch.setattr(council, "_ollama_complete", ok)
+    monkeypatch.setattr(council.retry_policy, "call_with_budget", spy)
+
+    asyncio.run(council._member_verdict(
+        "sys", "user", "model-a",
+        base_url="", api_key="", backend="ollama", temperature=0,
+    ))
+    assert seen["timeout"] == retry_policy.budget_for("reviewer").timeout

@@ -24,6 +24,7 @@ from dataclasses import dataclass
 from typing import List, Optional
 
 from decision import _ollama_complete, _openai_complete
+import retry_policy
 import model_routing
 import review
 
@@ -93,6 +94,7 @@ async def _member_verdict(
     backend: str,
     temperature: float,
     label: Optional[str] = None,
+    budget: Optional["retry_policy.Budget"] = None,
 ) -> CouncilVerdict:
     """One council member's JSON-schema-constrained verdict call. Fails open
     (pass) on any error -- same convention as review.review().
@@ -108,9 +110,16 @@ async def _member_verdict(
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_msg},
     ]
-    try:
+    # Members run concurrently (asyncio.gather in the callers), so the panel's
+    # wall clock is the slowest member -- but without a budget that slowest
+    # member was the client's full hardcoded timeout. A transient blip also
+    # became a fail-open "pass", i.e. an objection nobody actually raised
+    # (Step 15f-ii).
+    budget = budget or retry_policy.budget_for("reviewer")
+
+    async def _complete():
         if backend == "openai":
-            raw = await _openai_complete(
+            return await _openai_complete(
                 base_url, api_key, member, messages,
                 temperature=temperature,
                 response_format={
@@ -131,7 +140,7 @@ async def _member_verdict(
                 },
             )
         else:
-            raw = await _ollama_complete(
+            return await _ollama_complete(
                 base_url, member, messages,
                 options={"temperature": temperature},
                 fmt={
@@ -143,6 +152,9 @@ async def _member_verdict(
                     "required": ["verdict", "reason"],
                 },
             )
+
+    try:
+        raw = await retry_policy.call_with_budget(_complete, budget)
         data = json.loads(raw)
         verdict = data.get("verdict", "pass")
         if verdict not in VALID_VERDICTS:
