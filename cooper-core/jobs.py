@@ -99,6 +99,17 @@ _PII_SCHEMA = {
 _WS_RUN_RE = re.compile(r"\s+")
 
 
+def _neutralize_delimiter(text: str) -> str:
+    """Replace the RESULTS/EXISTING block's own '\"\"\"' delimiter with a
+    look-alike that cannot terminate it. Untrusted title/url/snippet text
+    (and existing-site names) is rendered into build_pii_prompt's triple-quoted
+    data blocks verbatim; without this, a snippet containing the literal
+    delimiter can visually close the block early and make anything after it
+    look, to the model, like it sits outside the quoted data (found by
+    test_injection_canaries.py's delimiter-escape canary)."""
+    return text.replace('"""', "'''")
+
+
 def _flatten(text: str) -> str:
     """Collapse newlines/tabs/space-runs to single spaces. Entry fields are LLM
     output derived from untrusted web content, and format_pii_entries writes a
@@ -396,10 +407,12 @@ def build_pii_prompt(query: str, results: List[dict], existing_sites: List[str])
     Kept a separate pure function so the canary suite can assert prompt shape
     without a backend."""
     results_block = "\n".join(
-        f"- title: {r.get('title', '')}\n  url: {r.get('url', '')}\n  snippet: {r.get('snippet', '')}"
+        f"- title: {_neutralize_delimiter(str(r.get('title', '')))}\n"
+        f"  url: {_neutralize_delimiter(str(r.get('url', '')))}\n"
+        f"  snippet: {_neutralize_delimiter(str(r.get('snippet', '')))}"
         for r in results
     )
-    existing_block = "\n".join(f"- {s}" for s in existing_sites)
+    existing_block = "\n".join(f"- {_neutralize_delimiter(str(s))}" for s in existing_sites)
     return (
         f"Search query used: {query}\n\n"
         f'EXISTING (already recorded, do not repeat):\n"""\n{existing_block}\n"""\n\n'
