@@ -1688,6 +1688,40 @@ Governance gates from the Step 15 spec §6 — each blocks only its named slice:
     The corpus reports `3/3 records valid` + `12 negative fixture(s): 12 invalid as
     expected, 0 unexpectedly valid`, exit 0.
 
+- **2026-09-05 · Packaging gate built — the third occurrence of one defect finally has a
+  test.** `Config/pii_research_queries.json` (14c) and `Scripts/PDA_RetryPolicy.json`
+  (15f-ii) both shipped missing from the built image. Both readers fail open by design —
+  correct runtime behaviour, and precisely what hides the gap: no error, no warning, a
+  working system, a green suite on the dev machine, and 15f-ii would have shipped as a
+  complete no-op. `cooper-core/test_packaging.py` now asserts every runtime config is
+  present **and parseable** (a truncated file packages as successfully as a good one), the
+  Fabric pattern tree is non-empty, and the retry budgets match the policy *file's* values
+  so a built-in fallback cannot masquerade as a loaded policy. Because these run everywhere,
+  the in-image suite becomes a real packaging gate rather than a suite that merely happens
+  to also run there.
+  - **Both halves mutation-tested, not assumed.** Removing `PDA_RetryPolicy.json` fails
+    naming that file; adding an uncovered `_REPO_ROOT / "Config" / ...` read to a runtime
+    module fails the drift guard naming it. The drift guard is what stops the manifest
+    rotting into the same silence it exists to prevent — the first `-k` filter I used
+    matched nothing, so that mutation had to be re-run properly before it could be believed.
+  - **Its first run against the real images found two things.** One was my own error:
+    `cooper_workshop_identities.yaml` is read by no runtime module and had gone into the
+    manifest from a directory listing rather than a grep hit. The other was correct
+    behaviour mis-modelled: Private lacks `jobs_registry.yaml` and `pii_research_queries.json`
+    because they are Open-only job configs supplied by bind mounts. **That is G4 holding, not
+    a packaging gap** — so the false positive became a stronger check: on Private the gate
+    now asserts those files are ABSENT. `verify_job` has enforced the workshop boundary in
+    code since 2026-09-05, but this pins the older second line of defence, where Private
+    cannot see the job registry at all. If it ever fails, G4 rests on the code check alone —
+    a decision to take deliberately rather than discover later.
+  - **Every count now reconciles with nothing unexplained:** dev 537 collected, Open 524
+    (−13 deliberately unshipped fixtures), Private 520 (−4 Open-only configs). That property
+    — no number that cannot be accounted for — is the actual deliverable; today produced
+    three separate cases where a green or red number meant something other than it appeared to.
+  - Origin worth recording: this was **the task COOPER's own 14e steward drafted** on its
+    first live run, having read the North Star and correctly identified the fail-open
+    packaging trap as the next thing worth building.
+
 - **2026-09-05 · 15f(ii) shipped: PDA_RetryPolicy.json implemented and wired — per-stage
   timeout/retry budgets, live-verified against real inference.** Autonomous session while
   the owner was away. 451 tests (was 426); every push green in CI.
