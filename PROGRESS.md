@@ -63,7 +63,7 @@ Execution order: 15a → 14a(rev) → 15c → 14b → 15d → 15e → 14c(+15f-i
 - [x] **14c — SearXNG + web_search + data-broker job** (+15f-i injection canaries) ✓ 2026-09-04
 - [ ] **14d — Bounded loop + opt-out documenter job**
 - [ ] **14e — Repo steward, draft-and-notify**
-- [x] **15f — Robustness** (M8→5): (i) injection canaries ✓ 2026-09-04 · (ii) retry policy implemented + wired ✓ 2026-09-05 · (iii) chaos tests ✓ 2026-09-05 — *streaming chat path still unwired for (ii)*
+- [x] **15f — Robustness** (M8→5): (i) injection canaries ✓ 2026-09-04 · (ii) retry policy implemented + wired ✓ 2026-09-05 · (iii) chaos tests ✓ 2026-09-05 — streaming chat path wired ✓ 2026-09-05
 - [ ] **15g — Governed learning breadth** (M5→5; prompt-diff self-optimization, outcome-weighted skill scores)
 - [ ] **15h — Session plans** (M2→5; gated on G3)
 - [ ] **15i — COOPER Cockpit: custom UI** (chat with native approve/deny buttons, Obsidian-brain graph view, workflow monitor, metrics dashboard, settings; incremental — monitor page after 14b, dashboard after 15d; Open WebUI retires only after Cockpit chat parity is browser-verified)
@@ -1589,3 +1589,18 @@ Governance gates from the Step 15 spec §6 — each blocks only its named slice:
     above: `decision.route_turn`/`route_turn_stream` — the main chat path — is still unwired
     for budgets because it streams and needs different treatment than `wait_for` around a
     single awaitable.
+
+- **2026-09-05 · 15f(ii) streaming half closed — 15f is now genuinely complete.** The chat
+  path streams, so it could not reuse the blocking wrapper: one timeout around the whole
+  response would kill a legitimately long generation for being long. `stream_with_budget`
+  bounds the two gaps that actually indicate a wedged backend — **time to first event** (a
+  backend that accepts the connection but never starts generating previously hung the turn
+  with no upper bound at all) and **time between events** (a backend that dies mid-generation
+  leaves the stream open forever, so a stall is the only observable symptom). The cap is
+  per-chunk, never total. Retries are deliberately ignored for streams: replaying a partially
+  consumed stream would repeat tokens the user already saw. The source iterator is closed on
+  timeout so the HTTP response is released rather than leaked.
+  - **Live-verified against real inference:** a real streamed turn produced 27 chunks, first
+    token at 8.7s, 11.6s total — roughly 10× headroom under the 90s per-chunk brain budget,
+    so the bound does not disturb normal use. A genuinely unroutable backend raised
+    `TimeoutError` in 2.0s against a 2.0s bound. 477 tests.
