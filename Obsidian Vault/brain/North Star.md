@@ -88,6 +88,47 @@ fixtures) but it means a green in-image run only proves "what got collected pass
 per-file collected counts, not totals. Fix is to make the empty case loud, mirroring the
 explicit `skipif` already at the bottom of that same file — open, not yet applied.
 
+**14e SHIPPED 2026-09-05 — repo steward, draft-and-notify, live-verified on the Open stack.**
+A third hardcoded `job_type` branch (`repo_steward`). The narrow-scope invariant holds
+unchanged: nothing dispatches on a job's `steps` list and no LLM selects a tool — the single
+drafter call returns task *fields*, and the filename, the template and the Constraints block
+are all COOPER's, in code. Pipeline: read the North Star → hash it → short-circuit if
+unchanged since the last draft → one budgeted drafter call → render → write under the new D5
+directory scope → record gate state → council review + evidence.
+
+**Five design decisions, all owner-answered (spec:
+`Docs/superpowers/specs/2026-09-05-step-14e-repo-steward-design.md`):** the bounded loop is
+deliberately NOT built here — as specced it reads a job's `steps` at runtime and lets an LLM
+choose among them, which would reverse the 2026-09-01 narrow decision; target repo is COOPER's
+own; read scope is the North Star alone, so the slice changes **no mounts at all**; re-draft
+suppression is input-hash gating; and `_run_file_edit` gained a directory-scope form, because
+exact-match `write_scope` cannot admit a newly-named file each run.
+
+**Live proof, all five DoD clauses, real cloud drafter on the running Open stack:** run 1
+drafted `TASK-20260905-193046-implement-a-packaging-check-for-configuration-files-babc0111.md`
+— and read the North Star well enough to pick *the fail-open packaging trap* as the next thing
+worth building, which is a correct read. Run 2 on unchanged input returned `drafted: 0`,
+`reason: "input unchanged"`, wrote no file, spent no cloud call, and still produced a valid
+evidence record. Both records validate; run 1 carried a real 3-member council verdict
+(`openai`/`claude`/`gemini`, all pass). The digest names both runs, and names the artifact the
+no-op was gated against. A synthetic probe job with a deliberately malformed envelope (naming
+a file where the steward needs a directory) landed in the exception queue with the exact
+refusal reason and wrote nothing — then was fully reverted: probe entry removed, its exception
+dismissed, `repo-steward` returned to `approved: false`, registry byte-identical to the commit.
+
+**Worth carrying:** the out-of-scope path is only reachable via a *malformed envelope*, because
+the runner derives the filename from the approved `write_scope` rather than letting the model
+name anything. That is the design working, not a gap in the test.
+
+**Found by TDD, not in production:** the filename was timestamp-to-the-second plus objective
+slug, so two drafts sharing both silently overwrote each other — a queue whose entries can
+clobber each other is not a queue. The filename now carries the input hash, which also makes
+every proposal traceable to the input state it came from.
+
+**`repo-steward` is committed `approved: false`.** There is no approval API, so that YAML edit
+is the approval act and it is the owner's. No n8n scheduler ships, so its `daily 07:00` hint is
+manual-trigger-only — same unmet clause as 14b/14c, stated rather than quietly skipped.
+
 **14d — DECIDED 2026-09-05: re-scope required, pulled from the execution order.** The
 opt-out tracking work has moved to a different project; COOPER will not build an opt-out
 documenter, so 14d's DoD payload is void. Its input is not the problem — 14c's live runs

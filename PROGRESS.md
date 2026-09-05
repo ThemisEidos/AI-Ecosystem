@@ -66,7 +66,7 @@ Execution order: 15a → 14a(rev) → 15c → 14b → 15d → 15e → 14c(+15f-i
   opt-out documenter payload is dropped (that work moved to another project); the
   bounded-loop mechanism still stands. Needs a new job + DoD from the owner before any
   code. Skipped in execution order until then — see decision log 2026-09-05.
-- [ ] **14e — Repo steward, draft-and-notify**
+- [x] **14e — Repo steward, draft-and-notify** ✓ 2026-09-05 — live-verified on the Open stack; `repo-steward` committed `approved: false`, manual-trigger-only (no scheduler)
 - [x] **15f — Robustness** (M8→5): (i) injection canaries ✓ 2026-09-04 · (ii) retry policy implemented + wired ✓ 2026-09-05 · (iii) chaos tests ✓ 2026-09-05 — streaming chat path wired ✓ 2026-09-05
 - [ ] **15g — Governed learning breadth** (M5→5; prompt-diff self-optimization, outcome-weighted skill scores)
 - [ ] **15h — Session plans** (M2→5; gated on G3)
@@ -1520,6 +1520,60 @@ Execution order: 15a → 14a(rev) → 15c → 14b → 15d → 15e → 14c(+15f-i
   an ambient variable rather than pinning it — a `conftest.py` fixture would decouple them.
   **Unfixed, owner's call.** Until then, the in-image packaging check must pass
   `-e WORKSHOP=open` when run against the Private container. Logged in Gotchas 2026-09-05.
+
+- **2026-09-05 · 14e shipped — repo steward, draft-and-notify, live-verified.** Third
+  hardcoded `job_type` branch (`repo_steward`). Spec:
+  `Docs/superpowers/specs/2026-09-05-step-14e-repo-steward-design.md`. 511 tests (was 481).
+  **The narrow-scope invariant holds unchanged** — nothing dispatches on a job's `steps` list
+  (pinned by a test that gives the job nonsense steps and still expects a clean run) and no
+  LLM selects a tool: the one drafter call returns task *fields*, while the filename, the
+  template and the Constraints block are all produced in code.
+  - **Five owner decisions.** D1: the bounded loop is deliberately NOT built here. The parent
+    spec assigns it to "T3/T5" and T3 (14d) was cancelled the same day, which made 14e look
+    like its remaining home — but as specced the loop restricts "tool choices to the
+    envelope's `steps` list", i.e. reads `steps` at runtime and lets an LLM choose among them,
+    reversing the 2026-09-01 narrow decision. 14e's DoD is a linear pipeline and needs no
+    loop. D2: target repo is COOPER's own (the alternatives needed new bind mounts). D3: read
+    scope is the North Star alone — **the slice changes no mounts at all**, since `brain/` is
+    already mounted ro and `Codex_Tasks/` rw. D4: re-draft suppression is input-hash gating,
+    not output dedup. D5: `_run_file_edit` gained a directory-scope form (below).
+  - **D5, a deliberate widening of a security primitive, taken as an owner decision.**
+    `write_scope` was exact-string-match only, which cannot admit a newly-named file each run;
+    computing the filename at runtime and passing it as its own scope was rejected outright as
+    it would make the approved envelope meaningless. An entry ending in `/` now admits any
+    file **directly inside** that one directory: subdirectories are not matched so the scope
+    cannot deepen, a bare `/` is skipped rather than becoming a write-anywhere wildcard, and
+    check 0's `..` rejection still runs first. Entries without a trailing `/` keep exact-match
+    semantics — which is every pre-14e entry. Shipped as its own commit with 7 tests: one for
+    what it allows, six for what it must still refuse.
+  - **Live proof on the running Open stack, all five DoD clauses, real cloud drafter.** Run 1
+    drafted `TASK-20260905-193046-implement-a-packaging-check-for-configuration-files-babc0111.md`
+    and read the North Star well enough to pick the fail-open packaging trap as the next thing
+    worth building — a correct read, not a plausible-looking one. Run 2 on unchanged input:
+    `drafted: 0`, `reason: "input unchanged"`, no file, **no cloud call spent**, and still a
+    valid evidence record. Run 3 after the North Star genuinely changed drafted again, and the
+    two task files coexist rather than one clobbering the other. Both records validate; run 1
+    carried a real 3-member council verdict (`openai`/`claude`/`gemini`, all pass). The digest
+    names all runs and names the artifact the no-op was gated against.
+  - **The exception path, and why it is only reachable one way.** A synthetic probe job with a
+    deliberately malformed envelope — naming a *file* where the steward needs a *directory* —
+    queued an exception carrying the exact refusal reason and wrote nothing; `links.csv` was
+    untouched. Worth recording: because the runner derives the filename from the approved
+    `write_scope` rather than letting the model name anything, an out-of-scope write can
+    **only** arise from a malformed envelope. That is the design working, not a gap.
+  - **Fully reverted after verification:** probe job entry removed, its exception marked
+    `dismissed-test-artifact`, `repo-steward` returned to `approved: false`,
+    `Config/jobs_registry.yaml` byte-identical to its commit (`git status` clean), pending
+    exceptions back to 0.
+  - **Found by TDD, not in production:** the filename was timestamp-to-the-second plus
+    objective slug, so two drafts sharing both silently overwrote each other — a queue whose
+    entries can clobber each other is not a queue. The filename now carries the input hash,
+    which additionally makes every proposal traceable to the input state it came from.
+  - **Open, owner's call:** `repo-steward` is committed `approved: false` and that YAML edit
+    is the approval act. No n8n scheduler ships, so the `daily 07:00` hint is unmet and the
+    job is manual-trigger-only — the same clause 14b and 14c also left open. Two real drafted
+    task files remain in `Codex_Tasks/` from the live runs; both propose the same packaging
+    check, and they are proposals, not commitments.
 
 ---
 
