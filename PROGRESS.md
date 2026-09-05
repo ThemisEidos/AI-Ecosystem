@@ -1453,6 +1453,44 @@ Execution order: 15a → 14a(rev) → 15c → 14b → 15d → 15e → 14c(+15f-i
   Unaffected: 14c's `data-broker-research` job already shipped and stays as-is, committed
   `approved: false` (inert, manual-trigger-only).
 
+- **2026-09-05 · 15f DEPLOYED — both stacks rebuilt; the 15f code is now the code that
+  runs.** 15f was merged and CI-green since 2026-09-05 but had never been built into an
+  image, so the retry/timeout budgets were still inert in production. Rebuilt both
+  `cooper-core` services from the main checkout
+  (`docker compose -f PDA-Runtime/docker-compose{,.private}.yml up -d --build cooper-core`).
+  `pda-litellm` was left `Running` (not recreated) and held all 4 provider keys, counted
+  before and after — the 2026-08-30 sibling-recreate trap did not fire, as expected from the
+  main checkout where both `PDA-Runtime/.env` and `litellm/.env.local` are present.
+  **Verification chain, in order, each step's real output checked:** `/health` ok on :8000
+  (private/ollama/COOPER-Private) and :8001 (open/openai) → `PDA_RetryPolicy.json` present at
+  `/app/Scripts/` in *both* images, confirming the `8b2c211` packaging fix survives a clean
+  rebuild → budgets loaded from the policy *inside* the containers rather than the built-in
+  fallbacks (`brain` 90s/1, `reviewer` 60s/1, `drafter` 90s/2, `planner` 120s/1,
+  `archivist` 30s/1; the pre-fix tell was `brain 60s x2`) → in-image pytest green → all seven
+  budget call sites present in the shipped source (`decision.py`, `review.py`, `council.py`,
+  `jobs.py`, `archivist.py`, `proposer.py`, `planner.py`), including the streaming chat path
+  at `decision.py:259` → real authenticated `POST /chat` on both stacks (Private 8.96s, Open
+  1.51s, both well inside the 90s brain budget). No budget log lines on the success path,
+  which is correct — they only emit on timeout or retry.
+- **2026-09-05 · The in-image test suite is itself fail-quiet — 13 tests vanish silently.**
+  Found while running the 15f packaging check, i.e. the check that exists *because* of the two
+  fail-open-config traps; this is a third variant of the family. The image reports
+  `460 passed, 4 skipped`, the dev machine `477 passed`, from byte-identical test-file sets.
+  Cause: `test_evidence.py` builds two `@pytest.mark.parametrize` lists at import time by
+  globbing `Tests/Fixtures/Workflow_Evidence/`, which is **deliberately** excluded from the
+  image by the `.dockerignore` allowlist. An empty `parametrize` list collects zero cases —
+  it does not skip and does not error — so 13 tests disappear from the count entirely with no
+  signal. A prior session had already reasoned this through correctly for the CLI test at the
+  bottom of the same file, which carries an explicit `skipif` and shows up as one of the 4
+  honest skips; the two parametrized tests never got the same treatment.
+  **Not a production defect** — `evidence.py` needs no fixtures at runtime and keeping test
+  data out of a production image is right. The defect is that the exclusion is invisible: a
+  green in-image run only proves "everything that got collected passed". Diagnostic is to
+  diff per-file collected counts (`--collect-only -q | grep :: | cut -d: -f1 | uniq -c`)
+  rather than compare totals. **Fix not applied — owner's call:** make the empty case loud
+  with a module-level skip mirroring the existing `skipif`, never by shipping fixtures into
+  the image to make a number match. Logged in Gotchas 2026-09-05.
+
 ---
 
 ## Blocked / needs owner input

@@ -66,9 +66,27 @@ site including the streaming chat path; 15f(iii) is an 18-test chaos suite.
 budget; real 27-chunk stream, first token 8.7s under a 90s per-chunk budget; a genuinely
 unroutable backend bounded at exactly 2.0s against a 2.0s budget.
 
-**IMPORTANT — the running containers still hold pre-15f code.** These changes go live only on
-`docker compose -f PDA-Runtime/docker-compose.yml up -d --build cooper-core`, deliberately not
-run while the owner was away.
+**15f DEPLOYED 2026-09-05 — both stacks rebuilt and live-verified.** (Superseded: the
+"containers still hold pre-15f code" warning that stood here.) `up -d --build cooper-core` run
+against both compose files from the main checkout; `pda-litellm` kept all 4 provider keys
+(counted before and after — the 2026-08-30 sibling-recreate trap did not fire) and was left
+`Running`, not recreated. Verified in this order: `/health` ok on :8000 and :8001 →
+`/app/Scripts/PDA_RetryPolicy.json` present in **both** images (the 8b2c211 packaging fix
+holds) → budgets read from the policy inside the containers, not the built-in fallbacks
+(`brain 90s x1`, `planner 120s x1`, `archivist 30s x1`, `drafter 90s x2`; the pre-fix tell was
+`brain 60s x2`) → in-image suite green → all 7 budget call sites present in the shipped source,
+including the streaming chat path (`decision.py:259` `stream_with_budget(..., budget_for("brain"))`)
+→ real authenticated `POST /chat` round trips on both stacks (Private 8.96s, Open 1.51s, both
+inside the 90s brain budget). The 15f code is now the code that runs.
+
+**Found during that verification — see Gotchas 2026-09-05:** the in-image suite is itself
+fail-quiet. It reports `460 passed, 4 skipped` against the dev machine's `477`; the test files
+are identical, but `test_evidence.py`'s two `parametrize` lists glob a fixtures directory that
+is deliberately absent from the image, and an empty `parametrize` collects **zero** cases
+silently — no skip, no error, 13 tests simply gone. Not a production defect (runtime needs no
+fixtures) but it means a green in-image run only proves "what got collected passed". Compare
+per-file collected counts, not totals. Fix is to make the empty case loud, mirroring the
+explicit `skipif` already at the bottom of that same file — open, not yet applied.
 
 **14d — DECIDED 2026-09-05: re-scope required, pulled from the execution order.** The
 opt-out tracking work has moved to a different project; COOPER will not build an opt-out

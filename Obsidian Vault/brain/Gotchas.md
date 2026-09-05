@@ -728,3 +728,46 @@ suite inside the built image (`docker run --rm --entrypoint sh <image> -c "cd /a
 && python -m pytest -q"`) — it costs seconds, touches no running container, and catches
 missing-file classes that no amount of local green can. Worth doing before any "shipped"
 claim that involves a new config file.
+
+### 2026-09-05 · The in-image test suite is itself fail-quiet: 13 tests vanished with no signal
+
+Running the 15f packaging check for real (the check added *because* of the two fail-open-config
+traps) surfaced a third variant of the same family. The image suite reports
+`460 passed, 4 skipped`; the dev machine reports `477 passed`. The test *files* are byte-identical
+sets — verified by diffing `ls test_*.py` in both — so the gap is not a missing-file problem.
+
+`cooper-core/test_evidence.py` builds two `@pytest.mark.parametrize` lists at import time from
+a glob:
+
+```python
+FIXTURES = _REPO / "Tests" / "Fixtures" / "Workflow_Evidence"
+VALID_FILES = sorted(FIXTURES.glob("*.json"))        # 13 files on disk, 0 in the image
+INVALID_FILES = sorted((FIXTURES / "Invalid").glob("*.json"))
+```
+
+`Tests/Fixtures/` is **deliberately** not shipped (`.dockerignore` allowlist) — a prior session
+reasoned that through and did the honest thing for the CLI test at the bottom of the file, which
+carries an explicit `@pytest.mark.skipif(not FIXTURES.exists(), ...)` and shows up as one of the
+4 skips. The two parametrized tests never got the same treatment. **A `parametrize` over an empty
+list does not skip and does not error — it collects zero cases and the run is green.** The 13
+tests do not appear as skipped, as failed, or in the count at all; they simply cease to exist.
+
+Diagnostic that ends the argument — compare collected counts per file, not totals:
+
+```bash
+docker exec <container> sh -c 'cd /app/cooper-core && python -m pytest --collect-only -q' \
+  | grep "::" | cut -d: -f1 | sort | uniq -c > /tmp/img.txt
+cd cooper-core && .venv/bin/python -m pytest --collect-only -q \
+  | grep "::" | cut -d: -f1 | sort | uniq -c > /tmp/dev.txt
+diff /tmp/dev.txt /tmp/img.txt      # -> 32 test_evidence.py vs 19 test_evidence.py
+```
+
+**The generalisation worth carrying:** the in-image suite is the check that catches fail-open
+*config*, but it is not self-validating — a green in-image run only means "every test that got
+collected passed", and collection itself can silently shrink. Compare the **count** against the
+dev run, not just the pass/fail. Any difference is either a documented skip or a hole.
+
+Not a production defect: `evidence.py`'s runtime behaviour needs no fixtures, and excluding test
+data from a production image is correct. The defect is that the exclusion is invisible. The fix is
+to make the empty case loud (a module-level skip when `FIXTURES` is missing, mirroring the pattern
+already in the same file) — never to ship the fixtures to make a number match.
