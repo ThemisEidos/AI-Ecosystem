@@ -63,7 +63,7 @@ Execution order: 15a → 14a(rev) → 15c → 14b → 15d → 15e → 14c(+15f-i
 - [x] **14c — SearXNG + web_search + data-broker job** (+15f-i injection canaries) ✓ 2026-09-04
 - [ ] **14d — Bounded loop + opt-out documenter job**
 - [ ] **14e — Repo steward, draft-and-notify**
-- [~] **15f — Robustness** (M8→5): (i) injection canaries ✓ 2026-09-04 · (ii) retry policy implemented + wired ✓ 2026-09-05 · (iii) chaos tests still open
+- [x] **15f — Robustness** (M8→5): (i) injection canaries ✓ 2026-09-04 · (ii) retry policy implemented + wired ✓ 2026-09-05 · (iii) chaos tests ✓ 2026-09-05 — *streaming chat path still unwired for (ii)*
 - [ ] **15g — Governed learning breadth** (M5→5; prompt-diff self-optimization, outcome-weighted skill scores)
 - [ ] **15h — Session plans** (M2→5; gated on G3)
 - [ ] **15i — COOPER Cockpit: custom UI** (chat with native approve/deny buttons, Obsidian-brain graph view, workflow monitor, metrics dashboard, settings; incremental — monitor page after 14b, dashboard after 15d; Open WebUI retires only after Cockpit chat parity is browser-verified)
@@ -1562,3 +1562,30 @@ Governance gates from the Step 15 spec §6 — each blocks only its named slice:
     failure-path test began paying real backoff sleeps. An autouse `conftest.py` fixture now
     zeroes **only the delay** — timeouts, retry counts and the retryable decision are
     untouched, so the behaviour under test is still real. Suite back to 2.55s.
+
+- **2026-09-05 · 15f(iii) shipped: chaos suite — and it found a real bug on its first run.**
+  18 tests in `cooper-core/test_chaos.py` injecting real faults at component boundaries:
+  backend killed mid-dispatch, malformed and hostile model output, ENOSPC on a job write,
+  and an unwritable destination.
+  - **The bug:** `extract_pii_entries` wrapped its backend call and `json.loads` in a
+    try/except → `JobError`, then called `payload.get("entries")` **outside** that guard. A
+    model returning valid JSON that is not an object — `null`, a bare string, a list — raised
+    a raw `AttributeError` that escaped `_run_pii_research`'s `(JobError, ExecutionError)`
+    handler and would have surfaced as an HTTP 500. **Same bug class as Gotchas 2026-09-01,
+    third recurrence, new shape:** there the public function didn't wrap its extract call at
+    all; here it does, but the guard stops one line short of the type assumption that follows
+    it. `planner.draft_envelope` already had the matching `isinstance` check — the asymmetry
+    between sibling modules was the tell, exactly as it was the first time.
+  - **DoD evidence:** a mid-dispatch backend kill now yields `status: "failed"`, the real
+    cause in `reason`, and an evidence record that validates — an unauditable run being worse
+    than a failed one. ENOSPC mid-write lands in the exception queue, reports
+    `entries_added: 0`, and writes empty `artifact_paths` rather than claiming an artifact it
+    never wrote.
+  - **Mutation-checked, not assumed:** removing the new guard, zeroing the write path's
+    exception counter, and flipping the failure status to `"completed"` each turn the suite
+    red for the right reason.
+  - Verified on a genuinely clean `git clone` (no `cooper_memory.db` present): **469 passed**.
+  - **15f is now complete across (i), (ii) and (iii)**, with one honest exception recorded
+    above: `decision.route_turn`/`route_turn_stream` — the main chat path — is still unwired
+    for budgets because it streams and needs different treatment than `wait_for` around a
+    single awaitable.
