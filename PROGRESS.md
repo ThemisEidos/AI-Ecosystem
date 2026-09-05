@@ -47,8 +47,9 @@ throughout: every slice ships alone and live. Specs:
 `Docs/superpowers/specs/2026-08-18-step-15-max-metrics-design.md` (approved direction;
 governance gates G1–G5 open — see Blocked section).
 
-Execution order: 15a → 14a(rev) → 15c → 14b → 15d → 15e → 14c(+15f-i) → 14d → 14e →
-15f → 15g → 15h. 15b anytime; 14f pinned until the home-lab network exists (2026-08-23).
+Execution order: 15a → 14a(rev) → 15c → 14b → 15d → 15e → 14c(+15f-i) → ~~14d~~ → 14e →
+15f → 15g → 15h. 15b anytime; 14f pinned until the home-lab network exists (2026-08-23);
+14d pulled from the order 2026-09-05 pending a new job definition (decision log).
 
 - [x] **15a — Native tool-calling dispatch** (M3→5; retires classifier dispatch; kills both 2026-08-04 gotchas as a class) — shipped 2026-08-24, live-verified both stacks (blocking + real SSE incl. preamble-then-dispatch), 3 post-review Importants closed in a fix-forward pass, itself reviewed clean (248/248). **Browser click-through per stack closed 2026-08-25** — see decision log; en route, found and fixed a real governance bypass on Private's Open WebUI (no cooper-core connection existed at all).
 - [x] **14a — Fabric pattern executor** — shipped 2026-08-25, live-verified both stacks (blocking API + browser click-through, all 4 patterns reachable via native tool-calling). Revised plan (2026-08-04 original rewritten for 15a's args-based dispatch), 4 tasks + subagent-driven-development, whole-branch review found and fixed 1 Critical (`PDA-Fabric/` was gitignored and never committed — see decision log) + 1 Important (workshop routing failed open toward cloud). Separate, unfixed finding: an intermittent approval-ticket hijack via Open WebUI's own background calls — see Gotchas 2026-08-25, flagged for owner decision, not in scope for this slice.
@@ -61,7 +62,10 @@ Execution order: 15a → 14a(rev) → 15c → 14b → 15d → 15e → 14c(+15f-i
 - [x] **15d — Council subsystem** (M6→5; planning-time panel + tiered final review, verdicts in evidence) ✓ 2026-08-31
 - [ ] **15e — Planner–executor** (M2→4; big brain drafts envelopes, cheap model executes)
 - [x] **14c — SearXNG + web_search + data-broker job** (+15f-i injection canaries) ✓ 2026-09-04
-- [ ] **14d — Bounded loop + opt-out documenter job**
+- [ ] **14d — Bounded loop + (payload TBD)** — **re-scope required, 2026-09-05.** The
+  opt-out documenter payload is dropped (that work moved to another project); the
+  bounded-loop mechanism still stands. Needs a new job + DoD from the owner before any
+  code. Skipped in execution order until then — see decision log 2026-09-05.
 - [ ] **14e — Repo steward, draft-and-notify**
 - [x] **15f — Robustness** (M8→5): (i) injection canaries ✓ 2026-09-04 · (ii) retry policy implemented + wired ✓ 2026-09-05 · (iii) chaos tests ✓ 2026-09-05 — streaming chat path wired ✓ 2026-09-05
 - [ ] **15g — Governed learning breadth** (M5→5; prompt-diff self-optimization, outcome-weighted skill scores)
@@ -1426,6 +1430,28 @@ Execution order: 15a → 14a(rev) → 15c → 14b → 15d → 15e → 14c(+15f-i
     the secrets-access wall blocked this session). M2 should not be marked closed to 4 on
     this work alone — the spec's traceability table's 15e row remains partially open.
     Full-spec generic step-executor remains available to revisit later by owner choice.
+
+- **2026-09-05 · 14d re-scoped by owner direction: the opt-out documenter payload is
+  dropped, and the slice is blocked on a new job definition.** The data-broker / opt-out
+  tracking work has moved to a different project entirely — COOPER will not build an
+  opt-out tracker. The 14d DoD as written in
+  `Docs/superpowers/specs/2026-08-04-step-14-autonomous-jobs-design.md` §3 ("For 3 sites
+  from T2's list, a documented opt-out procedure lands in the vault with sources; loop
+  provably halts at step quota") is therefore **void as a payload spec**. Note that its
+  input is not missing — `Obsidian Vault/02_Projects/opt-out/Data-Brokers.md` holds 3 real
+  sourced sites written by 14c's live runs, exactly the number the DoD asks for — so the
+  slice is technically runnable today. It is being dropped because the *work* is no longer
+  COOPER's, not because the harness can't do it.
+  **What survives is the mechanism half:** a bounded loop the runner can provably halt at a
+  step quota. That is generic jobs-harness infrastructure, the last unbuilt piece of the
+  14-series harness, and the actual reason 14d sits in the roadmap. It is worth building
+  against any payload.
+  **What 14d now needs before any code:** a new job — a genuinely useful multi-step task
+  for the bounded loop to drive — chosen by the owner, with its own DoD written first. A
+  re-scoped 14d is a fresh design conversation, not an edit to the existing spec row.
+  Until then 14d stays unchecked and is **skipped in execution order** (14c → 14e).
+  Unaffected: 14c's `data-broker-research` job already shipped and stays as-is, committed
+  `approved: false` (inert, manual-trigger-only).
 
 ---
 

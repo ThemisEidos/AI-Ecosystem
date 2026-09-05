@@ -70,9 +70,15 @@ unroutable backend bounded at exactly 2.0s against a 2.0s budget.
 `docker compose -f PDA-Runtime/docker-compose.yml up -d --build cooper-core`, deliberately not
 run while the owner was away.
 
-**Open, owner's call:** 14d is next in the roadmap order but its DoD consumes the
-data-broker list the owner moved to another project (2026-09-05) — the bounded-loop mechanism
-is still valuable, the job on top of it may not be. `run_job` now enforces the workshop
+**14d — DECIDED 2026-09-05: re-scope required, pulled from the execution order.** The
+opt-out tracking work has moved to a different project; COOPER will not build an opt-out
+documenter, so 14d's DoD payload is void. Its input is not the problem — 14c's live runs
+already wrote 3 real sourced sites to `Obsidian Vault/02_Projects/opt-out/Data-Brokers.md`,
+exactly what the DoD asks for — the *work* simply is not COOPER's any more. What survives is
+the mechanism half: **a bounded loop the runner can provably halt at a step quota**, the last
+unbuilt piece of the 14-series harness and worth building against any payload. 14d needs a
+new job + its own DoD from the owner before any code — a fresh design conversation, not an
+edit to the old spec row. Order is now 14c → 14e. `run_job` now enforces the workshop
 boundary in code (owner decision 2026-09-05), so G4 no longer holds by mount omission. No
 n8n scheduler ships for the data-broker job, so its "randomized time" DoD clause is unmet and
 it is manual-trigger-only. Both registry jobs are `approved: false`.
