@@ -613,3 +613,55 @@ that was only ever run against a long-lived dev machine, never a clean checkout,
 real bug indefinitely — and `gh run list` is worth checking periodically, not just PR-level
 `gh pr checks`, since a workflow can go quiet on `main` with no visible symptom until the
 next PR happens to need it.
+
+### 2026-09-04 · A worktree-based container rebuild permanently corrupts its bind mount after the worktree is deleted — `pda-private-cooper-core` found exited (`OCI runtime create failed ... not a directory`)
+
+Found `pda-private-cooper-core` exited with the host down for ~20 hours (Open stack was
+unaffected and healthy throughout — this was Private-only). `docker inspect`'s stored
+`State.Error` named the exact failure: `error mounting
+"/home/zb6/.../.worktrees/step-15e-narrow-planner/Config/skills_registry.yaml" to rootfs at
+"/app/Config/skills_registry.yaml": ... not a directory: Are you trying to mount a directory
+onto a file (or vice-versa)?`.
+
+**Mechanism, confirmed via `docker-compose.private.yml` + `git worktree list`:** the
+`cooper-core` service bind-mounts `../Config/skills_registry.yaml` (relative path). During
+15e's live verification (2026-09-01, this file's earlier entry on the same subject) the
+container was rebuilt with `docker compose ... up -d --build cooper-core` run from inside
+the `.worktrees/step-15e-narrow-planner` worktree — Compose resolves relative volume paths
+against wherever the compose file is being read from, so the bind source silently became
+`<worktree>/Config/skills_registry.yaml` instead of the main checkout's copy. That worked
+fine while the worktree existed. The worktree was later removed per the
+`finishing-a-development-branch` convention (`git worktree list` now shows only `main`), but
+directory debris survived on disk at `.worktrees/step-15e-narrow-planner/`, and the specific
+leaf path `Config/skills_registry.yaml` had degraded from a file into an **empty, root-owned
+directory** (`drwxr-xr-x root root`) — Docker auto-vivifies a missing bind-mount source as a
+directory the next time something tries to (re)create a container against it. A later
+container recreate attempt then tried to bind that now-directory source onto
+`/app/Config/skills_registry.yaml`, which the image bakes in as a real **file**
+(`Dockerfile`'s `COPY Config/... /app/Config/`) — directory-onto-file is an invalid bind
+mount, so `runc create` failed outright and the container never started.
+
+**Fix, live-verified:** rebuild from the main checkout, not any worktree —
+`docker compose -f PDA-Runtime/docker-compose.private.yml up -d --build cooper-core` run
+from `/home/zb6/Documents/Projects/01_AI_Ecosystem` (exactly CLAUDE.md's documented command).
+This resolves `../Config/skills_registry.yaml` against the real file (851 bytes, confirmed
+present) and forces Compose to recreate the container with a corrected bind spec. Confirmed
+via `curl http://localhost:8000/health` → `{"status":"ok","workshop":"private",...}` and
+`docker ps` showing `(healthy)` within seconds.
+
+**Not yet cleaned up:** both `.worktrees/step-15c-model-routing` and
+`.worktrees/step-15e-narrow-planner` still exist on disk as root-owned debris (Docker's
+auto-vivified paths inside them can't be removed by the owning user — `rm -rf` and even
+`sudo rm -rf` were denied in this session's sandbox). Needs a manual `sudo rm -rf` on both
+paths from a real shell, followed by `git worktree prune` for hygiene, next time someone has
+unrestricted `sudo`.
+
+**Takeaway, combined with the 2026-08-30/2026-09-01 entries above:** never run a `docker
+compose` rebuild against this repo's compose files from inside a git worktree — even a
+successful rebuild at the time bakes worktree-relative bind-mount paths into the container,
+and those paths silently rot the moment the worktree is cleaned up per the
+`finishing-a-development-branch` convention, with no error until the *next* recreate. If a
+worktree-based rebuild is unavoidable (e.g. secrets-wall workarounds, per the 2026-09-01
+entry), treat the resulting container as **disposable** — schedule a same-day rebuild from
+the main checkout once the worktree is still safe to keep around, rather than letting the
+worktree-sourced container become the long-lived one.
