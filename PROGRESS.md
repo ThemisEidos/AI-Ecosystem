@@ -1518,8 +1518,16 @@ Execution order: 15a → 14a(rev) → 15c → 14b → 15d → 15e → 14c(+15f-i
   **Not a production defect** (the runtime reads `WORKSHOP` by design; both stacks are
   healthy and were live-verified after the rebuild). The defect is that those tests depend on
   an ambient variable rather than pinning it — a `conftest.py` fixture would decouple them.
-  **Unfixed, owner's call.** Until then, the in-image packaging check must pass
-  `-e WORKSHOP=open` when run against the Private container. Logged in Gotchas 2026-09-05.
+  **FIXED 2026-09-05, same day.** The intent was already in the code and could not work:
+  four test modules called `os.environ.setdefault("WORKSHOP", "open")`, and `setdefault` is a
+  no-op precisely when the variable is already set — the only case that mattered.
+  `conftest.py` now assigns it before any test module imports `main`, plus a guard test so
+  dropping the pin fails loudly rather than resurfacing as mystery failures in one container.
+  Reproduced and verified without a container (`WORKSHOP=private pytest -q`: 12 failed before,
+  512 passed after), then confirmed in the real Private container with **no override** —
+  `495 passed, 4 skipped`, byte-identical to Open. The in-image packaging check now means the
+  same thing on both stacks, which is the whole point of having it. Logged in Gotchas
+  2026-09-05.
 
 - **2026-09-05 · 14e shipped — repo steward, draft-and-notify, live-verified.** Third
   hardcoded `job_type` branch (`repo_steward`). Spec:

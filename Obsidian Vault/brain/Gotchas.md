@@ -798,9 +798,22 @@ this, because a bare `docker run` gets the Dockerfile's env, not the Private ser
 overrides — the trap is specific to `docker exec` against a *running* Private container.
 
 Not a production defect: the runtime reads `WORKSHOP` deliberately and both stacks are healthy.
-The defect is in the tests — they depend on an ambient env var instead of setting it explicitly
-(a `conftest.py` fixture pinning `WORKSHOP` for the workshop-coupled tests would remove the
-coupling). Pre-existing, unrelated to any 15f change, and unfixed as of this entry.
+The defect was in the tests — they depended on an ambient env var instead of setting it.
+
+**FIXED same day.** The intent was already in the code and could not work: four test modules
+called `os.environ.setdefault("WORKSHOP", "open")`, and **`setdefault` is a no-op precisely
+when the variable is already set** — the only case that mattered. `conftest.py` now *assigns*
+`os.environ["WORKSHOP"] = "open"` before any test module imports `main`, with a guard test
+(`test_suite_pins_workshop_open_regardless_of_ambient_env`) so a future change that drops the
+pin fails loudly instead of resurfacing as a dozen mystery failures in one container. Tests
+that genuinely want another workshop already had the right tool —
+`_run_main_import_with_env` re-imports `main` in a subprocess with an explicit env dict.
+
+Reproduce-then-verify without touching a container: `WORKSHOP=private pytest -q` on the dev
+machine gave the identical 12 failures before the fix and 512 passed after. Both containers
+now report the same `495 passed, 4 skipped` with no override, so the in-image check finally
+means the same thing on both stacks. A side effect worth noting: the private-env run dropped
+33s -> 4s, because those 12 tests had been attempting real network calls.
 
 **The wider lesson, second one in a day about this same check:** the in-image suite was adopted
 because it catches what local green cannot, but it is not a neutral oracle. It can go quiet
