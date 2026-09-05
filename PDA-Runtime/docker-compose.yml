@@ -140,6 +140,9 @@ services:
         source: "../Config/jobs_registry.yaml"
         target: "/app/Config/jobs_registry.yaml"
       - type: bind
+        source: "../Config/pii_research_queries.json"
+        target: "/app/Config/pii_research_queries.json"
+      - type: bind
         source: "../State"
         target: "/app/State"
     networks:
