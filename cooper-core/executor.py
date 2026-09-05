@@ -846,6 +846,34 @@ async def _run_skill_promote(args: dict, workshop: str) -> str:
         return f"Workbench: skill promotion failed unexpectedly — {exc}"
 
 
+def _scope_admits(filename: str, write_scope: list) -> bool:
+    """True if `filename` is admitted by a caller-supplied write_scope entry.
+
+    Two entry forms (Step 14e / D5) — see _run_file_edit's Check 1 for the full
+    rationale. An entry ending in "/" is a directory scope admitting files
+    directly inside it; any other entry is an exact path match. Kept as a pure
+    function of its arguments so the matching rule can be tested in isolation
+    from the filesystem.
+    """
+    scope = [str(entry) for entry in write_scope]
+    if filename in scope:
+        return True
+    parent = str(Path(filename).parent)
+    name = Path(filename).name
+    if not name:
+        return False
+    for entry in scope:
+        if not entry.endswith("/"):
+            continue
+        directory = entry.rstrip("/")
+        if not directory:
+            # A bare "/" is not a scope — refuse rather than match everything.
+            continue
+        if parent == directory:
+            return True
+    return False
+
+
 async def _run_file_edit(tool: dict, message: str, workshop: str, args: dict) -> str:
     """Job-runner file writer (Step 14b). Not registered in any tool registry
     and never chat-reachable — this is a capability the job runner (jobs.py's
@@ -934,9 +962,31 @@ async def _run_file_edit(tool: dict, message: str, workshop: str, args: dict) ->
                 "path segment — refused."
             )
 
-    # Check 1 — cheap string-equality match against the caller's allowlist,
-    # before any filesystem resolution happens at all.
-    if filename not in write_scope:
+    # Check 1 — cheap allowlist match against the caller's write_scope, before
+    # any filesystem resolution happens at all. Two forms, in order:
+    #
+    #   exact  "Codex_Tasks/TASK-1.md"  — filename must equal it, string for
+    #                                     string. The original and still the
+    #                                     default: an entry that does not end
+    #                                     in "/" NEVER gains directory
+    #                                     semantics, so every pre-14e registry
+    #                                     entry behaves exactly as before.
+    #   dir    "Codex_Tasks/"           — admits any file DIRECTLY inside that
+    #                                     one directory (Step 14e / D5). Added
+    #                                     because a job that drafts a new,
+    #                                     dynamically-named artifact each run
+    #                                     cannot name its file in advance, and
+    #                                     computing write_scope at runtime would
+    #                                     make the approved envelope meaningless
+    #                                     — the runner could then name anything.
+    #
+    # The directory form deliberately does NOT match subdirectories: the parent
+    # must equal the scope directory exactly, so the scope cannot deepen. A bare
+    # "/" entry normalises to an empty directory and is skipped rather than
+    # becoming a write-anywhere wildcard. Check 0's '..' rejection has already
+    # run against both filename and every entry, so traversal is gone before
+    # any of this is reached.
+    if not _scope_admits(filename, write_scope):
         raise ExecutionError(
             f"file_edit: '{filename}' is not in the caller-supplied write_scope "
             f"({', '.join(sorted(str(s) for s in write_scope))}) — refused."

@@ -913,3 +913,90 @@ def test_web_search_handler_renders_an_empty_result_set_as_text(monkeypatch):
     ))
     assert isinstance(out, str)
     assert "no results" in out.lower()
+
+
+# --- D5: directory-scope write_scope entries (Step 14e) -----------------------
+# A write_scope entry ending in "/" admits any file DIRECTLY inside that one
+# directory. Exact-match stays the default for every entry that does not end in
+# "/". These tests pin both halves: what the widening allows, and everything it
+# must still refuse.
+
+def test_file_edit_directory_scope_admits_file_directly_inside(tmp_path, monkeypatch):
+    monkeypatch.setattr(executor, "_REPO_ROOT", tmp_path)
+    args = {
+        "filename": "Codex_Tasks/TASK-20260905-120000-do-a-thing.md",
+        "content": "# Task\n",
+        "write_scope": ["Codex_Tasks/"],
+    }
+    asyncio.run(executor._run_file_edit({}, "edit", "open", args))
+    written = tmp_path / "Codex_Tasks/TASK-20260905-120000-do-a-thing.md"
+    assert written.read_text() == "# Task\n"
+
+
+def test_file_edit_directory_scope_refuses_subdirectory(tmp_path, monkeypatch):
+    # "directly inside" means exactly that -- the scope must not deepen.
+    monkeypatch.setattr(executor, "_REPO_ROOT", tmp_path)
+    args = {
+        "filename": "Codex_Tasks/nested/TASK-sneaky.md",
+        "content": "x",
+        "write_scope": ["Codex_Tasks/"],
+    }
+    with pytest.raises(executor.ExecutionError):
+        asyncio.run(executor._run_file_edit({}, "edit", "open", args))
+    assert not (tmp_path / "Codex_Tasks/nested/TASK-sneaky.md").exists()
+
+
+def test_file_edit_directory_scope_still_refuses_traversal(tmp_path, monkeypatch):
+    # Check 0 runs before any scope matching and is unchanged by D5.
+    monkeypatch.setattr(executor, "_REPO_ROOT", tmp_path)
+    args = {
+        "filename": "Codex_Tasks/../PDA-Runtime/.env",
+        "content": "malicious",
+        "write_scope": ["Codex_Tasks/"],
+    }
+    with pytest.raises(executor.ExecutionError):
+        asyncio.run(executor._run_file_edit({}, "edit", "open", args))
+    assert not (tmp_path / "PDA-Runtime/.env").exists()
+
+
+def test_file_edit_directory_scope_refuses_sibling_directory(tmp_path, monkeypatch):
+    monkeypatch.setattr(executor, "_REPO_ROOT", tmp_path)
+    args = {
+        "filename": "Codex_Tasks_evil/TASK.md",
+        "content": "x",
+        "write_scope": ["Codex_Tasks/"],
+    }
+    with pytest.raises(executor.ExecutionError):
+        asyncio.run(executor._run_file_edit({}, "edit", "open", args))
+    assert not (tmp_path / "Codex_Tasks_evil/TASK.md").exists()
+
+
+def test_file_edit_exact_entry_never_gains_directory_semantics(tmp_path, monkeypatch):
+    # The regression that matters most: every pre-14e registry entry lacks a
+    # trailing "/", and must keep exact-match behaviour untouched.
+    monkeypatch.setattr(executor, "_REPO_ROOT", tmp_path)
+    args = {
+        "filename": "State/LinkAudit/other.csv",
+        "content": "x",
+        "write_scope": ["State/LinkAudit/links.csv"],
+    }
+    with pytest.raises(executor.ExecutionError):
+        asyncio.run(executor._run_file_edit({}, "edit", "open", args))
+    assert not (tmp_path / "State/LinkAudit/other.csv").exists()
+
+
+def test_file_edit_bare_root_scope_entry_admits_nothing(tmp_path, monkeypatch):
+    # "/" must not become a write-anywhere wildcard.
+    monkeypatch.setattr(executor, "_REPO_ROOT", tmp_path)
+    args = {"filename": "anything.md", "content": "x", "write_scope": ["/"]}
+    with pytest.raises(executor.ExecutionError):
+        asyncio.run(executor._run_file_edit({}, "edit", "open", args))
+    assert not (tmp_path / "anything.md").exists()
+
+
+def test_file_edit_directory_scope_refuses_bare_filename_at_repo_root(tmp_path, monkeypatch):
+    monkeypatch.setattr(executor, "_REPO_ROOT", tmp_path)
+    args = {"filename": "TASK.md", "content": "x", "write_scope": ["Codex_Tasks/"]}
+    with pytest.raises(executor.ExecutionError):
+        asyncio.run(executor._run_file_edit({}, "edit", "open", args))
+    assert not (tmp_path / "TASK.md").exists()
