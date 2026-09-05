@@ -259,3 +259,76 @@ def test_data_broker_extraction_runs_under_the_drafter_budget(monkeypatch):
         base_url="", api_key="", model="m", backend="ollama", complete_fn=ok,
     ))
     assert seen["timeout"] == retry_policy.budget_for("drafter").timeout
+
+
+# ── streaming budgets (Step 15f-ii, streaming half) ──────────────────────
+async def _collect(agen):
+    return [x async for x in agen]
+
+
+def _emit(items, delay=0.0, stall_before=None):
+    """An async iterator that optionally stalls forever before item N."""
+    async def gen():
+        for i, item in enumerate(items):
+            if stall_before is not None and i == stall_before:
+                await asyncio.sleep(60)
+            if delay:
+                await asyncio.sleep(delay)
+            yield item
+    return gen()
+
+
+def test_stream_with_budget_passes_events_through_untouched():
+    budget = retry_policy.Budget(timeout=5.0, max_retries=0)
+    out = asyncio.run(_collect(
+        retry_policy.stream_with_budget(_emit(["a", "b", "c"]), budget)
+    ))
+    assert out == ["a", "b", "c"]
+
+
+def test_stream_with_budget_bounds_time_to_first_event():
+    """A backend that accepts the connection but never starts generating used to
+    hang the user's turn indefinitely."""
+    async def never_starts():
+        await asyncio.sleep(60)
+        yield "unreachable"
+
+    budget = retry_policy.Budget(timeout=0.05, max_retries=0)
+    with pytest.raises(asyncio.TimeoutError):
+        asyncio.run(_collect(retry_policy.stream_with_budget(never_starts(), budget)))
+
+
+def test_stream_with_budget_detects_a_mid_stream_stall():
+    """A backend that dies after emitting some tokens must not hang forever —
+    the stream is already partially delivered, so this is the honest bound."""
+    budget = retry_policy.Budget(timeout=0.05, max_retries=0)
+    with pytest.raises(asyncio.TimeoutError):
+        asyncio.run(_collect(
+            retry_policy.stream_with_budget(_emit(["a", "b", "c"], stall_before=2), budget)
+        ))
+
+
+def test_stream_with_budget_allows_a_long_stream_of_prompt_chunks():
+    """The bound is per-chunk, not total: a legitimately long generation must
+    not be killed just for being long."""
+    budget = retry_policy.Budget(timeout=0.2, max_retries=0)
+    out = asyncio.run(_collect(
+        retry_policy.stream_with_budget(_emit(["x"] * 25, delay=0.01), budget)
+    ))
+    assert out == ["x"] * 25          # ~0.25s total, far past any single chunk's budget
+
+
+def test_stream_with_budget_never_retries():
+    """Retrying a partially-consumed stream would replay tokens the user already
+    saw. max_retries is deliberately ignored here."""
+    starts = []
+
+    async def gen():
+        starts.append(1)
+        yield "a"
+        await asyncio.sleep(60)
+
+    budget = retry_policy.Budget(timeout=0.05, max_retries=3)
+    with pytest.raises(asyncio.TimeoutError):
+        asyncio.run(_collect(retry_policy.stream_with_budget(gen(), budget)))
+    assert len(starts) == 1

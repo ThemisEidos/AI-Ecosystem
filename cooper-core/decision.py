@@ -35,6 +35,8 @@ from typing import AsyncIterator, Awaitable, Callable, Dict, List, Optional, Tup
 
 import httpx
 
+import retry_policy
+
 _DISPATCH_FALLBACK = "Acknowledged. No dispatch handler is wired for this request."
 
 _ALLOWED_ROLES = frozenset({"user", "assistant"})
@@ -248,6 +250,13 @@ async def route_turn_stream(
 ) -> Tuple[TurnDecision, AsyncIterator[str]]:
     msgs = _build_answer_messages(message, history, system_prompt)
     events = _stream_events(base_url, api_key, model, msgs, backend=backend, tools=tools)
+    # Step 15f-ii: bound the stream per-chunk, not in total. A backend that
+    # accepts the connection but never emits a token -- or dies mid-generation --
+    # otherwise hangs the user's turn with no upper bound at all. The cap is
+    # time-to-first-event and time-between-events, so a legitimately long
+    # generation is never killed for being long. No retry: replaying a
+    # partially-delivered stream would repeat tokens the user already saw.
+    events = retry_policy.stream_with_budget(events, retry_policy.budget_for("brain"))
     td = TurnDecision(decision="answer", reason="no tool call emitted")
     return td, _stream_and_maybe_dispatch(events, td, message, tool_call_handler)
 

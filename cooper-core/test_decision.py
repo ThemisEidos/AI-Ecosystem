@@ -1,3 +1,4 @@
+import pytest
 import asyncio
 import json
 
@@ -499,3 +500,77 @@ def test_stream_dispatch_falls_back_without_a_handler(monkeypatch):
     td, chunks = _run(scenario())
     assert td.decision == "dispatch"
     assert chunks == [decision._DISPATCH_FALLBACK]
+
+
+# ── streaming budget wiring (Step 15f-ii) ────────────────────────────────
+def test_route_turn_stream_bounds_a_backend_that_never_starts_generating(monkeypatch):
+    """Before budgets, a backend that accepted the connection but never emitted
+    a token hung the user's chat turn with no upper bound."""
+    import retry_policy
+
+    async def never_starts(*a, **k):
+        await asyncio.sleep(60)
+        yield {"content": "unreachable"}
+
+    monkeypatch.setattr(decision, "_stream_events", never_starts)
+    monkeypatch.setattr(
+        decision.retry_policy, "budget_for",
+        lambda role, **k: retry_policy.Budget(timeout=0.05, max_retries=0),
+    )
+
+    async def go():
+        td, stream = await decision.route_turn_stream(
+            "hi", [], system_prompt="s", base_url="", api_key="", model="m",
+            backend="ollama",
+        )
+        return [c async for c in stream]
+
+    with pytest.raises(asyncio.TimeoutError):
+        asyncio.run(go())
+
+
+def test_route_turn_stream_still_forwards_a_normal_stream(monkeypatch):
+    """The budget must not disturb the ordinary path."""
+    async def normal(*a, **k):
+        for c in ("Hel", "lo", " there"):
+            yield {"content": c}
+
+    monkeypatch.setattr(decision, "_stream_events", normal)
+
+    async def go():
+        td, stream = await decision.route_turn_stream(
+            "hi", [], system_prompt="s", base_url="", api_key="", model="m",
+            backend="ollama",
+        )
+        return "".join([c async for c in stream]), td
+
+    out, td = asyncio.run(go())
+    assert out == "Hello there"
+    assert td.decision == "answer"
+
+
+def test_route_turn_stream_uses_the_brain_role_budget(monkeypatch):
+    import retry_policy
+    seen = {}
+
+    async def normal(*a, **k):
+        yield {"content": "ok"}
+
+    real = retry_policy.stream_with_budget
+
+    def spy(events, budget):
+        seen["timeout"] = budget.timeout
+        return real(events, budget)
+
+    monkeypatch.setattr(decision, "_stream_events", normal)
+    monkeypatch.setattr(decision.retry_policy, "stream_with_budget", spy)
+
+    async def go():
+        td, stream = await decision.route_turn_stream(
+            "hi", [], system_prompt="s", base_url="", api_key="", model="m",
+            backend="ollama",
+        )
+        return [c async for c in stream]
+
+    asyncio.run(go())
+    assert seen["timeout"] == retry_policy.budget_for("brain").timeout

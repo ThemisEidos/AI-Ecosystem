@@ -143,3 +143,41 @@ async def call_with_budget(
             if budget.backoff_base > 0:
                 await asyncio.sleep(budget.backoff_base * (2 ** attempt))
     raise last if last is not None else RuntimeError("call_with_budget: no attempt ran")
+
+
+async def stream_with_budget(events, budget: Budget):
+    """Bound a streaming response without capping its total length.
+
+    A blocking call gets one timeout around the whole thing. A stream cannot:
+    a legitimately long generation would be killed for being long. The
+    meaningful bounds are instead:
+
+      * time to FIRST event -- a backend that accepts the connection but never
+        starts generating is wedged, and used to hang the turn indefinitely;
+      * time BETWEEN events -- a backend that dies mid-generation leaves the
+        stream open forever, so a stall is the only observable symptom.
+
+    Both use `budget.timeout` per gap, so the cap is per-chunk, never total.
+
+    `budget.max_retries` is deliberately IGNORED. Retrying a partially consumed
+    stream would replay tokens the caller has already forwarded to the user;
+    once the first chunk is out, the only honest options are finish or fail.
+
+    Raises asyncio.TimeoutError on either bound, after closing the source
+    iterator so the underlying HTTP response is released rather than leaked.
+    """
+    iterator = events.__aiter__()
+    while True:
+        try:
+            item = await asyncio.wait_for(iterator.__anext__(), timeout=budget.timeout)
+        except StopAsyncIteration:
+            return
+        except (asyncio.TimeoutError, asyncio.CancelledError):
+            aclose = getattr(iterator, "aclose", None)
+            if aclose is not None:
+                try:
+                    await aclose()
+                except Exception:
+                    pass
+            raise
+        yield item
