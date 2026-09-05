@@ -16,7 +16,10 @@ net on top of execution, not a second approval gate.
 import json
 from dataclasses import dataclass
 
+from typing import Optional
+
 from decision import _ollama_complete, _openai_complete
+import retry_policy
 
 _REVIEWER_SYSTEM = """\
 You are COOPER's Reviewer. A Workbench tool just ran and produced output below. \
@@ -51,8 +54,15 @@ async def review(
     api_key: str,
     model: str,
     backend: str,
+    budget: Optional["retry_policy.Budget"] = None,
 ) -> ReviewVerdict:
-    """Reviewer: ask the model to check the worker's output. Fails open (pass)."""
+    """Reviewer: ask the model to check the worker's output. Fails open (pass).
+
+    The backend call runs under the reviewer role's timeout/retry budget
+    (Step 15f-ii). Before budgets a wedged backend held the turn for the
+    client's full hardcoded timeout with no retry; now a transient fault gets
+    one bounded retry, and a genuine hang fails open at the budget instead of
+    the client timeout. `budget` is injectable so tests can shrink it."""
     tool_name = tool.get("name", tool.get("id", "unknown"))
     user_msg = (
         f"Requested action: {message}\n"
@@ -64,9 +74,11 @@ async def review(
         {"role": "user", "content": user_msg},
     ]
 
-    try:
+    budget = budget or retry_policy.budget_for("reviewer")
+
+    async def _complete():
         if backend == "openai":
-            raw = await _openai_complete(
+            return await _openai_complete(
                 base_url, api_key, model, messages,
                 temperature=0,
                 response_format={
@@ -87,7 +99,7 @@ async def review(
                 },
             )
         else:
-            raw = await _ollama_complete(
+            return await _ollama_complete(
                 base_url, model, messages,
                 options={"temperature": 0},
                 fmt={
@@ -99,6 +111,9 @@ async def review(
                     "required": ["verdict", "reason"],
                 },
             )
+
+    try:
+        raw = await retry_policy.call_with_budget(_complete, budget)
         data = json.loads(raw)
         verdict = data.get("verdict", "pass")
         if verdict not in VALID_VERDICTS:
