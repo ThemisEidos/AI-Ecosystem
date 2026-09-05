@@ -19,6 +19,7 @@ import datetime
 import hashlib
 import io
 import json
+import re
 import sqlite3
 import time
 import uuid
@@ -44,6 +45,15 @@ _DIGEST_DIR = _REPO_ROOT / "Obsidian Vault" / "00_Inbox"
 
 # url_verify: short, bounded — a job step must fail fast, not hang a run.
 _URL_VERIFY_TIMEOUT = 5.0
+
+# Step 14c (pii_research job). Seed queries are fixed and rotated by index --
+# an LLM never chooses what to search for (M7: "the model decided to search for
+# X today" is not an audit line).
+_QUERIES_PATH = _REPO_ROOT / "Config" / "pii_research_queries.json"
+
+# The vault note's entry format is a fixed convention this module both writes
+# (format_pii_entries) and reads back (existing_entry_sites) for dedupe.
+_PII_SITE_RE = re.compile(r"^\*\*Site:\*\*\s*(.+?)\s*$", re.MULTILINE)
 
 # Hashing the hash would be circular, and 'approved' must be flippable by the
 # approval step without changing the hash it gates.
@@ -268,6 +278,64 @@ async def csv_line_edit(filename: str, content: str, write_scope: List[str]) -> 
     tool = {"name": "csv_line_edit"}
     args = {"filename": filename, "content": content, "write_scope": write_scope}
     return await executor._run_file_edit(tool, "job run: csv_line_edit", "open", args)
+
+
+def next_seed_query(queries_path: Optional[Path] = None) -> str:
+    """Return the next fixed seed query and advance the persisted cursor
+    (wrapping at the end). Step 14c: query selection is deterministic — no LLM
+    picks what to search for. Raises JobError if no queries are configured;
+    a job that cannot name its own search has nothing to do."""
+    path = queries_path or _QUERIES_PATH
+    try:
+        config = json.loads(path.read_text(encoding="utf-8"))
+        queries = [str(q) for q in (config.get("queries") or []) if str(q).strip()]
+    except (OSError, json.JSONDecodeError, AttributeError):
+        raise JobError(f"no seed queries available at '{path}'")
+    if not queries:
+        raise JobError(f"no seed queries configured in '{path}'")
+
+    try:
+        index = int(config.get("next_index", 0))
+    except (TypeError, ValueError):
+        index = 0
+    if index < 0 or index >= len(queries):
+        index = 0
+
+    query = queries[index]
+    config["next_index"] = (index + 1) % len(queries)
+    try:
+        path.write_text(json.dumps(config, indent=4), encoding="utf-8")
+    except OSError:
+        # Cursor advance is best-effort: a read-only config must not cost the
+        # run its search. Worst case the same query repeats next run, and
+        # dedupe against existing entries already makes that harmless.
+        pass
+    return query
+
+
+def existing_entry_sites(note_path: Path) -> List[str]:
+    """Site names already recorded in the vault note, for dedupe. Fails OPEN on
+    the read side only (missing/unreadable/hand-edited note -> []), never
+    blocking a run — the write side stays fail-closed via write_scope."""
+    try:
+        text = note_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return []
+    return [m.strip() for m in _PII_SITE_RE.findall(text) if m.strip()]
+
+
+def format_pii_entries(entries: List[dict], today: str) -> str:
+    """Render validated entries as the vault note's fixed markdown convention.
+    Must stay in sync with _PII_SITE_RE, which parses '**Site:**' back out."""
+    blocks = []
+    for entry in entries:
+        blocks.append(
+            f"**Site:** {entry['site']}\n"
+            f"**Collects:** {entry['what_it_collects']}\n"
+            f"**Source:** {entry['source_url']}\n"
+            f"**Found:** {today}\n"
+        )
+    return "\n".join(blocks)
 
 
 def _execution_id(now: datetime.datetime) -> str:

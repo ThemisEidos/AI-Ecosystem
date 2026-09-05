@@ -507,3 +507,80 @@ def test_run_job_council_final_review_fail_open(conn, tmp_path, monkeypatch):
     assert "model_routing.load_routing: truncated JSON" in fallback["reason"]
     errs = evidence.validate_completion(record, [])
     assert errs == []
+
+
+# ── PII research helpers (Step 14c) ──────────────────────────────────────
+def _write_queries(tmp_path, queries, next_index=0):
+    path = tmp_path / "Config" / "pii_research_queries.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"queries": queries, "next_index": next_index}), encoding="utf-8")
+    return path
+
+
+def test_next_seed_query_returns_query_at_index_and_advances(tmp_path):
+    path = _write_queries(tmp_path, ["alpha", "beta", "gamma"], next_index=0)
+
+    assert jobs.next_seed_query(path) == "alpha"
+    assert json.loads(path.read_text())["next_index"] == 1
+    assert jobs.next_seed_query(path) == "beta"
+    assert json.loads(path.read_text())["next_index"] == 2
+
+
+def test_next_seed_query_wraps_at_end_of_list(tmp_path):
+    path = _write_queries(tmp_path, ["alpha", "beta"], next_index=1)
+
+    assert jobs.next_seed_query(path) == "beta"
+    assert json.loads(path.read_text())["next_index"] == 0
+    assert jobs.next_seed_query(path) == "alpha"
+
+
+def test_next_seed_query_recovers_from_out_of_range_index(tmp_path):
+    path = _write_queries(tmp_path, ["alpha", "beta"], next_index=99)
+    assert jobs.next_seed_query(path) == "alpha"
+
+
+def test_next_seed_query_raises_when_no_queries_configured(tmp_path):
+    path = _write_queries(tmp_path, [])
+    with pytest.raises(jobs.JobError, match="no seed queries"):
+        jobs.next_seed_query(path)
+
+
+def test_next_seed_query_raises_when_file_missing(tmp_path):
+    with pytest.raises(jobs.JobError, match="no seed queries"):
+        jobs.next_seed_query(tmp_path / "nope.json")
+
+
+def test_existing_entry_sites_extracts_recorded_names(tmp_path):
+    note = tmp_path / "note.md"
+    note.write_text(
+        "# Data Brokers\n\n"
+        "**Site:** Acme Data\n**Collects:** emails\n**Source:** https://a.example\n\n"
+        "**Site:** Beta Corp\n**Collects:** addresses\n**Source:** https://b.example\n",
+        encoding="utf-8",
+    )
+    assert jobs.existing_entry_sites(note) == ["Acme Data", "Beta Corp"]
+
+
+def test_existing_entry_sites_returns_empty_for_missing_file(tmp_path):
+    assert jobs.existing_entry_sites(tmp_path / "absent.md") == []
+
+
+def test_existing_entry_sites_returns_empty_for_unparseable_note(tmp_path):
+    note = tmp_path / "note.md"
+    note.write_text("free-form prose with no entries at all\n", encoding="utf-8")
+    assert jobs.existing_entry_sites(note) == []
+
+
+def test_format_pii_entries_renders_all_fields(tmp_path):
+    block = jobs.format_pii_entries(
+        [{"site": "Acme Data", "what_it_collects": "emails", "source_url": "https://a.example"}],
+        "2026-09-04",
+    )
+    assert "**Site:** Acme Data" in block
+    assert "**Collects:** emails" in block
+    assert "**Source:** https://a.example" in block
+    assert "**Found:** 2026-09-04" in block
+
+
+def test_format_pii_entries_returns_empty_string_for_no_entries():
+    assert jobs.format_pii_entries([], "2026-09-04") == ""
