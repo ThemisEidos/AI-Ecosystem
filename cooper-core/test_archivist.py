@@ -386,3 +386,41 @@ def test_init_db_creates_job_exceptions_table(conn):
     """Test that init_db creates the job_exceptions table with correct columns."""
     cols = [r[1] for r in conn.execute("PRAGMA table_info(job_exceptions)").fetchall()]
     assert cols == ["id", "job_id", "run_id", "proposed_action", "reason", "status", "created_at"]
+
+
+# --- brain indexing must not fail silently (2026-09-05) -----------------------
+# index_brain returned early on a missing directory and looped zero times on an
+# empty one, either way leaving brain_fts empty while startup still logged
+# "[ok] archivist: schema ready, brain indexed". recall() would then return
+# nothing, forever, with no signal -- the same silent-empty class as the
+# unshipped configs and the zero-collection parametrize found the same day.
+
+def test_index_brain_warns_when_the_directory_is_missing(tmp_path, capsys):
+    conn = archivist.get_conn(tmp_path / "m.db")
+    archivist.init_db(conn)
+    archivist.index_brain(conn, brain_dir=tmp_path / "nope", force=True)
+    out = capsys.readouterr().out
+    assert "brain" in out.lower()
+    assert "not found" in out.lower() or "missing" in out.lower()
+
+
+def test_index_brain_warns_when_the_directory_is_empty(tmp_path, capsys):
+    conn = archivist.get_conn(tmp_path / "m.db")
+    archivist.init_db(conn)
+    empty = tmp_path / "brain"
+    empty.mkdir()
+    archivist.index_brain(conn, brain_dir=empty, force=True)
+    out = capsys.readouterr().out
+    assert "no .md" in out.lower() or "0 file" in out.lower() or "empty" in out.lower()
+
+
+def test_index_brain_is_quiet_on_a_populated_directory(tmp_path, capsys):
+    conn = archivist.get_conn(tmp_path / "m.db")
+    archivist.init_db(conn)
+    brain = tmp_path / "brain"
+    brain.mkdir()
+    (brain / "North Star.md").write_text("# North Star\n\nbody\n", encoding="utf-8")
+    archivist.index_brain(conn, brain_dir=brain, force=True)
+    out = capsys.readouterr().out
+    assert "[!!]" not in out, f"a healthy index must stay quiet, got: {out}"
+    assert conn.execute("SELECT COUNT(*) FROM brain_fts").fetchone()[0] > 0

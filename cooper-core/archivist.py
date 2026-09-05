@@ -296,8 +296,19 @@ def index_brain(conn: sqlite3.Connection, brain_dir: Optional[Path] = None, forc
     _last_index_at = time.time()
     directory = brain_dir or _BRAIN_DIR
     if not directory.exists():
+        # Loud, not silent. Returning quietly left brain_fts empty and recall()
+        # permanently answerless while startup still logged "brain indexed" --
+        # the deployment failure (a dropped bind mount) would have looked
+        # exactly like a healthy system with nothing to say.
+        print(f"  [!!] brain directory not found at {directory} — 0 notes indexed, "
+              "recall() will return nothing until the mount is restored")
         return
-    for path in sorted(directory.glob("*.md")):
+    md_files = sorted(directory.glob("*.md"))
+    if not md_files:
+        print(f"  [!!] brain directory {directory} contains no .md files — "
+              "0 notes indexed, recall() will return nothing")
+        return
+    for path in md_files:
         mtime = path.stat().st_mtime
         cache_key = str(path)
         if _brain_mtime_cache.get(cache_key) == mtime:

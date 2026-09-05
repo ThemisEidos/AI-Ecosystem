@@ -96,6 +96,16 @@ def test_fabric_pattern_tree_is_populated():
     assert patterns, "PDA-Fabric/ has no pattern files -- fabric_pattern is inert"
 
 
+def test_brain_directory_is_mounted_and_populated():
+    # Supplied by a read-only bind mount on BOTH stacks, not baked into the
+    # image. archivist.index_brain now warns when it finds nothing, but a
+    # warning in a startup log is easy to miss; this fails the packaging gate
+    # instead. An empty brain means recall() answers nothing, forever.
+    brain = _REPO / "Obsidian Vault" / "brain"
+    assert brain.is_dir(), f"{brain} is not mounted — recall() has no corpus"
+    assert sorted(brain.glob("*.md")), f"{brain} has no .md notes — recall() has no corpus"
+
+
 def test_retry_policy_roles_are_actually_loaded_not_fallbacks():
     # The concrete 15f-ii regression: the container reported the built-in
     # fallback (brain 60s x2) while the policy on disk said 90s x1. Assert
