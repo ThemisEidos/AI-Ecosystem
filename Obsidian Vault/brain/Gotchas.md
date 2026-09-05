@@ -665,3 +665,35 @@ worktree-based rebuild is unavoidable (e.g. secrets-wall workarounds, per the 20
 entry), treat the resulting container as **disposable** — schedule a same-day rebuild from
 the main checkout once the worktree is still safe to keep around, rather than letting the
 worktree-sourced container become the long-lived one.
+
+### 2026-09-05 · A same-length mutation test can leave stale `.pyc` behind, so the restored file runs the MUTATED bytecode — a phantom bug that survives `git diff` showing clean
+
+While mutation-testing the 15f-iii chaos suite, a mutation was applied with
+`sed -i '716s/exceptions_raised += 1/exceptions_raised += 0/'`, the test confirmed red, and
+the file was restored from a backup with `cp`. **The test kept failing after the restore.**
+`grep` found no mutation, `git diff` showed only unrelated additions, and reading the
+function showed correct code — yet a standalone repro outside pytest reproduced the wrong
+result (`exceptions_raised: 0`), so it was not a pytest artifact either.
+
+**Mechanism:** CPython invalidates a cached `__pycache__/*.pyc` by comparing the source's
+**mtime and size** against the values recorded in the `.pyc` header — not by hashing the
+source (that is opt-in, `PYTHONPYCACHEPREFIX`/`--invalidation-mode checked-hash`).
+`exceptions_raised += 0` and `exceptions_raised += 1` are **the same number of bytes**, and
+the `cp` restore landed within the same filesystem-timestamp granularity as the mutated
+version's compile. Same mtime-second, same size → the interpreter considered the cached
+bytecode valid and kept executing the **mutated** code from a source file that was, on disk,
+completely correct.
+
+**The tell that cracked it:** adding a `print()` to the same line made the behaviour correct
+again — because that changed the file's *size*, invalidating the cache. A "fix" that works
+only when you add a debug print is almost never about the print.
+
+**Fix:** `find . -name __pycache__ -type d -exec rm -rf {} +`, then re-run — 469/469 green,
+no source change needed.
+
+**Takeaway for any future mutation testing in this repo** (the canary suites and chaos suite
+both rely on it): prefer mutations that change the file's LENGTH (delete a line, insert one)
+over same-length single-character edits, and clear `__pycache__` as part of the restore step,
+not just the file copy. A same-size mutation plus a fast restore is indistinguishable from a
+real bug by every normal diagnostic — grep, `git diff`, and reading the code all say the file
+is clean, because it is.
