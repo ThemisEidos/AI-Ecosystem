@@ -906,3 +906,55 @@ def test_extract_pii_entries_returns_empty_without_calling_backend_on_no_results
         backend="ollama", complete_fn=must_not_run,
     ))
     assert entries == []
+
+
+# ── workshop boundary enforcement (owner decision 2026-09-05) ─────────────
+def test_verify_job_refuses_a_private_job_running_on_open():
+    """A Private-workshop job must never execute on Open — that is the
+    Category 2 boundary (nothing leaves the machine), not a preference."""
+    entry = {**MINIMAL_JOB, "workshop": "private", "approved": True}
+    entry["envelope_hash"] = jobs.compute_envelope_hash(entry)
+    reason = jobs.verify_job(entry, workshop="open")
+    assert reason is not None
+    assert "workshop" in reason.lower()
+
+
+def test_verify_job_refuses_an_open_job_running_on_private():
+    entry = {**MINIMAL_JOB, "workshop": "open", "approved": True}
+    entry["envelope_hash"] = jobs.compute_envelope_hash(entry)
+    reason = jobs.verify_job(entry, workshop="private")
+    assert reason is not None
+    assert "workshop" in reason.lower()
+
+
+def test_verify_job_allows_a_matching_workshop():
+    entry = {**MINIMAL_JOB, "workshop": "open", "approved": True}
+    entry["envelope_hash"] = jobs.compute_envelope_hash(entry)
+    assert jobs.verify_job(entry, workshop="open") is None
+
+
+def test_verify_job_without_a_workshop_argument_keeps_prior_behaviour():
+    """Callers that don't pass a workshop (existing tests, planner) are unchanged."""
+    entry = {**MINIMAL_JOB, "workshop": "private", "approved": True}
+    entry["envelope_hash"] = jobs.compute_envelope_hash(entry)
+    assert jobs.verify_job(entry) is None
+
+
+def test_run_job_refuses_a_cross_workshop_job(conn, tmp_path, monkeypatch):
+    """End-to-end: the boundary is enforced by run_job, not just verify_job.
+
+    _REPO_ROOT is redirected even though a refusal writes nothing: if the gate
+    ever regresses, the job would RUN, and an un-redirected test would drop a
+    real evidence record into State/. (It did exactly that during this test's
+    own red phase.) A test that can dirty real state on failure is a trap."""
+    monkeypatch.setattr(jobs, "_REPO_ROOT", tmp_path)
+    monkeypatch.setattr(executor, "_REPO_ROOT", tmp_path)
+    entry = {**MINIMAL_JOB, "workshop": "private", "approved": True,
+             "job_type": "csv_link_check"}
+    entry["envelope_hash"] = jobs.compute_envelope_hash(entry)
+    monkeypatch.setattr(jobs, "load_registry", lambda path=None: {"jobs": [entry]})
+
+    result = asyncio.run(jobs.run_job("test-job", conn, **_RUN_JOB_KWARGS))
+
+    assert result["status"] == "refused"
+    assert "workshop" in result["reason"].lower()

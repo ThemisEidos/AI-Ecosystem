@@ -44,6 +44,19 @@ def is_job_linked(record: dict) -> bool:
     return bool(record.get("job_id"))
 
 
+# The v1 (PowerShell/n8n) runtime had no approval gate, so its completion
+# records cannot cite an approval_id -- none was ever issued. Owner decision
+# 2026-09-05: mark those records for what they are rather than delete real
+# audit history (M7 is held at 5; spending it to make a validator pass is the
+# trade this platform declines) or invent an approval_id that never existed
+# (which would be fabricating audit data outright). The flag waives exactly one
+# rule -- the open-workshop approval linkage -- and nothing else: schema,
+# hygiene, verdicts, artifact-boundary and job-linkage checks all still apply.
+# It is deliberately explicit rather than a date cutoff, so a reader sees WHY a
+# record is exempt from the record itself.
+_LEGACY_FLAG = "legacy_pre_approval_gate"
+
+
 _RESTRICTED_PREFIX = "Restricted DMZ Workspace/"
 _SENSITIVE_RE = re.compile(
     r"api[_-]?key|password|\bsecret\b|\bPII\b|access[_-]?token", re.IGNORECASE
@@ -134,7 +147,7 @@ def validate_completion(record: dict, context: List[dict]) -> List[str]:
                     f"consistency: approval '{approval_id}' status is "
                     f"'{approval.get('status')}' — a completion may only cite a completed approval"
                 )
-    elif workshop == "open" and not job_linked:
+    elif workshop == "open" and not job_linked and not record.get(_LEGACY_FLAG):
         errs.append("linkage: open-workshop completion requires an approval_id")
 
     for path in record["artifact_paths"]:

@@ -182,14 +182,34 @@ def compute_envelope_hash(job_entry: dict) -> str:
     return hashlib.sha256(payload).hexdigest()
 
 
-def verify_job(job_entry: dict) -> Optional[str]:
+def verify_job(job_entry: dict, workshop: Optional[str] = None) -> Optional[str]:
     """Governance gate a run_job() call must pass before doing anything. Returns
-    None when the job is approved and its stored envelope_hash still matches the
-    current entry; otherwise a human-readable reason it must not run."""
+    None when the job is approved, its stored envelope_hash still matches the
+    current entry, and (when `workshop` is supplied) the entry is declared for
+    the workshop actually running it; otherwise a human-readable reason it must
+    not run.
+
+    The workshop check is the Category 2 boundary in code (owner decision
+    2026-09-05). Before it, an envelope's `workshop` field was documentation:
+    nothing compared it to the running workshop, and G4 held only because the
+    Private stack happens not to mount Config/jobs_registry.yaml. A mount change
+    would have silently allowed a Private job to execute on Open — data leaving
+    the machine — or an Open job to run on Private. Enforcement now lives here,
+    beside the approval and hash gates, rather than in deployment layout.
+
+    `workshop` stays optional so callers that are not executing a job (planner
+    drafting, registry inspection) keep their prior behaviour."""
     if not job_entry.get("approved"):
         return "not approved"
     if job_entry.get("envelope_hash") != compute_envelope_hash(job_entry):
         return "hash mismatch — envelope was edited after approval"
+    if workshop is not None:
+        declared = str(job_entry.get("workshop", ""))
+        if declared != workshop:
+            return (
+                f"workshop boundary — job is declared for '{declared}' "
+                f"but this is the '{workshop}' workshop"
+            )
     return None
 
 
@@ -564,7 +584,7 @@ async def run_job(
     if job_entry is None:
         return {"status": "refused", "reason": f"unknown job id '{job_id}'"}
 
-    reason = verify_job(job_entry)
+    reason = verify_job(job_entry, workshop=workshop)
     if reason:
         return {"status": "refused", "reason": reason}
 

@@ -1,0 +1,36 @@
+{
+    "workflow_id": "data-broker-research",
+    "workflow_name": "data-broker-research",
+    "execution_id": "20260905T024758013Z",
+    "status": "completed",
+    "completion_time": "2026-09-05T02:47:58.013763Z",
+    "workshop_id": "open",
+    "workshop_name": "Open Workshop",
+    "approval_id": "",
+    "artifact_paths": [
+        "Obsidian Vault/02_Projects/opt-out/Data-Brokers.md"
+    ],
+    "review_status": "unknown",
+    "user_accepted": false,
+    "notes": "run_id=471029b3d6a8: query 'people search site remove personal information', 10 result(s), 2 new entry(ies). appended 2 entry(ies) to 'Obsidian Vault/02_Projects/opt-out/Data-Brokers.md'.",
+    "job_id": "data-broker-research",
+    "envelope_hash": "a41c2e5f196e5ab314b08e7770b8027cf6a5370428be0cc56703a3496e2826e2",
+    "run_id": "471029b3d6a8",
+    "verdicts": [
+        {
+            "member": "openai",
+            "verdict": "pass",
+            "reason": "successful completion with new entries added"
+        },
+        {
+            "member": "claude",
+            "verdict": "pass",
+            "reason": "Successful search query execution with results appended to markdown file"
+        },
+        {
+            "member": "gemini",
+            "verdict": "pass",
+            "reason": "Successfully queried and appended entries to the specified file."
+        }
+    ]
+}

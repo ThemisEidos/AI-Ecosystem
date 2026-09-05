@@ -1,0 +1,36 @@
+{
+    "workflow_id": "data-broker-research",
+    "workflow_name": "data-broker-research",
+    "execution_id": "20260905T024741217Z",
+    "status": "completed",
+    "completion_time": "2026-09-05T02:47:41.217854Z",
+    "workshop_id": "open",
+    "workshop_name": "Open Workshop",
+    "approval_id": "",
+    "artifact_paths": [
+        "Obsidian Vault/02_Projects/opt-out/Data-Brokers.md"
+    ],
+    "review_status": "unknown",
+    "user_accepted": false,
+    "notes": "run_id=b813227b966c: query 'data broker opt out list', 10 result(s), 3 new entry(ies). appended 3 entry(ies) to 'Obsidian Vault/02_Projects/opt-out/Data-Brokers.md'.",
+    "job_id": "data-broker-research",
+    "envelope_hash": "a41c2e5f196e5ab314b08e7770b8027cf6a5370428be0cc56703a3496e2826e2",
+    "run_id": "b813227b966c",
+    "verdicts": [
+        {
+            "member": "openai",
+            "verdict": "pass",
+            "reason": "successful completion with new entries added"
+        },
+        {
+            "member": "claude",
+            "verdict": "pass",
+            "reason": "successful research run with new entries appended"
+        },
+        {
+            "member": "gemini",
+            "verdict": "pass",
+            "reason": "Successfully queried and appended new entries to file."
+        }
+    ]
+}

@@ -160,3 +160,48 @@ def test_verdicts_field_hygiene_checks_reason_text():
     ])
     errs = evidence.validate_completion(record, [])
     assert any("hygiene" in e for e in errs)
+
+
+# ── legacy pre-approval-gate records (owner decision 2026-09-05) ──────────
+def _v1_completion(**overrides):
+    """A real v1-era (June 2026) completion: the approval gate did not exist
+    yet, so no approval_id could ever have been cited."""
+    return {
+        "workflow_id": "WF-001", "workflow_name": "Research Summary",
+        "execution_id": "20260623T040423552Z", "status": "pass",
+        "completion_time": "2026-06-23T04:04:23.5529784Z",
+        "workshop_id": "open", "workshop_name": "Open Workshop",
+        "approval_id": "", "artifact_paths": [],
+        "review_status": "unknown", "user_accepted": False,
+        "notes": "WF-001 research summary completed; review pending.",
+        **overrides,
+    }
+
+
+def test_open_completion_without_approval_id_is_still_invalid_by_default():
+    """The approval requirement must stay enforced for ordinary records —
+    the exemption below must not become a general escape hatch."""
+    errs = evidence.validate_completion(_v1_completion(), [])
+    assert any("approval_id" in e for e in errs)
+
+
+def test_legacy_pre_approval_gate_record_is_exempt_from_the_approval_requirement():
+    """Records predating the approval gate cannot cite an approval that never
+    existed. Marking them truthfully is the honest repair — deleting real audit
+    history to make a validator pass would spend M7 for convenience."""
+    record = _v1_completion(legacy_pre_approval_gate=True)
+    assert evidence.validate_completion(record, []) == []
+
+
+def test_legacy_flag_does_not_waive_any_other_rule():
+    """The exemption is narrow: it waives the approval linkage only."""
+    record = _v1_completion(legacy_pre_approval_gate=True, notes="api_key=abc123")
+    errs = evidence.validate_completion(record, [])
+    assert any("sensitive" in e for e in errs)
+
+
+def test_legacy_flag_does_not_waive_schema_requirements():
+    record = _v1_completion(legacy_pre_approval_gate=True)
+    del record["execution_id"]
+    errs = evidence.validate_completion(record, [])
+    assert any("execution_id" in e for e in errs)

@@ -1,16 +1,17 @@
 {
-    "workflow_id":  "WF-001",
-    "workflow_name":  "Research Summary",
-    "execution_id":  "20260623T040423552Z",
-    "status":  "pass",
-    "completion_time":  "2026-06-23T04:04:23.5529784Z",
-    "workshop_id":  "open",
-    "workshop_name":  "Open Workshop",
-    "approval_id":  "",
-    "artifact_paths":  [
-                           "D:\\D_Projects\\01_AI_Ecosystem\\Obsidian Vault\\02_Projects\\AI Tool Ecosystem\\Agent Findings\\Research\\research-output-20260622-210423.md"
-                       ],
-    "review_status":  "unknown",
-    "user_accepted":  false,
-    "notes":  "WF-001 research summary completed; review pending."
+    "workflow_id": "WF-001",
+    "workflow_name": "Research Summary",
+    "execution_id": "20260623T040423552Z",
+    "status": "pass",
+    "completion_time": "2026-06-23T04:04:23.5529784Z",
+    "workshop_id": "open",
+    "workshop_name": "Open Workshop",
+    "approval_id": "",
+    "artifact_paths": [
+        "D:\\D_Projects\\01_AI_Ecosystem\\Obsidian Vault\\02_Projects\\AI Tool Ecosystem\\Agent Findings\\Research\\research-output-20260622-210423.md"
+    ],
+    "review_status": "unknown",
+    "user_accepted": false,
+    "notes": "WF-001 research summary completed; review pending.",
+    "legacy_pre_approval_gate": true
 }
