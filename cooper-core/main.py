@@ -545,7 +545,7 @@ async def run_job(job_id: str):
     result = await jobs.run_job(
         job_id, _ARCHIVIST_CONN,
         base_url=BACKEND_URL, api_key=BACKEND_KEY, backend=BACKEND,
-        workshop=WORKSHOP, reviewer_model=REVIEWER_MODEL,
+        workshop=WORKSHOP, reviewer_model=REVIEWER_MODEL, drafter_model=DRAFTER_MODEL,
     )
     jobs.write_digest(_ARCHIVIST_CONN)
     return result

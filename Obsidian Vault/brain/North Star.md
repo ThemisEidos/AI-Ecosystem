@@ -36,6 +36,39 @@ detail incl. every live-verification command and its real output: PROGRESS.md's
 2026-08-31 (15d) entry (git history — the SDD workspace itself was deleted per the
 finishing-a-development-branch convention once the branch merged clean).
 
+**14c shipped 2026-09-04 (+15f-i) — web search, the data-broker research job, and the**
+**injection-canary suite, live-verified on the running Open stack.** Branch
+`step-14c-web-search-pii-job`, 10 commits, 415 tests (was 372). A `searxng` container joins
+the Open stack only (G4 held — internal network, no host port, Private compose untouched
+across the whole branch); `web_search` is wired as a job-runner-only executor_type, absent
+from every tool registry so no chat model can select it. `run_job` now dispatches on a
+`job_type` field to a **second hardcoded branch** — the 15e narrow-scope invariant holds:
+nothing reads a job's `steps` at runtime (final review verified), and no LLM picks a tool.
+Live: 3 runs, 8 sourced entries, no duplicates, rotating query, all evidence records valid,
+`pda-litellm` kept its 4 provider keys through every rebuild.
+
+**The lesson worth carrying: all three real defects this slice produced were found by
+review, not by tests, and all three were in the plan as written.** (1) `evidence._SENSITIVE_RE`
+matches `\bPII\b` case-insensitively across every top-level string field, so the original
+`pii-research` job id made an honest extraction failure *unrecordable* — fixed by renaming,
+not by relaxing a governance regex. (2) An intermediate "fail open to empty string" turned an
+append into a full overwrite and silently destroyed a real Latin-1 note; the asymmetry to
+remember is that reading a str can fail on *decoding* while writing one cannot fail on
+*encoding*, so an unreadable note is always still writable and no write-side error catches it
+— now refuse-and-queue. (3) `build_pii_prompt` let untrusted snippet text carrying `"""`
+close its own data fence; the canary suite caught it, and the fix went into the source.
+Every canary was mutation-tested, including breaking the leak-detection helper three
+different ways.
+
+**Open for owner decision (none blocking, all recorded in PROGRESS.md's 2026-09-04 entry):**
+the job is committed `approved: false` — there is no approval API, so that YAML edit *is*
+the approval act and it is yours; no n8n scheduler ships, so the DoD's "randomized time"
+clause is unmet and the job is manual-trigger-only; `run_job` does not enforce an envelope's
+`workshop` field, so G4 currently holds by a mount omission rather than a code check; the
+vault note is created `root:root` so Obsidian can read but not save it without a one-time
+`sudo chown`; and 12 legacy WF-001/002/005 evidence fixtures still fail validation, which
+makes a whole-directory `evidence.py` run exit 1.
+
 **Merged to `main` 2026-09-03 (PR #1, commit `7424f69`) — and along the way, found and fixed**
 **a real month-long CI gap, not just landed the code below.** PR #1's own CI came back
 FAILURE on both runs despite its body's local claim of "371/371 passing" —

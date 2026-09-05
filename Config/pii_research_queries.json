@@ -1,0 +1,12 @@
+{
+    "_comment": "Step 14c: rotating seed queries for the data-broker-research job. Queries are FIXED here, never chosen by an LLM -- run_job reads next_index, uses that query, then advances and wraps. Deterministic and auditable (M7). CAUTION: the chosen query string is copied verbatim into each run's evidence-record `notes` field, which evidence._sensitive_errors scans -- a query containing a standalone 'PII', 'password', 'secret', 'api key', or 'access token' will make every record it touches fail validation. Keep query wording clear of those markers.",
+    "queries": [
+        "data broker opt out list",
+        "people search site remove personal information",
+        "companies that sell personal data to third parties",
+        "background check site data removal request",
+        "marketing data broker personal information collection",
+        "consumer data aggregator privacy opt out"
+    ],
+    "next_index": 0
+}

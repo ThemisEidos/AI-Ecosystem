@@ -776,3 +776,109 @@ def test_file_edit_refuses_non_list_write_scope():
 def test_file_edit_wired_in_handlers_and_run():
     assert "file_edit" in executor.WIRED_EXECUTOR_TYPES
     assert executor._HANDLERS["file_edit"] is not None
+
+
+# ── web_search (Step 14c) ────────────────────────────────────────────────
+class _FakeSearxResponse:
+    def __init__(self, payload, status=200):
+        self._payload = payload
+        self.status_code = status
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            raise RuntimeError(f"HTTP {self.status_code}")
+
+    def json(self):
+        if isinstance(self._payload, Exception):
+            raise self._payload
+        return self._payload
+
+
+def _fake_searx_client(response):
+    class _Client:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def get(self, url, params=None):
+            _Client.last_url = url
+            _Client.last_params = params
+            return response
+
+    return _Client
+
+
+def test_web_search_returns_normalized_results(monkeypatch):
+    payload = {"results": [
+        {"title": "Broker A", "url": "https://a.example", "content": "sells data"},
+        {"title": "Broker B", "url": "https://b.example", "content": "collects data"},
+    ]}
+    client = _fake_searx_client(_FakeSearxResponse(payload))
+    monkeypatch.setattr(executor.httpx, "AsyncClient", lambda **kw: client())
+
+    results = asyncio.run(executor._run_web_search("data broker opt out"))
+
+    assert results == [
+        {"title": "Broker A", "url": "https://a.example", "snippet": "sells data"},
+        {"title": "Broker B", "url": "https://b.example", "snippet": "collects data"},
+    ]
+    assert client.last_params["format"] == "json"
+    assert client.last_params["q"] == "data broker opt out"
+
+
+def test_web_search_caps_at_max_results(monkeypatch):
+    payload = {"results": [
+        {"title": f"R{i}", "url": f"https://{i}.example", "content": "x"}
+        for i in range(25)
+    ]}
+    monkeypatch.setattr(
+        executor.httpx, "AsyncClient",
+        lambda **kw: _fake_searx_client(_FakeSearxResponse(payload))(),
+    )
+    results = asyncio.run(executor._run_web_search("q", max_results=3))
+    assert len(results) == 3
+
+
+def test_web_search_returns_empty_list_when_no_results(monkeypatch):
+    monkeypatch.setattr(
+        executor.httpx, "AsyncClient",
+        lambda **kw: _fake_searx_client(_FakeSearxResponse({"results": []}))(),
+    )
+    assert asyncio.run(executor._run_web_search("q")) == []
+
+
+def test_web_search_raises_execution_error_on_http_failure(monkeypatch):
+    monkeypatch.setattr(
+        executor.httpx, "AsyncClient",
+        lambda **kw: _fake_searx_client(_FakeSearxResponse({}, status=502))(),
+    )
+    with pytest.raises(executor.ExecutionError, match="web_search"):
+        asyncio.run(executor._run_web_search("q"))
+
+
+def test_web_search_raises_execution_error_on_malformed_json(monkeypatch):
+    monkeypatch.setattr(
+        executor.httpx, "AsyncClient",
+        lambda **kw: _fake_searx_client(_FakeSearxResponse(ValueError("bad json")))(),
+    )
+    with pytest.raises(executor.ExecutionError, match="web_search"):
+        asyncio.run(executor._run_web_search("q"))
+
+
+def test_web_search_skips_results_missing_a_url(monkeypatch):
+    payload = {"results": [
+        {"title": "No URL", "content": "x"},
+        {"title": "Good", "url": "https://good.example", "content": "y"},
+    ]}
+    monkeypatch.setattr(
+        executor.httpx, "AsyncClient",
+        lambda **kw: _fake_searx_client(_FakeSearxResponse(payload))(),
+    )
+    results = asyncio.run(executor._run_web_search("q"))
+    assert results == [{"title": "Good", "url": "https://good.example", "snippet": "y"}]
+
+
+def test_web_search_is_wired_in_handlers():
+    assert "web_search" in executor.WIRED_EXECUTOR_TYPES

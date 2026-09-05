@@ -77,6 +77,13 @@ _MAX_NOTE_CONTENT_BYTES = 65_536
 _MAX_FETCH_BYTES = 262_144  # 256 KB of raw HTML before extraction
 _FETCH_TIMEOUT   = 20  # seconds — a research fetch should fail fast, not hang a turn
 
+# SearXNG metasearch (Step 14c, Open stack only per G4). Internal container DNS —
+# never published to the host. Job-runner-only: jobs.py calls _run_web_search
+# directly; no registry tool exposes it to the chat model.
+_SEARXNG_URL       = os.environ.get("SEARXNG_URL", "http://searxng:8080")
+_SEARXNG_TIMEOUT   = 15   # seconds — a metasearch call must fail fast, not hang a run
+_MAX_SEARCH_RESULTS = 10  # cap on results returned to a caller
+
 _MAX_FABRIC_INPUT_BYTES = 65_536  # same cap as the note/DMZ writers
 _MAX_FILE_EDIT_CONTENT_BYTES = 262_144  # 256 KB — a job artifact, not a chat draft
 
@@ -511,6 +518,45 @@ async def _run_browser(args: dict) -> str:
     return f"[Browser Research — {url}]\n{text}"
 
 
+async def _run_web_search(query: str, max_results: int = _MAX_SEARCH_RESULTS) -> list:
+    """SearXNG metasearch (Step 14c, Open stack only per G4). Returns a list of
+    {title, url, snippet} dicts, capped at max_results.
+
+    Job-runner-only, exactly like _run_file_edit: jobs.py's pii_research branch
+    calls this directly. It is deliberately NOT in any tool registry YAML, so the
+    chat model can neither see nor select it.
+
+    Every field returned here is UNTRUSTED remote text. Callers must place it in a
+    quoted data block, never in the instruction portion of a prompt — the invariant
+    test_injection_canaries.py enforces."""
+    q = str(query).strip()
+    if not q:
+        raise ExecutionError("web_search: empty query")
+
+    try:
+        async with httpx.AsyncClient(timeout=_SEARXNG_TIMEOUT) as client:
+            resp = await client.get(
+                f"{_SEARXNG_URL}/search",
+                params={"q": q, "format": "json"},
+            )
+            resp.raise_for_status()
+            payload = resp.json()
+    except Exception as exc:
+        raise ExecutionError(f"web_search failed for '{q[:80]}' — {exc}")
+
+    results = []
+    for item in (payload.get("results") or [])[: max(0, int(max_results))]:
+        url = str(item.get("url", "")).strip()
+        if not url:
+            continue
+        results.append({
+            "title":   str(item.get("title", "")).strip()[:300],
+            "url":     url,
+            "snippet": str(item.get("content", "")).strip()[:1000],
+        })
+    return results
+
+
 async def _run_workflow_engine(tool: dict, args: dict, workshop: str) -> str:
     """n8n workflow trigger (Open only — no reachable instance from
     Private). allowed_workflows maps a workflow id to a webhook path; per
@@ -939,6 +985,13 @@ _HANDLERS = {
     # dispatch table stays the single source of truth for "what executor.run()
     # can execute," matching every other handler's registration shape.
     "file_edit":      lambda tool, message, workshop, args: _run_file_edit(tool, message, workshop, args),
+    # web_search, like file_edit, is intentionally NOT referenced by any tool
+    # registry YAML — Step 14c's pii_research job (jobs.py) calls
+    # _run_web_search directly. It gets a _HANDLERS entry so the dispatch table
+    # stays the single source of truth for "what executor.run() can execute."
+    "web_search":     lambda tool, message, workshop, args: _run_web_search(
+        str(args.get("query", "")), int(args.get("max_results", _MAX_SEARCH_RESULTS))
+    ),
 }
 
 # Every executor_type run() actually dispatches to — derived from _HANDLERS so
