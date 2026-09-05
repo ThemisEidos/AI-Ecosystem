@@ -419,7 +419,7 @@ def test_next_seed_query_raises_when_file_missing(tmp_path):
 def test_existing_entry_sites_extracts_recorded_names(tmp_path):
     note = tmp_path / "note.md"
     note.write_text(
-        "# PII Data Brokers\n\n"
+        "# Data Brokers\n\n"
         "**Site:** Acme Data\n**Collects:** emails\n**Source:** https://a.example\n\n"
         "**Site:** Beta Corp\n**Collects:** addresses\n**Source:** https://b.example\n",
         encoding="utf-8",
@@ -464,7 +464,7 @@ Expected: FAIL — `AttributeError: module 'jobs' has no attribute 'next_seed_qu
 ```bash
 cat > /home/zb6/Documents/Projects/01_AI_Ecosystem/Config/pii_research_queries.json <<'EOF'
 {
-    "_comment": "Step 14c: rotating seed queries for the pii-research job. Queries are FIXED here, never chosen by an LLM -- run_job reads next_index, uses that query, then advances and wraps. Deterministic and auditable (M7).",
+    "_comment": "Step 14c: rotating seed queries for the data-broker-research job. Queries are FIXED here, never chosen by an LLM -- run_job reads next_index, uses that query, then advances and wraps. Deterministic and auditable (M7). CAUTION: the chosen query string is copied verbatim into each run's evidence-record `notes` field, which evidence._sensitive_errors scans -- a query containing a standalone 'PII', 'password', 'secret', 'api key', or 'access token' will make every record it touches fail validation. Keep query wording clear of those markers.",
     "queries": [
         "data broker opt out list",
         "people search site remove personal information",
@@ -593,13 +593,13 @@ Append to `cooper-core/test_jobs.py`:
 ```python
 # ── pii_research job branch (Step 14c) ───────────────────────────────────
 PII_JOB = {
-    "id": "pii-research",
+    "id": "data-broker-research",
     "job_type": "pii_research",
     "workshop": "open",
     "schedule_hint": "daily, randomized 00:00-06:00",
     "steps": ["web_search", "pii_extract", "note_append"],
-    "read_scope": ["Obsidian Vault/02_Projects/opt-out/PII-Data-Brokers.md"],
-    "write_scope": ["Obsidian Vault/02_Projects/opt-out/PII-Data-Brokers.md"],
+    "read_scope": ["Obsidian Vault/02_Projects/opt-out/Data-Brokers.md"],
+    "write_scope": ["Obsidian Vault/02_Projects/opt-out/Data-Brokers.md"],
     "quota": {"queries_per_run": 1, "entries_per_run": 5},
     "permission_level": 3,
     "approved": True,
@@ -636,7 +636,7 @@ def _setup_pii(tmp_path, monkeypatch, *, search_results, extracted, note_text=No
     extract = _fake_extract(extracted)
     monkeypatch.setattr(jobs.executor, "_run_web_search", search)
     monkeypatch.setattr(jobs, "extract_pii_entries", extract)
-    note = tmp_path / "Obsidian Vault" / "02_Projects" / "opt-out" / "PII-Data-Brokers.md"
+    note = tmp_path / "Obsidian Vault" / "02_Projects" / "opt-out" / "Data-Brokers.md"
     if note_text is not None:
         note.parent.mkdir(parents=True, exist_ok=True)
         note.write_text(note_text, encoding="utf-8")
@@ -653,7 +653,7 @@ def test_run_job_pii_research_appends_entry_and_writes_evidence(conn, tmp_path, 
     job_entry = _approved_pii_job()
     monkeypatch.setattr(jobs, "load_registry", lambda path=None: {"jobs": [job_entry]})
 
-    result = asyncio.run(jobs.run_job("pii-research", conn, **_RUN_JOB_KWARGS))
+    result = asyncio.run(jobs.run_job("data-broker-research", conn, **_RUN_JOB_KWARGS))
 
     assert result["status"] == "completed"
     assert result["entries_added"] == 1
@@ -666,7 +666,7 @@ def test_run_job_pii_research_appends_entry_and_writes_evidence(conn, tmp_path, 
     assert "**Source:** https://a.example" in text
 
     record = json.loads(Path(result["evidence_path"]).read_text(encoding="utf-8"))
-    assert record["job_id"] == "pii-research"
+    assert record["job_id"] == "data-broker-research"
     assert record["run_id"] == result["run_id"]
     assert evidence.validate_completion(record, []) == []
 
@@ -680,7 +680,7 @@ def test_run_job_pii_research_passes_existing_sites_for_dedupe(conn, tmp_path, m
     )
     monkeypatch.setattr(jobs, "load_registry", lambda path=None: {"jobs": [_approved_pii_job()]})
 
-    asyncio.run(jobs.run_job("pii-research", conn, **_RUN_JOB_KWARGS))
+    asyncio.run(jobs.run_job("data-broker-research", conn, **_RUN_JOB_KWARGS))
 
     assert extract.existing_sites == ["Acme Data"]
 
@@ -693,7 +693,7 @@ def test_run_job_pii_research_zero_findings_is_a_successful_run(conn, tmp_path, 
     )
     monkeypatch.setattr(jobs, "load_registry", lambda path=None: {"jobs": [_approved_pii_job()]})
 
-    result = asyncio.run(jobs.run_job("pii-research", conn, **_RUN_JOB_KWARGS))
+    result = asyncio.run(jobs.run_job("data-broker-research", conn, **_RUN_JOB_KWARGS))
 
     assert result["status"] == "completed"
     assert result["entries_added"] == 0
@@ -718,7 +718,7 @@ def test_run_job_pii_research_caps_entries_at_quota(conn, tmp_path, monkeypatch)
             quota={"queries_per_run": 1, "entries_per_run": 3})]},
     )
 
-    result = asyncio.run(jobs.run_job("pii-research", conn, **_RUN_JOB_KWARGS))
+    result = asyncio.run(jobs.run_job("data-broker-research", conn, **_RUN_JOB_KWARGS))
 
     assert result["entries_added"] == 3
     assert note.read_text(encoding="utf-8").count("**Site:**") == 3
@@ -734,7 +734,7 @@ def test_run_job_pii_research_queues_exception_for_out_of_scope_write(conn, tmp_
     job_entry = _approved_pii_job(write_scope=["State/SomewhereElse.md"])
     monkeypatch.setattr(jobs, "load_registry", lambda path=None: {"jobs": [job_entry]})
 
-    result = asyncio.run(jobs.run_job("pii-research", conn, **_RUN_JOB_KWARGS))
+    result = asyncio.run(jobs.run_job("data-broker-research", conn, **_RUN_JOB_KWARGS))
 
     assert result["status"] == "completed"
     assert result["exceptions_raised"] == 1
@@ -750,7 +750,7 @@ def test_run_job_pii_research_surfaces_search_failure_without_crashing(conn, tmp
     monkeypatch.setattr(jobs.executor, "_run_web_search", _boom)
     monkeypatch.setattr(jobs, "load_registry", lambda path=None: {"jobs": [_approved_pii_job()]})
 
-    result = asyncio.run(jobs.run_job("pii-research", conn, **_RUN_JOB_KWARGS))
+    result = asyncio.run(jobs.run_job("data-broker-research", conn, **_RUN_JOB_KWARGS))
 
     assert result["status"] == "failed"
     assert "searxng unreachable" in result["reason"]
@@ -1054,7 +1054,7 @@ async def _run_pii_research(
     entries_per_run = int(quota.get("entries_per_run", 5))
     read_scope = job_entry.get("read_scope") or []
     write_scope = job_entry.get("write_scope") or []
-    note_rel_path = write_scope[0] if write_scope else (read_scope[0] if read_scope else None)
+    note_rel_path = read_scope[0] if read_scope else (write_scope[0] if write_scope else None)
     note_path = (_REPO_ROOT / note_rel_path) if note_rel_path else None
     today = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
 
@@ -1084,7 +1084,7 @@ async def _run_pii_research(
     exceptions_raised = 0
     write_note = ""
     if entries and note_path is not None:
-        header = "" if note_path.exists() else "# PII Data Brokers\n\n"
+        header = "" if note_path.exists() else "# Data Brokers\n\n"
         existing_text = note_path.read_text(encoding="utf-8") if note_path.exists() else ""
         updated = existing_text + header + "\n" + format_pii_entries(entries, today)
         try:
@@ -1147,13 +1147,13 @@ Because `_run_csv_link_check` keeps its own `load_registry`/`verify_job` calls, 
 Edit `Config/jobs_registry.yaml`: add `job_type: csv_link_check` to the existing `link-checker` entry (directly under its `id:`), and append the new job. **The existing `envelope_hash` must be recomputed** — adding `job_type` changes the hashed content.
 
 ```yaml
-  - id: pii-research
+  - id: data-broker-research
     job_type: pii_research
     workshop: open
     schedule_hint: "daily, randomized 00:00-06:00"
     steps: [web_search, pii_extract, note_append]
-    read_scope: ["Obsidian Vault/02_Projects/opt-out/PII-Data-Brokers.md"]
-    write_scope: ["Obsidian Vault/02_Projects/opt-out/PII-Data-Brokers.md"]
+    read_scope: ["Obsidian Vault/02_Projects/opt-out/Data-Brokers.md"]
+    write_scope: ["Obsidian Vault/02_Projects/opt-out/Data-Brokers.md"]
     quota:
       queries_per_run: 1
       entries_per_run: 5
@@ -1446,7 +1446,7 @@ git commit -m "test(security): add injection canary suite for web_search/browser
 
 **Files:**
 - Modify: `Config/jobs_registry.yaml` (owner approval — flip `approved: true` and re-pin the hash)
-- Create: `Obsidian Vault/02_Projects/opt-out/PII-Data-Brokers.md` (created by the first run; gitignored via `Obsidian Vault/02_Projects/opt-out/`)
+- Create: `Obsidian Vault/02_Projects/opt-out/Data-Brokers.md` (created by the first run; gitignored via `Obsidian Vault/02_Projects/opt-out/`)
 
 **Interfaces:**
 - Consumes: everything from Tasks 1-5.
@@ -1483,7 +1483,7 @@ Expected: empty output, non-zero exit — Private has no `SEARXNG_URL`. If it pr
 
 - [ ] **Step 4: Owner-approve the job envelope**
 
-Flip `approved: true` on the `pii-research` entry in `Config/jobs_registry.yaml`, then re-pin the hash:
+Flip `approved: true` on the `data-broker-research` entry in `Config/jobs_registry.yaml`, then re-pin the hash:
 
 ```bash
 cd /home/zb6/Documents/Projects/01_AI_Ecosystem/cooper-core
@@ -1492,7 +1492,7 @@ import yaml, jobs
 p = jobs._REGISTRY_PATH
 reg = yaml.safe_load(p.read_text())
 for e in reg['jobs']:
-    if e['id'] == 'pii-research':
+    if e['id'] == 'data-broker-research':
         e['approved'] = True
         e['envelope_hash'] = jobs.compute_envelope_hash(e)
         print('approved, hash:', e['envelope_hash'])
@@ -1505,7 +1505,7 @@ The registry is read from disk, but `Config/jobs_registry.yaml` is NOT baked int
 ```bash
 cd /home/zb6/Documents/Projects/01_AI_Ecosystem
 docker cp Config/jobs_registry.yaml pda-open-cooper-core:/app/Config/jobs_registry.yaml
-docker exec pda-open-cooper-core cat /app/Config/jobs_registry.yaml | grep -A3 'id: pii-research'
+docker exec pda-open-cooper-core cat /app/Config/jobs_registry.yaml | grep -A3 'id: data-broker-research'
 docker cp Config/pii_research_queries.json pda-open-cooper-core:/app/Config/pii_research_queries.json
 ```
 
@@ -1515,14 +1515,14 @@ Read the live key off the running container — never from the `.env` file (Gotc
 
 ```bash
 KEY=$(docker inspect pda-open-cooper-core --format '{{range .Config.Env}}{{println .}}{{end}}' | grep '^COOPER_API_KEYS=' | cut -d= -f2 | cut -d, -f1)
-curl -s -X POST http://localhost:8001/jobs/run/pii-research -H "Authorization: Bearer $KEY" | tee /tmp/pii-run-1.json
+curl -s -X POST http://localhost:8001/jobs/run/data-broker-research -H "Authorization: Bearer $KEY" | tee /tmp/pii-run-1.json
 ```
 Expected JSON: `"status":"completed"`, a real `"query"`, `"results_found"` ≥ 1, `"entries_added"` ≥ 1, and an `evidence_path`.
 
 - [ ] **Step 6: Confirm the vault note gained real, sourced entries**
 
 ```bash
-docker exec pda-open-cooper-core cat "/app/Obsidian Vault/02_Projects/opt-out/PII-Data-Brokers.md"
+docker exec pda-open-cooper-core cat "/app/Obsidian Vault/02_Projects/opt-out/Data-Brokers.md"
 ```
 Expected: ≥1 block with `**Site:**`, `**Collects:**`, a real `**Source:** https://...`, and `**Found:**`. **This is the DoD line** — entries must carry source links.
 
@@ -1530,8 +1530,8 @@ Expected: ≥1 block with `**Site:**`, `**Collects:**`, a real `**Source:** http
 
 ```bash
 KEY=$(docker inspect pda-open-cooper-core --format '{{range .Config.Env}}{{println .}}{{end}}' | grep '^COOPER_API_KEYS=' | cut -d= -f2 | cut -d, -f1)
-curl -s -X POST http://localhost:8001/jobs/run/pii-research -H "Authorization: Bearer $KEY" | tee /tmp/pii-run-2.json
-docker exec pda-open-cooper-core cat "/app/Obsidian Vault/02_Projects/opt-out/PII-Data-Brokers.md" | grep -c '\*\*Site:\*\*'
+curl -s -X POST http://localhost:8001/jobs/run/data-broker-research -H "Authorization: Bearer $KEY" | tee /tmp/pii-run-2.json
+docker exec pda-open-cooper-core cat "/app/Obsidian Vault/02_Projects/opt-out/Data-Brokers.md" | grep -c '\*\*Site:\*\*'
 docker exec pda-open-cooper-core grep -o '"next_index": [0-9]*' /app/Config/pii_research_queries.json
 ```
 Expected: run 2's `query` differs from run 1's (rotation advanced); no site name appears twice in the note; `next_index` advanced.
@@ -1552,7 +1552,7 @@ Append a dated entry to `PROGRESS.md`'s decision log and update `Obsidian Vault/
 ```bash
 cd /home/zb6/Documents/Projects/01_AI_Ecosystem
 git add Config/jobs_registry.yaml PROGRESS.md "Obsidian Vault/brain/North Star.md"
-git commit -m "docs: 14c live-verified -- pii-research job runs end-to-end on the Open stack"
+git commit -m "docs: 14c live-verified -- data-broker-research job runs end-to-end on the Open stack"
 ```
 
 ---
