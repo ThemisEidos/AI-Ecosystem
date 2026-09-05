@@ -63,7 +63,7 @@ Execution order: 15a → 14a(rev) → 15c → 14b → 15d → 15e → 14c(+15f-i
 - [x] **14c — SearXNG + web_search + data-broker job** (+15f-i injection canaries) ✓ 2026-09-04
 - [ ] **14d — Bounded loop + opt-out documenter job**
 - [ ] **14e — Repo steward, draft-and-notify**
-- [ ] **15f — Robustness: retry policy implemented, chaos tests** (M8→5)
+- [~] **15f — Robustness** (M8→5): (i) injection canaries ✓ 2026-09-04 · (ii) retry policy implemented + wired ✓ 2026-09-05 · (iii) chaos tests still open
 - [ ] **15g — Governed learning breadth** (M5→5; prompt-diff self-optimization, outcome-weighted skill scores)
 - [ ] **15h — Session plans** (M2→5; gated on G3)
 - [ ] **15i — COOPER Cockpit: custom UI** (chat with native approve/deny buttons, Obsidian-brain graph view, workflow monitor, metrics dashboard, settings; incremental — monitor page after 14b, dashboard after 15d; Open WebUI retires only after Cockpit chat parity is browser-verified)
@@ -1520,3 +1520,45 @@ Governance gates from the Step 15 spec §6 — each blocks only its named slice:
     `quota.queries_per_run` is declared but not enforced (one query per run is hardcoded).
     Also surfaced, pre-existing and unrelated: 12 legacy WF-001/002/005 evidence fixtures
     fail validation, so a whole-directory `evidence.py` run exits 1.
+
+- **2026-09-05 · 15f(ii) shipped: PDA_RetryPolicy.json implemented and wired — per-stage
+  timeout/retry budgets, live-verified against real inference.** Autonomous session while
+  the owner was away. 451 tests (was 426); every push green in CI.
+  - **What was actually true before this** (verified by grep, not assumed): every LLM call
+    site used a hardcoded client timeout — 120s for Ollama, 60s for OpenAI — and there was
+    **no retry logic anywhere in cooper-core**. A chain of three calls could burn ~360s
+    before failing, and a single transient 429/503 killed the turn. `PDA_RetryPolicy.json`
+    had sat unread since the v1 era.
+  - `cooper-core/retry_policy.py` implements it: `budget_for(role) -> Budget` plus an async
+    `call_with_budget()` applying the timeout **per attempt**, retrying bounded transient
+    failures with exponential backoff, and refusing to retry anything matching the policy's
+    existing `non_retryable_reasons` (a governance refusal is not worth hammering N more
+    times). Retries are capped at 5 by construction, and `Budget.worst_case_seconds()` makes
+    a stage's ceiling computable *before* it runs.
+  - **The policy file predated v2** — its `workers` map names retired v1 PowerShell workers.
+    Rather than add a second policy file (repo rule: implement the existing ones), a `roles`
+    section was added keyed off the same names `PDA_ModelRouting.json` already uses; the
+    legacy `workers`/`dead_letter_folder` keys are left intact for the `Scripts/` that still
+    read them. A test asserts every routed role has a declared budget, so the policy cannot
+    silently drift out of coverage as roles are added.
+  - **Wired into every non-streaming call site:** `review.review` and `council._member_verdict`
+    (reviewer, 60s×2), `archivist._extract` (30s×2), `proposer._extract_draft` and
+    `jobs.extract_pii_entries` (drafter, 90s×3 — cloud 429s are the common transient there),
+    `planner._extract_fields` (120s×2).
+  - **The governance point, not just the latency one:** `review` and `council` both fail open
+    by design, so before this a transient blip silently became `verdict="pass"` — an approval
+    nobody gave, and for council a seeded-flaw objection that never reached the owner. It now
+    takes two consecutive failures to produce that. Fail-open itself is unchanged and still
+    correct; a blip is simply no longer mistaken for a broken member.
+  - **Live-verified against real inference** (host Ollama, `COOPER-Private`, no container
+    touched): a real reviewer call returned a genuine verdict in 13.8s against a 60s budget
+    (~4× headroom, so the budgets are not too tight for local gemma); a real council member
+    verdict in 4.2s; and an unreachable backend failed open in **4.0s against a 4s worst-case
+    budget** — the Step 11 hang class dying under measurement rather than in principle.
+  - **Still open in 15f:** the main chat path (`decision.route_turn` / `route_turn_stream`)
+    is deliberately unwired — it streams, so it needs different treatment than `wait_for`
+    around a single awaitable. 15f(iii) chaos tests remain untouched.
+  - Also fixed: wiring the budgets tripled the suite runtime (2.4s → 7.7s) because every
+    failure-path test began paying real backoff sleeps. An autouse `conftest.py` fixture now
+    zeroes **only the delay** — timeouts, retry counts and the retryable decision are
+    untouched, so the behaviour under test is still real. Suite back to 2.55s.
