@@ -7,10 +7,25 @@
 #
 # An item inherits its feed's category -- no model classifies or routes.
 # `category` values are fixed; adding one means adding a section to the reel.
+#
+# VERIFY FROM INSIDE THE CONTAINER, not the host. Both CISA XML feeds were
+# verified working from the dev machine and then 403'd in production on the
+# first live run: CISA's WAF allows the static /feeds/*.json path but blocks the
+# dynamic .xml views for the container's fingerprint, while the same request
+# from the host succeeds. A source list verified in the wrong environment is a
+# source list that has not been verified.
+#   docker exec pda-open-cooper-core python -c "...executor._run_rss_fetch(url)"
+
 sources:
+# Replaced CISA All Advisories (403 in-container, see header). CERT/CC is the
+# closest analogue -- authoritative, numbered vulnerability advisories -- and
+# SANS ISC adds daily practitioner triage.
 - category: cyber
-  name: CISA All Advisories
-  url: https://www.cisa.gov/cybersecurity-advisories/all.xml
+  name: CERT/CC Vulnerability Notes
+  url: https://www.kb.cert.org/vuls/atomfeed/
+- category: cyber
+  name: SANS Internet Storm Center
+  url: https://isc.sans.edu/rssfeed_full.xml
 - category: cyber
   name: Krebs on Security
   url: https://krebsonsecurity.com/feed/
@@ -27,9 +42,10 @@ sources:
   name: SecurityWeek
   url: https://www.securityweek.com/feed/
 
+# Replaced CISA ICS Advisories (403 in-container, see header).
 - category: critical_infrastructure
-  name: CISA ICS Advisories
-  url: https://www.cisa.gov/cybersecurity-advisories/ics-advisories.xml
+  name: SecurityWeek ICS/OT
+  url: https://www.securityweek.com/category/ics-ot/feed/
 - category: critical_infrastructure
   name: Utility Dive
   url: https://www.utilitydive.com/feeds/news/

@@ -1509,3 +1509,20 @@ def test_news_reel_steps_list_is_never_dispatched_on(conn, tmp_path, monkeypatch
     _setup_news(tmp_path, monkeypatch, entry=entry)
     result = asyncio.run(jobs.run_job("news-reel", conn, **_RUN_JOB_KWARGS))
     assert result["status"] == "completed"
+
+
+def test_render_reel_separates_consecutive_stories():
+    # Live run 2026-09-06 produced "<url>- **Next story**" on one line: the
+    # bullet separator was missing, so every story after the first ran into its
+    # predecessor's URL. Markdown rendered it as one mangled bullet.
+    body = jobs.render_reel(
+        selections={"cyber": [
+            {"title": "First", "why": "w1", "url": "https://x.test/1"},
+            {"title": "Second", "why": "w2", "url": "https://x.test/2"},
+        ]},
+        failures=[], counts={"cyber": 2}, generated="2026-09-06",
+    )
+    assert "<https://x.test/1>- **Second**" not in body
+    assert "\n- **Second**" in body, "each story must start its own bullet line"
+    for line in body.splitlines():
+        assert not (line.startswith("  <http") and "**" in line), line

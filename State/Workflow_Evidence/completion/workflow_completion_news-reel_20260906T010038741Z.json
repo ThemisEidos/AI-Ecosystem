@@ -1,0 +1,36 @@
+{
+    "workflow_id": "news-reel",
+    "workflow_name": "news-reel",
+    "execution_id": "20260906T010038741Z",
+    "status": "completed",
+    "completion_time": "2026-09-06T01:00:38.741328Z",
+    "workshop_id": "open",
+    "workshop_name": "Open Workshop",
+    "approval_id": "",
+    "artifact_paths": [
+        "Obsidian Vault/00_Inbox/News-Reel-2026-09-06-cd34debd.md"
+    ],
+    "review_status": "unknown",
+    "user_accepted": false,
+    "notes": "run_id=d8d695b21c2b: fetched 26 source(s), 146 item(s) after dedupe, selected 25 story(ies) across 5 categor(ies)",
+    "job_id": "news-reel",
+    "envelope_hash": "3788eda907d67d8aa31c0a4de7417c72553dd8ffa33186dbc0ce6b6843d54115",
+    "run_id": "d8d695b21c2b",
+    "verdicts": [
+        {
+            "member": "openai",
+            "verdict": "pass",
+            "reason": "normal successful completion"
+        },
+        {
+            "member": "claude",
+            "verdict": "pass",
+            "reason": "successful fetch and story selection"
+        },
+        {
+            "member": "gemini",
+            "verdict": "pass",
+            "reason": "Normal successful completion of news fetching and selection."
+        }
+    ]
+}

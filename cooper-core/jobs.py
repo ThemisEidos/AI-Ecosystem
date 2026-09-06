@@ -709,12 +709,16 @@ def render_reel(selections: dict, failures: List[tuple], counts: dict, generated
             )
             continue
         for s in stories:
-            parts.append(f"- **{s['title']}**")
+            # Each story is assembled then terminated with a newline. Appending
+            # "" as a separator was a no-op because parts are joined with "",
+            # so every story ran into its predecessor's URL line and markdown
+            # rendered them as one mangled bullet (seen in the first live run).
+            block = [f"- **{s['title']}**"]
             if s.get("why"):
-                parts.append(f"  \n  {s['why']}")
+                block.append(f"  \n  {s['why']}")
             if s.get("url"):
-                parts.append(f"  \n  <{s['url']}>")
-            parts.append("")
+                block.append(f"  \n  <{s['url']}>")
+            parts.append("".join(block) + "\n")
     parts.append("\n---\n\n## Provenance\n")
     total = sum(counts.values()) if counts else 0
     parts.append(f"- {total} candidate item(s) after dedupe, across "
