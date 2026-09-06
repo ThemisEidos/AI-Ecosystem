@@ -1260,3 +1260,252 @@ def test_task_filename_discriminator_prevents_same_second_collisions():
     b = jobs.task_filename("Same objective", when=when, discriminator="bbbb2222")
     assert a != b
     assert re.fullmatch(r"TASK-\d{8}-\d{6}-[a-z0-9-]+\.md", a), a
+
+
+# --- Step 14d (re-scoped): News Reel ------------------------------------------
+
+def test_load_news_sources_groups_by_category():
+    sources = jobs.load_news_sources()
+    assert sources, "source config is empty"
+    cats = {s["category"] for s in sources}
+    assert cats == {"cyber", "critical_infrastructure", "national_security",
+                    "election", "weather_hazard"}
+    for s in sources:
+        assert s["url"].startswith("https://"), s
+
+
+def test_dedupe_items_collapses_same_url():
+    items = [
+        {"title": "A", "url": "https://x.test/1", "category": "cyber", "source": "s1"},
+        {"title": "A different headline", "url": "https://x.test/1", "category": "cyber", "source": "s2"},
+        {"title": "B", "url": "https://x.test/2", "category": "cyber", "source": "s1"},
+    ]
+    assert len(jobs.dedupe_items(items)) == 2
+
+
+def test_dedupe_items_collapses_near_identical_titles():
+    items = [
+        {"title": "Major Breach At Acme Corp", "url": "https://a.test/1", "category": "cyber", "source": "s1"},
+        {"title": "major breach at acme corp!", "url": "https://b.test/9", "category": "cyber", "source": "s2"},
+    ]
+    assert len(jobs.dedupe_items(items)) == 1
+
+
+def test_dedupe_items_keeps_same_title_in_different_categories():
+    # A story can legitimately appear in two categories; collapsing across them
+    # would silently empty a section.
+    items = [
+        {"title": "Grid attack", "url": "https://a.test/1", "category": "cyber", "source": "s1"},
+        {"title": "Grid attack", "url": "https://b.test/2", "category": "critical_infrastructure", "source": "s2"},
+    ]
+    assert len(jobs.dedupe_items(items)) == 2
+
+
+def test_item_is_recent_uses_the_window():
+    now = datetime.datetime(2026, 9, 5, 12, 0, tzinfo=datetime.timezone.utc)
+    fresh = "Fri, 05 Sep 2026 06:00:00 GMT"
+    stale = "Mon, 01 Sep 2026 06:00:00 GMT"
+    assert jobs.item_is_recent(fresh, window_hours=48, now=now)
+    assert not jobs.item_is_recent(stale, window_hours=48, now=now)
+
+
+def test_item_with_unparseable_date_is_kept():
+    # Dropping undated items would silently empty categories whose feeds omit
+    # pubDate. Keeping them is the safer failure: a human sees the story.
+    now = datetime.datetime(2026, 9, 5, 12, 0, tzinfo=datetime.timezone.utc)
+    assert jobs.item_is_recent("not a date", window_hours=48, now=now)
+    assert jobs.item_is_recent("", window_hours=48, now=now)
+
+
+def test_parse_reel_selection_rejects_non_dict():
+    for payload in ("null", '"str"', "[1,2]", "7"):
+        with pytest.raises(jobs.JobError):
+            jobs.parse_reel_selection(payload)
+
+
+def test_parse_reel_selection_coerces_and_filters():
+    out = jobs.parse_reel_selection(
+        '{"stories": [{"title": "T", "why": "W", "url": "https://x.test/1"}, '
+        '{"title": "", "why": "ignored"}, "not an object"]}'
+    )
+    assert len(out) == 1
+    assert out[0]["title"] == "T"
+
+
+def test_build_reel_prompt_neutralizes_the_fence():
+    hostile = [{"title": 'Story with """ fence', "url": "https://x.test/1",
+                "summary": 'and """ again', "source": "s", "published": ""}]
+    prompt = jobs.build_reel_prompt("cyber", hostile, 5)
+    assert len(prompt.split('"""')) == 3, "untrusted feed text closed its own fence"
+
+
+def test_render_reel_has_a_section_per_category_and_names_failures():
+    body = jobs.render_reel(
+        selections={"cyber": [{"title": "T1", "why": "matters", "url": "https://x.test/1"}],
+                    "election": []},
+        failures=[("Dead Feed", "HTTP 404")],
+        counts={"cyber": 12, "election": 0},
+        generated="2026-09-05",
+    )
+    assert "## Cyber" in body
+    assert "## Election" in body
+    assert "T1" in body and "matters" in body
+    assert "Dead Feed" in body and "404" in body, "a dropped source must be named"
+    assert "no stories" in body.lower() or "nothing" in body.lower()
+
+
+def test_build_reel_prompt_interpolates_every_placeholder():
+    # A literal "{top_n}" reaching the model is a silently degraded prompt: it
+    # still returns plausible output, so nothing else would catch it.
+    prompt = jobs.build_reel_prompt("cyber", [], 5)
+    assert "{top_n}" not in prompt
+    assert "{" not in prompt.split('"""')[0].replace('{"stories"', "").replace('{"title"', "")
+    assert prompt.count("5") >= 2
+
+
+# --- News Reel orchestration --------------------------------------------------
+
+NEWS_JOB = {
+    "id": "news-reel",
+    "job_type": "news_reel",
+    "workshop": "open",
+    "steps": ["fetch_feeds", "dedupe", "analyse", "write_reel"],
+    "read_scope": ["Config/news_sources.yaml"],
+    "write_scope": ["Obsidian Vault/00_Inbox/"],
+    "quota": {"fetches_per_run": 30, "stories_per_category": 5, "window_hours": 48},
+    "permission_level": 3,
+    "approved": True,
+}
+
+
+def _approved_news_job(**overrides):
+    entry = {**NEWS_JOB, **overrides}
+    entry["envelope_hash"] = jobs.compute_envelope_hash(entry)
+    return entry
+
+
+def _setup_news(tmp_path, monkeypatch, *, sources=None, fetch=None, analyse=None, entry=None):
+    monkeypatch.setattr(jobs, "_REPO_ROOT", tmp_path)
+    monkeypatch.setattr(executor, "_REPO_ROOT", tmp_path)
+    (tmp_path / "Obsidian Vault/00_Inbox").mkdir(parents=True, exist_ok=True)
+
+    srcs = sources if sources is not None else [
+        {"url": "https://a.test/f", "category": "cyber", "name": "FeedA"},
+        {"url": "https://b.test/f", "category": "election", "name": "FeedB"},
+    ]
+    monkeypatch.setattr(jobs, "load_news_sources", lambda path=None: srcs)
+
+    async def _default_fetch(url):
+        _default_fetch.calls.append(url)
+        return [{"title": f"Story from {url}", "url": f"{url}/1",
+                 "summary": "s", "published": ""}]
+    _default_fetch.calls = []
+    monkeypatch.setattr(executor, "_run_rss_fetch", fetch or _default_fetch)
+
+    async def _default_analyse(cat, items, top_n, **kw):
+        _default_analyse.seen.append((cat, len(items)))
+        return [{"title": f"{cat} top", "why": "w", "url": "https://x.test/1"}] if items else []
+    _default_analyse.seen = []
+    monkeypatch.setattr(jobs, "analyse_reel_category", analyse or _default_analyse)
+
+    monkeypatch.setattr(jobs, "load_registry",
+                        lambda path=None: {"jobs": [entry or _approved_news_job()]})
+    return _default_fetch, _default_analyse
+
+
+def test_news_reel_writes_a_dated_note_and_evidence(conn, tmp_path, monkeypatch):
+    _setup_news(tmp_path, monkeypatch)
+    result = asyncio.run(jobs.run_job("news-reel", conn, **_RUN_JOB_KWARGS))
+
+    assert result["status"] == "completed"
+    notes = list((tmp_path / "Obsidian Vault/00_Inbox").glob("News-Reel-*.md"))
+    assert len(notes) == 1
+    body = notes[0].read_text(encoding="utf-8")
+    for label in ("## Cyber", "## Critical Infrastructure", "## National Security",
+                  "## Election", "## Weather & Hazards"):
+        assert label in body, label
+    record = json.loads(Path(result["evidence_path"]).read_text(encoding="utf-8"))
+    assert evidence.validate_completion(record, []) == []
+
+
+def test_news_reel_bounded_loop_halts_at_the_fetch_quota(conn, tmp_path, monkeypatch):
+    # 14d's surviving DoD clause: the loop provably halts at the step quota.
+    many = [{"url": f"https://s{i}.test/f", "category": "cyber", "name": f"F{i}"}
+            for i in range(25)]
+    entry = _approved_news_job(quota={"fetches_per_run": 4, "stories_per_category": 5,
+                                      "window_hours": 48})
+    fetch, _ = _setup_news(tmp_path, monkeypatch, sources=many, entry=entry)
+    result = asyncio.run(jobs.run_job("news-reel", conn, **_RUN_JOB_KWARGS))
+
+    assert result["sources_fetched"] == 4, "the fetch cap must bound the loop"
+    assert len(fetch.calls) == 4
+
+
+def test_news_reel_dead_feed_is_skipped_named_and_not_fatal(conn, tmp_path, monkeypatch):
+    async def _half_dead(url):
+        if "b.test" in url:
+            raise executor.ExecutionError("HTTP 404")
+        return [{"title": "Live story", "url": f"{url}/1", "summary": "", "published": ""}]
+    _setup_news(tmp_path, monkeypatch, fetch=_half_dead)
+    result = asyncio.run(jobs.run_job("news-reel", conn, **_RUN_JOB_KWARGS))
+
+    assert result["status"] == "completed"
+    assert result["failures"] == 1
+    body = list((tmp_path / "Obsidian Vault/00_Inbox").glob("News-Reel-*.md"))[0].read_text()
+    assert "FeedB" in body and "404" in body, "a dropped source must be named in the reel"
+
+
+def test_news_reel_all_feeds_dead_is_a_failed_run_with_evidence(conn, tmp_path, monkeypatch):
+    async def _all_dead(url):
+        raise executor.ExecutionError("HTTP 500")
+    _setup_news(tmp_path, monkeypatch, fetch=_all_dead)
+    result = asyncio.run(jobs.run_job("news-reel", conn, **_RUN_JOB_KWARGS))
+
+    assert result["status"] == "failed"
+    assert "no items collected" in result["reason"]
+    assert list((tmp_path / "Obsidian Vault/00_Inbox").glob("News-Reel-*.md")) == []
+    record = json.loads(Path(result["evidence_path"]).read_text(encoding="utf-8"))
+    assert evidence.validate_completion(record, []) == []
+
+
+def test_news_reel_one_category_analysis_failure_spares_the_others(conn, tmp_path, monkeypatch):
+    async def _flaky(cat, items, top_n, **kw):
+        if cat == "cyber":
+            raise jobs.JobError("model wedged")
+        return [{"title": f"{cat} top", "why": "w", "url": "https://x.test/1"}] if items else []
+    _setup_news(tmp_path, monkeypatch, analyse=_flaky)
+    result = asyncio.run(jobs.run_job("news-reel", conn, **_RUN_JOB_KWARGS))
+
+    assert result["status"] == "completed"
+    body = list((tmp_path / "Obsidian Vault/00_Inbox").glob("News-Reel-*.md"))[0].read_text()
+    assert "election top" in body, "a sibling category must survive"
+    assert "cyber analysis" in body, "the failed category must be named"
+
+
+def test_news_reel_item_never_lands_outside_its_feeds_category(conn, tmp_path, monkeypatch):
+    # Category assignment is deterministic -- no model routes an item.
+    _, analyse = _setup_news(tmp_path, monkeypatch)
+    asyncio.run(jobs.run_job("news-reel", conn, **_RUN_JOB_KWARGS))
+    seen = dict(analyse.seen)
+    assert seen["cyber"] == 1 and seen["election"] == 1
+    assert seen["national_security"] == 0 and seen["weather_hazard"] == 0
+
+
+def test_news_reel_out_of_scope_write_queues_an_exception(conn, tmp_path, monkeypatch):
+    _setup_news(tmp_path, monkeypatch)
+
+    async def _refuse(*a, **kw):
+        raise executor.ExecutionError("out of scope")
+    monkeypatch.setattr(executor, "_run_file_edit", _refuse)
+
+    result = asyncio.run(jobs.run_job("news-reel", conn, **_RUN_JOB_KWARGS))
+    assert result["exceptions"] == 1
+    assert result["status"] == "failed"
+    assert any(e["job_id"] == "news-reel" for e in jobs.list_exceptions(conn))
+
+
+def test_news_reel_steps_list_is_never_dispatched_on(conn, tmp_path, monkeypatch):
+    entry = _approved_news_job(steps=["nonsense_one", "nonsense_two"])
+    _setup_news(tmp_path, monkeypatch, entry=entry)
+    result = asyncio.run(jobs.run_job("news-reel", conn, **_RUN_JOB_KWARGS))
+    assert result["status"] == "completed"

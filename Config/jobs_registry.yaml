@@ -51,3 +51,23 @@ jobs:
   permission_level: 3
   approved: false
   envelope_hash: 39f9dfcd6a5a2a9349cec5106545d60d20117da568554346832f019c6650c190
+- id: news-reel
+  job_type: news_reel
+  workshop: open
+  schedule_hint: daily 06:30
+  steps:
+  - fetch_feeds
+  - dedupe
+  - analyse_per_category
+  - write_reel
+  read_scope:
+  - Config/news_sources.yaml
+  write_scope:
+  - Obsidian Vault/00_Inbox/
+  quota:
+    fetches_per_run: 30
+    stories_per_category: 5
+    window_hours: 48
+  permission_level: 3
+  approved: false
+  envelope_hash: 3788eda907d67d8aa31c0a4de7417c72553dd8ffa33186dbc0ce6b6843d54115

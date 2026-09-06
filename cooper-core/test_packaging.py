@@ -59,6 +59,7 @@ _REQUIRED_RUNTIME_FILES = [
 _OPEN_ONLY_JOB_FILES = [
     ("Config/jobs_registry.yaml", "yaml"),
     ("Config/pii_research_queries.json", "json"),
+    ("Config/news_sources.yaml", "yaml"),
 ]
 
 if HOST_WORKSHOP != "private":
