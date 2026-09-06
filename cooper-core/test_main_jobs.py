@@ -297,3 +297,23 @@ def test_cockpit_page_never_reads_the_key_from_a_query_string(monkeypatch):
     body = _client(monkeypatch).get("/cockpit").text
     assert "location.search" not in body.split("function keyFromFragment")[1].split("}")[0]
     assert "location.hash" in body
+
+
+def test_pair_new_requires_auth_and_claim_does_not(monkeypatch):
+    monkeypatch.setattr(main, "_API_KEYS", {"real-key"})
+    monkeypatch.setattr(main, "_ALLOW_ANON", False)
+    c = TestClient(main.app)
+    assert c.post("/pair/new").status_code == 401
+    # claim is open by necessity — the claiming device has no key yet
+    assert c.post("/pair/claim", json={"code": "000000"}).status_code == 400
+
+
+def test_pairing_round_trip_hands_over_the_presented_key(monkeypatch):
+    monkeypatch.setattr(main, "_API_KEYS", {"real-key"})
+    monkeypatch.setattr(main, "_ALLOW_ANON", False)
+    monkeypatch.setattr(main, "_PAIRING", main.pairing.PairingStore())
+    c = TestClient(main.app)
+    code = c.post("/pair/new", headers={"Authorization": "Bearer real-key"}).json()["code"]
+    assert c.post("/pair/claim", json={"code": code}).json()["key"] == "real-key"
+    # single use
+    assert c.post("/pair/claim", json={"code": code}).status_code == 400

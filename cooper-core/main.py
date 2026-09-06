@@ -23,12 +23,13 @@ from pathlib import Path
 from typing import AsyncIterator, List, Optional
 
 import httpx
-from fastapi import Depends, FastAPI, HTTPException, Security
+from fastapi import Depends, FastAPI, HTTPException, Request, Security
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
 from decision import TurnDecision, route_turn, route_turn_stream
+import pairing
 import registry
 import approval
 import executor
@@ -569,6 +570,7 @@ async def _critique_and_note(job_id: str, job_entry: dict) -> dict:
 
 
 _COCKPIT_HTML = _REPO_ROOT / "cooper-core" / "static" / "cockpit.html"
+_PAIRING = pairing.PairingStore()
 
 
 # ── Step 15i: COOPER Cockpit — the governance surface ─────────────────────────
@@ -646,6 +648,41 @@ async def list_runs(job_id: Optional[str] = None, limit: int = 50) -> dict:
 @app.get("/jobs/exceptions", dependencies=[Depends(_require_auth)])
 async def list_job_exceptions(status: str = "pending") -> dict:
     return {"exceptions": jobs.list_exceptions(_ARCHIVIST_CONN, status=status)}
+
+
+@app.post("/pair/new", dependencies=[Depends(_require_auth)])
+async def pair_new(request: Request) -> dict:
+    """Issue a pairing code so a phone can get the key without typing it.
+
+    Authenticated: only an already-unlocked Cockpit may hand the key onward.
+    The code the caller receives stands in for the key it presented."""
+    presented = ""
+    header = request.headers.get("authorization", "")
+    if header.lower().startswith("bearer "):
+        presented = header[7:].strip()
+    if not presented:
+        raise HTTPException(status_code=400, detail="no bearer key to pair with")
+    code = _PAIRING.new_code(presented)
+    print(f"  [ok] pairing code issued, valid {_PAIRING.ttl}s")
+    return {"code": code, "expires_in": _PAIRING.ttl}
+
+
+@app.get("/pair/pending", dependencies=[Depends(_require_auth)])
+async def pair_pending() -> dict:
+    return {"pending": _PAIRING.pending()}
+
+
+@app.post("/pair/claim")
+async def pair_claim(body: dict) -> dict:
+    """Exchange a pairing code for the API key. UNAUTHENTICATED by necessity —
+    the claiming device has no key yet, which is the whole point. pairing.py
+    holds the countermeasures: one pending code, 5-minute TTL, single use, and a
+    global attempt budget so the code cannot be brute-forced in its own life."""
+    key = _PAIRING.claim(str((body or {}).get("code", "")))
+    if not key:
+        raise HTTPException(status_code=400, detail="invalid or expired pairing code")
+    print("  [ok] pairing code claimed by a device")
+    return {"key": key}
 
 
 @app.get("/cockpit", response_class=HTMLResponse)

@@ -90,6 +90,16 @@
   <div style="margin-top:14px"><button class="act primary" id="unlock">Unlock</button></div>
 </div>
 
+<div id="pairbox" class="gate hide" style="position:fixed;inset:0;margin:0;display:flex;align-items:center;justify-content:center;background:rgba(14,17,19,.92);border:0;z-index:20">
+  <div style="background:var(--panel);border:1px solid var(--line);padding:26px;max-width:420px;width:calc(100% - 32px)">
+    <h2>Pair a device</h2>
+    <p>Open <b id="lanurl">this Cockpit</b> on the other device and enter this code. It is good for five minutes, works once, and dies after five wrong guesses.</p>
+    <div id="paircodeout" style="font-family:var(--mono);font-size:38px;letter-spacing:.18em;text-align:center;padding:14px 0;color:var(--accent)">------</div>
+    <div id="pairttl" style="font-family:var(--mono);font-size:11px;color:var(--dim3);text-align:center"></div>
+    <div style="margin-top:18px;display:flex;gap:8px"><button class="act" id="pairclose">Done</button></div>
+  </div>
+</div>
+
 <div class="wrap hide" id="app">
   <header>
     <div class="brand">
@@ -102,6 +112,7 @@
       <div><span>approved</span> <b id="s-appr">—</b></div>
       <div><span>exceptions</span> <b id="s-exc">—</b></div>
       <div><span>last run</span> <b id="s-last">—</b></div>
+      <button class="tab" id="pair" style="border:1px solid #262f34;border-bottom-width:1px;padding:3px 8px">PAIR A DEVICE</button>
       <button class="tab" id="forget" style="border:1px solid #262f34;border-bottom-width:1px;padding:3px 8px">FORGET KEY</button>
     </div>
   </header>
@@ -374,6 +385,43 @@
   });
 
   $("forget").addEventListener("click", function () { lock("Key forgotten on this browser."); });
+
+  var pairTimer = null;
+  $("pair").addEventListener("click", function () {
+    api("/pair/new", { method: "POST", body: "{}" }).then(function (r) {
+      $("paircodeout").textContent = r.code;
+      $("lanurl").textContent = location.origin + "/cockpit";
+      $("pairbox").classList.remove("hide");
+      var left = r.expires_in;
+      clearInterval(pairTimer);
+      $("pairttl").textContent = "expires in " + left + "s";
+      pairTimer = setInterval(function () {
+        left -= 1;
+        $("pairttl").textContent = left > 0 ? "expires in " + left + "s" : "expired";
+        if (left <= 0) { clearInterval(pairTimer); $("paircodeout").textContent = "------"; }
+      }, 1000);
+    }).catch(function (e) { toast(e.message, true); });
+  });
+  $("pairclose").addEventListener("click", function () {
+    clearInterval(pairTimer);
+    $("pairbox").classList.add("hide");
+  });
+
+  $("claim").addEventListener("click", function () {
+    var code = $("paircode").value.trim();
+    if (!code) return;
+    fetch("/pair/claim", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code: code })
+    }).then(function (r) { return r.json().then(function (b) {
+      if (!r.ok) throw new Error(b.detail || "pairing failed");
+      return b;
+    }); }).then(function (b) {
+      writeStored(b.key, true);
+      boot(b.key);
+    }).catch(function (e) { toast(e.message, true); });
+  });
+  $("paircode").addEventListener("keydown", function (e) { if (e.key === "Enter") $("claim").click(); });
   $("key").addEventListener("keydown", function (e) { if (e.key === "Enter") $("unlock").click(); });
 
   // The desktop launcher hands the key over in the URL FRAGMENT (#key=...).
