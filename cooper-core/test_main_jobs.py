@@ -192,3 +192,93 @@ def test_post_jobs_draft_rejects_empty_goal(monkeypatch):
         resp = client.post("/jobs/draft", json={"goal": ""})
 
     assert resp.status_code == 422
+
+
+# --- Step 15i: cockpit endpoints ----------------------------------------------
+
+import shutil  # noqa: E402
+
+import jobs  # noqa: E402
+import yaml  # noqa: E402
+
+
+def _client(monkeypatch):
+    monkeypatch.setattr(main, "_API_KEYS", set())
+    monkeypatch.setattr(main, "_ALLOW_ANON", True)
+    return TestClient(main.app)
+
+
+def _copy_registry(tmp_path):
+    """A throwaway registry so approval tests never write the real one."""
+    dst = tmp_path / "jobs_registry.yaml"
+    shutil.copyfile(jobs._REGISTRY_PATH, dst)
+    return dst
+
+
+def test_get_jobs_lists_envelopes_with_state(monkeypatch):
+    r = _client(monkeypatch).get("/jobs")
+    assert r.status_code == 200
+    body = r.json()
+    ids = {j["id"] for j in body["jobs"]}
+    assert {"link-checker", "news-reel", "repo-steward"} <= ids
+    j = next(x for x in body["jobs"] if x["id"] == "news-reel")
+    for field in ("job_type", "workshop", "read_scope", "write_scope",
+                  "quota", "permission_level", "approved", "envelope_hash"):
+        assert field in j, field
+
+
+def test_get_jobs_requires_auth_when_keys_are_set(monkeypatch):
+    monkeypatch.setattr(main, "_API_KEYS", {"real-key"})
+    monkeypatch.setattr(main, "_ALLOW_ANON", False)
+    assert TestClient(main.app).get("/jobs").status_code == 401
+
+
+def test_post_job_approval_flips_state(monkeypatch, tmp_path):
+    monkeypatch.setattr(jobs, "_REGISTRY_PATH", _copy_registry(tmp_path))
+    c = _client(monkeypatch)
+    assert c.post("/jobs/news-reel/approval", json={"approved": False}).json()["approved"] is False
+    assert c.post("/jobs/news-reel/approval", json={"approved": True}).json()["approved"] is True
+
+
+def test_post_job_approval_unknown_job_is_404(monkeypatch, tmp_path):
+    monkeypatch.setattr(jobs, "_REGISTRY_PATH", _copy_registry(tmp_path))
+    assert _client(monkeypatch).post("/jobs/nope/approval", json={"approved": True}).status_code == 404
+
+
+def test_patch_job_settings_voids_approval(monkeypatch, tmp_path):
+    monkeypatch.setattr(jobs, "_REGISTRY_PATH", _copy_registry(tmp_path))
+    c = _client(monkeypatch)
+    c.post("/jobs/news-reel/approval", json={"approved": True})
+    r = c.patch("/jobs/news-reel/settings", json={"quota": {"fetches_per_run": 9}})
+    assert r.status_code == 200
+    assert r.json()["approved"] is False, "editing an envelope must revoke approval"
+
+
+def test_patch_job_settings_refuses_scope_edits(monkeypatch, tmp_path):
+    monkeypatch.setattr(jobs, "_REGISTRY_PATH", _copy_registry(tmp_path))
+    r = _client(monkeypatch).patch("/jobs/news-reel/settings", json={"write_scope": ["/etc/"]})
+    assert r.status_code == 400
+
+
+def test_get_job_runs_and_exceptions(monkeypatch):
+    c = _client(monkeypatch)
+    assert c.get("/jobs/runs").status_code == 200
+    assert "exceptions" in c.get("/jobs/exceptions").json()
+
+
+def test_cockpit_page_is_served_without_auth(monkeypatch):
+    # The shell carries no data: it fetches everything with the key the operator
+    # supplies in the browser, so serving it needs no auth.
+    monkeypatch.setattr(main, "_API_KEYS", {"real-key"})
+    monkeypatch.setattr(main, "_ALLOW_ANON", False)
+    r = TestClient(main.app).get("/cockpit")
+    assert r.status_code == 200
+    assert "text/html" in r.headers["content-type"]
+    assert "COOPER" in r.text
+
+
+def test_cockpit_page_embeds_no_api_key(monkeypatch):
+    body = _client(monkeypatch).get("/cockpit").text
+    assert "cooper-local" not in body
+    for key in main._API_KEYS:
+        assert key not in body

@@ -173,6 +173,116 @@ def append_job_entry(entry: dict, registry_path: Optional[Path] = None) -> None:
     p.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
 
 
+# --- Step 15i: cockpit governance writes --------------------------------------
+# The registry has always been edited by hand. These are the two writes the
+# cockpit needs, and they encode the governance rule that hand-editing left
+# implicit: approving does NOT change the envelope, and changing the envelope
+# DOES revoke approval.
+
+_EDITABLE_SETTINGS = ("quota", "schedule_hint")
+
+
+def set_job_approval(
+    job_id: str, approved: bool, *, registry_path: Optional[Path] = None
+) -> dict:
+    """Approve or deny a job. The envelope itself is untouched.
+
+    `approved` is excluded from compute_envelope_hash by design, so flipping it
+    cannot change the hash — approval gates the envelope, it is not part of it.
+    """
+    reg = load_registry(registry_path)
+    entry = get_job(job_id, reg)
+    if entry is None:
+        raise JobError(f"unknown job id '{job_id}'")
+    updated = {**entry, "approved": bool(approved)}
+    append_job_entry(updated, registry_path)
+    return updated
+
+
+def update_job_settings(
+    job_id: str,
+    *,
+    quota: Optional[dict] = None,
+    schedule_hint: Optional[str] = None,
+    registry_path: Optional[Path] = None,
+    **forbidden,
+) -> dict:
+    """Edit a job's quota and/or schedule, then VOID its approval.
+
+    Scope (`read_scope`, `write_scope`, `workshop`, `permission_level`, `steps`)
+    is deliberately NOT editable here: it is the security boundary, enforced in
+    code, and widening it is a decision that belongs in a reviewed commit rather
+    than in a text box. Any attempt raises.
+
+    Quota and schedule ARE editable — but every edit rewrites the envelope hash,
+    and the spec's rule is that any edit to an approved envelope voids its
+    approval. Enforced here rather than trusted to the caller, so a job cannot
+    keep running under terms nobody approved.
+    """
+    if forbidden:
+        raise JobError(
+            f"not editable from the cockpit: {', '.join(sorted(forbidden))} — "
+            "scope is the security boundary and changes in a reviewed commit"
+        )
+    reg = load_registry(registry_path)
+    entry = get_job(job_id, reg)
+    if entry is None:
+        raise JobError(f"unknown job id '{job_id}'")
+
+    updated = {**entry}
+    if quota is not None:
+        if not isinstance(quota, dict):
+            raise JobError("quota must be an object")
+        clean = {}
+        for k, v in quota.items():
+            try:
+                clean[str(k)] = int(v)
+            except (TypeError, ValueError):
+                raise JobError(f"quota.{k} must be a whole number, got {v!r}")
+            if clean[str(k)] < 0:
+                raise JobError(f"quota.{k} must not be negative")
+        updated["quota"] = clean
+    if schedule_hint is not None:
+        updated["schedule_hint"] = str(schedule_hint)[:120]
+
+    # Void first, then hash: `approved` is excluded from the hash, so the order
+    # does not affect the digest -- but writing it in this order makes the rule
+    # legible at the call site.
+    updated["approved"] = False
+    updated["envelope_hash"] = compute_envelope_hash(updated)
+    append_job_entry(updated, registry_path)
+    return updated
+
+
+def list_job_runs(job_id: Optional[str] = None, limit: int = 50) -> List[dict]:
+    """Job-linked evidence records, newest first.
+
+    Reads the same completion records the digest reads. Unreadable or non-job
+    records are skipped rather than failing the listing -- a corrupt file must
+    not blank the whole run history.
+    """
+    out = []
+    for path in _EVIDENCE_DIR.glob("*.json"):
+        try:
+            record = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(record, dict) or not record.get("job_id"):
+            continue
+        if job_id and str(record.get("job_id")) != job_id:
+            continue
+        out.append({
+            "job_id": str(record.get("job_id", "")),
+            "run_id": str(record.get("run_id", "")),
+            "status": str(record.get("status", "")),
+            "completion_time": str(record.get("completion_time", "")),
+            "notes": str(record.get("notes", "")),
+            "artifact_paths": record.get("artifact_paths") or [],
+        })
+    out.sort(key=lambda r: r["completion_time"], reverse=True)
+    return out[:limit]
+
+
 def compute_envelope_hash(job_entry: dict) -> str:
     """SHA-256 hex digest over the job entry's canonical JSON, excluding the
     entry's own envelope_hash and approved keys (spec: any edit to an approved

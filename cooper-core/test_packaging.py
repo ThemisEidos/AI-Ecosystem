@@ -47,6 +47,9 @@ _REQUIRED_RUNTIME_FILES = [
     ("Config/general_tool_registry.yaml", "yaml"),
     ("Config/private_tool_registry.yaml", "yaml"),
     ("Models/cooper-personality/Modelfile", "text"),
+    # Step 15i: served by GET /cockpit. Not config, but read from disk at
+    # request time — so it fails the same way if it is not packaged.
+    ("cooper-core/static/cockpit.html", "text"),
 ]
 
 # Open-only job config, supplied by bind mounts in docker-compose.yml rather

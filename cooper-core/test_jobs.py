@@ -1526,3 +1526,103 @@ def test_render_reel_separates_consecutive_stories():
     assert "\n- **Second**" in body, "each story must start its own bullet line"
     for line in body.splitlines():
         assert not (line.startswith("  <http") and "**" in line), line
+
+
+# --- Step 15i: cockpit governance API ------------------------------------------
+
+def _reg_file(tmp_path, entries):
+    p = tmp_path / "jobs_registry.yaml"
+    p.write_text(yaml.safe_dump({"jobs": entries}, sort_keys=False), encoding="utf-8")
+    return p
+
+
+def test_set_job_approval_flips_the_flag_and_keeps_the_hash(tmp_path):
+    entry = _approved_news_job(approved=False)
+    p = _reg_file(tmp_path, [entry])
+    before = entry["envelope_hash"]
+    out = jobs.set_job_approval("news-reel", True, registry_path=p)
+    assert out["approved"] is True
+    assert out["envelope_hash"] == before, "approval must not change the envelope hash"
+    assert jobs.get_job("news-reel", jobs.load_registry(p))["approved"] is True
+
+
+def test_set_job_approval_can_deny(tmp_path):
+    p = _reg_file(tmp_path, [_approved_news_job(approved=True)])
+    jobs.set_job_approval("news-reel", False, registry_path=p)
+    assert jobs.get_job("news-reel", jobs.load_registry(p))["approved"] is False
+
+
+def test_set_job_approval_rejects_unknown_job(tmp_path):
+    p = _reg_file(tmp_path, [_approved_news_job()])
+    with pytest.raises(jobs.JobError):
+        jobs.set_job_approval("nope", True, registry_path=p)
+
+
+def test_update_job_settings_rewrites_the_hash_and_voids_approval(tmp_path):
+    # The governance interaction the cockpit exists to make visible: editing an
+    # envelope must revoke its approval, not silently keep it.
+    entry = _approved_news_job(approved=True)
+    p = _reg_file(tmp_path, [entry])
+    before = entry["envelope_hash"]
+    out = jobs.update_job_settings(
+        "news-reel", quota={"fetches_per_run": 12, "stories_per_category": 3,
+                            "window_hours": 24}, registry_path=p)
+    assert out["envelope_hash"] != before
+    assert out["approved"] is False, "an edited envelope must lose its approval"
+    assert jobs.verify_job(out, workshop="open") == "not approved"
+
+
+def test_update_job_settings_keeps_the_hash_consistent(tmp_path):
+    p = _reg_file(tmp_path, [_approved_news_job(approved=True)])
+    out = jobs.update_job_settings("news-reel", schedule_hint="daily 09:00", registry_path=p)
+    assert out["envelope_hash"] == jobs.compute_envelope_hash(out)
+    assert out["schedule_hint"] == "daily 09:00"
+
+
+def test_update_job_settings_refuses_to_touch_scope(tmp_path):
+    # Scope is the security boundary; it is not editable from the cockpit.
+    p = _reg_file(tmp_path, [_approved_news_job(approved=True)])
+    with pytest.raises(jobs.JobError):
+        jobs.update_job_settings("news-reel", quota={"fetches_per_run": 1},
+                                 write_scope=["/etc/"], registry_path=p)
+
+
+def test_update_job_settings_rejects_non_numeric_quota(tmp_path):
+    p = _reg_file(tmp_path, [_approved_news_job(approved=True)])
+    with pytest.raises(jobs.JobError):
+        jobs.update_job_settings("news-reel", quota={"fetches_per_run": "lots"},
+                                 registry_path=p)
+
+
+def test_list_job_runs_returns_newest_first(conn, tmp_path, monkeypatch):
+    monkeypatch.setattr(jobs, "_EVIDENCE_DIR", tmp_path)
+    for i, (job, when) in enumerate([("a", "2026-09-01T00:00:00.000000Z"),
+                                     ("b", "2026-09-03T00:00:00.000000Z"),
+                                     ("c", "2026-09-02T00:00:00.000000Z")]):
+        (tmp_path / f"workflow_completion_{job}_{i}.json").write_text(json.dumps({
+            "job_id": job, "run_id": f"r{i}", "status": "completed",
+            "completion_time": when, "notes": f"note {job}", "artifact_paths": [],
+        }), encoding="utf-8")
+    runs = jobs.list_job_runs()
+    assert [r["job_id"] for r in runs] == ["b", "c", "a"]
+
+
+def test_list_job_runs_filters_by_job_and_limits(conn, tmp_path, monkeypatch):
+    monkeypatch.setattr(jobs, "_EVIDENCE_DIR", tmp_path)
+    for i in range(5):
+        (tmp_path / f"wc_{i}.json").write_text(json.dumps({
+            "job_id": "x" if i % 2 else "y", "run_id": f"r{i}", "status": "completed",
+            "completion_time": f"2026-09-0{i+1}T00:00:00.000000Z", "notes": "", "artifact_paths": [],
+        }), encoding="utf-8")
+    assert all(r["job_id"] == "x" for r in jobs.list_job_runs(job_id="x"))
+    assert len(jobs.list_job_runs(limit=2)) == 2
+
+
+def test_list_job_runs_skips_unreadable_records(conn, tmp_path, monkeypatch):
+    monkeypatch.setattr(jobs, "_EVIDENCE_DIR", tmp_path)
+    (tmp_path / "bad.json").write_text("{not json", encoding="utf-8")
+    (tmp_path / "good.json").write_text(json.dumps({
+        "job_id": "g", "run_id": "r", "status": "completed",
+        "completion_time": "2026-09-01T00:00:00.000000Z", "notes": "", "artifact_paths": [],
+    }), encoding="utf-8")
+    assert [r["job_id"] for r in jobs.list_job_runs()] == ["g"]

@@ -24,7 +24,7 @@ from typing import AsyncIterator, List, Optional
 
 import httpx
 from fastapi import Depends, FastAPI, HTTPException, Security
-from fastapi.responses import StreamingResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
@@ -566,6 +566,98 @@ async def _critique_and_note(job_id: str, job_entry: dict) -> dict:
         "note_path": str(note_path),
         "envelope_hash": envelope_hash,
     }
+
+
+_COCKPIT_HTML = _REPO_ROOT / "cooper-core" / "static" / "cockpit.html"
+
+
+# ── Step 15i: COOPER Cockpit — the governance surface ─────────────────────────
+# Approving a job was a hand-edit of Config/jobs_registry.yaml. These endpoints
+# make it an act with a UI, and make the rule that hand-editing left implicit
+# enforceable: approving does not change the envelope, editing the envelope
+# revokes approval. Scope stays uneditable — it is the security boundary.
+
+@app.get("/jobs", dependencies=[Depends(_require_auth)])
+async def list_jobs() -> dict:
+    """Every job envelope plus its approval state, for the cockpit."""
+    reg = jobs.load_registry()
+    out = []
+    for entry in (reg.get("jobs") or []):
+        if not isinstance(entry, dict):
+            continue
+        out.append({
+            "id": str(entry.get("id", "")),
+            "job_type": str(entry.get("job_type", "csv_link_check")),
+            "workshop": str(entry.get("workshop", "")),
+            "schedule_hint": str(entry.get("schedule_hint", "")),
+            "steps": entry.get("steps") or [],
+            "read_scope": entry.get("read_scope") or [],
+            "write_scope": entry.get("write_scope") or [],
+            "quota": entry.get("quota") or {},
+            "permission_level": entry.get("permission_level", 0),
+            "approved": bool(entry.get("approved")),
+            "envelope_hash": str(entry.get("envelope_hash", "")),
+            "runnable_here": jobs.verify_job(entry, workshop=WORKSHOP) is None,
+            "blocked_reason": jobs.verify_job(entry, workshop=WORKSHOP),
+        })
+    return {"jobs": out, "workshop": WORKSHOP}
+
+
+@app.post("/jobs/{job_id}/approval", dependencies=[Depends(_require_auth)])
+async def set_job_approval(job_id: str, body: dict) -> dict:
+    """Approve or deny a job. This IS the approval act — previously a YAML edit."""
+    approved = bool(body.get("approved"))
+    try:
+        entry = jobs.set_job_approval(job_id, approved)
+    except jobs.JobError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    print(f"  [ok] job '{job_id}' {'APPROVED' if approved else 'DENIED'} via cockpit")
+    return {"id": entry["id"], "approved": entry["approved"],
+            "envelope_hash": entry["envelope_hash"]}
+
+
+@app.patch("/jobs/{job_id}/settings", dependencies=[Depends(_require_auth)])
+async def patch_job_settings(job_id: str, body: dict) -> dict:
+    """Edit quota / schedule. Always voids approval — see jobs.update_job_settings."""
+    known = {"quota", "schedule_hint"}
+    extra = {k: v for k, v in (body or {}).items() if k not in known}
+    try:
+        entry = jobs.update_job_settings(
+            job_id,
+            quota=body.get("quota"),
+            schedule_hint=body.get("schedule_hint"),
+            **extra,
+        )
+    except jobs.JobError as exc:
+        msg = str(exc)
+        code = 404 if msg.startswith("unknown job id") else 400
+        raise HTTPException(status_code=code, detail=msg)
+    return {"id": entry["id"], "approved": entry["approved"],
+            "quota": entry.get("quota", {}),
+            "schedule_hint": entry.get("schedule_hint", ""),
+            "envelope_hash": entry["envelope_hash"]}
+
+
+@app.get("/jobs/runs", dependencies=[Depends(_require_auth)])
+async def list_runs(job_id: Optional[str] = None, limit: int = 50) -> dict:
+    return {"runs": jobs.list_job_runs(job_id=job_id, limit=max(1, min(limit, 200)))}
+
+
+@app.get("/jobs/exceptions", dependencies=[Depends(_require_auth)])
+async def list_job_exceptions(status: str = "pending") -> dict:
+    return {"exceptions": jobs.list_exceptions(_ARCHIVIST_CONN, status=status)}
+
+
+@app.get("/cockpit", response_class=HTMLResponse)
+async def cockpit_page() -> HTMLResponse:
+    """The cockpit shell. Deliberately UNAUTHENTICATED and data-free: it embeds
+    no key and no job data, and fetches everything with the key the operator
+    supplies in the browser. Serving the shell therefore leaks nothing, and the
+    real gate stays on the API endpoints above."""
+    try:
+        return HTMLResponse(_COCKPIT_HTML.read_text(encoding="utf-8"))
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"cockpit page missing: {exc}")
 
 
 @app.post("/jobs/critique/{job_id}", dependencies=[Depends(_require_auth)])
