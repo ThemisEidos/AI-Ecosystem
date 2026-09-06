@@ -15,7 +15,7 @@ jobs:
     rows_per_run: 10
     fetches_per_run: 30
   permission_level: 3
-  approved: false
+  approved: true
   envelope_hash: a4ca5d93237d8aaff63013fc1378d7cbd0d242509b6807cf453d8355f904ccb3
 - id: data-broker-research
   job_type: pii_research
@@ -32,7 +32,7 @@ jobs:
   quota:
     entries_per_run: 5
   permission_level: 3
-  approved: false
+  approved: true
   envelope_hash: 203ebfcb75536fa7626ac14dad3a03e6f222d86cc32db4d3a7c746a2bb3f2e12
 - id: repo-steward
   job_type: repo_steward
@@ -49,7 +49,7 @@ jobs:
   quota:
     tasks_per_run: 1
   permission_level: 3
-  approved: false
+  approved: true
   envelope_hash: 39f9dfcd6a5a2a9349cec5106545d60d20117da568554346832f019c6650c190
 - id: news-reel
   job_type: news_reel
@@ -69,5 +69,5 @@ jobs:
     stories_per_category: 5
     window_hours: 48
   permission_level: 3
-  approved: false
+  approved: true
   envelope_hash: 3788eda907d67d8aa31c0a4de7417c72553dd8ffa33186dbc0ce6b6843d54115
