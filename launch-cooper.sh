@@ -82,7 +82,21 @@ for _ in $(seq 1 30); do
     sleep 2
 done
 
-if ! xdg-open "$LANDING_URL" >/dev/null 2>&1; then
+# Hand the API key to the Cockpit so the button does not make you type it.
+# It goes in the URL FRAGMENT, which is never sent to the server (no request
+# log, no proxy, no access log sees it) and which the page strips from the
+# address bar on load. OPEN_URL is only ever passed to xdg-open; every
+# notification and log line below uses $LANDING_URL, so the key never reaches
+# the desktop notification, the terminal, or tmp/launch-<stack>.log.
+OPEN_URL="$LANDING_URL"
+if [ "$STACK" = "open" ] && [ -r "$REPO_ROOT/PDA-Runtime/.env" ]; then
+    COOPER_KEY="$(grep -m1 '^COOPER_API_KEYS=' "$REPO_ROOT/PDA-Runtime/.env" 2>/dev/null | cut -d= -f2- | cut -d, -f1 | tr -d '[:space:]')"
+    if [ -n "${COOPER_KEY:-}" ]; then
+        OPEN_URL="${LANDING_URL}#key=${COOPER_KEY}"
+    fi
+fi
+
+if ! xdg-open "$OPEN_URL" >/dev/null 2>&1; then
     notify "COOPER ${STACK^} is up" "Open $LANDING_URL in your browser." "$ICON"
     exit 0
 fi

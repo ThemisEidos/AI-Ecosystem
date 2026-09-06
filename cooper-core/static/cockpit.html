@@ -102,6 +102,7 @@
       <div><span>approved</span> <b id="s-appr">—</b></div>
       <div><span>exceptions</span> <b id="s-exc">—</b></div>
       <div><span>last run</span> <b id="s-last">—</b></div>
+      <button class="tab" id="forget" style="border:1px solid #262f34;border-bottom-width:1px;padding:3px 8px">FORGET KEY</button>
     </div>
   </header>
   <main id="jobs"></main>
@@ -148,11 +149,31 @@
     });
   }
 
+  var STORE_KEY = "cooper_key";
+
+  function readStored() {
+    try { return localStorage.getItem(STORE_KEY) || sessionStorage.getItem(STORE_KEY); }
+    catch (e) { return null; }
+  }
+
+  function writeStored(k, persist) {
+    try {
+      clearStored();
+      (persist ? localStorage : sessionStorage).setItem(STORE_KEY, k);
+    } catch (e) {}
+  }
+
+  function clearStored() {
+    try { localStorage.removeItem(STORE_KEY); } catch (e) {}
+    try { sessionStorage.removeItem(STORE_KEY); } catch (e) {}
+  }
+
   function lock(msg) {
     KEY = null;
-    try { sessionStorage.removeItem("cooper_key"); } catch (e) {}
+    clearStored();
     $("app").classList.add("hide");
     $("gate").classList.remove("hide");
+    $("key").value = "";
     if (msg) toast(msg, true);
   }
 
@@ -348,13 +369,35 @@
   $("unlock").addEventListener("click", function () {
     var k = $("key").value.trim();
     if (!k) return;
-    try { sessionStorage.setItem("cooper_key", k); } catch (e) {}
+    writeStored(k, $("remember").checked);
     boot(k);
   });
+
+  $("forget").addEventListener("click", function () { lock("Key forgotten on this browser."); });
   $("key").addEventListener("keydown", function (e) { if (e.key === "Enter") $("unlock").click(); });
 
-  var saved = null;
-  try { saved = sessionStorage.getItem("cooper_key"); } catch (e) {}
+  // The desktop launcher hands the key over in the URL FRAGMENT (#key=...).
+  // A fragment is never sent to the server -- it reaches no request log, proxy
+  // or access log -- and it is stripped from the address bar immediately below,
+  // so it does not linger in browser history either. Typing the key by hand
+  // still works; this only means the button does not make you.
+  function keyFromFragment() {
+    var h = String(location.hash || "").replace(/^#/, "");
+    if (!h) return null;
+    var found = null;
+    h.split("&").forEach(function (pair) {
+      var i = pair.indexOf("=");
+      if (i > 0 && pair.slice(0, i) === "key") found = decodeURIComponent(pair.slice(i + 1));
+    });
+    if (found) {
+      try { history.replaceState(null, "", location.pathname + location.search); } catch (e) {}
+    }
+    return found && found.trim() ? found.trim() : null;
+  }
+
+  var handed = keyFromFragment();
+  if (handed) writeStored(handed, true);
+  var saved = handed || readStored();
   if (saved) { boot(saved); } else { $("gate").classList.remove("hide"); }
   setInterval(function () { if (KEY) load().catch(function () {}); }, 30000);
 })();

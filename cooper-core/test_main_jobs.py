@@ -282,3 +282,18 @@ def test_cockpit_page_embeds_no_api_key(monkeypatch):
     assert "cooper-local" not in body
     for key in main._API_KEYS:
         assert key not in body
+
+
+def test_cockpit_page_strips_a_handed_over_key_from_the_url(monkeypatch):
+    # The launcher passes the key in the URL fragment. The page must clear it
+    # from the address bar so it does not sit in browser history.
+    body = _client(monkeypatch).get("/cockpit").text
+    assert "keyFromFragment" in body
+    assert "history.replaceState" in body
+
+
+def test_cockpit_page_never_reads_the_key_from_a_query_string(monkeypatch):
+    # A query string WOULD reach the server's access log; a fragment never does.
+    body = _client(monkeypatch).get("/cockpit").text
+    assert "location.search" not in body.split("function keyFromFragment")[1].split("}")[0]
+    assert "location.hash" in body
