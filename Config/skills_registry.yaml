@@ -23,3 +23,33 @@ skills:
   permission_level: 1
   approval_required: false
   content_hash: 47526b7a9747cee7286a77a4c40b02f4a588b913b104b6d9d9f1e2116eb2e8d0
+- id: executor-workshop-integration
+  path: Skills/learned/executor-workshop-integration
+  workshop: open
+  permission_level: 1
+  approval_required: false
+  content_hash: 4d38e31721bfa2bc421c7e43711a873ec027fb82a48be29ecea3df8aa8390ead
+- id: fabric-pattern-review
+  path: Skills/learned/fabric-pattern-review
+  workshop: open
+  permission_level: 1
+  approval_required: false
+  content_hash: c9361854d8ebb89db152a2922bed406ee85582d252dc560a03e608213fe50da4
+- id: generate-status-summary
+  path: Skills/learned/generate-status-summary
+  workshop: open
+  permission_level: 1
+  approval_required: false
+  content_hash: 9a1efd4ae3de77ba648574d149be4768dd294e6c78dd0dae6b06796b9c005f04
+- id: report-summary
+  path: Skills/learned/report-summary
+  workshop: open
+  permission_level: 1
+  approval_required: false
+  content_hash: b3fac190bebf4718fbca4d4ff8a23dda13947aef8b7597b6f4babf8a241b001f
+- id: security-triage-alert
+  path: Skills/learned/security-triage-alert
+  workshop: open
+  permission_level: 1
+  approval_required: false
+  content_hash: 3877029e56690f6e95d16bb0f21dcba9ea013a00d2649eba32fc34fd5c196bf9
