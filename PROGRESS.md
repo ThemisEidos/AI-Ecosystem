@@ -47,9 +47,9 @@ throughout: every slice ships alone and live. Specs:
 `Docs/superpowers/specs/2026-08-18-step-15-max-metrics-design.md` (approved direction;
 governance gates G1–G5 open — see Blocked section).
 
-Execution order: 15a → 14a(rev) → 15c → 14b → 15d → 15e → 14c(+15f-i) → ~~14d~~ → 14e →
+Execution order: 15a → 14a(rev) → 15c → 14b → 15d → 15e → 14c(+15f-i) → 14d → 14e →
 15f → 15g → 15h. 15b anytime; 14f pinned until the home-lab network exists (2026-08-23);
-14d pulled from the order 2026-09-05 pending a new job definition (decision log).
+14d re-scoped and shipped 2026-09-05 as the News Reel (decision log).
 
 - [x] **15a — Native tool-calling dispatch** (M3→5; retires classifier dispatch; kills both 2026-08-04 gotchas as a class) — shipped 2026-08-24, live-verified both stacks (blocking + real SSE incl. preamble-then-dispatch), 3 post-review Importants closed in a fix-forward pass, itself reviewed clean (248/248). **Browser click-through per stack closed 2026-08-25** — see decision log; en route, found and fixed a real governance bypass on Private's Open WebUI (no cooper-core connection existed at all).
 - [x] **14a — Fabric pattern executor** — shipped 2026-08-25, live-verified both stacks (blocking API + browser click-through, all 4 patterns reachable via native tool-calling). Revised plan (2026-08-04 original rewritten for 15a's args-based dispatch), 4 tasks + subagent-driven-development, whole-branch review found and fixed 1 Critical (`PDA-Fabric/` was gitignored and never committed — see decision log) + 1 Important (workshop routing failed open toward cloud). Separate, unfixed finding: an intermittent approval-ticket hijack via Open WebUI's own background calls — see Gotchas 2026-08-25, flagged for owner decision, not in scope for this slice.
@@ -62,10 +62,11 @@ Execution order: 15a → 14a(rev) → 15c → 14b → 15d → 15e → 14c(+15f-i
 - [x] **15d — Council subsystem** (M6→5; planning-time panel + tiered final review, verdicts in evidence) ✓ 2026-08-31
 - [ ] **15e — Planner–executor** (M2→4; big brain drafts envelopes, cheap model executes)
 - [x] **14c — SearXNG + web_search + data-broker job** (+15f-i injection canaries) ✓ 2026-09-04
-- [ ] **14d — Bounded loop + (payload TBD)** — **re-scope required, 2026-09-05.** The
-  opt-out documenter payload is dropped (that work moved to another project); the
-  bounded-loop mechanism still stands. Needs a new job + DoD from the owner before any
-  code. Skipped in execution order until then — see decision log 2026-09-05.
+- [x] **14d — Bounded feed loop + News Reel** ✓ 2026-09-05 (re-scoped same day) — owner
+  supplied the new payload: collate cyber, critical infrastructure, national security,
+  election and weather-hazard news into one prioritised note. Live-verified on the Open
+  stack; `news-reel` committed `approved: false`, manual-trigger-only. Spec:
+  `Docs/superpowers/specs/2026-09-05-step-14d-news-reel-design.md`.
 - [x] **14e — Repo steward, draft-and-notify** ✓ 2026-09-05 — live-verified on the Open stack; `repo-steward` committed `approved: false`, manual-trigger-only (no scheduler)
 - [x] **15f — Robustness** (M8→5): (i) injection canaries ✓ 2026-09-04 · (ii) retry policy implemented + wired ✓ 2026-09-05 · (iii) chaos tests ✓ 2026-09-05 — streaming chat path wired ✓ 2026-09-05
 - [ ] **15g — Governed learning breadth** (M5→5; prompt-diff self-optimization, outcome-weighted skill scores)
@@ -1721,6 +1722,56 @@ Governance gates from the Step 15 spec §6 — each blocks only its named slice:
   - Origin worth recording: this was **the task COOPER's own 14e steward drafted** on its
     first live run, having read the North Star and correctly identified the fail-open
     packaging trap as the next thing worth building.
+
+- **2026-09-05 · 14d re-scoped and SHIPPED the same day — the News Reel.** The owner
+  supplied the new payload the re-scope was waiting on: collate cyber, critical
+  infrastructure, national security, election and weather-hazard news into one analysed,
+  prioritised note. Spec: `Docs/superpowers/specs/2026-09-05-step-14d-news-reel-design.md`.
+  578 tests (was 537).
+  - **It restores 14d's surviving DoD clause honestly.** "Loop provably halts at step quota"
+    is satisfied by a finite source list iterated under a hard `fetches_per_run` cap —
+    proven by a test that hands it 25 sources with a cap of 4 and asserts exactly 4 fetches.
+    This is emphatically **not** the parent spec's loop whose "tool choices are restricted to
+    the envelope's `steps` list": nothing dispatches on `steps`, and no LLM selects a tool, a
+    source or a category. Items inherit their feed's declared category; the model only ranks
+    and explains within a category it was handed. The 2026-09-01 narrow decision stands.
+  - **Sources: 26 feeds, every one verified before being written down.** RSS/Atom over
+    SearXNG, because search results carry no reliable publication date and "today's top
+    stories" then becomes guesswork. No new dependency — stdlib `xml.etree` plus the existing
+    `httpx`. The NWS feed is severity-filtered in the URL; unfiltered it returns ~266 mostly
+    minor alerts that would drown every other category.
+  - **A security review during the build flagged "XXE / entity expansion". Half of it was
+    real.** Probed before fixing: XXE does NOT reproduce — pointed at the real
+    `PDA-Runtime/.env`, Python's expat refuses external entities and raises "undefined
+    entity", no file read. Entity expansion IS real: a ~600-byte billion-laughs payload
+    parsed into a 300,000-character title, 500× amplification at five nesting levels, two
+    more levels being gigabytes, reachable from any of 26 third-party publishers. Fixed by
+    removing the class rather than the sample — every variant needs an entity declaration,
+    which needs a DTD, so DOCTYPE is refused outright. Verified it costs no real source.
+  - **The method error worth carrying: I verified the feed list from the HOST, and the job
+    runs in the CONTAINER.** Both CISA XML feeds passed design verification and then 403'd on
+    the first live run. CISA's WAF allows the static `/feeds/*.json` path but blocks the
+    dynamic `.xml` views for the container's fingerprint, while the identical request from
+    the host succeeds — same httpx version, same user agent, same minute. **A source list
+    verified in the wrong environment has not been verified.** Replaced with
+    in-container-verified equivalents (CERT/CC, SANS ISC, SecurityWeek ICS/OT): 26/26 now
+    working. The config header carries the lesson and the command to check properly.
+  - **Live proof (Open stack, real feeds, real cloud analysis):** 26 sources fetched, 146
+    items after dedupe, **25 stories — five in every category** — in ~40s, zero failures,
+    evidence valid. Earlier runs proved the resilience paths for real: a run with two dead
+    CISA feeds still completed and NAMED both in the reel's provenance section rather than
+    silently dropping them.
+  - **A rendering defect only a real run could show:** consecutive stories ran together as
+    `<url>- **Next story**`, because the separator was appended as `""` into a list joined
+    with `""`. Every section rendered as one mangled bullet. Now 25 clean bullets, 0
+    run-together lines — and a test pins it.
+  - **6 injection canaries** for the new path, mutation-tested: removing the delimiter
+    neutraliser fails exactly the three escape canaries and no others.
+  - **Owner's call:** `news-reel` is committed `approved: false` — that YAML edit is the
+    approval act. No scheduler, so the `daily 06:30` hint is unmet and it is manual-trigger
+    only. Election remains the thinnest category (4 feeds; Votebeat, Democracy Docket,
+    Brennan Center and NCSL all 404'd or blocked) and the reel reports a thin category
+    honestly rather than padding it.
 
 - **2026-09-05 · 15f(ii) shipped: PDA_RetryPolicy.json implemented and wired — per-stage
   timeout/retry budgets, live-verified against real inference.** Autonomous session while
