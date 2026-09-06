@@ -288,15 +288,19 @@ def test_cockpit_page_strips_a_handed_over_key_from_the_url(monkeypatch):
     # The launcher passes the key in the URL fragment. The page must clear it
     # from the address bar so it does not sit in browser history.
     body = _client(monkeypatch).get("/cockpit").text
-    assert "keyFromFragment" in body
+    assert "location.hash" in body
     assert "history.replaceState" in body
 
 
 def test_cockpit_page_never_reads_the_key_from_a_query_string(monkeypatch):
     # A query string WOULD reach the server's access log; a fragment never does.
-    body = _client(monkeypatch).get("/cockpit").text
-    assert "location.search" not in body.split("function keyFromFragment")[1].split("}")[0]
-    assert "location.hash" in body
+    # Assert on the code that extracts the key, not on a function name.
+    import re
+    js = re.search(r"<script>(.*?)</script>",
+                   _client(monkeypatch).get("/cockpit").text, re.S).group(1)
+    extractor = js[:js.index("history.replaceState")]
+    assert "location.hash" in extractor
+    assert "location.search" not in extractor
 
 
 def test_pair_new_requires_auth_and_claim_does_not(monkeypatch):
@@ -317,3 +321,47 @@ def test_pairing_round_trip_hands_over_the_presented_key(monkeypatch):
     assert c.post("/pair/claim", json={"code": code}).json()["key"] == "real-key"
     # single use
     assert c.post("/pair/claim", json={"code": code}).status_code == 400
+
+
+def test_cockpit_every_element_the_script_touches_exists(monkeypatch):
+    """The bug this exists to prevent (2026-09-06).
+
+    Three elements the script wires up at load — the pairing input, its button
+    and the remember checkbox — were missing because two edits to the markup
+    silently no-opped. `$("claim").addEventListener` then threw a TypeError on
+    load, which killed the script before it reached ANY of its work: the page
+    rendered blank, and the key handed over in the URL fragment was never
+    stripped from the address bar. One missing element, both symptoms.
+
+    A blank page and a leaked key are the same class of failure as everything
+    else caught today: something did nothing and said nothing about it.
+    """
+    import re
+    html = _client(monkeypatch).get("/cockpit").text
+    script = re.search(r"<script>(.*?)</script>", html, re.S)
+    assert script, "cockpit page has no script block"
+    used = set(re.findall(r'\$\("([^"]+)"\)', script.group(1)))
+    present = set(re.findall(r'id="([^"]+)"', html))
+    assert used, "no element lookups found — did the helper get renamed?"
+    assert not (used - present), (
+        "the script looks up elements that do not exist in the page: "
+        + ", ".join(sorted(used - present))
+    )
+
+
+def test_cockpit_strips_the_fragment_before_anything_that_can_throw(monkeypatch):
+    """The strip must not depend on the rest of the script surviving.
+
+    It used to run last; a TypeError higher up meant the key stayed in the
+    address bar. It now runs first, so the only code that can precede it is the
+    strip itself.
+    """
+    import re
+    js = re.search(r"<script>(.*?)</script>",
+                   _client(monkeypatch).get("/cockpit").text, re.S).group(1)
+    strip_at = js.index("history.replaceState")
+    # nothing that touches the DOM may run before the strip
+    head = js[:strip_at]
+    assert "getElementById" not in head
+    assert "addEventListener" not in head
+    assert 'document.querySelector' not in head

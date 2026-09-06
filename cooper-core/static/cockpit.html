@@ -85,9 +85,19 @@
 
 <div id="gate" class="gate hide">
   <h2>COOPER Cockpit</h2>
-  <p>Paste the API key from <code>PDA-Runtime/.env</code>. It stays in this tab only — it is never stored on the server or written into the page.</p>
+  <p>Paste the API key from <code>PDA-Runtime/.env</code>. It is kept in this browser only — never on the server, never written into the page.</p>
   <input type="text" id="key" placeholder="COOPER_API_KEYS value" autocomplete="off">
+  <label style="display:flex;gap:8px;align-items:center;margin-top:12px;font-size:13px;color:var(--dim2);cursor:pointer">
+    <input type="checkbox" id="remember" checked> Stay unlocked on this browser
+  </label>
   <div style="margin-top:14px"><button class="act primary" id="unlock">Unlock</button></div>
+  <div style="margin-top:22px;padding-top:18px;border-top:1px solid var(--line)">
+    <p style="margin:0 0 10px">On a phone? Open the Cockpit on the machine running COOPER, press <b>Pair a device</b>, and enter the six digits it shows.</p>
+    <div style="display:flex;gap:8px">
+      <input type="text" id="paircode" placeholder="000000" inputmode="numeric" maxlength="6" autocomplete="one-time-code" style="width:130px;letter-spacing:.25em;text-align:center">
+      <button class="act" id="claim">Pair</button>
+    </div>
+  </div>
 </div>
 
 <div id="pairbox" class="gate hide" style="position:fixed;inset:0;margin:0;display:flex;align-items:center;justify-content:center;background:rgba(14,17,19,.92);border:0;z-index:20">
@@ -123,6 +133,33 @@
 <script>
 (function () {
   "use strict";
+
+  // FIRST, before anything else can throw.
+  //
+  // The desktop launcher hands the key over in the URL fragment (#key=...).
+  // A fragment is never sent to the server -- no request log, no proxy, no
+  // access log sees it -- but it IS visible in the address bar until stripped.
+  //
+  // This ran at the BOTTOM of the script once, and a TypeError higher up killed
+  // the script before reaching it: the page rendered blank AND the key sat in
+  // the address bar (2026-09-06). Stripping the URL must not depend on the rest
+  // of this file working, so it happens here, wrapped, with nothing before it.
+  var HANDED = null;
+  try {
+    var h = String(location.hash || "").replace(/^#/, "");
+    if (h) {
+      h.split("&").forEach(function (pair) {
+        var i = pair.indexOf("=");
+        if (i > 0 && pair.slice(0, i) === "key") HANDED = decodeURIComponent(pair.slice(i + 1));
+      });
+      if (HANDED) {
+        try { history.replaceState(null, "", location.pathname + location.search); }
+        catch (e) { location.hash = ""; }
+      }
+    }
+    if (HANDED) { HANDED = HANDED.trim() || null; }
+  } catch (e) { HANDED = null; }
+
   var KEY = null, state = { open: null, tab: "envelope" }, DATA = { jobs: [], runs: [], exceptions: [] };
   var $ = function (id) { return document.getElementById(id); };
 
@@ -424,28 +461,8 @@
   $("paircode").addEventListener("keydown", function (e) { if (e.key === "Enter") $("claim").click(); });
   $("key").addEventListener("keydown", function (e) { if (e.key === "Enter") $("unlock").click(); });
 
-  // The desktop launcher hands the key over in the URL FRAGMENT (#key=...).
-  // A fragment is never sent to the server -- it reaches no request log, proxy
-  // or access log -- and it is stripped from the address bar immediately below,
-  // so it does not linger in browser history either. Typing the key by hand
-  // still works; this only means the button does not make you.
-  function keyFromFragment() {
-    var h = String(location.hash || "").replace(/^#/, "");
-    if (!h) return null;
-    var found = null;
-    h.split("&").forEach(function (pair) {
-      var i = pair.indexOf("=");
-      if (i > 0 && pair.slice(0, i) === "key") found = decodeURIComponent(pair.slice(i + 1));
-    });
-    if (found) {
-      try { history.replaceState(null, "", location.pathname + location.search); } catch (e) {}
-    }
-    return found && found.trim() ? found.trim() : null;
-  }
-
-  var handed = keyFromFragment();
-  if (handed) writeStored(handed, true);
-  var saved = handed || readStored();
+  if (HANDED) writeStored(HANDED, true);
+  var saved = HANDED || readStored();
   if (saved) { boot(saved); } else { $("gate").classList.remove("hide"); }
   setInterval(function () { if (KEY) load().catch(function () {}); }, 30000);
 })();
