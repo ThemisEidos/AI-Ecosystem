@@ -95,7 +95,7 @@ the Bearer token / Open WebUI connection key for this machine.
 
 Installs **COOPER Private** and **COOPER Open** into the app launcher (pin to the dock as
 desired). Clicking one runs `launch-cooper.sh <stack>`: brings that stack up via
-`install-cooper.sh`, waits for cooper-core and Open WebUI health, then opens the WebUI in
+`install-cooper.sh`, waits for cooper-core health and the landing page, then opens it in
 the default browser. Progress is reported via desktop notifications; on failure the
 notification points at `tmp/launch-<stack>.log`. The `.desktop` entries embed this
 checkout's absolute path — re-run `--install-desktop` if the repo moves.

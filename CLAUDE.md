@@ -71,8 +71,12 @@ Fresh-machine gotcha: `docker-compose.yml` declares the `open-webui` volume
 
 **Desktop launchers:** `./launch-cooper.sh --install-desktop` installs "COOPER Private" /
 "COOPER Open" app-grid entries (pin to dock). Each runs `launch-cooper.sh <stack>`:
-brings the stack up via `install-cooper.sh`, waits for health, opens the WebUI in the
-browser; progress via desktop notifications, failures logged to `tmp/launch-<stack>.log`.
+brings the stack up via `install-cooper.sh`, waits for health, opens that stack's landing
+page in the browser; progress via desktop notifications, failures logged to `tmp/launch-<stack>.log`.
+**Open lands on the Cockpit** (`:8001/cockpit`, Step 15i) rather than Open WebUI — the
+governance surface is what that button is for. Private still lands on its WebUI (`:3001`):
+`/cockpit` is Open-only for now, and Private mounts no jobs registry (G4), so a cockpit
+there would only ever be empty.
 
 ### Port map
 

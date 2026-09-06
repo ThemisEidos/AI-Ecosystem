@@ -1,12 +1,17 @@
 #!/usr/bin/env bash
 # launch-cooper.sh — GUI-friendly launcher for a COOPER stack (backend for the
 # desktop buttons). Brings the stack up if needed (via install-cooper.sh), waits
-# for health, then opens Open WebUI in the browser. Progress via desktop
-# notifications so it works with Terminal=false .desktop entries.
+# for health, then opens the stack's landing page in the browser. Progress via
+# desktop notifications so it works with Terminal=false .desktop entries.
+#
+# Open lands on the Cockpit (:8001/cockpit, Step 15i) rather than Open WebUI:
+# the governance surface is what the desktop button is for. Private still lands
+# on its WebUI — /cockpit is deliberately Open-only for now, and Private mounts
+# no jobs registry at all (G4), so a cockpit there would only ever be empty.
 #
 # Usage:
 #   ./launch-cooper.sh private            # COOPER Private → WebUI on :3001
-#   ./launch-cooper.sh open               # COOPER Open    → WebUI on :3000
+#   ./launch-cooper.sh open               # COOPER Open    → Cockpit on :8001
 #   ./launch-cooper.sh --install-desktop  # write ~/.local/share/applications entries
 set -uo pipefail
 
@@ -29,7 +34,7 @@ install_desktop() {
         if [[ "$stack" == private ]]; then
             name="COOPER Private"; comment="Local-only workshop (Ollama, ports 8000/3001)"
         else
-            name="COOPER Open"; comment="Cloud-capable workshop (LiteLLM, ports 8001/3000)"
+            name="COOPER Open"; comment="Cloud-capable workshop — opens the Cockpit (:8001)"
         fi
         cat > "$apps_dir/cooper-$stack.desktop" <<EOF
 [Desktop Entry]
@@ -56,8 +61,8 @@ fi
 
 STACK="${1:-}"
 case "$STACK" in
-    private) INSTALL_ARGS=(--private); WEBUI_URL="http://localhost:3001" ;;
-    open)    INSTALL_ARGS=();          WEBUI_URL="http://localhost:3000" ;;
+    private) INSTALL_ARGS=(--private); LANDING_URL="http://localhost:3001" ;;
+    open)    INSTALL_ARGS=();          LANDING_URL="http://localhost:8001/cockpit" ;;
     *) echo "Usage: launch-cooper.sh <private|open> | --install-desktop" >&2; exit 2 ;;
 esac
 ICON="$ICON_DIR/cooper-$STACK.svg"
@@ -70,15 +75,15 @@ if ! bash install-cooper.sh "${INSTALL_ARGS[@]+"${INSTALL_ARGS[@]}"}" >"$LOG" 2>
     exit 1
 fi
 
-# install-cooper.sh polled cooper-core; also wait for Open WebUI itself so the
-# browser doesn't land on a connection error during a cold start.
+# install-cooper.sh polled cooper-core's /health; also wait for the landing page
+# itself so the browser doesn't hit a connection error during a cold start.
 for _ in $(seq 1 30); do
-    curl -sf --max-time 2 "$WEBUI_URL" >/dev/null 2>&1 && break
+    curl -sf --max-time 2 "$LANDING_URL" >/dev/null 2>&1 && break
     sleep 2
 done
 
-if ! xdg-open "$WEBUI_URL" >/dev/null 2>&1; then
-    notify "COOPER ${STACK^} is up" "Open $WEBUI_URL in your browser." "$ICON"
+if ! xdg-open "$LANDING_URL" >/dev/null 2>&1; then
+    notify "COOPER ${STACK^} is up" "Open $LANDING_URL in your browser." "$ICON"
     exit 0
 fi
-notify "COOPER ${STACK^} is ready" "$WEBUI_URL" "$ICON"
+notify "COOPER ${STACK^} is ready" "$LANDING_URL" "$ICON"
