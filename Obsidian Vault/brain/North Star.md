@@ -129,6 +129,24 @@ every proposal traceable to the input state it came from.
 is the approval act and it is the owner's. No n8n scheduler ships, so its `daily 07:00` hint is
 manual-trigger-only — same unmet clause as 14b/14c, stated rather than quietly skipped.
 
+**2026-09-06 — scheduler live, skills promoted, approval GUI designed.**
+*Scheduler:* `COOPER Job Scheduler` imported into n8n and **active** — all four jobs
+scheduled (link-checker 03:00, data-broker-research 00:05 + random 0-350min, news-reel
+06:30, repo-steward 07:00). Closes the "no scheduler ships" gap every slice since 14b has
+carried, and the randomized-time clause 14c's DoD asked for. Auth is
+`{{ $env.COOPER_API_KEY }}` from compose, not an n8n credential — that credential-by-name
+with an empty id is exactly why 14b's scheduler sat unimported since 2026-08-30. Verified
+before activating: n8n reaches cooper-core, the key authenticates, the call is refused
+"not approved". **The approval gate governs execution, not the schedule** — so an active
+scheduler is harmless for unapproved jobs, and approving one starts it running.
+*Skills:* owner triaged the six inert drafts — 1 deleted, 1 freshened
+(`fabric-pattern-integration` was stale, rewritten as `executor-workshop-integration`
+around the packaging lesson that has recurred three times), 5 promoted. Registry 4 → 9,
+`Skills/_drafts/` empty.
+*Approval GUI:* three directions drafted, owner chose the console; built out with
+expandable per-job envelopes (scope read-only, quota/schedule editable with the
+hash-voids-approval warning in place), run history and exception tabs. A slice of 15i.
+
 **14d — DECIDED 2026-09-05: re-scope required, pulled from the execution order.** The
 opt-out tracking work has moved to a different project; COOPER will not build an opt-out
 documenter, so 14d's DoD payload is void. Its input is not the problem — 14c's live runs
