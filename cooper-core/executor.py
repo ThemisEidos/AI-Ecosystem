@@ -522,6 +522,11 @@ async def _run_browser(args: dict) -> str:
 
 _RSS_TIMEOUT = 20.0
 _RSS_MAX_ITEMS_PER_FEED = 40
+# Largest real feed measured across all 25 configured sources on 2026-09-05 was
+# 4.5MB; 16MB is headroom without allowing an unbounded body to be read into
+# memory before parsing even begins.
+_RSS_MAX_BYTES = 16 * 1024 * 1024
+_DOCTYPE_RE = re.compile(rb"<!\s*doctype", re.IGNORECASE)
 _RSS_UA = "Mozilla/5.0 (compatible; COOPER-NewsReel/1.0; governed personal research)"
 _ATOM_NS = "{http://www.w3.org/2005/Atom}"
 
@@ -545,15 +550,46 @@ def _first_text(elem, *paths) -> str:
     return ""
 
 
-def parse_feed(text: str) -> list:
+def parse_feed(text: str, max_bytes: int = _RSS_MAX_BYTES) -> list:
     """Parse RSS 2.0 <item>s or Atom <entry>s into {title,url,summary,published}.
 
     stdlib xml.etree only -- no new dependency, per the repo's minimal-deps
     convention. Items with no title are dropped: a headline is the one field the
     reel cannot work without, and a title-less item is noise, not news.
+
+    HARDENING (2026-09-05, from a commit security review). Feed bodies are
+    untrusted documents from 25 third-party publishers, any of which could be
+    compromised. Two guards, both grounded in what was actually measured rather
+    than in what the class of attack is called:
+
+      * DOCTYPE is refused outright. The review flagged "XXE / entity
+        expansion"; probed against the real PDA-Runtime/.env, the XXE half does
+        NOT reproduce -- Python's expat does not resolve external entities and
+        raises "undefined entity", so no file is read. The expansion half is
+        real and serious: a ~600-byte billion-laughs payload parsed into a
+        300,000-character title, 500x amplification at five nesting levels, and
+        two more levels is gigabytes. Every variant of that attack needs an
+        entity declaration, which needs a DTD, so refusing DOCTYPE removes the
+        class rather than the sample. Verified the same day that none of the 25
+        configured feeds uses a DOCTYPE, so this costs no real source.
+      * Size cap before parsing, so an oversized body cannot exhaust memory
+        before any of the above runs.
     """
+    raw = text.encode("utf-8") if isinstance(text, str) else bytes(text)
+    if len(raw) > max_bytes:
+        raise ExecutionError(
+            f"rss_fetch: feed body is {len(raw)} bytes, over the {max_bytes}-byte cap"
+        )
+    # Check only the head: a DOCTYPE is only legal in the prolog, and scanning
+    # the whole body would let a huge document pay for a check it cannot pass.
+    if _DOCTYPE_RE.search(raw[:4096]):
+        raise ExecutionError(
+            "rss_fetch: feed declares a DOCTYPE — refused. Entity expansion "
+            "(billion-laughs) is a memory-exhaustion vector and no legitimate "
+            "feed in the configured source list uses one."
+        )
     try:
-        root = ET.fromstring(text.encode("utf-8") if isinstance(text, str) else text)
+        root = ET.fromstring(raw)
     except ET.ParseError as exc:
         raise ExecutionError(f"rss_fetch: feed is not parseable XML — {exc}")
 
@@ -603,6 +639,11 @@ async def _run_rss_fetch(url: str) -> list:
         raise ExecutionError(f"rss_fetch: {u} — {type(exc).__name__}: {exc}")
     if resp.status_code != 200:
         raise ExecutionError(f"rss_fetch: {u} — HTTP {resp.status_code}")
+    if len(resp.content) > _RSS_MAX_BYTES:
+        raise ExecutionError(
+            f"rss_fetch: {u} — body is {len(resp.content)} bytes, over the "
+            f"{_RSS_MAX_BYTES}-byte cap"
+        )
     return parse_feed(resp.text)
 
 

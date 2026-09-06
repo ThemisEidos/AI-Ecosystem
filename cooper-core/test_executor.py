@@ -1063,3 +1063,56 @@ def test_rss_fetch_is_not_in_any_tool_registry():
     for workshop in ("open", "private"):
         tools = registry.list_tools(workshop)
         assert not [t for t in tools if t.get("executor") == "rss_fetch"], workshop
+
+
+# --- feed parsing hardening (2026-09-05, from a commit security review) -------
+# The review flagged "XXE / XML entity expansion". Probed against the real
+# .env before fixing anything: the XXE half does NOT reproduce -- Python's
+# expat does not resolve external entities and raises "undefined entity", so
+# no file is read. The expansion half is REAL: a ~600-byte billion-laughs
+# payload parsed into a 300,000-character title, 500x amplification at only
+# five nesting levels. Two more levels is gigabytes, from any of 25 third-party
+# feeds. Guard: reject DOCTYPE outright (verified 2026-09-05 that none of the
+# 25 real feeds uses one) and cap the response size.
+
+_BILLION_LAUGHS = """<?xml version="1.0"?>
+<!DOCTYPE lolz [
+ <!ENTITY lol "lol">
+ <!ENTITY lol1 "&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;">
+ <!ENTITY lol2 "&lol1;&lol1;&lol1;&lol1;&lol1;&lol1;&lol1;&lol1;&lol1;&lol1;">
+ <!ENTITY lol3 "&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;">
+ <!ENTITY lol4 "&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;">
+ <!ENTITY lol5 "&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;">
+]>
+<rss version="2.0"><channel><item><title>&lol5;</title></item></channel></rss>"""
+
+
+def test_parse_feed_refuses_entity_expansion_bomb():
+    with pytest.raises(executor.ExecutionError) as exc:
+        executor.parse_feed(_BILLION_LAUGHS)
+    assert "doctype" in str(exc.value).lower()
+
+
+def test_parse_feed_refuses_any_doctype():
+    doc = ('<?xml version="1.0"?><!DOCTYPE rss SYSTEM "http://evil.test/x.dtd">'
+           "<rss><channel><item><title>T</title></item></channel></rss>")
+    with pytest.raises(executor.ExecutionError):
+        executor.parse_feed(doc)
+
+
+def test_parse_feed_refuses_doctype_regardless_of_case_or_spacing():
+    for variant in ("<!doctype rss []>", "<!DocType  rss []>", "<!DOCTYPE\nrss []>"):
+        doc = f'<?xml version="1.0"?>{variant}<rss><channel></channel></rss>'
+        with pytest.raises(executor.ExecutionError):
+            executor.parse_feed(doc)
+
+
+def test_parse_feed_refuses_oversized_documents():
+    huge = "<rss><channel>" + ("<item><title>x</title></item>" * 10) + "</channel></rss>"
+    with pytest.raises(executor.ExecutionError):
+        executor.parse_feed(huge, max_bytes=50)
+
+
+def test_parse_feed_still_accepts_a_normal_feed_after_hardening():
+    assert executor.parse_feed(_RSS_SAMPLE)[0]["title"] == "First story"
+    assert executor.parse_feed(_ATOM_SAMPLE)[0]["title"] == "Atom story"
