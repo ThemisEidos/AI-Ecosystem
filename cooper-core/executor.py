@@ -57,6 +57,8 @@ from typing import Optional
 
 from html.parser import HTMLParser
 
+import xml.etree.ElementTree as ET
+
 import httpx
 
 from decision import _ollama_complete, _openai_complete
@@ -516,6 +518,92 @@ async def _run_browser(args: dict) -> str:
     text = await loop.run_in_executor(None, _extract)
     text = text[:_MAX_OUTPUT].strip()
     return f"[Browser Research — {url}]\n{text}"
+
+
+_RSS_TIMEOUT = 20.0
+_RSS_MAX_ITEMS_PER_FEED = 40
+_RSS_UA = "Mozilla/5.0 (compatible; COOPER-NewsReel/1.0; governed personal research)"
+_ATOM_NS = "{http://www.w3.org/2005/Atom}"
+
+
+def _first_text(elem, *paths) -> str:
+    """First non-empty text among `paths`, tolerating absent elements.
+
+    Feeds are untrusted remote documents, not a schema we control: items
+    routinely omit links, dates or summaries. A missing field is a blank, never
+    an exception -- one malformed item must not cost the whole feed.
+    """
+    for path in paths:
+        found = elem.find(path)
+        if found is not None:
+            if found.text and found.text.strip():
+                return found.text.strip()
+            # Atom links carry the URL in an attribute, not in text.
+            href = found.get("href")
+            if href and href.strip():
+                return href.strip()
+    return ""
+
+
+def parse_feed(text: str) -> list:
+    """Parse RSS 2.0 <item>s or Atom <entry>s into {title,url,summary,published}.
+
+    stdlib xml.etree only -- no new dependency, per the repo's minimal-deps
+    convention. Items with no title are dropped: a headline is the one field the
+    reel cannot work without, and a title-less item is noise, not news.
+    """
+    try:
+        root = ET.fromstring(text.encode("utf-8") if isinstance(text, str) else text)
+    except ET.ParseError as exc:
+        raise ExecutionError(f"rss_fetch: feed is not parseable XML — {exc}")
+
+    nodes = root.findall(".//item") or root.findall(f".//{_ATOM_NS}entry")
+    items = []
+    for node in nodes[:_RSS_MAX_ITEMS_PER_FEED]:
+        title = _first_text(node, "title", f"{_ATOM_NS}title")
+        if not title:
+            continue
+        items.append({
+            "title": title,
+            "url": _first_text(node, "link", f"{_ATOM_NS}link"),
+            "summary": _first_text(
+                node, "description", f"{_ATOM_NS}summary", f"{_ATOM_NS}content"
+            ),
+            "published": _first_text(
+                node, "pubDate", f"{_ATOM_NS}updated", f"{_ATOM_NS}published"
+            ),
+        })
+    return items
+
+
+async def _run_rss_fetch(url: str) -> list:
+    """Fetch and parse one feed (Step 14d). Job-runner-only.
+
+    Deliberately NOT in any tool registry, exactly like _run_web_search and
+    _run_file_edit: the chat model can neither see nor select it. The caller
+    supplies the URL from the envelope-declared source list in
+    Config/news_sources.yaml -- never a URL from a model, and never a link found
+    inside feed content.
+
+    Every field returned here is UNTRUSTED remote text. Callers must place it in
+    a quoted data block, never in the instruction portion of a prompt; the
+    invariant test_injection_canaries.py enforces.
+    """
+    u = str(url).strip()
+    if not u:
+        raise ExecutionError("rss_fetch: empty url")
+    if not u.lower().startswith(("http://", "https://")):
+        raise ExecutionError(f"rss_fetch: refusing non-http(s) url '{u}'")
+    try:
+        async with httpx.AsyncClient(
+            timeout=_RSS_TIMEOUT, follow_redirects=True, headers={"User-Agent": _RSS_UA}
+        ) as client:
+            resp = await client.get(u)
+    except httpx.HTTPError as exc:
+        raise ExecutionError(f"rss_fetch: {u} — {type(exc).__name__}: {exc}")
+    if resp.status_code != 200:
+        raise ExecutionError(f"rss_fetch: {u} — HTTP {resp.status_code}")
+    return parse_feed(resp.text)
 
 
 async def _run_web_search(query: str, max_results: int = _MAX_SEARCH_RESULTS) -> list:

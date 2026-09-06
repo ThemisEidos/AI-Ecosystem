@@ -1,0 +1,96 @@
+# News Reel sources (Step 14d, re-scoped 2026-09-05).
+#
+# Curation lives here, as data, so adding or dropping a source is an owner edit
+# rather than a code change. Every feed below was fetched and parsed on
+# 2026-09-05 before being written down; candidates that returned 403/404 or
+# unparseable bodies were dropped rather than shipped hopefully.
+#
+# An item inherits its feed's category -- no model classifies or routes.
+# `category` values are fixed; adding one means adding a section to the reel.
+sources:
+- category: cyber
+  name: CISA All Advisories
+  url: https://www.cisa.gov/cybersecurity-advisories/all.xml
+- category: cyber
+  name: Krebs on Security
+  url: https://krebsonsecurity.com/feed/
+- category: cyber
+  name: BleepingComputer
+  url: https://www.bleepingcomputer.com/feed/
+- category: cyber
+  name: The Record
+  url: https://therecord.media/feed
+- category: cyber
+  name: Dark Reading
+  url: https://www.darkreading.com/rss.xml
+- category: cyber
+  name: SecurityWeek
+  url: https://www.securityweek.com/feed/
+
+- category: critical_infrastructure
+  name: CISA ICS Advisories
+  url: https://www.cisa.gov/cybersecurity-advisories/ics-advisories.xml
+- category: critical_infrastructure
+  name: Utility Dive
+  url: https://www.utilitydive.com/feeds/news/
+- category: critical_infrastructure
+  name: Industrial Cyber
+  url: https://industrialcyber.co/feed/
+- category: critical_infrastructure
+  name: Nextgov
+  url: https://www.nextgov.com/rss/all/
+- category: critical_infrastructure
+  name: POWER Magazine
+  url: https://www.powermag.com/feed/
+
+- category: national_security
+  name: Defense One
+  url: https://www.defenseone.com/rss/all/
+- category: national_security
+  name: Breaking Defense
+  url: https://breakingdefense.com/feed/
+- category: national_security
+  name: War on the Rocks
+  url: https://warontherocks.com/feed/
+- category: national_security
+  name: Defense News
+  url: https://www.defensenews.com/arc/outboundfeeds/rss/
+- category: national_security
+  name: Just Security
+  url: https://www.justsecurity.org/feed/
+
+# Weakest category: Votebeat, Democracy Docket, Brennan Center and NCSL all
+# 404'd or blocked on 2026-09-05. NPR Politics is general politics, so the
+# analysis step filters it for election relevance. The reel reports a thin
+# category honestly rather than padding it.
+- category: election
+  name: Election Law Blog
+  url: https://electionlawblog.org/?feed=rss2
+- category: election
+  name: Stateline
+  url: https://stateline.org/feed/
+- category: election
+  name: Verified Voting
+  url: https://verifiedvoting.org/feed/
+- category: election
+  name: NPR Politics
+  url: https://feeds.npr.org/1014/rss.xml
+
+# Severity filter is IN the URL on purpose: unfiltered this feed returns ~266
+# active alerts, overwhelmingly minor, which would drown every other category.
+# Severe+Extreme returns ~40. Both verified 2026-09-05.
+- category: weather_hazard
+  name: NWS Severe/Extreme Alerts
+  url: https://api.weather.gov/alerts/active.atom?severity=Severe,Extreme&status=actual
+- category: weather_hazard
+  name: NHC Atlantic
+  url: https://www.nhc.noaa.gov/index-at.xml
+- category: weather_hazard
+  name: NOAA Storm Prediction Center
+  url: https://www.spc.noaa.gov/products/spcrss.xml
+- category: weather_hazard
+  name: USGS M4.5+ Earthquakes
+  url: https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/4.5_day.atom
+- category: weather_hazard
+  name: InciWeb Wildfires
+  url: https://inciweb.wildfire.gov/incidents/rss.xml

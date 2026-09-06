@@ -1000,3 +1000,66 @@ def test_file_edit_directory_scope_refuses_bare_filename_at_repo_root(tmp_path, 
     with pytest.raises(executor.ExecutionError):
         asyncio.run(executor._run_file_edit({}, "edit", "open", args))
     assert not (tmp_path / "TASK.md").exists()
+
+
+# --- rss_fetch: job-runner-only feed reader (Step 14d) ------------------------
+
+_RSS_SAMPLE = """<?xml version="1.0"?>
+<rss version="2.0"><channel><title>Feed</title>
+<item><title>First story</title><link>https://ex.test/1</link>
+<description>Body one</description><pubDate>Wed, 03 Sep 2026 10:00:00 GMT</pubDate></item>
+<item><title>Second story</title><link>https://ex.test/2</link>
+<description>Body two</description><pubDate>Wed, 03 Sep 2026 11:00:00 GMT</pubDate></item>
+</channel></rss>"""
+
+_ATOM_SAMPLE = """<?xml version="1.0"?>
+<feed xmlns="http://www.w3.org/2005/Atom"><title>AFeed</title>
+<entry><title>Atom story</title><link href="https://ex.test/a1"/>
+<summary>Atom body</summary><updated>2026-09-03T12:00:00Z</updated></entry>
+</feed>"""
+
+
+def test_rss_fetch_parses_rss_items():
+    items = executor.parse_feed(_RSS_SAMPLE)
+    assert [i["title"] for i in items] == ["First story", "Second story"]
+    assert items[0]["url"] == "https://ex.test/1"
+    assert "Body one" in items[0]["summary"]
+    assert items[0]["published"]
+
+
+def test_rss_fetch_parses_atom_entries():
+    items = executor.parse_feed(_ATOM_SAMPLE)
+    assert len(items) == 1
+    assert items[0]["title"] == "Atom story"
+    assert items[0]["url"] == "https://ex.test/a1"   # Atom link is an attribute
+
+
+def test_rss_fetch_raises_on_malformed_xml():
+    with pytest.raises(executor.ExecutionError):
+        executor.parse_feed("<rss><channel><item>unclosed")
+
+
+def test_rss_fetch_tolerates_items_missing_fields():
+    # A feed item with no link or date must not crash the parser -- feeds are
+    # untrusted remote documents, not a schema we control.
+    xml = ('<?xml version="1.0"?><rss version="2.0"><channel>'
+           "<item><title>Bare</title></item></channel></rss>")
+    items = executor.parse_feed(xml)
+    assert items[0]["title"] == "Bare"
+    assert items[0]["url"] == ""
+    assert items[0]["published"] == ""
+
+
+def test_rss_fetch_skips_items_with_no_title():
+    xml = ('<?xml version="1.0"?><rss version="2.0"><channel>'
+           "<item><link>https://ex.test/x</link></item>"
+           "<item><title>Real</title></item></channel></rss>")
+    assert [i["title"] for i in executor.parse_feed(xml)] == ["Real"]
+
+
+def test_rss_fetch_is_not_in_any_tool_registry():
+    # Job-runner-only, same treatment web_search and file_edit get: no chat
+    # model may see or select it.
+    for workshop in ("open", "private"):
+        tools = registry.list_tools(workshop)
+        assert not [t for t in tools if t.get("executor") == "rss_fetch"], workshop
