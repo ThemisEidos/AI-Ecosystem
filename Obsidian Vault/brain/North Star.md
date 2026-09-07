@@ -6,6 +6,26 @@ Part of [[COOPER Brain]] · traps that shaped this position: [[Gotchas]] · how 
 
 ## Current Position
 
+**Session close 2026-09-07 — where things stand.** Purpose re-anchored by the owner:
+**COOPER is the harness that beats Hermes**; the ops console is a bonus; Private is
+deferred until Open is fully realized. Shipped this session, all live-verified and
+CI-green: **specialist routing** (governed roster, foreman delegates, per-capability
+approval — `needs_approval` honors explicit registry flags both directions); **runtime
+driver switching** (Cockpit dropdown, 363 tool-capable OpenRouter models + 4 aliases,
+closed-set validated, persisted, `openrouter/*` LiteLLM wildcard); **perimeter auth**
+(COOPER never asks for the key — the loopback+tailnet socket binding is the perimeter;
+presented keys still validated); **daily memory backups** (`backup-cooper.sh`, systemd
+user timer 05:00, sqlite backup API, verified restorable); **the real Obsidian brain**
+(112 wikilinks, `[[COOPER Brain]]` hub, `.obsidian/` seeded, and `cooper-core/codemap.py`
+generating a 21-note wikilinked code map that recall() can now search — brain_fts 95→116).
+Roadmap remnants cleared: 15b retired (Cockpit superseded it), 15e closed. **Open
+roadmap: 15g, 15h, 14f (pinned), MCP (backlog). Next: 15g governed learning.**
+Still owner-gated: nobody has visually looked at the Cockpit yet, and Open WebUI's
+retirement waits on that look. Two jobs (`repo-steward`, `news-reel`) approved and
+scheduled. Traps this session (all in Gotchas): bare `docker compose up` drops the
+tailnet binding — bring stacks up via `install-cooper.sh`.
+
+
 **15d (council subsystem) shipped 2026-08-31 — live and live-verified against the real**
 **running Open stack.** 6 tasks, each independently task-reviewed clean; full suite grew
 315 → 343 (`cd cooper-core && .venv/bin/python -m pytest -q`). `council.py` added
