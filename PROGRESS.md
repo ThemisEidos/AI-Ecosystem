@@ -1741,6 +1741,27 @@ Execution order: 15a → 14a(rev) → 15c → 14b → 15d → 15e → 14c(+15f-i
   and logged the bare-`docker compose up` trap that silently drops the tailnet binding
   (Gotchas 2026-09-07). 560 tests.
 
+- **2026-09-07 · COOPER's Obsidian brain actually built (owner ask: "did we ever...
+  lets do that now").** Honest answer recorded first: the brain existed as content (6
+  files, FTS-indexed, recall-fed) but was never an Obsidian vault — no `.obsidian/`, no
+  plugins, zero wikilinks, so no graph. "Graphify" turned out to be a CLI that tree-sits a
+  CODEBASE into a linked-note knowledge graph (the Claude-Code-token-saving meta), not an
+  Obsidian plugin. Rather than install a third-party binary, the same outcome was built
+  in-repo: `cooper-core/codemap.py` (stdlib `ast`, deterministic, idempotent, prunes stale
+  notes, 4 tests — one of which caught a real bug where import edges resolved against the
+  wrong directory) generates `brain/codemap/` — 21 notes, one per runtime module,
+  wikilinked along real import edges, plus a fan-in-annotated [[Code Map]] hub.
+  - Vault made real: `[[COOPER Brain]]` hub note, related-links lines in all 6 brain
+    files, `.obsidian/` seeded (graph colors: codemap/brain/inbox; workspace files stay
+    gitignored). 112 wikilinks where there were zero — the graph view now renders both the
+    knowledge and the architecture.
+  - `archivist.index_brain` and `GET /brain` went recursive with relative-path names —
+    without that, codemap notes would exist in the graph while recall() silently never saw
+    them (the silent-empty class, caught at design time for once). Legacy basename rows
+    cleaned on re-index.
+  - Live: brain_fts 95 → 116 rows; searching "envelope hash verification" now top-hits
+    `codemap/jobs.md`. COOPER recalls its own structure. 565 tests.
+
 ## Blocked / needs owner input
 
 Governance gates from the Step 15 spec §6 — each blocks only its named slice:

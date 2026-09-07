@@ -1,5 +1,7 @@
 # North Star — COOPER Project Direction
 
+Part of [[COOPER Brain]] · traps that shaped this position: [[Gotchas]] · how we build: [[Patterns]] · the code itself: [[Code Map]]
+
 > Updated 2026-09-05. Source of truth: PROGRESS.md + PRD.md.
 
 ## Current Position

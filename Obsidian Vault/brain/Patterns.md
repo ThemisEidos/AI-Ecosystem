@@ -1,5 +1,7 @@
 # Patterns — Confirmed Implementation Approaches
 
+Part of [[COOPER Brain]] · why: [[Key Decisions]] · counter-examples: [[Gotchas]] · realized in: [[Code Map]]
+
 > Updated 2026-07-01. Append new entries with `### YYYY-MM-DD · <title>`.
 
 ---

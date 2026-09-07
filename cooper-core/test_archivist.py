@@ -414,6 +414,25 @@ def test_index_brain_warns_when_the_directory_is_empty(tmp_path, capsys):
     assert "no .md" in out.lower() or "0 file" in out.lower() or "empty" in out.lower()
 
 
+def test_index_brain_indexes_subdirectories_with_relative_names(tmp_path):
+    """The brain gained codemap/ (2026-09-07). A top-level glob would have left
+    those notes visible in the graph but invisible to recall() -- the note
+    exists, nothing errors, memory just quietly lacks it."""
+    conn = archivist.get_conn(tmp_path / "m.db")
+    archivist.init_db(conn)
+    brain = tmp_path / "brain"
+    (brain / "codemap").mkdir(parents=True)
+    (brain / "North Star.md").write_text("# North Star\n\ntop text\n", encoding="utf-8")
+    (brain / "codemap" / "jobs.md").write_text("# jobs.py\n\nnested text\n", encoding="utf-8")
+    archivist.index_brain(conn, brain_dir=brain, force=True)
+    names = {r[0] for r in conn.execute("SELECT DISTINCT file_name FROM brain_fts")}
+    assert "codemap/jobs.md" in names, "subdirectory notes must be recallable"
+    assert "North Star.md" in names
+    hits = conn.execute(
+        "SELECT file_name FROM brain_fts WHERE brain_fts MATCH 'nested'").fetchall()
+    assert hits and hits[0][0] == "codemap/jobs.md"
+
+
 def test_index_brain_is_quiet_on_a_populated_directory(tmp_path, capsys):
     conn = archivist.get_conn(tmp_path / "m.db")
     archivist.init_db(conn)

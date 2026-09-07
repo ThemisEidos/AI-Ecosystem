@@ -1,5 +1,7 @@
 # Claude Desktop — Session Context
 
+Part of [[COOPER Brain]] · start every session at: [[North Star]]
+
 This file is the entry point for Claude Desktop MCP sessions on the COOPER project.
 
 ## How to load context

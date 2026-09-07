@@ -1,0 +1,17 @@
+{
+  "collapse-filter": true,
+  "showTags": false,
+  "showAttachments": false,
+  "hideUnresolved": false,
+  "showOrphans": true,
+  "collapse-color-groups": false,
+  "colorGroups": [
+    { "query": "path:brain/codemap", "color": { "a": 1, "rgb": 7328711 } },
+    { "query": "path:brain", "color": { "a": 1, "rgb": 15251305 } },
+    { "query": "path:00_Inbox", "color": { "a": 1, "rgb": 6122140 } }
+  ],
+  "collapse-display": false,
+  "textFadeMultiplier": -0.4,
+  "nodeSizeMultiplier": 1.2,
+  "lineSizeMultiplier": 1
+}

@@ -1,5 +1,7 @@
 # Key Decisions — Binding Architectural Choices
 
+Part of [[COOPER Brain]] · current effect: [[North Star]] · execution patterns: [[Patterns]]
+
 > Updated 2026-07-01. Append new entries with `### YYYY-MM-DD · <title>`.
 > Full decision log with rationale: PROGRESS.md "Decisions log" section.
 

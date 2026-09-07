@@ -1,5 +1,7 @@
 # Skills — Proven COOPER Capabilities
 
+Part of [[COOPER Brain]] · the loop's code: [[Code Map]] · proven runs feed: [[Key Decisions]]
+
 > Updated 2026-07-01. Source: State/COOPER_Skills.json + FastAPI build steps 1-5.
 > Do not reimplement a skill that already works — extend or configure it.
 

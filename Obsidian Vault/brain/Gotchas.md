@@ -1,5 +1,7 @@
 # Gotchas — Known Traps and Environment Quirks
 
+Part of [[COOPER Brain]] · position these traps shaped: [[North Star]] · choices they hardened into: [[Patterns]] · where they live: [[Code Map]]
+
 > Updated 2026-07-01. Append new entries with `### YYYY-MM-DD · <title>`.
 
 ---

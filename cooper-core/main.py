@@ -797,11 +797,14 @@ async def brain_index() -> dict:
     """
     files = []
     if _BRAIN_DIR.is_dir():
-        for path in sorted(_BRAIN_DIR.glob("*.md")):
+        # rglob since 2026-09-07: the brain gained codemap/ (one note per
+        # runtime module) and the browser must show what recall() can reach.
+        for path in sorted(_BRAIN_DIR.rglob("*.md")):
+            rel = path.relative_to(_BRAIN_DIR).as_posix()
             try:
                 text = path.read_text(encoding="utf-8")
             except (OSError, UnicodeDecodeError) as exc:
-                files.append({"file": path.name, "headings": 0, "sections": [],
+                files.append({"file": rel, "headings": 0, "sections": [],
                               "error": str(exc)})
                 continue
             sections = [
@@ -809,7 +812,7 @@ async def brain_index() -> dict:
                 for m in (ln for ln in text.splitlines() if ln.startswith("#"))
             ]
             files.append({
-                "file": path.name,
+                "file": rel,
                 "headings": len(sections),
                 "lines": len(text.splitlines()),
                 "sections": sections[:200],
