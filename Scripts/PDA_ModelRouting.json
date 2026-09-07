@@ -16,12 +16,12 @@
     "planner": {
       "private": "COOPER-Private",
       "open": "openai",
-      "notes": "Call site: planner.draft_envelope(), invoked once per POST /jobs/draft (Step 15e, narrow scope — 2026-09-01). Never called during job execution (run_job, jobs.py, is unmodified)."
+      "notes": "Call site: planner.draft_envelope(), invoked once per POST /jobs/draft (Step 15e, narrow scope \u2014 2026-09-01). Never called during job execution (run_job, jobs.py, is unmodified)."
     },
     "executor": {
       "private": "COOPER-Private",
       "open": "openai",
-      "notes": "No call site yet — reserved for Step 15e."
+      "notes": "No call site yet \u2014 reserved for Step 15e."
     },
     "reviewer": {
       "private": "COOPER-Private",
@@ -40,8 +40,35 @@
     }
   },
   "council_roster": {
-    "private": ["COOPER-Private", "COOPER-Private", "COOPER-Private"],
-    "open": ["openai", "claude", "gemini"],
+    "private": [
+      "COOPER-Private",
+      "COOPER-Private",
+      "COOPER-Private"
+    ],
+    "open": [
+      "openai",
+      "claude",
+      "gemini"
+    ],
     "notes": "Step 15d. 3-5 diverse aliases per the spec. Private has one local model (G1, 2026-08-23: no cloud-routed planning on Private) so its roster repeats COOPER-Private at varied temperatures (council.py's _MEMBER_TEMPERATURES) for behavioral spread rather than true model diversity -- the documented honest ceiling per North Star's M6 traceability note ('if 4b review quality fails, honest ceiling is 4 -- same-model review'). Open's roster spans three distinct providers (OpenAI, Anthropic, Google) already configured in litellm/litellm_config.yaml."
-  }
+  },
+  "specialists": {
+    "claude": {
+      "alias": "claude",
+      "description": "Code review, code generation, careful multi-step reasoning, writing quality. First choice for anything touching source code or requiring rigor."
+    },
+    "gemini-pro": {
+      "alias": "gemini-pro",
+      "description": "Deep research, long-context analysis, large-document summarization. First choice when the task involves a lot of material."
+    },
+    "gemini": {
+      "alias": "gemini",
+      "description": "Fast general assistant; cheap second opinion or quick summarization when claude/gemini-pro would be overkill."
+    },
+    "openai": {
+      "alias": "openai",
+      "description": "The workshop default (gpt-4o-mini). Quick general tasks; the fallback when no specialist fits."
+    }
+  },
+  "_comment_specialists": "Owner-directed 2026-09-07: the foreman delegates. The brain picks a specialist BY NAME; llm_api validates against this map; a test keeps the registry enum in sync. Aliases must exist in litellm_config.yaml \u2014 raw provider slugs do not route (Gotchas 2026-08-04)."
 }

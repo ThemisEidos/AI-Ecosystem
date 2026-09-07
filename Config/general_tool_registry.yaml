@@ -75,7 +75,12 @@ tools:
     name: LiteLLM Router
     drawer: AI Models
     workshop: Open Workshop
-    description: Route approved prompts to configured cloud or local language models.
+    description: >-
+      Delegate a task to a specialist model when it needs more than the default
+      brain: claude for code review, code generation and careful multi-step
+      reasoning; gemini-pro for deep research and long-context analysis; gemini
+      for a fast cheap second opinion; openai for quick general tasks (the
+      default). Pick the specialist whose strengths match the task.
     permission_level: 3
     approval_required: true
     executor_type: llm_api
@@ -85,10 +90,11 @@ tools:
       properties:
         prompt:
           type: string
-          description: "The exact prompt to send to the routed model — no tool-invocation framing, just the task itself."
-        model:
+          description: "The exact task to hand to the specialist — no tool-invocation framing, just the task itself."
+        specialist:
           type: string
-          description: "Optional model name to route to. Defaults to the workshop's configured model if omitted."
+          enum: [claude, gemini-pro, gemini, openai]
+          description: "Which specialist gets the task. Defaults to openai if omitted."
       required:
         - prompt
       additionalProperties: false

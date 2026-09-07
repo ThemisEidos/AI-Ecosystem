@@ -61,6 +61,9 @@ import xml.etree.ElementTree as ET
 
 import httpx
 
+import model_routing
+import retry_policy
+
 from decision import _ollama_complete, _openai_complete
 
 import registry
@@ -468,22 +471,48 @@ async def _run_fabric_pattern(args: dict, workshop: str) -> str:
 
 
 async def _run_llm_api(args: dict) -> str:
-    """LiteLLM Router (Open only) — routes an approved prompt to LiteLLM's
-    chat-completions endpoint. args.prompt is the clean instruction text
-    with no tool-invocation framing (the 2026-07-21 'framing text sent as
-    prompt' bug class dies with the regex it required)."""
-    model = args.get("model") or _LITELLM_DEFAULT_MODEL
+    """Specialist delegation (Open only) — the foreman's road to the roster.
+
+    Owner-directed 2026-09-07: the brain decides a task needs a specialist,
+    names one, and this routes it through LiteLLM. The pick is validated
+    against model_routing.load_specialists() even though the registry schema
+    already enums it — a schema is advisory to a misbehaving model; this gate
+    is not. The legacy 'model' param goes through the same gate, so no path
+    forwards an arbitrary string to LiteLLM any more.
+
+    args.prompt is the clean instruction text with no tool-invocation framing
+    (the 2026-07-21 'framing text sent as prompt' bug class dies there)."""
     prompt = str(args.get("prompt", "")).strip()
     if not prompt:
-        return "Workbench: LiteLLM Router request has no prompt to route."
-    try:
-        response = await _openai_complete(
-            _LITELLM_BASE_URL, _LITELLM_API_KEY, model,
+        return "Workbench: specialist delegation request has no task to route."
+
+    roster = model_routing.load_specialists()
+    picked = str(args.get("specialist") or args.get("model") or "").strip()
+    if not picked:
+        picked = "openai" if "openai" in roster else next(iter(roster), "")
+    spec = roster.get(picked)
+    if spec is None:
+        names = ", ".join(sorted(roster)) or "(roster is empty)"
+        return (
+            f"Workbench: '{picked}' is not on the specialist roster — "
+            f"refusing to route. Available specialists: {names}."
+        )
+
+    async def _attempt():
+        return await _openai_complete(
+            _LITELLM_BASE_URL, _LITELLM_API_KEY, spec["alias"],
             [{"role": "user", "content": prompt}],
         )
+
+    try:
+        # 15f 'executor' budget: reserved with no call site until now — this is
+        # its call site. A wedged specialist must not hold the turn open.
+        response = await retry_policy.call_with_budget(
+            _attempt, retry_policy.budget_for("executor")
+        )
     except Exception as exc:
-        raise ExecutionError(f"LiteLLM routing failed — {exc}")
-    return f"[LiteLLM Router — model: {model}]\n{response.strip()}"
+        raise ExecutionError(f"specialist routing failed — {exc}")
+    return f"[Specialist: {picked} ({spec['alias']})]\n{str(response).strip()}"
 
 
 async def _run_browser(args: dict) -> str:

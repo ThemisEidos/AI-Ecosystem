@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 import executor
+import model_routing
 import registry
 import skills as skills_mod
 
@@ -283,16 +284,19 @@ def test_note_editor_rejects_empty_content():
 
 
 def test_llm_api_executor_routes_through_litellm(monkeypatch):
+    # Updated 2026-09-07: this used to pass "claude-sonnet" -- an off-roster
+    # free-form name -- straight through, which is exactly the behavior the
+    # specialist roster deliberately closed. A roster name routes to its alias.
     async def fake_complete(base_url, api_key, model, messages, **kw):
-        assert model == "claude-sonnet"
+        assert model == "claude"
         return "  routed response  "
     monkeypatch.setattr(executor, "_openai_complete", fake_complete)
     out = asyncio.run(executor.run(
         {"executor_type": "llm_api"}, "run", "open",
-        {"prompt": "summarize this", "model": "claude-sonnet"},
+        {"prompt": "summarize this", "model": "claude"},
     ))
     assert "routed response" in out
-    assert "claude-sonnet" in out
+    assert "claude" in out
 
 
 def test_llm_api_executor_defaults_model_when_unspecified(monkeypatch):
@@ -938,3 +942,80 @@ def test_parse_feed_refuses_oversized_documents():
 def test_parse_feed_still_accepts_a_normal_feed_after_hardening():
     assert executor.parse_feed(_RSS_SAMPLE)[0]["title"] == "First story"
     assert executor.parse_feed(_ATOM_SAMPLE)[0]["title"] == "Atom story"
+
+
+# --- Specialist routing (2026-09-07, owner-directed) --------------------------
+# The foreman delegates: the brain picks a NAMED specialist from a governed
+# roster; the executor validates the pick even if the schema was bypassed.
+
+def test_specialists_roster_loads_with_alias_and_description():
+    roster = model_routing.load_specialists()
+    assert roster, "specialist roster is empty"
+    for name, spec in roster.items():
+        assert spec["alias"], name
+        assert spec["description"], name
+
+
+def test_llm_api_accepts_a_roster_specialist(monkeypatch):
+    captured = {}
+    async def fake(base, key, model, msgs, **kw):
+        captured["model"] = model
+        return "specialist reply"
+    monkeypatch.setattr(executor, "_openai_complete", fake)
+    out = asyncio.run(executor.run(
+        {"executor_type": "llm_api"}, "run", "open",
+        {"prompt": "review this diff", "specialist": "claude"},
+    ))
+    assert captured["model"] == "claude"
+    assert "[Specialist: claude" in out, "reply must carry provenance"
+
+
+def test_llm_api_refuses_an_off_roster_specialist(monkeypatch):
+    # Defense in depth: the schema enum should prevent this, but a schema is
+    # advisory to a misbehaving model -- the executor is not.
+    async def fake(*a, **kw):
+        raise AssertionError("must not reach the backend")
+    monkeypatch.setattr(executor, "_openai_complete", fake)
+    out = asyncio.run(executor.run(
+        {"executor_type": "llm_api"}, "run", "open",
+        {"prompt": "x", "specialist": "gpt-5-ultra-secret"},
+    ))
+    assert "not on the specialist roster" in out
+    assert "claude" in out, "the refusal should name the real options"
+
+
+def test_llm_api_legacy_model_param_still_validated(monkeypatch):
+    # Older dispatches send "model"; it goes through the same roster gate.
+    async def fake(*a, **kw):
+        raise AssertionError("must not reach the backend")
+    monkeypatch.setattr(executor, "_openai_complete", fake)
+    out = asyncio.run(executor.run(
+        {"executor_type": "llm_api"}, "run", "open",
+        {"prompt": "x", "model": "anthropic/claude-opus-999"},
+    ))
+    assert "not on the specialist roster" in out
+
+
+def test_registry_enum_matches_the_roster():
+    """Drift guard: the YAML enum the brain sees and the JSON roster the code
+    enforces must be the same set, or the brain gets offered a specialist the
+    executor refuses (or never learns one exists)."""
+    import yaml as _yaml
+    reg = _yaml.safe_load(
+        (executor._REPO_ROOT / "Config" / "general_tool_registry.yaml").read_text(encoding="utf-8"))
+    tool = next(t for t in reg["tools"] if t["id"] == "lite_llm_router")
+    enum = set(tool["parameters"]["properties"]["specialist"]["enum"])
+    assert enum == set(model_routing.load_specialists()), (
+        "YAML enum and PDA_ModelRouting.json specialists have diverged"
+    )
+
+
+def test_registry_description_teaches_the_brain_its_options():
+    # "Identifying the specialist" requires being told the options: every
+    # roster entry must appear in the tool description the brain reads.
+    import yaml as _yaml
+    reg = _yaml.safe_load(
+        (executor._REPO_ROOT / "Config" / "general_tool_registry.yaml").read_text(encoding="utf-8"))
+    tool = next(t for t in reg["tools"] if t["id"] == "lite_llm_router")
+    for name in model_routing.load_specialists():
+        assert name in tool["description"], f"'{name}' missing from the tool description"

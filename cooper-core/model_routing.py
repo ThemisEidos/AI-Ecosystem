@@ -42,3 +42,27 @@ def council_roster(workshop: str, routing: Optional[dict] = None) -> List[str]:
             f"no council_roster mapping for workshop '{workshop}'"
         )
     return list(rosters[workshop])
+
+
+def load_specialists(routing: Optional[dict] = None) -> dict:
+    """The governed specialist roster (owner-directed 2026-09-07).
+
+    name -> {alias, description}. The foreman (brain) picks BY NAME from this
+    map; the llm_api executor refuses anything off it, and a registry drift
+    guard keeps the YAML enum the brain sees equal to this map. Adding a
+    specialist is a JSON edit to PDA_ModelRouting.json, not a code change.
+    Malformed entries are dropped loudly rather than served half-formed.
+    """
+    data = routing if routing is not None else load_routing()
+    out = {}
+    for name, spec in (data.get("specialists") or {}).items():
+        if not isinstance(spec, dict):
+            print(f"  [!!] specialist '{name}' is not an object — dropped")
+            continue
+        alias = str(spec.get("alias") or "").strip()
+        desc = str(spec.get("description") or "").strip()
+        if not alias or not desc:
+            print(f"  [!!] specialist '{name}' missing alias/description — dropped")
+            continue
+        out[str(name)] = {"alias": alias, "description": desc}
+    return out
