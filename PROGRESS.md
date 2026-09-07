@@ -1650,6 +1650,18 @@ Execution order: 15a → 14a(rev) → 15c → 14b → 15d → 15e → 14c(+15f-i
     no browser was available this session. The page has been executed against a DOM harness
     (runs clean, strips the fragment, fires its calls) but never visually confirmed.
 
+- **2026-09-07 · Purpose re-anchored (owner decision).** COOPER **is the harness that
+  beats Hermes** — the Steps 14–15 max-metric program is the organizing goal, and the
+  personal ops console (Cockpit, News Reel) is a welcome by-product, not the point. A
+  project analysis had suggested the reverse reading; the owner corrected it. Three
+  companion decisions: **Private workshop is deferred** — built out only after the Open
+  workshop is fully realized (not mothballed, sequenced); **specialist routing is confirmed
+  as the vision, with a specific shape** — gpt-4o-mini stays the foreman that decides the
+  workflow, identifies the specialist models a task needs, and routes those tasks through
+  OpenRouter to them (the PRD's "right tool for the job" made concrete: cheap brain,
+  delegated specialists); and the stale PRD facts (D:\ paths, Qwen, "Claude Sonnet
+  default", ChromaDB) are acknowledged drift to be corrected against this re-anchoring.
+
 ## Blocked / needs owner input
 
 Governance gates from the Step 15 spec §6 — each blocks only its named slice:
