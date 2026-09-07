@@ -30,6 +30,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
 from decision import TurnDecision, route_turn, route_turn_stream
+import driver
 import pairing
 import registry
 import approval
@@ -477,9 +478,9 @@ async def health():
         "status":   "ok",
         "workshop": WORKSHOP,
         "backend":  BACKEND,
-        "model":    COOPER_MODEL,
+        "model":    _brain_model(),
         "roles": {
-            "brain":     COOPER_MODEL,
+            "brain":     _brain_model(),
             "reviewer":  REVIEWER_MODEL,
             "drafter":   DRAFTER_MODEL,
             "archivist": ARCHIVIST_MODEL,
@@ -833,6 +834,52 @@ async def brain_search(q: str = "", limit: int = 20) -> dict:
          "excerpt": str(r[2])[:600]} for r in rows]}
 
 
+def _brain_model() -> str:
+    """The model driving this turn. On Open the Cockpit can switch it at
+    runtime (owner-directed 2026-09-07); Private always uses its configured
+    local model — the driver mechanism deliberately does not reach it."""
+    if WORKSHOP != "open":
+        return COOPER_MODEL
+    try:
+        return driver.current(_ARCHIVIST_CONN, default=COOPER_MODEL)
+    except Exception as exc:                       # noqa: BLE001 — never break chat
+        print(f"  [!!] driver read failed, using default: {exc}")
+        return COOPER_MODEL
+
+
+@app.get("/driver", dependencies=[Depends(_require_auth)])
+async def get_driver() -> dict:
+    cur = _brain_model()
+    return {"driver": cur, "default": COOPER_MODEL, "workshop": WORKSHOP,
+            "is_default": cur == COOPER_MODEL}
+
+
+@app.put("/driver", dependencies=[Depends(_require_auth)])
+async def put_driver(body: dict) -> dict:
+    if WORKSHOP != "open":
+        raise HTTPException(status_code=400, detail="driver switching is Open-only")
+    try:
+        picked = driver.set_driver(
+            _ARCHIVIST_CONN, str((body or {}).get("model", "")), default=COOPER_MODEL)
+    except driver.DriverError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return {"driver": picked, "is_default": picked == COOPER_MODEL}
+
+
+@app.get("/driver/catalog", dependencies=[Depends(_require_auth)])
+async def driver_catalog() -> dict:
+    """Dropdown contents: local aliases first, then the OpenRouter catalog.
+    Catalog failure degrades to aliases-only rather than emptying the list."""
+    aliases = sorted(driver._aliases())
+    try:
+        remote = ["openrouter/" + m for m in driver.catalog()]
+        err = None
+    except driver.DriverError as exc:
+        remote, err = [], str(exc)
+    return {"aliases": aliases, "openrouter": remote, "error": err,
+            "current": _brain_model()}
+
+
 @app.get("/cockpit", response_class=HTMLResponse)
 async def cockpit_page() -> HTMLResponse:
     """The cockpit shell. Deliberately UNAUTHENTICATED and data-free: it embeds
@@ -1009,7 +1056,7 @@ async def _stream_sse(message: str, history: List[dict], session_id: str = "loca
                 system_prompt=system_prompt,
                 base_url=BACKEND_URL,
                 api_key=BACKEND_KEY,
-                model=COOPER_MODEL,
+                model=_brain_model(),
                 backend=BACKEND,
                 tools=stream_tools,
                 tool_call_handler=lambda tid, a, raw: _handle_tool_call(tid, a, raw, session_id),
@@ -1081,9 +1128,9 @@ async def _generate(message: str, history: List[dict], tools: Optional[List[dict
         msgs.insert(1, {"role": "system", "content": recall_context})
     if BACKEND == "openai":
         from decision import _openai_complete
-        return await _openai_complete(BACKEND_URL, BACKEND_KEY, COOPER_MODEL, msgs, tools=tools)
+        return await _openai_complete(BACKEND_URL, BACKEND_KEY, _brain_model(), msgs, tools=tools)
     from decision import _ollama_complete
-    return await _ollama_complete(BACKEND_URL, COOPER_MODEL, msgs, tools=tools)
+    return await _ollama_complete(BACKEND_URL, _brain_model(), msgs, tools=tools)
 
 
 def _build_messages(history: List[dict], user_message: str) -> List[dict]:

@@ -139,6 +139,12 @@
       <div class="dot" id="dot"></div>
       <h1>COOPER Cockpit</h1>
       <div class="chip" id="ws">—</div>
+      <div style="display:flex;align-items:center;gap:6px">
+        <span style="font-family:var(--mono);font-size:10px;letter-spacing:.08em;color:var(--dim3)">DRIVER</span>
+        <input list="driverlist" id="driverpick" placeholder="loading…" title="The model currently driving COOPER-Open. Type to search; pick to switch."
+          style="font-family:var(--mono);font-size:11px;color:var(--accent);background:var(--bg);border:1px solid #2e393f;padding:5px 8px;width:250px">
+        <datalist id="driverlist"></datalist>
+      </div>
       <div class="viewtabs">
         <button class="vt" id="v-jobs" data-view="jobs" aria-selected="true">JOBS</button>
         <button class="vt" id="v-chat" data-view="chat" aria-selected="false">CHAT</button>
@@ -621,6 +627,35 @@
     $("chatview").classList.toggle("hide", v !== "chat");
     if (v === "chat") { refreshPending(); drawChat(); $("composer").focus(); }
   }
+  // Driver dropdown: any LLM can drive COOPER-Open (owner, 2026-09-07). The
+  // datalist is searchable across ~430 OpenRouter models + local aliases; the
+  // SERVER validates every pick against the closed set -- this input is a
+  // convenience, not the gate.
+  function loadDriver() {
+    api("/driver/catalog").then(function (c) {
+      var opts = c.aliases.concat(c.openrouter);
+      $("driverlist").innerHTML = opts.map(function (m) {
+        return '<option value="' + esc(m) + '"></option>';
+      }).join("");
+      $("driverpick").value = c.current;
+      if (c.error) toast("OpenRouter catalog unavailable — aliases only", true);
+    }).catch(function () {});
+  }
+  $("driverpick").addEventListener("change", function () {
+    var pick = $("driverpick").value.trim();
+    if (!pick) return;
+    api("/driver", { method: "PUT", body: JSON.stringify({ model: pick }) })
+      .then(function (r) {
+        toast("COOPER is now driven by " + r.driver);
+        $("driverpick").value = r.driver;
+      })
+      .catch(function (e) {
+        toast(e.message, true);
+        api("/driver").then(function (d) { $("driverpick").value = d.driver; });
+      });
+  });
+  loadDriver();
+
   loadChat();
   $("clearchat").addEventListener("click", function () {
     CHAT = []; saveChat(); drawChat();

@@ -444,3 +444,40 @@ def test_brain_search_survives_fts_syntax_in_the_query(monkeypatch):
     # typing must not 500 the page.
     for q in ['"', 'a AND', 'NEAR(', '*', "foo OR"]:
         assert _client(monkeypatch).get("/brain/search", params={"q": q}).status_code in (200, 400)
+
+
+# --- driver selection (owner-directed 2026-09-07) ------------------------------
+
+def test_get_driver_reports_current_and_default(monkeypatch):
+    b = _client(monkeypatch).get("/driver").json()
+    assert {"driver", "default", "is_default"} <= set(b)
+
+
+def test_put_driver_validates_against_the_closed_set(monkeypatch):
+    import driver as drv
+    monkeypatch.setattr(drv, "_fetch_catalog_ids", lambda: {"meta-llama/llama-3.3-70b-instruct"})
+    drv._CATALOG_CACHE.update({"ids": None, "at": 0.0})
+    c = _client(monkeypatch)
+    assert c.put("/driver", json={"model": "claude"}).status_code == 200
+    assert c.put("/driver", json={"model": "openrouter/meta-llama/llama-3.3-70b-instruct"}).status_code == 200
+    assert c.put("/driver", json={"model": "totally-made-up"}).status_code == 400
+    assert c.put("/driver", json={"model": "openrouter/fake/nope"}).status_code == 400
+    # restore default so other tests see the configured brain
+    c.put("/driver", json={"model": main.COOPER_MODEL})
+
+
+def test_driver_catalog_degrades_without_openrouter(monkeypatch):
+    import driver as drv
+    def boom():
+        raise drv.DriverError("unreachable")
+    monkeypatch.setattr(drv, "_fetch_catalog_ids", boom)
+    drv._CATALOG_CACHE.update({"ids": None, "at": 0.0})
+    b = _client(monkeypatch).get("/driver/catalog").json()
+    assert b["aliases"], "aliases must survive a dead catalog"
+    assert b["openrouter"] == [] and b["error"]
+
+
+def test_cockpit_has_the_driver_dropdown(monkeypatch):
+    body = _client(monkeypatch).get("/cockpit").text
+    assert 'id="driverpick"' in body and 'id="driverlist"' in body
+    assert '"/driver/catalog"' in body and '"/driver"' in body

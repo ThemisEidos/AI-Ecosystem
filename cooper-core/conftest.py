@@ -64,3 +64,19 @@ def _no_retry_backoff(monkeypatch):
         return dataclasses.replace(real(role, *a, **k), backoff_base=0.0)
 
     monkeypatch.setattr(_retry_policy, "budget_for", no_backoff)
+
+
+import driver as _driver
+
+
+@pytest.fixture(autouse=True)
+def _reset_driver_state():
+    """driver.py caches the current pick and the catalog in module globals so
+    the hot path costs no DB read. In tests that cache bleeds one test's pick
+    into the next (found 2026-09-07: a driver test set 'gemini' and the health
+    test then reported it as the brain). Reset both around every test."""
+    _driver._STATE.update({"value": None, "loaded": False})
+    _driver._CATALOG_CACHE.update({"ids": None, "at": 0.0})
+    yield
+    _driver._STATE.update({"value": None, "loaded": False})
+    _driver._CATALOG_CACHE.update({"ids": None, "at": 0.0})

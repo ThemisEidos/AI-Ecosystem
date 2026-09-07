@@ -1685,6 +1685,25 @@ Execution order: 15a → 14a(rev) → 15c → 14b → 15d → 15e → 14c(+15f-i
   - Kept per owner: SearXNG (web search will be needed for the metric program) and
     signal-cli (parked; owner sets it up later).
 
+- **2026-09-07 · Any LLM can drive COOPER-Open (owner-directed).** The Cockpit header
+  gains a searchable DRIVER dropdown: 4 local aliases + 363 OpenRouter models, and picking
+  one switches the Open brain at runtime. Mechanics: a `openrouter/*` wildcard deployment
+  in `litellm_config.yaml` passes any catalog slug through to OpenRouter (proven live —
+  llama-3.3-70b answered through it); `driver.py` persists the pick in `cooper_memory.db`
+  and validates against a CLOSED set (LiteLLM alias, or a slug present in the live
+  OpenRouter catalog — free-form strings refused, catalog-down fails closed for slugs while
+  aliases keep working); `_brain_model()` feeds all three chat call sites and `/health`
+  reports the actual driver. Private is untouched by design.
+  - **Live loop proven:** switched to `openrouter/meta-llama/llama-3.3-70b-instruct`, chat
+    answered under it, `/health` reported it as brain, switched back to `openai`.
+  - **Real finding, fixed same hour:** under llama the delegation request came back as
+    plain text — `decision: answer`, no tool call. A driver without native tool-calling
+    chats but SILENTLY loses dispatch. The OpenRouter catalog's `supported_parameters`
+    exposes this up front, so the dropdown now only offers tool-capable models
+    (430 → 363). The dropdown only offers drivers that can actually drive.
+  - Also fixed: `driver._STATE` module-global bled one test's pick into another test's
+    health assertion — autouse conftest reset both ways.
+
 ## Blocked / needs owner input
 
 Governance gates from the Step 15 spec §6 — each blocks only its named slice:

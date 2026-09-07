@@ -34,6 +34,13 @@ model_list:
     litellm_params:
       model: openrouter/openai/gpt-4o-mini
       api_key: os.environ/OPENROUTER_API_KEY
+  # Owner-directed 2026-09-07: any LLM can drive COOPER-Open. This wildcard
+  # lets cooper-core request any "openrouter/<vendor>/<model>" slug and have it
+  # pass through to OpenRouter -- the Cockpit's driver dropdown depends on it.
+  - model_name: "openrouter/*"
+    litellm_params:
+      model: "openrouter/*"
+      api_key: os.environ/OPENROUTER_API_KEY
   - model_name: text-embedding-3-small
     litellm_params:
       model: openai/text-embedding-3-small
