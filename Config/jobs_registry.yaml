@@ -1,39 +1,4 @@
 jobs:
-- id: link-checker
-  job_type: csv_link_check
-  workshop: open
-  schedule_hint: daily 03:00
-  steps:
-  - csv_next_rows
-  - url_verify
-  - csv_line_edit
-  read_scope:
-  - State/LinkAudit/links.csv
-  write_scope:
-  - State/LinkAudit/links.csv
-  quota:
-    rows_per_run: 10
-    fetches_per_run: 30
-  permission_level: 3
-  approved: true
-  envelope_hash: a4ca5d93237d8aaff63013fc1378d7cbd0d242509b6807cf453d8355f904ccb3
-- id: data-broker-research
-  job_type: pii_research
-  workshop: open
-  schedule_hint: daily, randomized 00:00-06:00
-  steps:
-  - web_search
-  - extract_entries
-  - append_note
-  read_scope:
-  - Obsidian Vault/02_Projects/opt-out/Data-Brokers.md
-  write_scope:
-  - Obsidian Vault/02_Projects/opt-out/Data-Brokers.md
-  quota:
-    entries_per_run: 5
-  permission_level: 3
-  approved: true
-  envelope_hash: 203ebfcb75536fa7626ac14dad3a03e6f222d86cc32db4d3a7c746a2bb3f2e12
 - id: repo-steward
   job_type: repo_steward
   workshop: open

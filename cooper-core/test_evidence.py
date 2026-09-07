@@ -51,7 +51,23 @@ def _fixture_id(path):
     return path.name if path is not None else "corpus-absent"
 
 
+def _job_completion(**overrides):
+    base = {
+        "workflow_id": "news-reel", "workflow_name": "News Reel",
+        "execution_id": "run-abc123", "status": "completed",
+        "completion_time": "2026-08-30T12:00:00Z", "workshop_id": "open",
+        "workshop_name": "Open Workshop", "approval_id": "",
+        "artifact_paths": ["Obsidian Vault/00_Inbox/News-Reel-2026-09-06.md"],
+        "review_status": "pass", "user_accepted": True,
+        "job_id": "news-reel", "envelope_hash": "a" * 64, "run_id": "run-abc123",
+    }
+    base.update(overrides)
+    return base
+
+
 @pytest.mark.parametrize("path", _fixture_params(VALID_FILES, "valid"), ids=_fixture_id)
+
+
 def test_valid_fixture_passes(path):
     context = _records(VALID_FILES)
     record = json.loads(path.read_text(encoding="utf-8"))
@@ -68,18 +84,6 @@ def test_invalid_fixture_fails(path):
     assert evidence.validate_record(record, context) != []
 
 
-def _job_completion(**overrides):
-    base = {
-        "workflow_id": "link-checker", "workflow_name": "CSV Link Checker",
-        "execution_id": "run-abc123", "status": "completed",
-        "completion_time": "2026-08-30T12:00:00Z", "workshop_id": "open",
-        "workshop_name": "Open Workshop", "approval_id": "",
-        "artifact_paths": ["State/LinkAudit/links.csv"],
-        "review_status": "pass", "user_accepted": True,
-        "job_id": "link-checker", "envelope_hash": "a" * 64, "run_id": "run-abc123",
-    }
-    base.update(overrides)
-    return base
 
 
 def test_job_linked_open_completion_valid_without_approval_id():

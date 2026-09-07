@@ -2,7 +2,7 @@
 
 This exists because the same defect has now shipped three times:
 
-  2026-09-04  Config/pii_research_queries.json missing from the image (14c)
+  2026-09-04  a job's queries file missing from the image (14c)
   2026-09-05  Scripts/PDA_RetryPolicy.json missing from the image (15f-ii) --
               every declared budget silently reverted to a built-in fallback:
               no error, no warning, a working system, and a fully green suite
@@ -55,13 +55,12 @@ _REQUIRED_RUNTIME_FILES = [
 # Open-only job config, supplied by bind mounts in docker-compose.yml rather
 # than baked into the image. On PRIVATE these must be ABSENT: nothing mounts
 # them there, and that omission is what keeps G4 (owner decision 2026-08-23:
-# Private gets no web search, no data-broker job) holding at the filesystem
+# Private gets no web search and no internet-facing job) holding at the filesystem
 # layer as well as in verify_job's workshop check. A Private container that
 # gained these files would be a real boundary regression, so the check asserts
 # the absence rather than skipping it.
 _OPEN_ONLY_JOB_FILES = [
     ("Config/jobs_registry.yaml", "yaml"),
-    ("Config/pii_research_queries.json", "json"),
     ("Config/news_sources.yaml", "yaml"),
 ]
 
@@ -181,7 +180,7 @@ def test_no_runtime_config_file_escapes_the_packaging_check():
 def test_private_workshop_has_no_job_config(rel, _kind):
     """G4 at the filesystem layer (owner decision 2026-08-23).
 
-    Private gets no web search and no data-broker job. verify_job enforces the
+    Private gets no web search and no internet-facing job. verify_job enforces the
     workshop boundary in code (2026-09-05), but this asserts the second, older
     line of defence: the Private container simply cannot see the job registry,
     so there is nothing for a mount change to accidentally make runnable. If

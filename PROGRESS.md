@@ -1586,6 +1586,38 @@ Execution order: 15a → 14a(rev) → 15c → 14b → 15d → 15e → 14c(+15f-i
 
 ---
 
+- **2026-09-06 · link-checker and data-broker-research REMOVED from COOPER entirely
+  (owner direction).** Both jobs, and the work they served, live in a different project.
+  They are not COOPER's and are not to be proposed again. Removed in one pass: both registry
+  entries; `_run_csv_link_check`, `_run_pii_research` and every helper exclusive to them
+  (`csv_next_rows`, `url_verify`, `csv_line_edit`, `next_seed_query`, `existing_entry_sites`,
+  `format_pii_entries`, `build_pii_prompt`, `extract_pii_entries`) plus their prompts and
+  schemas; `Config/pii_research_queries.json`; `State/LinkAudit/`; the opt-out vault
+  directory; their evidence records; their compose mounts; the legacy link-checker n8n
+  workflow; the digests naming them; and every test covering them. Comment references
+  elsewhere were reworded rather than left as fossils.
+  - **`planner.py` (15e's drafting half) went with them.** It drafts jobs of exactly one
+    shape — the CSV monitor — which `run_job` no longer executes, so it could only produce
+    envelopes the runtime refuses. That is broken, not merely unused. Its `/jobs/draft`
+    endpoint and tests are gone too. 15e's drafting half is retired with the job shape it
+    served; the spec's wider 15e row stays open.
+  - **`job_type` no longer has a default.** An entry without one used to fall back to
+    `csv_link_check`; that shape is gone, so a missing `job_type` is now refused outright.
+  - **Kept deliberately:** the `web_search` executor and the SearXNG container. They are a
+    general capability rather than job-specific code, still tested, and still absent from
+    every tool registry so no chat model can select them. Their only consumer left with
+    these jobs, so they are currently unused — worth revisiting, not worth ripping out in
+    the same pass as a scope removal.
+  - Registry is now 2 jobs (`repo-steward`, `news-reel`), the n8n scheduler was rebuilt and
+    reactivated with only those two, and 520 tests pass (was 616 — the drop is the removed
+    coverage, not lost coverage). Live: both removed ids return
+    `unknown job id`.
+  - **Method note worth keeping:** the first removal attempt used regex cuts and silently
+    over-reached, taking the News Reel and repo-steward helpers with it. Caught because the
+    suite went to 104 failures, reverted with `git checkout`, and redone with an AST pass
+    that removes exact node line-spans. Text-editing code by pattern is how you delete more
+    than you meant to.
+
 ## Blocked / needs owner input
 
 Governance gates from the Step 15 spec §6 — each blocks only its named slice:

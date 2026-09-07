@@ -651,8 +651,8 @@ async def _run_web_search(query: str, max_results: int = _MAX_SEARCH_RESULTS) ->
     """SearXNG metasearch (Step 14c, Open stack only per G4). Returns a list of
     {title, url, snippet} dicts, capped at max_results.
 
-    Job-runner-only, exactly like _run_file_edit: jobs.py's pii_research branch
-    calls this directly. It is deliberately NOT in any tool registry YAML, so the
+    Job-runner-only, exactly like _run_file_edit: a job branch calls this
+    directly. It is deliberately NOT in any tool registry YAML, so the
     chat model can neither see nor select it.
 
     Every field returned here is UNTRUSTED remote text. Callers must place it in a
@@ -690,7 +690,7 @@ async def _web_search_as_text(query: str, max_results: int = _MAX_SEARCH_RESULTS
     """run()'s string-contract adapter for _run_web_search.
 
     _run_web_search returns a list because its only real caller (jobs.py's
-    data-broker pipeline) needs structured results. run() is annotated -> str
+    a job pipeline) needs structured results. run() is annotated -> str
     and every one of its callers treats the result as text, so the dispatch
     table must adapt rather than leak a list through it. Unreachable today --
     no tool registry names web_search -- but the dispatch table is the single
@@ -1024,7 +1024,7 @@ async def _run_file_edit(tool: dict, message: str, workshop: str, args: dict) ->
       0. Reject any literal '..' path segment in filename or in ANY
          write_scope entry, before anything else. This closes a
          self-cancelling-traversal case a naive two-check design misses:
-         filename="State/LinkAudit/../../PDA-Runtime/.env" with an
+         filename="State/Some/../../PDA-Runtime/.env" with an
          IDENTICAL write_scope entry passes a plain string-equality check
          (they're the same string) AND passes a naive "resolves somewhere
          under repo root" check (the two '..' segments cancel back to
@@ -1038,7 +1038,7 @@ async def _run_file_edit(tool: dict, message: str, workshop: str, args: dict) ->
       1. Cheap string equality: filename must literally be a member of
          write_scope. This alone already defeats a traversal string like
          '../../PDA-Runtime/.env' when write_scope only names
-         'State/LinkAudit/links.csv' — the strings simply don't match.
+         'State/Some/file.csv' — the strings simply don't match.
       2. A resolve()-based re-check against _REPO_ROOT (the same
          .resolve() + relative_to() containment technique _run_filesystem
          and _run_note_editor use against their own fixed directories),
@@ -1184,7 +1184,7 @@ _HANDLERS = {
     # can execute," matching every other handler's registration shape.
     "file_edit":      lambda tool, message, workshop, args: _run_file_edit(tool, message, workshop, args),
     # web_search, like file_edit, is intentionally NOT referenced by any tool
-    # registry YAML — Step 14c's pii_research job (jobs.py) calls
+    # registry YAML — a job runner (jobs.py) calls
     # _run_web_search directly. It gets a _HANDLERS entry so the dispatch table
     # stays the single source of truth for "what executor.run() can execute."
     "web_search":     lambda tool, message, workshop, args: _web_search_as_text(

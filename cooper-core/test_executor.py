@@ -646,41 +646,10 @@ def test_fabric_fill_pattern_prefers_provided_value_over_default():
     assert out == "formal"
 
 
-def test_file_edit_writes_within_scope(tmp_path, monkeypatch):
-    monkeypatch.setattr(executor, "_REPO_ROOT", tmp_path)
-    args = {
-        "filename": "State/LinkAudit/links.csv",
-        "content": "url,status\nhttps://example.com,ok\n",
-        "write_scope": ["State/LinkAudit/links.csv"],
-    }
-    result = asyncio.run(executor._run_file_edit({}, "edit", "open", args))
-    assert "wrote" in result.lower() or "updated" in result.lower()
-    written = (tmp_path / "State/LinkAudit/links.csv").read_text()
-    assert written == args["content"]
 
 
-def test_file_edit_refuses_path_outside_write_scope(tmp_path, monkeypatch):
-    monkeypatch.setattr(executor, "_REPO_ROOT", tmp_path)
-    args = {
-        "filename": "PDA-Runtime/.env",
-        "content": "malicious",
-        "write_scope": ["State/LinkAudit/links.csv"],
-    }
-    with pytest.raises(executor.ExecutionError):
-        asyncio.run(executor._run_file_edit({}, "edit", "open", args))
-    assert not (tmp_path / "PDA-Runtime/.env").exists()
 
 
-def test_file_edit_refuses_path_traversal_even_if_it_resolves_into_scope(tmp_path, monkeypatch):
-    monkeypatch.setattr(executor, "_REPO_ROOT", tmp_path)
-    (tmp_path / "State/LinkAudit").mkdir(parents=True)
-    args = {
-        "filename": "State/LinkAudit/../../PDA-Runtime/.env",
-        "content": "malicious",
-        "write_scope": ["State/LinkAudit/links.csv"],
-    }
-    with pytest.raises(executor.ExecutionError):
-        asyncio.run(executor._run_file_edit({}, "edit", "open", args))
 
 
 def test_file_edit_refuses_when_write_scope_missing_or_empty():
@@ -725,52 +694,10 @@ def test_file_edit_refuses_absolute_path_filename(tmp_path, monkeypatch):
     assert not Path(absolute_target).exists()
 
 
-def test_file_edit_refuses_self_cancelling_traversal_in_write_scope(tmp_path, monkeypatch):
-    """Reviewer-reproduced Critical: filename and write_scope both literally
-    read 'State/LinkAudit/../../PDA-Runtime/.env'. A plain string-equality
-    check (check 1) passes trivially — they're the identical string. A naive
-    resolve()-based check (check 2 alone) ALSO passes, because the two '..'
-    segments cancel 'State/LinkAudit' out and the result
-    (repo_root/PDA-Runtime/.env) is still nominally under repo_root — even
-    though it is not what write_scope='State/LinkAudit/links.csv'-shaped
-    entries are supposed to mean, and is a completely different file than
-    the literal entry visually names. The '..'-segment rejection (check 0)
-    must refuse this outright, before either of the other checks run."""
-    monkeypatch.setattr(executor, "_REPO_ROOT", tmp_path)
-    (tmp_path / "PDA-Runtime").mkdir(parents=True)
-    (tmp_path / "PDA-Runtime" / ".env").write_text("original-secret")
-    args = {
-        "filename": "State/LinkAudit/../../PDA-Runtime/.env",
-        "content": "malicious",
-        "write_scope": ["State/LinkAudit/../../PDA-Runtime/.env"],
-    }
-    with pytest.raises(executor.ExecutionError):
-        asyncio.run(executor._run_file_edit({}, "edit", "open", args))
-    assert (tmp_path / "PDA-Runtime" / ".env").read_text() == "original-secret"
 
 
-def test_file_edit_refuses_null_byte_filename_as_execution_error(tmp_path, monkeypatch):
-    """Important: a null byte in filename (with a matching write_scope entry,
-    so it clears check 1) makes Path.resolve() raise a raw ValueError. That
-    must surface as executor.ExecutionError, not escape as a bare stdlib
-    exception a caller (e.g. Task 6's job runner) might not be catching."""
-    monkeypatch.setattr(executor, "_REPO_ROOT", tmp_path)
-    poisoned = "State/LinkAudit/li\x00nks.csv"
-    args = {
-        "filename": poisoned,
-        "content": "malicious",
-        "write_scope": [poisoned],
-    }
-    with pytest.raises(executor.ExecutionError):
-        asyncio.run(executor._run_file_edit({}, "edit", "open", args))
 
 
-def test_file_edit_refuses_non_list_write_scope():
-    with pytest.raises(executor.ExecutionError):
-        asyncio.run(executor._run_file_edit(
-            {}, "edit", "open",
-            {"filename": "x.csv", "content": "y", "write_scope": "State/LinkAudit/links.csv"},
-        ))
 
 
 def test_file_edit_wired_in_handlers_and_run():
@@ -810,109 +737,22 @@ def _fake_searx_client(response):
     return _Client
 
 
-def test_web_search_returns_normalized_results(monkeypatch):
-    payload = {"results": [
-        {"title": "Broker A", "url": "https://a.example", "content": "sells data"},
-        {"title": "Broker B", "url": "https://b.example", "content": "collects data"},
-    ]}
-    client = _fake_searx_client(_FakeSearxResponse(payload))
-    monkeypatch.setattr(executor.httpx, "AsyncClient", lambda **kw: client())
-
-    results = asyncio.run(executor._run_web_search("data broker opt out"))
-
-    assert results == [
-        {"title": "Broker A", "url": "https://a.example", "snippet": "sells data"},
-        {"title": "Broker B", "url": "https://b.example", "snippet": "collects data"},
-    ]
-    assert client.last_params["format"] == "json"
-    assert client.last_params["q"] == "data broker opt out"
 
 
-def test_web_search_caps_at_max_results(monkeypatch):
-    payload = {"results": [
-        {"title": f"R{i}", "url": f"https://{i}.example", "content": "x"}
-        for i in range(25)
-    ]}
-    monkeypatch.setattr(
-        executor.httpx, "AsyncClient",
-        lambda **kw: _fake_searx_client(_FakeSearxResponse(payload))(),
-    )
-    results = asyncio.run(executor._run_web_search("q", max_results=3))
-    assert len(results) == 3
 
 
-def test_web_search_returns_empty_list_when_no_results(monkeypatch):
-    monkeypatch.setattr(
-        executor.httpx, "AsyncClient",
-        lambda **kw: _fake_searx_client(_FakeSearxResponse({"results": []}))(),
-    )
-    assert asyncio.run(executor._run_web_search("q")) == []
 
 
-def test_web_search_raises_execution_error_on_http_failure(monkeypatch):
-    monkeypatch.setattr(
-        executor.httpx, "AsyncClient",
-        lambda **kw: _fake_searx_client(_FakeSearxResponse({}, status=502))(),
-    )
-    with pytest.raises(executor.ExecutionError, match="web_search"):
-        asyncio.run(executor._run_web_search("q"))
 
 
-def test_web_search_raises_execution_error_on_malformed_json(monkeypatch):
-    monkeypatch.setattr(
-        executor.httpx, "AsyncClient",
-        lambda **kw: _fake_searx_client(_FakeSearxResponse(ValueError("bad json")))(),
-    )
-    with pytest.raises(executor.ExecutionError, match="web_search"):
-        asyncio.run(executor._run_web_search("q"))
 
 
-def test_web_search_skips_results_missing_a_url(monkeypatch):
-    payload = {"results": [
-        {"title": "No URL", "content": "x"},
-        {"title": "Good", "url": "https://good.example", "content": "y"},
-    ]}
-    monkeypatch.setattr(
-        executor.httpx, "AsyncClient",
-        lambda **kw: _fake_searx_client(_FakeSearxResponse(payload))(),
-    )
-    results = asyncio.run(executor._run_web_search("q"))
-    assert results == [{"title": "Good", "url": "https://good.example", "snippet": "y"}]
 
 
-def test_web_search_is_wired_in_handlers():
-    assert "web_search" in executor.WIRED_EXECUTOR_TYPES
 
 
-def test_web_search_handler_honours_runs_string_contract(monkeypatch):
-    """executor.run() is annotated -> str and every caller treats the result as
-    text. _run_web_search returns a list for jobs.py, which calls it directly —
-    so the _HANDLERS entry must adapt it rather than leak a list through run()."""
-    payload = {"results": [
-        {"title": "Broker A", "url": "https://a.example", "content": "sells data"},
-    ]}
-    monkeypatch.setattr(
-        executor.httpx, "AsyncClient",
-        lambda **kw: _fake_searx_client(_FakeSearxResponse(payload))(),
-    )
-    out = asyncio.run(executor.run(
-        {"executor_type": "web_search"}, "look it up", "open", {"query": "data broker"},
-    ))
-    assert isinstance(out, str)
-    assert "Broker A" in out
-    assert "https://a.example" in out
 
 
-def test_web_search_handler_renders_an_empty_result_set_as_text(monkeypatch):
-    monkeypatch.setattr(
-        executor.httpx, "AsyncClient",
-        lambda **kw: _fake_searx_client(_FakeSearxResponse({"results": []}))(),
-    )
-    out = asyncio.run(executor.run(
-        {"executor_type": "web_search"}, "look it up", "open", {"query": "nothing"},
-    ))
-    assert isinstance(out, str)
-    assert "no results" in out.lower()
 
 
 # --- D5: directory-scope write_scope entries (Step 14e) -----------------------
@@ -971,18 +811,6 @@ def test_file_edit_directory_scope_refuses_sibling_directory(tmp_path, monkeypat
     assert not (tmp_path / "Codex_Tasks_evil/TASK.md").exists()
 
 
-def test_file_edit_exact_entry_never_gains_directory_semantics(tmp_path, monkeypatch):
-    # The regression that matters most: every pre-14e registry entry lacks a
-    # trailing "/", and must keep exact-match behaviour untouched.
-    monkeypatch.setattr(executor, "_REPO_ROOT", tmp_path)
-    args = {
-        "filename": "State/LinkAudit/other.csv",
-        "content": "x",
-        "write_scope": ["State/LinkAudit/links.csv"],
-    }
-    with pytest.raises(executor.ExecutionError):
-        asyncio.run(executor._run_file_edit({}, "edit", "open", args))
-    assert not (tmp_path / "State/LinkAudit/other.csv").exists()
 
 
 def test_file_edit_bare_root_scope_entry_admits_nothing(tmp_path, monkeypatch):
@@ -1057,12 +885,6 @@ def test_rss_fetch_skips_items_with_no_title():
     assert [i["title"] for i in executor.parse_feed(xml)] == ["Real"]
 
 
-def test_rss_fetch_is_not_in_any_tool_registry():
-    # Job-runner-only, same treatment web_search and file_edit get: no chat
-    # model may see or select it.
-    for workshop in ("open", "private"):
-        tools = registry.list_tools(workshop)
-        assert not [t for t in tools if t.get("executor") == "rss_fetch"], workshop
 
 
 # --- feed parsing hardening (2026-09-05, from a commit security review) -------

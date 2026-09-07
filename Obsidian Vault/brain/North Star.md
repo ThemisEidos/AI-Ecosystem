@@ -129,6 +129,13 @@ every proposal traceable to the input state it came from.
 is the approval act and it is the owner's. No n8n scheduler ships, so its `daily 07:00` hint is
 manual-trigger-only — same unmet clause as 14b/14c, stated rather than quietly skipped.
 
+**link-checker and data-broker-research are NOT COOPER jobs — removed 2026-09-06.**
+Owner direction: that work lives in a different project. Both jobs, their code, config,
+state, vault data, evidence, scheduler entries and tests were removed from the repo
+entirely. `planner.py` (15e's drafting half) went with them, because it could only draft
+the CSV shape `run_job` no longer executes. **Do not propose either job, or an opt-out /
+link-checking capability, again.** COOPER runs two jobs: `repo-steward` and `news-reel`.
+
 **2026-09-06 — scheduler live, skills promoted, approval GUI designed.**
 *Scheduler:* `COOPER Job Scheduler` imported into n8n and **active** — all four jobs
 scheduled (link-checker 03:00, data-broker-research 00:05 + random 0-350min, news-reel

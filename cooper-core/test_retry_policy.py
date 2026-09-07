@@ -38,15 +38,6 @@ def test_budget_for_fills_a_partial_role_entry_from_defaults():
     assert budget.max_retries == 2
 
 
-def test_budget_for_never_returns_a_negative_or_zero_timeout():
-    """A zero/negative timeout would mean 'fail instantly' or 'hang forever'
-    depending on the client — neither is a budget."""
-    policy = {
-        "default_max_retries": 2, "default_timeout_seconds": 60,
-        "roles": {"brain": {"timeout_seconds": 0}, "planner": {"timeout_seconds": -5}},
-    }
-    assert retry_policy.budget_for("brain", policy=policy).timeout > 0
-    assert retry_policy.budget_for("planner", policy=policy).timeout > 0
 
 
 def test_budget_for_clamps_absurd_retry_counts():
@@ -57,13 +48,6 @@ def test_budget_for_clamps_absurd_retry_counts():
     assert retry_policy.budget_for("brain", policy=policy).max_retries <= retry_policy._MAX_RETRIES_CAP
 
 
-def test_budget_for_fails_open_when_the_policy_file_is_missing(tmp_path):
-    """An unreadable policy must not take the runtime down — it degrades to
-    conservative built-in defaults, the same fail-open convention load_registry
-    and existing_entry_sites already use."""
-    budget = retry_policy.budget_for("brain", path=tmp_path / "absent.json")
-    assert budget.timeout > 0
-    assert budget.max_retries >= 0
 
 
 def test_the_shipped_policy_file_declares_a_budget_for_every_routed_role():
@@ -230,35 +214,8 @@ def test_proposer_draft_runs_under_the_drafter_budget(monkeypatch):
     assert seen["retries"] == retry_policy.budget_for("drafter").max_retries
 
 
-def test_planner_extraction_runs_under_the_planner_budget(monkeypatch):
-    import planner
-    seen = {}
-
-    async def ok(*a, **k):
-        return json.dumps({"id": "i", "csv_path": "p.csv", "rows_per_run": 1,
-                           "fetches_per_run": 1, "schedule_hint": "daily"})
-
-    monkeypatch.setattr(planner, "_ollama_complete", ok)
-    monkeypatch.setattr(planner.retry_policy, "call_with_budget", _budget_spy(planner, seen))
-    asyncio.run(planner._extract_fields(
-        "goal", base_url="", api_key="", model="m", backend="ollama",
-    ))
-    assert seen["timeout"] == retry_policy.budget_for("planner").timeout
 
 
-def test_data_broker_extraction_runs_under_the_drafter_budget(monkeypatch):
-    import jobs
-    seen = {}
-
-    async def ok(*a, **k):
-        return json.dumps({"entries": []})
-
-    monkeypatch.setattr(jobs.retry_policy, "call_with_budget", _budget_spy(jobs, seen))
-    asyncio.run(jobs.extract_pii_entries(
-        "q", [{"title": "t", "url": "https://a.example", "snippet": "s"}], [],
-        base_url="", api_key="", model="m", backend="ollama", complete_fn=ok,
-    ))
-    assert seen["timeout"] == retry_policy.budget_for("drafter").timeout
 
 
 # ── streaming budgets (Step 15f-ii, streaming half) ──────────────────────

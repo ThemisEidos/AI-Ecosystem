@@ -38,7 +38,6 @@ import workshop
 import archivist
 import embeddings
 import proposer
-import planner
 import skills
 import jobs
 import council
@@ -709,21 +708,6 @@ class JobDraftRequest(BaseModel):
     goal: str = Field(..., min_length=1, max_length=2000)
 
 
-@app.post("/jobs/draft", dependencies=[Depends(_require_auth)])
-async def draft_job(body: JobDraftRequest):
-    try:
-        job_entry = await planner.draft_envelope(
-            body.goal, workshop=WORKSHOP,
-            base_url=BACKEND_URL, api_key=BACKEND_KEY,
-            model=PLANNER_MODEL, backend=BACKEND,
-        )
-    except planner.PlannerError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
-    critique = await _critique_and_note(job_entry["id"], job_entry)
-    return {"job_entry": job_entry, **critique}
-
-
-# ── Workshop status ───────────────────────────────────────────────────────────
 @app.get("/workshop", dependencies=[Depends(_require_auth)])
 async def workshop_status():
     violation = None

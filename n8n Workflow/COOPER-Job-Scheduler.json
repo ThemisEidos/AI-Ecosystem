@@ -3,138 +3,15 @@
   "name": "COOPER Job Scheduler",
   "nodes": [
     {
-      "id": "trigger-link-checker",
-      "name": "Schedule \u2014 link-checker",
-      "type": "n8n-nodes-base.scheduleTrigger",
-      "typeVersion": 1.2,
-      "position": [
-        0,
-        0
-      ],
-      "parameters": {
-        "rule": {
-          "interval": [
-            {
-              "field": "cronExpression",
-              "expression": "0 3 * * *"
-            }
-          ]
-        }
-      },
-      "notes": "Daily 03:00"
-    },
-    {
-      "id": "http-link-checker",
-      "name": "Run link-checker",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        300,
-        0
-      ],
-      "parameters": {
-        "method": "POST",
-        "url": "http://cooper-core:8000/jobs/run/link-checker",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Authorization",
-              "value": "=Bearer {{ $env.COOPER_API_KEY }}"
-            }
-          ]
-        },
-        "sendBody": false,
-        "options": {
-          "timeout": 600000,
-          "response": {
-            "response": {
-              "neverError": true
-            }
-          }
-        }
-      },
-      "notes": "cooper-core refuses an unapproved job; the approval gate does the gating, not the schedule."
-    },
-    {
-      "id": "trigger-data-broker-research",
-      "name": "Schedule \u2014 data-broker-research",
-      "type": "n8n-nodes-base.scheduleTrigger",
-      "typeVersion": 1.2,
-      "position": [
-        0,
-        220
-      ],
-      "parameters": {
-        "rule": {
-          "interval": [
-            {
-              "field": "cronExpression",
-              "expression": "5 0 * * *"
-            }
-          ]
-        }
-      },
-      "notes": "Daily 00:05 + random delay (lands 00:05-05:55)"
-    },
-    {
-      "id": "wait-data-broker-research",
-      "name": "Randomize \u2014 data-broker-research",
-      "type": "n8n-nodes-base.wait",
-      "typeVersion": 1.1,
-      "position": [
-        280,
-        220
-      ],
-      "webhookId": "cooper-wait-data-broker-research",
-      "parameters": {
-        "amount": "={{ Math.floor(Math.random() * 350) }}",
-        "unit": "minutes"
-      },
-      "notes": "Spec asks this job to run at a randomized time; this spreads it across a 350-minute window."
-    },
-    {
-      "id": "http-data-broker-research",
-      "name": "Run data-broker-research",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        520,
-        220
-      ],
-      "parameters": {
-        "method": "POST",
-        "url": "http://cooper-core:8000/jobs/run/data-broker-research",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Authorization",
-              "value": "=Bearer {{ $env.COOPER_API_KEY }}"
-            }
-          ]
-        },
-        "sendBody": false,
-        "options": {
-          "timeout": 600000,
-          "response": {
-            "response": {
-              "neverError": true
-            }
-          }
-        }
-      },
-      "notes": "cooper-core refuses an unapproved job; the approval gate does the gating, not the schedule."
-    },
-    {
       "id": "trigger-news-reel",
       "name": "Schedule \u2014 news-reel",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
       "position": [
         0,
-        440
+        0
       ],
+      "notes": "Daily 06:30",
       "parameters": {
         "rule": {
           "interval": [
@@ -144,8 +21,7 @@
             }
           ]
         }
-      },
-      "notes": "Daily 06:30"
+      }
     },
     {
       "id": "http-news-reel",
@@ -154,8 +30,9 @@
       "typeVersion": 4.2,
       "position": [
         300,
-        440
+        0
       ],
+      "notes": "cooper-core refuses an unapproved job; the approval gate does the gating.",
       "parameters": {
         "method": "POST",
         "url": "http://cooper-core:8000/jobs/run/news-reel",
@@ -177,8 +54,7 @@
             }
           }
         }
-      },
-      "notes": "cooper-core refuses an unapproved job; the approval gate does the gating, not the schedule."
+      }
     },
     {
       "id": "trigger-repo-steward",
@@ -187,8 +63,9 @@
       "typeVersion": 1.2,
       "position": [
         0,
-        660
+        220
       ],
+      "notes": "Daily 07:00",
       "parameters": {
         "rule": {
           "interval": [
@@ -198,8 +75,7 @@
             }
           ]
         }
-      },
-      "notes": "Daily 07:00"
+      }
     },
     {
       "id": "http-repo-steward",
@@ -208,8 +84,9 @@
       "typeVersion": 4.2,
       "position": [
         300,
-        660
+        220
       ],
+      "notes": "cooper-core refuses an unapproved job; the approval gate does the gating.",
       "parameters": {
         "method": "POST",
         "url": "http://cooper-core:8000/jobs/run/repo-steward",
@@ -231,44 +108,10 @@
             }
           }
         }
-      },
-      "notes": "cooper-core refuses an unapproved job; the approval gate does the gating, not the schedule."
+      }
     }
   ],
   "connections": {
-    "Schedule \u2014 link-checker": {
-      "main": [
-        [
-          {
-            "node": "Run link-checker",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Schedule \u2014 data-broker-research": {
-      "main": [
-        [
-          {
-            "node": "Randomize \u2014 data-broker-research",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Randomize \u2014 data-broker-research": {
-      "main": [
-        [
-          {
-            "node": "Run data-broker-research",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Schedule \u2014 news-reel": {
       "main": [
         [
