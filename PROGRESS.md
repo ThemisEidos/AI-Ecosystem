@@ -71,7 +71,7 @@ Execution order: 15a → 14a(rev) → 15c → 14b → 15d → 15e → 14c(+15f-i
 - [x] **15f — Robustness** (M8→5): (i) injection canaries ✓ 2026-09-04 · (ii) retry policy implemented + wired ✓ 2026-09-05 · (iii) chaos tests ✓ 2026-09-05 — streaming chat path wired ✓ 2026-09-05
 - [ ] **15g — Governed learning breadth** (M5→5; prompt-diff self-optimization, outcome-weighted skill scores)
 - [ ] **15h — Session plans** (M2→5; gated on G3)
-- [ ] **15i — COOPER Cockpit: custom UI** (chat with native approve/deny buttons, Obsidian-brain graph view, workflow monitor, metrics dashboard, settings; incremental — monitor page after 14b, dashboard after 15d; Open WebUI retires only after Cockpit chat parity is browser-verified)
+- [~] **15i — COOPER Cockpit: custom UI** — jobs, chat+approve/deny, streaming, history, metrics, brain browser all shipped 2026-09-06/07; Open WebUI not yet retired (chat with native approve/deny buttons, Obsidian-brain graph view, workflow monitor, metrics dashboard, settings; incremental — monitor page after 14b, dashboard after 15d; Open WebUI retires only after Cockpit chat parity is browser-verified)
 - [ ] **14f — Network review design** (pinned 2026-08-23: placeholder until the home-lab network is built; integrate COOPER when that project starts)
 - [ ] **MCP integration — backlogged 2026-08-25, not yet slotted to a letter.** Owner confirmed
   this needs addressing at some point, scope/timing undecided. Not a new idea: three
@@ -1617,6 +1617,38 @@ Execution order: 15a → 14a(rev) → 15c → 14b → 15d → 15e → 14c(+15f-i
     suite went to 104 failures, reverted with `git checkout`, and redone with an AST pass
     that removes exact node line-spans. Text-editing code by pattern is how you delete more
     than you meant to.
+
+- **2026-09-06/07 · 15i COOPER Cockpit — five slices shipped, live on the Open stack.**
+  `/cockpit`, one self-contained page, no build step and no new dependency.
+  - **Jobs.** Expandable per-job envelopes: scope read-only (it is enforced in code),
+    quota/schedule editable, run history and exception tabs. Two governance rules that
+    hand-editing YAML left implicit are now enforced — approving never alters the envelope,
+    and editing it always revokes approval. Live-proven: changing news-reel's quota moved
+    its hash and flipped it unapproved; a `write_scope` edit was refused 400.
+  - **Chat with native approve/deny.** The reason 15i exists. A pending ticket renders as a
+    card with buttons. **The buttons take the ordinary conversational path, not a dedicated
+    endpoint** — one code path for the gate, not two, pinned by a test that fails if the page
+    ever grows a second door. Live: a level-4 halt produced a real ticket, deny cancelled it,
+    approve executed the tool and returned its output.
+  - **Streaming + history.** Through `/v1/chat/completions`, which runs the same tool-call
+    handler, so the gate behaves identically streamed — verified, not assumed. History
+    persists per browser, capped at 60 stored / 20 sent (the server caps at 50), and replays
+    only real turns: the `decision:` lines are UI annotations and would teach the model to
+    imitate them.
+  - **Metrics.** Every figure derived from real records — evidence files, the decisions
+    table, skill trust — never from counters, so a number cannot drift from what it measures.
+    Cannot 500: a corrupt evidence file degrades one figure, not the page.
+  - **Brain browser, NOT a graph.** The roadmap says "brain graph view"; the brain files
+    contain zero wikilinks, so a graph would have rendered an empty canvas that looks like a
+    bug — shipping a silent-empty on purpose would be worse than finding one. Shows the real
+    structure (6 files, 107 headings) plus search over `brain_fts`, **the same table
+    `archivist.recall()` reads**, so the page and the model see one corpus.
+  - **Access.** The desktop button opens the Cockpit and hands the key over in the URL
+    fragment; phones pair with a 6-digit code (one pending, 5-minute TTL, single use, global
+    attempt budget, constant-time compare).
+  - **Still open:** Open WebUI is not retired — that needs browser-verified chat parity, and
+    no browser was available this session. The page has been executed against a DOM harness
+    (runs clean, strips the fragment, fires its calls) but never visually confirmed.
 
 ## Blocked / needs owner input
 
