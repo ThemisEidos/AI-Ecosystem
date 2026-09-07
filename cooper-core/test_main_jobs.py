@@ -319,7 +319,41 @@ def test_cockpit_approve_buttons_use_the_existing_chat_gate(monkeypatch):
     js = re.search(r"<script>(.*?)</script>",
                    _client(monkeypatch).get("/cockpit").text, re.S).group(1)
     assert 'send("approve", true)' in js and 'send("deny", true)' in js
-    # the only endpoints the chat view talks to
-    assert '"/chat"' in js and '"/pending"' in js
-    for forbidden in ('"/approve"', '"/deny"', "/pending/approve"):
+    # send() is the ordinary conversational path -- the same one typing uses.
+    # Verified live 2026-09-07: a halt raised through /v1/chat/completions opens
+    # a real ticket, and "deny" sent the same way clears it.
+    assert '"/v1/chat/completions"' in js and '"/pending"' in js
+    for forbidden in ('"/approve"', '"/deny"', "/pending/approve", "/approval/consume"):
         assert forbidden not in js, forbidden
+
+
+def test_cockpit_streams_through_the_openai_endpoint(monkeypatch):
+    """Streaming goes through /v1/chat/completions, which runs the SAME
+    tool-call handler as POST /chat -- so an approval halt behaves identically
+    and the gate is not weakened by streaming."""
+    import re
+    js = re.search(r"<script>(.*?)</script>",
+                   _client(monkeypatch).get("/cockpit").text, re.S).group(1)
+    assert '"/v1/chat/completions"' in js
+    assert "stream: true" in js
+    assert "getReader" in js
+
+
+def test_cockpit_history_excludes_ui_annotations(monkeypatch):
+    """System lines ("decision: …") are UI annotations, not conversation. Sending
+    them back as history would teach the model to imitate them."""
+    import re
+    js = re.search(r"<script>(.*?)</script>",
+                   _client(monkeypatch).get("/cockpit").text, re.S).group(1)
+    fn = js[js.index("function historyForServer"):]
+    fn = fn[:fn.index("\n  }")]
+    assert 'm.cls === "me" || m.cls === ""' in fn
+    assert "slice(-CHAT_SEND)" in fn
+
+
+def test_cockpit_history_is_capped(monkeypatch):
+    # The server caps history at 50; an unbounded local log would eventually
+    # exceed it and every request would 422.
+    body = _client(monkeypatch).get("/cockpit").text
+    assert "CHAT_SEND = 20" in body
+    assert "CHAT_MAX = 60" in body

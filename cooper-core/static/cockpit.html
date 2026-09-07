@@ -153,6 +153,7 @@
     <div class="composer">
       <textarea id="composer" placeholder="Ask COOPER…  (Enter sends, Shift+Enter for a new line)"></textarea>
       <button class="act primary" id="send">Send</button>
+      <button class="act" id="clearchat" title="Clear this conversation">Clear</button>
     </div>
   </section>
   <div class="foot">click any job to expand &middot; scope is enforced in code and not editable here &middot; editing quota or schedule voids approval</div>
@@ -457,11 +458,40 @@
   // so the gate has one code path, not two, and a UI bug cannot invent a way
   // past it. The button is a convenience over the existing gate, never a
   // bypass of it.
+  // History persists per browser so a reload does not lose the conversation.
+  // Capped: the tail is what a model needs, and an unbounded log would grow the
+  // request forever and eventually blow the 50-message server limit.
+  var CHAT_STORE = "cooper_chat", CHAT_MAX = 60, CHAT_SEND = 20;
   var CHAT = [];
+
+  function loadChat() {
+    try {
+      var raw = localStorage.getItem(CHAT_STORE);
+      CHAT = raw ? JSON.parse(raw) : [];
+      if (!Array.isArray(CHAT)) CHAT = [];
+    } catch (e) { CHAT = []; }
+  }
+
+  function saveChat() {
+    try { localStorage.setItem(CHAT_STORE, JSON.stringify(CHAT.slice(-CHAT_MAX))); }
+    catch (e) {}
+  }
 
   function pushMsg(who, text, cls) {
     CHAT.push({ who: who, text: text, cls: cls || "" });
+    if (CHAT.length > CHAT_MAX) CHAT = CHAT.slice(-CHAT_MAX);
+    saveChat();
     drawChat();
+  }
+
+  // What the model is shown: real turns only. System lines ("decision: …") are
+  // UI annotations and must not be replayed back as conversation.
+  function historyForServer() {
+    return CHAT.filter(function (m) { return m.cls === "me" || m.cls === ""; })
+               .slice(-CHAT_SEND)
+               .map(function (m) {
+                 return { role: m.cls === "me" ? "user" : "assistant", content: m.text };
+               });
   }
 
   function drawChat() {
@@ -497,25 +527,65 @@
       .catch(function () { drawApproval(null); });
   }
 
+  // Streamed through the OpenAI-compatible endpoint, which runs the SAME
+  // tool-call handler as POST /chat -- so an approval halt behaves identically
+  // here, and the gate is not weakened by streaming.
   function send(text, isGateAnswer) {
     if (!text) return;
+    var history = historyForServer();
     pushMsg("you", text, "me");
     if (!isGateAnswer) $("composer").value = "";
     $("send").disabled = true;
     drawApproval(null);
-    pushMsg("cooper", "…", "pending-msg");
-    api("/chat", { method: "POST", body: JSON.stringify({ message: text }) })
-      .then(function (r) {
-        CHAT.pop();
-        pushMsg("cooper", r.reply, "");
-        if (r.decision && r.decision !== "answer") {
-          CHAT.push({ who: "", text: "decision: " + r.decision + (r.reason ? " — " + r.reason : ""), cls: "sys" });
-        }
-        drawChat();
-        return refreshPending();
-      })
-      .catch(function (e) { CHAT.pop(); pushMsg("cooper", "— " + e.message, "sys"); })
-      .then(function () { $("send").disabled = false; $("composer").focus(); });
+
+    var idx = CHAT.push({ who: "cooper", text: "", cls: "" }) - 1;
+    drawChat();
+
+    var body = {
+      model: "cooper", stream: true,
+      messages: history.concat([{ role: "user", content: text }])
+    };
+
+    fetch("/v1/chat/completions", {
+      method: "POST",
+      headers: { "Authorization": "Bearer " + KEY, "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    }).then(function (resp) {
+      if (resp.status === 401) { lock("Key rejected."); throw new Error("unauthorized"); }
+      if (!resp.ok || !resp.body) throw new Error("HTTP " + resp.status);
+      var reader = resp.body.getReader(), dec = new TextDecoder(), buf = "";
+      function pump() {
+        return reader.read().then(function (r) {
+          if (r.done) return;
+          buf += dec.decode(r.value, { stream: true });
+          var lines = buf.split("\n");
+          buf = lines.pop();
+          lines.forEach(function (line) {
+            line = line.trim();
+            if (!line.indexOf("data:")) line = line.slice(5).trim();
+            if (!line || line === "[DONE]") return;
+            try {
+              var d = JSON.parse(line);
+              var piece = d.choices && d.choices[0] && d.choices[0].delta &&
+                          d.choices[0].delta.content;
+              if (piece) { CHAT[idx].text += piece; drawChat(); }
+            } catch (e) { /* a partial frame; the next read completes it */ }
+          });
+          return pump();
+        });
+      }
+      return pump();
+    }).then(function () {
+      if (!CHAT[idx].text) CHAT[idx].text = "(no content)";
+      saveChat(); drawChat();
+      return refreshPending();
+    }).catch(function (e) {
+      CHAT[idx].text = CHAT[idx].text || ("— " + e.message);
+      CHAT[idx].cls = CHAT[idx].text.indexOf("— ") === 0 ? "sys" : "";
+      saveChat(); drawChat();
+    }).then(function () {
+      $("send").disabled = false; $("composer").focus();
+    });
   }
 
   $("send").addEventListener("click", function () { send($("composer").value.trim(), false); });
@@ -529,8 +599,12 @@
     $("v-chat").setAttribute("aria-selected", String(v === "chat"));
     $("jobs").classList.toggle("hide", v !== "jobs");
     $("chatview").classList.toggle("hide", v !== "chat");
-    if (v === "chat") { refreshPending(); $("composer").focus(); }
+    if (v === "chat") { refreshPending(); drawChat(); $("composer").focus(); }
   }
+  loadChat();
+  $("clearchat").addEventListener("click", function () {
+    CHAT = []; saveChat(); drawChat();
+  });
   $("v-jobs").addEventListener("click", function () { setView("jobs"); });
   $("v-chat").addEventListener("click", function () { setView("chat"); });
 
