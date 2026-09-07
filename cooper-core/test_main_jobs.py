@@ -357,3 +357,50 @@ def test_cockpit_history_is_capped(monkeypatch):
     body = _client(monkeypatch).get("/cockpit").text
     assert "CHAT_SEND = 20" in body
     assert "CHAT_MAX = 60" in body
+
+
+# --- Step 15i: metrics ---------------------------------------------------------
+
+def test_metrics_endpoint_shape(monkeypatch):
+    r = _client(monkeypatch).get("/metrics/summary")
+    assert r.status_code == 200
+    b = r.json()
+    for k in ("jobs", "runs", "decisions", "skills", "exceptions", "council"):
+        assert k in b, k
+    assert set(b["jobs"]) >= {"total", "approved"}
+    assert set(b["runs"]) >= {"total", "completed", "failed", "recent"}
+    assert set(b["decisions"]) >= {"total", "success", "by_tool"}
+    assert set(b["council"]) >= {"verdicts", "flagged"}
+
+
+def test_metrics_requires_auth(monkeypatch):
+    monkeypatch.setattr(main, "_API_KEYS", {"real-key"})
+    monkeypatch.setattr(main, "_ALLOW_ANON", False)
+    assert TestClient(main.app).get("/metrics/summary").status_code == 401
+
+
+def test_metrics_counts_runs_by_status(monkeypatch, tmp_path):
+    import json as _json
+    monkeypatch.setattr(jobs, "_EVIDENCE_DIR", tmp_path)
+    for i, st in enumerate(["completed", "completed", "failed"]):
+        (tmp_path / f"wc_{i}.json").write_text(_json.dumps({
+            "job_id": "news-reel", "run_id": f"r{i}", "status": st,
+            "completion_time": f"2026-09-0{i+1}T00:00:00.000000Z",
+            "notes": "", "artifact_paths": [],
+            "verdicts": [{"member": "openai", "verdict": "pass" if st == "completed" else "flag",
+                          "reason": "x"}],
+        }), encoding="utf-8")
+    b = _client(monkeypatch).get("/metrics/summary").json()
+    assert b["runs"]["total"] == 3
+    assert b["runs"]["completed"] == 2
+    assert b["runs"]["failed"] == 1
+    assert b["council"]["verdicts"] == 3
+    assert b["council"]["flagged"] == 1
+
+
+def test_metrics_survives_a_corrupt_evidence_record(monkeypatch, tmp_path):
+    # A dashboard that blanks because one file is malformed is worse than one
+    # that shows the rest and says so.
+    (tmp_path / "bad.json").write_text("{not json", encoding="utf-8")
+    monkeypatch.setattr(jobs, "_EVIDENCE_DIR", tmp_path)
+    assert _client(monkeypatch).get("/metrics/summary").status_code == 200

@@ -684,6 +684,89 @@ async def pair_claim(body: dict) -> dict:
     return {"key": key}
 
 
+@app.get("/metrics/summary", dependencies=[Depends(_require_auth)])
+async def metrics_summary() -> dict:
+    """Everything the Cockpit dashboard shows, from what actually happened.
+
+    Deliberately derived from real records -- evidence files, the decisions
+    table, skill trust scores -- rather than from counters the code increments,
+    so a number here cannot drift away from the thing it claims to measure.
+    Every read is guarded: a dashboard that blanks because one file is malformed
+    is worse than one that shows the rest.
+    """
+    runs = jobs.list_job_runs(limit=200)
+    by_status: dict = {}
+    council_total = council_flagged = 0
+    for r in runs:
+        by_status[r["status"]] = by_status.get(r["status"], 0) + 1
+    for path in sorted(jobs._EVIDENCE_DIR.glob("*.json")):
+        try:
+            rec = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(rec, dict) or not rec.get("job_id"):
+            continue
+        verdicts = rec.get("verdicts") or []
+        if isinstance(verdicts, list) and verdicts:
+            council_total += 1
+            if any(isinstance(v, dict) and v.get("verdict") == "flag" for v in verdicts):
+                council_flagged += 1
+
+    reg = jobs.load_registry()
+    entries = [e for e in (reg.get("jobs") or []) if isinstance(e, dict)]
+
+    decisions = {"total": 0, "success": 0, "by_tool": []}
+    skills_stat = {"total": 0, "top": []}
+    try:
+        cur = _ARCHIVIST_CONN.execute(
+            "SELECT outcome, tool_name FROM decisions WHERE workshop = ?", (WORKSHOP,))
+        rows = cur.fetchall()
+        decisions["total"] = len(rows)
+        decisions["success"] = sum(1 for r in rows if str(r[0]) == "success")
+        tally: dict = {}
+        for r in rows:
+            name = str(r[1] or "(none)")
+            tally[name] = tally.get(name, 0) + 1
+        decisions["by_tool"] = sorted(
+            ({"tool": k, "count": v} for k, v in tally.items()),
+            key=lambda d: -d["count"])[:8]
+        srows = _ARCHIVIST_CONN.execute(
+            "SELECT tool_name, successful_run_count, failed_run_count, trust_score "
+            "FROM skills ORDER BY trust_score DESC LIMIT 8").fetchall()
+        skills_stat["total"] = _ARCHIVIST_CONN.execute(
+            "SELECT COUNT(*) FROM skills").fetchone()[0]
+        skills_stat["top"] = [
+            {"tool": str(r[0]), "ok": int(r[1] or 0), "fail": int(r[2] or 0),
+             "trust": round(float(r[3] or 0), 2)} for r in srows]
+    except Exception as exc:                      # noqa: BLE001 — dashboard must not 500
+        print(f"  [!!] metrics: decisions/skills read failed (non-fatal): {exc}")
+
+    try:
+        pending_exc = jobs.list_exceptions(_ARCHIVIST_CONN)
+    except Exception:                             # noqa: BLE001
+        pending_exc = []
+
+    return {
+        "workshop": WORKSHOP,
+        "jobs": {
+            "total": len(entries),
+            "approved": sum(1 for e in entries if e.get("approved")),
+            "detail": [{"id": str(e.get("id")), "approved": bool(e.get("approved")),
+                        "schedule": str(e.get("schedule_hint", ""))} for e in entries],
+        },
+        "runs": {
+            "total": len(runs),
+            "completed": by_status.get("completed", 0),
+            "failed": by_status.get("failed", 0),
+            "recent": runs[:12],
+        },
+        "decisions": decisions,
+        "skills": skills_stat,
+        "exceptions": {"pending": len(pending_exc)},
+        "council": {"verdicts": council_total, "flagged": council_flagged},
+    }
+
+
 @app.get("/cockpit", response_class=HTMLResponse)
 async def cockpit_page() -> HTMLResponse:
     """The cockpit shell. Deliberately UNAUTHENTICATED and data-free: it embeds
