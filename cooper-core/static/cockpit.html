@@ -143,6 +143,7 @@
         <button class="vt" id="v-jobs" data-view="jobs" aria-selected="true">JOBS</button>
         <button class="vt" id="v-chat" data-view="chat" aria-selected="false">CHAT</button>
         <button class="vt" id="v-metrics" data-view="metrics" aria-selected="false">METRICS</button>
+        <button class="vt" id="v-brain" data-view="brain" aria-selected="false">BRAIN</button>
       </div>
     </div>
     <div class="stats">
@@ -157,6 +158,14 @@
   <main id="jobs"></main>
 
   <section id="metricsview" class="hide"></section>
+
+  <section id="brainview" class="hide">
+    <div style="display:flex;gap:8px;margin-bottom:14px">
+      <input type="text" id="brainq" placeholder="Search what COOPER can recall…" style="flex:1;font-family:var(--sans);font-size:14px;color:var(--fg);background:var(--bg);border:1px solid #2e393f;padding:10px 12px">
+      <button class="act primary" id="brainsearch">Search</button>
+    </div>
+    <div id="brainout"></div>
+  </section>
 
   <section id="chatview" class="chat hide">
     <div class="msgs" id="msgs"></div>

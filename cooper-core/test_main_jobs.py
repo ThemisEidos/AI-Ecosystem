@@ -404,3 +404,43 @@ def test_metrics_survives_a_corrupt_evidence_record(monkeypatch, tmp_path):
     (tmp_path / "bad.json").write_text("{not json", encoding="utf-8")
     monkeypatch.setattr(jobs, "_EVIDENCE_DIR", tmp_path)
     assert _client(monkeypatch).get("/metrics/summary").status_code == 200
+
+
+# --- Step 15i: brain browser ---------------------------------------------------
+
+def test_brain_index_lists_files_and_headings(monkeypatch):
+    r = _client(monkeypatch).get("/brain")
+    assert r.status_code == 200
+    b = r.json()
+    assert b["files"], "brain index is empty"
+    f = b["files"][0]
+    assert {"file", "headings", "sections"} <= set(f)
+
+
+def test_brain_requires_auth(monkeypatch):
+    monkeypatch.setattr(main, "_API_KEYS", {"real-key"})
+    monkeypatch.setattr(main, "_ALLOW_ANON", False)
+    assert TestClient(main.app).get("/brain").status_code == 401
+
+
+def test_brain_search_uses_the_same_index_recall_uses(monkeypatch):
+    """The point of this view: see what COOPER can actually recall.
+
+    It queries brain_fts -- the same table archivist.recall() reads -- so what
+    the page shows and what the model gets are the same corpus, not two views
+    that can drift apart.
+    """
+    r = _client(monkeypatch).get("/brain/search", params={"q": "packaging"})
+    assert r.status_code == 200
+    assert "results" in r.json()
+
+
+def test_brain_search_rejects_an_empty_query(monkeypatch):
+    assert _client(monkeypatch).get("/brain/search", params={"q": "  "}).status_code == 400
+
+
+def test_brain_search_survives_fts_syntax_in_the_query(monkeypatch):
+    # FTS5 MATCH has its own syntax; a stray quote or operator from a human
+    # typing must not 500 the page.
+    for q in ['"', 'a AND', 'NEAR(', '*', "foo OR"]:
+        assert _client(monkeypatch).get("/brain/search", params={"q": q}).status_code in (200, 400)

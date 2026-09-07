@@ -16,6 +16,7 @@ import asyncio
 import hashlib
 import json
 import os
+import re
 import time
 import uuid
 from contextlib import asynccontextmanager
@@ -765,6 +766,71 @@ async def metrics_summary() -> dict:
         "exceptions": {"pending": len(pending_exc)},
         "council": {"verdicts": council_total, "flagged": council_flagged},
     }
+
+
+_BRAIN_DIR = _REPO_ROOT / "Obsidian Vault" / "brain"
+
+
+@app.get("/brain", dependencies=[Depends(_require_auth)])
+async def brain_index() -> dict:
+    """The brain's real structure: files and their headings.
+
+    Deliberately NOT a link graph. The brain files contain no wikilinks at all,
+    so a graph view would render an empty canvas that looks like a bug — the
+    silent-empty failure this repo keeps finding. Headings are the structure
+    that actually exists.
+    """
+    files = []
+    if _BRAIN_DIR.is_dir():
+        for path in sorted(_BRAIN_DIR.glob("*.md")):
+            try:
+                text = path.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError) as exc:
+                files.append({"file": path.name, "headings": 0, "sections": [],
+                              "error": str(exc)})
+                continue
+            sections = [
+                {"level": len(m) - len(m.lstrip("#")), "title": m.lstrip("# ").strip()}
+                for m in (ln for ln in text.splitlines() if ln.startswith("#"))
+            ]
+            files.append({
+                "file": path.name,
+                "headings": len(sections),
+                "lines": len(text.splitlines()),
+                "sections": sections[:200],
+            })
+    return {"files": files, "dir": str(_BRAIN_DIR), "present": _BRAIN_DIR.is_dir()}
+
+
+@app.get("/brain/search", dependencies=[Depends(_require_auth)])
+async def brain_search(q: str = "", limit: int = 20) -> dict:
+    """Full-text search over brain_fts — the SAME table archivist.recall() reads.
+
+    That is the point of this view: what the page shows and what the model is
+    given at recall time are one corpus, not two that can drift apart.
+    """
+    query = (q or "").strip()
+    if not query:
+        raise HTTPException(status_code=400, detail="q is required")
+    # A human typing into a search box is not writing FTS5 syntax. Quote each
+    # bare term so a stray quote, operator or wildcard cannot become a syntax
+    # error (or an accidental operator) instead of a search.
+    safe = " OR ".join(
+        '"' + t.replace('"', "") + '"'
+        for t in re.findall(r"[A-Za-z0-9_]+", query)
+    )
+    if not safe:
+        raise HTTPException(status_code=400, detail="q has no searchable terms")
+    try:
+        rows = _ARCHIVIST_CONN.execute(
+            "SELECT file_name, heading, body FROM brain_fts WHERE brain_fts MATCH ? "
+            "ORDER BY rank LIMIT ?", (safe, max(1, min(int(limit), 50)))).fetchall()
+    except Exception as exc:                       # noqa: BLE001 — never 500 a search box
+        print(f"  [!!] brain search failed (non-fatal): {exc}")
+        return {"results": [], "error": str(exc), "query": query}
+    return {"query": query, "results": [
+        {"file": str(r[0]), "heading": str(r[1]),
+         "excerpt": str(r[2])[:600]} for r in rows]}
 
 
 @app.get("/cockpit", response_class=HTMLResponse)
