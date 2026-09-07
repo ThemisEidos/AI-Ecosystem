@@ -77,6 +77,21 @@
   .gate p{font-size:13px;color:var(--dim2);line-height:1.6;margin:0 0 16px}
   .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:24px;background:var(--panel);border:1px solid var(--line);padding:11px 18px;font-family:var(--mono);font-size:12px;color:var(--fg);z-index:9}
   .toast.bad{border-color:#5a2f2c;color:var(--bad)}
+  .viewtabs{display:flex;gap:2px;margin-left:6px}
+  .vt{font-family:var(--mono);font-size:10px;letter-spacing:.08em;padding:5px 12px;cursor:pointer;background:none;border:1px solid #262f34;color:var(--dim3)}
+  .vt[aria-selected=true]{color:var(--bg);background:var(--accent);border-color:var(--accent)}
+  .chat{display:flex;flex-direction:column;height:calc(100vh - 190px);min-height:400px}
+  .msgs{flex:1;overflow-y:auto;padding:6px 2px;display:flex;flex-direction:column;gap:14px}
+  .msg{max-width:min(760px,88%);padding:12px 15px;border:1px solid var(--line);background:var(--panel);white-space:pre-wrap;word-break:break-word;line-height:1.55;font-size:14px}
+  .msg.me{align-self:flex-end;background:#12181a;border-color:#2a343a}
+  .msg.sys{align-self:center;max-width:100%;background:none;border:0;color:var(--dim3);font-family:var(--mono);font-size:11px;padding:2px}
+  .who{font-family:var(--mono);font-size:10px;letter-spacing:.08em;color:var(--dim3);margin-bottom:5px}
+  .composer{display:flex;gap:8px;margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}
+  .composer textarea{flex:1;font-family:var(--sans);font-size:14px;color:var(--fg);background:var(--bg);border:1px solid #2e393f;padding:10px 12px;resize:vertical;min-height:46px;max-height:180px}
+  .composer textarea:focus{outline:none;border-color:var(--accent)}
+  .gate2{border:1px solid var(--warn);background:#1d1810;padding:14px 16px;align-self:stretch;max-width:100%}
+  .gate2 h3{margin:0 0 4px;font-size:15px;color:var(--warn)}
+  .gate2 .kv{margin:10px 0}
   .hide{display:none!important}
   @media (max-width:640px){.wrap{padding:16px 14px 48px}.meta{display:none}.set{grid-template-columns:1fr}}
 </style>
@@ -116,6 +131,10 @@
       <div class="dot" id="dot"></div>
       <h1>COOPER Cockpit</h1>
       <div class="chip" id="ws">—</div>
+      <div class="viewtabs">
+        <button class="vt" id="v-jobs" data-view="jobs" aria-selected="true">JOBS</button>
+        <button class="vt" id="v-chat" data-view="chat" aria-selected="false">CHAT</button>
+      </div>
     </div>
     <div class="stats">
       <div><span>jobs</span> <b id="s-jobs">—</b></div>
@@ -127,6 +146,15 @@
     </div>
   </header>
   <main id="jobs"></main>
+
+  <section id="chatview" class="chat hide">
+    <div class="msgs" id="msgs"></div>
+    <div id="approvalslot"></div>
+    <div class="composer">
+      <textarea id="composer" placeholder="Ask COOPER…  (Enter sends, Shift+Enter for a new line)"></textarea>
+      <button class="act primary" id="send">Send</button>
+    </div>
+  </section>
   <div class="foot">click any job to expand &middot; scope is enforced in code and not editable here &middot; editing quota or schedule voids approval</div>
 </div>
 
@@ -160,7 +188,7 @@
     if (HANDED) { HANDED = HANDED.trim() || null; }
   } catch (e) { HANDED = null; }
 
-  var KEY = null, state = { open: null, tab: "envelope" }, DATA = { jobs: [], runs: [], exceptions: [] };
+  var KEY = null, state = { open: null, tab: "envelope", view: "jobs" }, DATA = { jobs: [], runs: [], exceptions: [] };
   var $ = function (id) { return document.getElementById(id); };
 
   var PERMITS = {
@@ -422,6 +450,89 @@
   });
 
   $("forget").addEventListener("click", function () { lock("Key forgotten on this browser."); });
+
+  // ── Chat (Step 15i) ──────────────────────────────────────────────────────
+  // The approve/deny buttons do NOT get their own endpoint. They send the words
+  // "approve" / "deny" through POST /chat -- the exact path typing them takes --
+  // so the gate has one code path, not two, and a UI bug cannot invent a way
+  // past it. The button is a convenience over the existing gate, never a
+  // bypass of it.
+  var CHAT = [];
+
+  function pushMsg(who, text, cls) {
+    CHAT.push({ who: who, text: text, cls: cls || "" });
+    drawChat();
+  }
+
+  function drawChat() {
+    $("msgs").innerHTML = CHAT.map(function (m) {
+      if (m.cls === "sys") return '<div class="msg sys">' + esc(m.text) + "</div>";
+      return '<div class="msg ' + m.cls + '"><div class="who">' + esc(m.who) + "</div>" + esc(m.text) + "</div>";
+    }).join("");
+    var box = $("msgs");
+    box.scrollTop = box.scrollHeight;
+  }
+
+  function drawApproval(t) {
+    if (!t) { $("approvalslot").innerHTML = ""; return; }
+    $("approvalslot").innerHTML =
+      '<div class="gate2"><h3>Approval required</h3>' +
+      '<div style="font-size:13px;color:var(--dim)">COOPER has halted and is waiting on you. Nothing has run.</div>' +
+      '<div class="kv">' +
+        '<div class="k">tool</div><div class="v">' + esc(t.tool) + "</div>" +
+        '<div class="k">level</div><div class="v">' + esc(t.permission_level) + "</div>" +
+        '<div class="k">asked</div><div class="v">' + esc(t.requested_message) + "</div>" +
+        '<div class="k">waiting</div><div class="v">' + esc(t.age_seconds) + "s</div>" +
+      "</div>" +
+      '<div style="display:flex;gap:9px;margin-top:6px">' +
+        '<button class="act primary" id="ap-yes">Approve &amp; run</button>' +
+        '<button class="act" id="ap-no">Deny</button>' +
+      "</div></div>";
+    $("ap-yes").addEventListener("click", function () { send("approve", true); });
+    $("ap-no").addEventListener("click", function () { send("deny", true); });
+  }
+
+  function refreshPending() {
+    return api("/pending").then(function (r) { drawApproval(r.pending); })
+      .catch(function () { drawApproval(null); });
+  }
+
+  function send(text, isGateAnswer) {
+    if (!text) return;
+    pushMsg("you", text, "me");
+    if (!isGateAnswer) $("composer").value = "";
+    $("send").disabled = true;
+    drawApproval(null);
+    pushMsg("cooper", "…", "pending-msg");
+    api("/chat", { method: "POST", body: JSON.stringify({ message: text }) })
+      .then(function (r) {
+        CHAT.pop();
+        pushMsg("cooper", r.reply, "");
+        if (r.decision && r.decision !== "answer") {
+          CHAT.push({ who: "", text: "decision: " + r.decision + (r.reason ? " — " + r.reason : ""), cls: "sys" });
+        }
+        drawChat();
+        return refreshPending();
+      })
+      .catch(function (e) { CHAT.pop(); pushMsg("cooper", "— " + e.message, "sys"); })
+      .then(function () { $("send").disabled = false; $("composer").focus(); });
+  }
+
+  $("send").addEventListener("click", function () { send($("composer").value.trim(), false); });
+  $("composer").addEventListener("keydown", function (e) {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("send").click(); }
+  });
+
+  function setView(v) {
+    state.view = v;
+    $("v-jobs").setAttribute("aria-selected", String(v === "jobs"));
+    $("v-chat").setAttribute("aria-selected", String(v === "chat"));
+    $("jobs").classList.toggle("hide", v !== "jobs");
+    $("chatview").classList.toggle("hide", v !== "chat");
+    if (v === "chat") { refreshPending(); $("composer").focus(); }
+  }
+  $("v-jobs").addEventListener("click", function () { setView("jobs"); });
+  $("v-chat").addEventListener("click", function () { setView("chat"); });
 
   var pairTimer = null;
   $("pair").addEventListener("click", function () {

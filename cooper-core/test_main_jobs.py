@@ -298,3 +298,28 @@ def test_cockpit_strips_the_fragment_before_anything_that_can_throw(monkeypatch)
     assert "getElementById" not in head
     assert "addEventListener" not in head
     assert 'document.querySelector' not in head
+
+
+def test_cockpit_chat_pane_is_present(monkeypatch):
+    body = _client(monkeypatch).get("/cockpit").text
+    for el in ('id="chatview"', 'id="msgs"', 'id="composer"', 'id="approvalslot"',
+               'id="v-chat"', 'id="v-jobs"'):
+        assert el in body, el
+
+
+def test_cockpit_approve_buttons_use_the_existing_chat_gate(monkeypatch):
+    """The approve/deny buttons must not get their own endpoint.
+
+    They send the words "approve"/"deny" through POST /chat -- the exact path
+    typing them takes -- so the gate has one code path rather than two, and a UI
+    bug cannot invent a way past it. A dedicated /approve route would be a second
+    door onto the same room.
+    """
+    import re
+    js = re.search(r"<script>(.*?)</script>",
+                   _client(monkeypatch).get("/cockpit").text, re.S).group(1)
+    assert 'send("approve", true)' in js and 'send("deny", true)' in js
+    # the only endpoints the chat view talks to
+    assert '"/chat"' in js and '"/pending"' in js
+    for forbidden in ('"/approve"', '"/deny"', "/pending/approve"):
+        assert forbidden not in js, forbidden
