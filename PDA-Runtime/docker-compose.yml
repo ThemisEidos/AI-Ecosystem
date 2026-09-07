@@ -109,6 +109,13 @@ services:
       - "${COOPER_TAILNET_IP:-127.0.0.2}:8001:8000"
     environment:
       - WORKSHOP=open
+      # Owner decision 2026-09-07: the Cockpit must never ask for the key. The
+      # SOCKET BINDING is the perimeter -- since 2026-09-06 this service is
+      # reachable only from loopback and the owner's tailnet, so anonymous
+      # requests can only originate from the owner's own devices. A key that IS
+      # presented (n8n, scripts) is still validated and still names its own
+      # approval-session domain.
+      - COOPER_ALLOW_ANON=1
       - OPENAI_BASE_URL=http://litellm:4000/v1
       # LITELLM_MASTER_KEY here is resolved from the shell env or a PDA-Runtime/.env file
       # (Compose-level interpolation) — NOT from litellm/.env.local, which only populates the

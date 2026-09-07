@@ -158,6 +158,20 @@ def _check_auth_config(api_keys: set, allow_anon: bool) -> None:
 def _require_auth(
     creds: Optional[HTTPAuthorizationCredentials] = Security(_bearer),
 ) -> None:
+    """Bearer gate — unless COOPER_ALLOW_ANON=1, in which case the SOCKET
+    BINDING is the perimeter (owner decision 2026-09-07: the Cockpit must stop
+    asking for the key). Since 2026-09-06 the stacks bind loopback + the
+    tailnet address only, so every connection that can reach this process at
+    all comes from the owner's own machine, the owner's own tailnet devices,
+    or a sibling container of this compose stack. A key that IS presented is
+    still validated — a client that believes it is authenticating must find
+    out when it is not — and still names its own approval-session domain
+    (n8n and scripts keep sending one).
+    """
+    if _ALLOW_ANON:
+        if creds and _API_KEYS and creds.credentials not in _API_KEYS:
+            raise HTTPException(status_code=401, detail="Unauthorized")
+        return
     if _API_KEYS and (not creds or creds.credentials not in _API_KEYS):
         raise HTTPException(status_code=401, detail="Unauthorized")
 

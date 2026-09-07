@@ -863,3 +863,16 @@ source starts reading a config the manifest does not cover — without which the
 would rot into the same silence it exists to prevent. Both halves are mutation-tested;
 the first attempt at that mutation test used a `-k` filter that matched nothing and had to
 be redone, which is itself an instance of the class.
+
+### 2026-09-07 · A bare `docker compose up` silently drops the tailnet binding
+
+`install-cooper.sh` detects the tailscale0 IP at launch and exports `COOPER_TAILNET_IP`
+for compose substitution. Run `docker compose -f PDA-Runtime/docker-compose.yml up -d`
+DIRECTLY and that export never happens, so `${COOPER_TAILNET_IP:-127.0.0.2}` falls back
+to the second loopback: everything still works from the laptop, and the tailnet (your
+phone) silently loses access — found when a post-rebuild check got `000` from the tailnet
+address that had worked an hour earlier. The silent-empty class again: nothing errors,
+one access path just vanishes. Rule: **bring stacks up through `install-cooper.sh`** (or
+export `COOPER_TAILNET_IP` first). The rebuild one-liner in CLAUDE.md is for the image;
+follow it with the installer when the binding matters. Verify with a real request to the
+tailnet address, not to localhost.

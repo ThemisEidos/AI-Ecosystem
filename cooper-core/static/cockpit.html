@@ -241,7 +241,7 @@
 
   function api(path, opts) {
     opts = opts || {};
-    opts.headers = Object.assign({ "Authorization": "Bearer " + KEY }, opts.headers || {});
+    opts.headers = Object.assign(KEY ? { "Authorization": "Bearer " + KEY } : {}, opts.headers || {});
     if (opts.body) opts.headers["Content-Type"] = "application/json";
     return fetch(path, opts).then(function (r) {
       if (r.status === 401) { lock("Key rejected."); throw new Error("unauthorized"); }
@@ -574,7 +574,7 @@
 
     fetch("/v1/chat/completions", {
       method: "POST",
-      headers: { "Authorization": "Bearer " + KEY, "Content-Type": "application/json" },
+      headers: Object.assign(KEY ? { "Authorization": "Bearer " + KEY } : {}, { "Content-Type": "application/json" }),
       body: JSON.stringify(body)
     }).then(function (resp) {
       if (resp.status === 401) { lock("Key rejected."); throw new Error("unauthorized"); }
@@ -701,10 +701,20 @@
   $("paircode").addEventListener("keydown", function (e) { if (e.key === "Enter") $("claim").click(); });
   $("key").addEventListener("keydown", function (e) { if (e.key === "Enter") $("unlock").click(); });
 
+  // Perimeter-first boot (owner decision 2026-09-07: never ask for the key).
+  // The server trusts the socket binding (loopback + tailnet), so probe with
+  // NO credentials before consulting any stored key -- a stale stored key must
+  // not be able to lock a browser out of a server that admits anonymous.
   if (HANDED) writeStored(HANDED, true);
-  var saved = HANDED || readStored();
-  if (saved) { boot(saved); } else { $("gate").classList.remove("hide"); }
-  setInterval(function () { if (KEY) load().catch(function () {}); }, 30000);
+  fetch("/driver").then(function (r) {
+    if (r.ok) { boot(""); return; }
+    var saved = HANDED || readStored();
+    if (saved) { boot(saved); } else { $("gate").classList.remove("hide"); }
+  }).catch(function () {
+    var saved = HANDED || readStored();
+    if (saved) { boot(saved); } else { $("gate").classList.remove("hide"); }
+  });
+  setInterval(function () { if (!$("app").classList.contains("hide")) load().catch(function () {}); }, 30000);
 })();
 </script>
 </body>

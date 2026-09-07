@@ -1728,6 +1728,19 @@ Execution order: 15a → 14a(rev) → 15c → 14b → 15d → 15e → 14c(+15f-i
   verified with `PRAGMA integrity_check` ok and real row counts (open: 21 decisions,
   private: 7); systemd user timer armed, `Persistent=true` so it catches up after sleep.
 
+- **2026-09-07 · The Cockpit stops asking for the key — perimeter auth (owner order).**
+  `COOPER_ALLOW_ANON=1` on both stacks: the SOCKET BINDING is the perimeter. Since
+  2026-09-06 nothing but loopback and the owner's tailnet can reach the ports at all, so
+  the bearer prompt was guarding against nobody while costing the owner a paste per
+  launch. A key that IS presented is still validated (wrong key still 401s — a client
+  that believes it authenticates must find out when it is not) and still names its own
+  approval-session domain, so n8n and scripts are unchanged. The page probes keyless
+  first, so a stale stored key can no longer lock a browser out of a server that admits
+  anonymous. Live: `/jobs`, `/driver`, `/chat` all 200 with no key from loopback AND from
+  the tailnet address; wrong key 401; Wi-Fi still refused at the socket. En route, found
+  and logged the bare-`docker compose up` trap that silently drops the tailnet binding
+  (Gotchas 2026-09-07). 560 tests.
+
 ## Blocked / needs owner input
 
 Governance gates from the Step 15 spec §6 — each blocks only its named slice:

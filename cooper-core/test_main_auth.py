@@ -20,6 +20,9 @@ def test_check_auth_config_passes_with_explicit_anon():
 
 def test_chat_rejects_missing_bearer_when_key_set(monkeypatch):
     monkeypatch.setattr(main, "_API_KEYS", {"sekrit"})
+    # Pin keyed mode explicitly: other test modules set COOPER_ALLOW_ANON=1 in
+    # the ambient env, and this test is about the keyed configuration.
+    monkeypatch.setattr(main, "_ALLOW_ANON", False)
     client = TestClient(main.app)  # no `with` -> lifespan does not run
     resp = client.post("/chat", json={"message": "hi"})
     assert resp.status_code == 401
@@ -101,3 +104,35 @@ def test_pending_and_chat_are_isolated_per_bearer_token(monkeypatch):
     resp_a_again = client.get("/pending", headers={"Authorization": "Bearer key-a"})
     assert resp_a_again.status_code == 200
     assert resp_a_again.json()["pending"] is not None
+
+
+# --- trusted-perimeter mode (owner decision 2026-09-07) -----------------------
+# With COOPER_ALLOW_ANON=1 the SOCKET BINDING (loopback + tailnet since
+# 2026-09-06) is the perimeter: anonymous requests pass, a presented key is
+# still validated, and a WRONG key still fails -- a client that believes it is
+# authenticating must find out when it is not.
+
+def test_allow_anon_admits_anonymous_even_with_keys_set(monkeypatch):
+    monkeypatch.setattr(main, "_API_KEYS", {"real-key"})
+    monkeypatch.setattr(main, "_ALLOW_ANON", True)
+    assert TestClient(main.app).get("/jobs").status_code == 200
+
+
+def test_allow_anon_still_rejects_a_wrong_key(monkeypatch):
+    monkeypatch.setattr(main, "_API_KEYS", {"real-key"})
+    monkeypatch.setattr(main, "_ALLOW_ANON", True)
+    r = TestClient(main.app).get("/jobs", headers={"Authorization": "Bearer wrong"})
+    assert r.status_code == 401
+
+
+def test_allow_anon_still_accepts_the_right_key(monkeypatch):
+    monkeypatch.setattr(main, "_API_KEYS", {"real-key"})
+    monkeypatch.setattr(main, "_ALLOW_ANON", True)
+    r = TestClient(main.app).get("/jobs", headers={"Authorization": "Bearer real-key"})
+    assert r.status_code == 200
+
+
+def test_without_allow_anon_keys_still_gate(monkeypatch):
+    monkeypatch.setattr(main, "_API_KEYS", {"real-key"})
+    monkeypatch.setattr(main, "_ALLOW_ANON", False)
+    assert TestClient(main.app).get("/jobs").status_code == 401

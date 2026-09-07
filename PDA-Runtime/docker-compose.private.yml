@@ -61,6 +61,9 @@ services:
       - "127.0.0.1:8000:8000"
     environment:
       - WORKSHOP=private
+      # Perimeter auth (owner decision 2026-09-07, same as the Open stack) --
+      # and Private binds loopback ONLY, so anonymous means "this machine".
+      - COOPER_ALLOW_ANON=1
       - OLLAMA_HOST=http://private-ollama:11434
       - COOPER_DB_PATH=/app/data/cooper_memory.db
       - COOPER_API_KEY=${COOPER_API_KEY-cooper-local}
