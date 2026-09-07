@@ -138,6 +138,7 @@ Everything else is in git. These are the files/volumes that make a deployment *y
 | `PDA-Runtime/.env` | `LITELLM_MASTER_KEY`, `COOPER_API_KEYS` client key | copy manually, **or** let `install-cooper.sh` generate a fresh one (then re-enter the new key in Open WebUI) |
 | `n8n-api-key.txt` | n8n API credential | copy only if using the n8n workflows |
 | COOPER memory DB | decisions log, learned skills stats, trust scores | Docker: named volume `pda-private-cooper-core-data` (path `/app/data/cooper_memory.db` — move with `docker cp` into the new container, or a volume backup). Bare-metal: the file `cooper-core/cooper_memory.db` |
+| Memory backups | daily second copy of both stacks' memory DBs | `./backup-cooper.sh` (sqlite backup API via docker exec, lands in `PDA-Backups/memory/`, keeps 14 per stack); `--install-timer` arms a daily 05:00 systemd user timer. Restore = `docker cp` the file back to `/app/data/cooper_memory.db` and restart |
 | `Skills/learned/` + `Config/skills_registry.yaml` | promoted skills + governance manifest | in git — nothing to do |
 | `Obsidian Vault/brain/` | North Star, Gotchas, Patterns | in git — nothing to do |
 | Open WebUI volumes (`open-webui`, `pda-private-open-webui-main`) | accounts, chat history, connections | optional volume backup; simpler to redo the 2-minute first-run wiring |

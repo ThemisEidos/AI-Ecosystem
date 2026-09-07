@@ -48,19 +48,32 @@ throughout: every slice ships alone and live. Specs:
 governance gates G1–G5 open — see Blocked section).
 
 Execution order: 15a → 14a(rev) → 15c → 14b → 15d → 15e → 14c(+15f-i) → 14d → 14e →
-15f → 15g → 15h. 15b anytime; 14f pinned until the home-lab network exists (2026-08-23);
+15f → 15g → 15h. 15b retired 2026-09-07 (superseded by the Cockpit); 15e closed
+2026-09-07; 14f pinned until the home-lab network exists (2026-08-23);
 14d re-scoped and shipped 2026-09-05 as the News Reel (decision log).
 
 - [x] **15a — Native tool-calling dispatch** (M3→5; retires classifier dispatch; kills both 2026-08-04 gotchas as a class) — shipped 2026-08-24, live-verified both stacks (blocking + real SSE incl. preamble-then-dispatch), 3 post-review Importants closed in a fix-forward pass, itself reviewed clean (248/248). **Browser click-through per stack closed 2026-08-25** — see decision log; en route, found and fixed a real governance bypass on Private's Open WebUI (no cooper-core connection existed at all).
 - [x] **14a — Fabric pattern executor** — shipped 2026-08-25, live-verified both stacks (blocking API + browser click-through, all 4 patterns reachable via native tool-calling). Revised plan (2026-08-04 original rewritten for 15a's args-based dispatch), 4 tasks + subagent-driven-development, whole-branch review found and fixed 1 Critical (`PDA-Fabric/` was gitignored and never committed — see decision log) + 1 Important (workshop routing failed open toward cloud). Separate, unfixed finding: an intermittent approval-ticket hijack via Open WebUI's own background calls — see Gotchas 2026-08-25, flagged for owner decision, not in scope for this slice.
-- [ ] **15b — Zero-touch Open WebUI provisioning** (M9→5; independent, anytime)
+- [x] **15b — RETIRED 2026-09-07, superseded by the Cockpit.** The slice existed to
+  automate Open WebUI's manual first-run wiring (admin wizard, connection, key). The
+  Cockpit needs none of that — the desktop launcher hands the key over and the page
+  self-configures — so M9's goal (zero-touch setup) is met by making provisioning
+  unnecessary rather than automating it. Revisit only if Open WebUI outlives the
+  Cockpit, which is the opposite of the plan.
 - [x] **15c — Per-role model routing** (implements `Scripts/PDA_ModelRouting.json`; LiteLLM fallback pools; Private E4B/12B role split — E4B benchmark is the entry gate) ✓ 2026-08-30
 - [x] **14b — Jobs harness + link-checker** (M2→3) ✓ mechanism shipped, live-verified,
   inert 2026-08-30 — `approved: false`, n8n scheduler workflow built but not imported
   (manual import still needed). Owner activation steps + the multi-day DoD clock: see
   decision log.
 - [x] **15d — Council subsystem** (M6→5; planning-time panel + tiered final review, verdicts in evidence) ✓ 2026-08-31
-- [ ] **15e — Planner–executor** (M2→4; big brain drafts envelopes, cheap model executes)
+- [x] **15e — CLOSED 2026-09-07.** Its three parts each resolved: the **drafting half**
+  was built narrow (2026-09-01) and retired with the CSV job shape it drafted
+  (2026-09-06, planner.py removed — it could only draft envelopes the runtime refuses);
+  the **generic step-executor** was deliberately declined by the owner (2026-09-01,
+  option (a) narrow) and stays declined; and the reserved **executor role** found its
+  real call site in specialist delegation (2026-09-07) — the foreman-delegates shape IS
+  this slice's 'big brain decides, cheap/specialist model executes', arrived at by a
+  different road. M2 now rests on the jobs harness + delegation, not on a planner.
 - [x] **14c — SearXNG + web_search + data-broker job** (+15f-i injection canaries) ✓ 2026-09-04
 - [x] **14d — Bounded feed loop + News Reel** ✓ 2026-09-05 (re-scoped same day) — owner
   supplied the new payload: collate cyber, critical infrastructure, national security,
@@ -1703,6 +1716,17 @@ Execution order: 15a → 14a(rev) → 15c → 14b → 15d → 15e → 14c(+15f-i
     (430 → 363). The dropdown only offers drivers that can actually drive.
   - Also fixed: `driver._STATE` module-global bled one test's pick into another test's
     health assertion — autouse conftest reset both ways.
+
+- **2026-09-07 · Roadmap remnants cleaned; COOPER's memory has a second copy.**
+  15b retired (superseded — the Cockpit made Open WebUI provisioning unnecessary rather
+  than automated); 15e closed (drafting half built-then-retired with its job shape,
+  generic executor stays declined, the reserved executor role found its real call site in
+  specialist delegation). Remaining open roadmap: 15g, 15h, 14f (pinned), MCP (backlog).
+  `backup-cooper.sh` now takes a daily 05:00 second copy of both stacks'
+  `cooper_memory.db` via sqlite's backup API (a raw copy of a hot WAL db can tear;
+  `.backup` cannot), lands in `PDA-Backups/memory/`, keeps 14 per stack — first run
+  verified with `PRAGMA integrity_check` ok and real row counts (open: 21 decisions,
+  private: 7); systemd user timer armed, `Persistent=true` so it catches up after sleep.
 
 ## Blocked / needs owner input
 
