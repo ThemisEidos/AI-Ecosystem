@@ -1662,6 +1662,29 @@ Execution order: 15a → 14a(rev) → 15c → 14b → 15d → 15e → 14c(+15f-i
   delegated specialists); and the stale PRD facts (D:\ paths, Qwen, "Claude Sonnet
   default", ChromaDB) are acknowledged drift to be corrected against this re-anchoring.
 
+- **2026-09-07 · Specialist routing shipped; delegation approval moved per-capability;
+  PRD re-anchored.** The foreman delegates: a governed `specialists` roster in
+  `PDA_ModelRouting.json` (claude/gemini-pro/gemini/openai), enum-enforced in the tool
+  registry so the brain cannot emit an off-roster pick, validated again in `_run_llm_api`
+  (a schema is advisory to a misbehaving model; the gate is not), legacy `model` param
+  closed through the same gate, replies labeled `[Specialist: name (alias)]`, runs under
+  the 15f `executor` budget (its first call site). Live: brain listed its roster correctly;
+  a delegated code review returned claude's labeled reply and found the planted bug;
+  off-roster names refused naming the real options.
+  - **Approval rule amended (owner: "I've already approved the job, so everything after
+    that can just run").** `needs_approval` now honors an EXPLICIT registry
+    `approval_required` in either direction — false waives the gate at any level, true
+    forces it at any level; a tool that says nothing keeps the ladder default (L2+ halts).
+    The git-tracked registry flag is itself the per-capability approval act, same
+    philosophy as the 2026-08-04 jobs amendment. Audited before changing: exactly one tool
+    (`lite_llm_router`) carries an explicit false. Live-verified both directions —
+    delegation runs with no halt; PowerShell L4 still halts.
+  - **PRD facts corrected + §0 amendment added:** purpose (harness that beats Hermes; ops
+    console a bonus), Pop!_OS path, gemma4 not Qwen, gpt-4o-mini brain not "Claude Sonnet
+    default", SQLite FTS5 not ChromaDB, Cockpit as frontend, Private deferred.
+  - Kept per owner: SearXNG (web search will be needed for the metric program) and
+    signal-cli (parked; owner sets it up later).
+
 ## Blocked / needs owner input
 
 Governance gates from the Step 15 spec §6 — each blocks only its named slice:

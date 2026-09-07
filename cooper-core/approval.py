@@ -48,8 +48,21 @@ class ApprovalConflictError(Exception):
 
 
 def needs_approval(tool: dict) -> bool:
-    """Level 2+ always gates, regardless of the registry flag (defense in depth)."""
-    return bool(tool.get("approval_required")) or tool.get("permission_level", 0) >= 2
+    """Does this tool halt for approval before running?
+
+    Owner amendment 2026-09-07 ("I've already approved the job, so everything
+    after that can just run"): a registry entry that EXPLICITLY sets
+    approval_required decides -- true forces the gate at any level, false
+    waives it at any level. The registry is git-tracked and owner-edited, so
+    that flag is itself the durable, per-capability approval act (the same
+    philosophy as the 2026-08-04 jobs amendment: approve the envelope once,
+    in a reviewed file, rather than every call). A tool that says NOTHING
+    keeps the ladder default: level 2+ halts. The override must be stated,
+    never inferred.
+    """
+    if "approval_required" in tool:
+        return bool(tool["approval_required"])
+    return tool.get("permission_level", 0) >= 2
 
 
 def request(

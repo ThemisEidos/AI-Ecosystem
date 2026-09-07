@@ -82,7 +82,11 @@ tools:
       for a fast cheap second opinion; openai for quick general tasks (the
       default). Pick the specialist whose strengths match the task.
     permission_level: 3
-    approval_required: true
+    # Owner decision 2026-09-07: approval moved from per-call to per-capability
+    # ("I've already approved the job, so everything after that can just run").
+    # Delegation is a pure LLM call -- it touches no files and no world state;
+    # anything a specialist's ANSWER leads to still hits its own tool's gate.
+    approval_required: false
     executor_type: llm_api
     enabled: true
     parameters:

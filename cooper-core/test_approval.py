@@ -135,3 +135,27 @@ def test_request_allows_new_ticket_after_prior_one_consumed():
     approval.consume("open", "s1")
     new_ticket = approval.request("open", _tool(), "task b", session_id="s1")
     assert new_ticket.message == "task b"
+
+
+# --- explicit per-tool approval override (owner decision 2026-09-07) ----------
+# "I've already approved the job, so everything after that can just run":
+# approval moves from per-call to per-capability for a tool whose registry
+# entry EXPLICITLY sets approval_required: false. The registry is git-tracked
+# and owner-edited, so that flag is itself the durable approval act. A tool
+# that says nothing keeps the ladder default (L2+ needs approval) -- the
+# override must be stated, never inferred.
+
+def test_explicit_false_wins_over_the_ladder():
+    assert not approval.needs_approval(
+        {"permission_level": 3, "approval_required": False})
+
+
+def test_explicit_true_wins_even_below_the_ladder():
+    assert approval.needs_approval(
+        {"permission_level": 1, "approval_required": True})
+
+
+def test_absent_flag_keeps_the_ladder_default():
+    assert approval.needs_approval({"permission_level": 2})
+    assert not approval.needs_approval({"permission_level": 1})
+    assert not approval.needs_approval({})

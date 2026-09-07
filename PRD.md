@@ -4,11 +4,25 @@
 > **The one rule that governs this rebuild:** every phase ends in something that *runs*, not something that *describes*. No new standards documents count as "done." If you can't execute it, it isn't finished.
 >
 > **Project:** COOPER (Command Operations Orchestrator for Planning, Execution, and Reporting) — the governed operator surface for the AI Ecosystem / PDA platform.
-> **Repo:** AI-Ecosystem (`D:\D_Projects\01_AI_Ecosystem`)
+> **Repo:** AI-Ecosystem (`/home/zb6/Documents/Projects/01_AI_Ecosystem`, Pop!_OS — the Windows/WSL2 era is retired)
 > **Owner:** ThemisEidos
 > **Companion docs:** `CLAUDE.md` (how c3 works in the repo) · `PROGRESS.md` (living state)
 
 ---
+
+## 0. Amendment — 2026-09-07 (owner re-anchor)
+
+**COOPER is the harness that beats Hermes.** The Steps 14–15 max-metric program (COOPER-Open
+to 45/45 on the nine harness metrics, outperforming Hermes Agent's 29/45) is the organizing
+goal; the personal ops console that has emerged (Cockpit, News Reel) is a welcome by-product,
+not the point. Companions to this decision: the Private Workshop is **deferred** until the
+Open Workshop is fully realized; and the §1 vision's "right tool for the job" now has its
+concrete shape — **the cheap brain (gpt-4o-mini) is the foreman**: it decides the workflow,
+identifies the specialist a task needs from a governed roster (`PDA_ModelRouting.json`
+`specialists`, enum-enforced in the tool registry, validated again in the executor), and
+routes the task through LiteLLM/OpenRouter to it. Delegation is approved **per-capability
+in the registry, not per-call** (owner, 2026-09-07 — the same philosophy as the 2026-08-04
+jobs amendment); tools that state nothing keep the ladder default.
 
 ## 1. Vision (unchanged — it was always right)
 
@@ -31,7 +45,7 @@ Keep the entire governance corpus as the **binding specification**, and build th
 ## 4. What we keep, build, and retire
 
 **Keep as binding spec (do not re-document, just implement):**
-- The two-workshop model: Open Workshop (COOPER, cloud-capable, Claude Sonnet default) vs Private Workshop (COOPER Private, local-only, Qwen via Ollama, never falls back to cloud).
+- The two-workshop model: Open Workshop (COOPER, cloud-capable — gpt-4o-mini brain via LiteLLM per G2, delegating to a governed specialist roster) vs Private Workshop (COOPER Private, local-only, gemma4:e4b as `COOPER-Private` via Ollama, never falls back to cloud). **Private build-out is deferred until Open is fully realized (owner, 2026-09-07).**
 - The 6-level permission ladder (L0 inform -> L5 destructive/blocked), with one-time-per-action approval (Phase 1 rule: no remembered permissions).
 - Category 1 (Open/cloud-allowed) vs Category 2 (Private/local-only) data classification and the sanitization gate.
 - The Quartermaster (router) / Safety Officer (approval) / Workbench (execution gateway) metaphor.
@@ -62,7 +76,7 @@ Keep the entire governance corpus as the **binding specification**, and build th
 5. **Execution gateway (Workbench) + one real tool.** Wire one PowerShell/CLI tool end-to-end. DoD: COOPER executes a real tool after approval and shows you the result + artifact path.
 6. **Workshop enforcement.** Open vs Private boundary enforced at the routing layer. DoD: Private Workshop refuses a cloud call at runtime; Open Workshop allows an approved one.
 7. **Sub-agent review loop.** Worker -> reviewer -> governor (steal loki-mode's RARV + anti-sycophancy + "empty review blocks" patterns). DoD: a dispatched task is checked by a reviewer agent before results reach you.
-8. **Memory + skill loop.** ChromaDB + the Obsidian "brain" read each turn; successful tasks abstracted into scored, versioned skills (the "exceed Hermes" step). DoD: COOPER recalls a prior decision and reuses a saved skill at runtime.
+8. **Memory + skill loop.** SQLite FTS5 (not ChromaDB — decision 2026-07-01) + the Obsidian "brain" read each turn; successful tasks abstracted into scored, versioned skills (the "exceed Hermes" step). DoD: COOPER recalls a prior decision and reuses a saved skill at runtime.
 9. **Dockerize + portability.** Clean deploy on WSL2 now, Pop!_OS later. DoD: `docker compose up` brings COOPER fully online on a fresh checkout.
 
 ## 6. Patterns stolen from comparable projects (apply during build, not as docs)
@@ -82,7 +96,7 @@ You can talk to a personality-driven COOPER in a web UI that actually converses;
 
 ## 9. Tech stack
 
-Frontend: Open WebUI (existing). Backend: Python + FastAPI. COOPER runtime: Ollama (Gemma/Qwen-class; swappable). Routing: LiteLLM + OpenRouter. Vector memory: ChromaDB. State: SQLite (SQLAlchemy). Human memory: Markdown / Obsidian "brain". Automation: n8n (retained). Containers: Docker Compose. Target OS: WSL2 -> Pop!_OS.
+Frontend: COOPER Cockpit (`/cockpit` — jobs, chat with native approve/deny, metrics, brain browser; Open WebUI retained until browser-verified chat parity, then retired). Backend: Python + FastAPI. COOPER runtime: Ollama (gemma4:e4b as COOPER-Private). Routing: LiteLLM + OpenRouter, per-role via `PDA_ModelRouting.json` incl. the specialist roster. Memory: SQLite FTS5 (`cooper_memory.db`) — ChromaDB was rejected 2026-07-01, no vector DB. Human memory: Markdown / Obsidian "brain". Automation: n8n (scheduler). Containers: Docker Compose. OS: Pop!_OS (migration closed 2026-08-02).
 
 ## 10. Anti-drift checklist (read before declaring any phase done)
 
