@@ -5,7 +5,13 @@ services:
     labels:
       ai.ecosystem.stack: open
     ports:
-      - "3000:8080"
+      # Owner decision 2026-09-06: no service binds 0.0.0.0 any more. Loopback
+      # for this machine, plus the tailnet so your own devices reach it from
+      # anywhere -- and nothing else on whatever Wi-Fi the laptop joins.
+      # COOPER_TAILNET_IP lives in PDA-Runtime/.env; unset it falls back to a
+      # second loopback address, i.e. local-only.
+      - "127.0.0.1:3000:8080"
+      - "${COOPER_TAILNET_IP:-127.0.0.2}:3000:8080"
     environment:
       # Fallback for fresh installs only — v0.9.6 SQLite takes precedence after first run.
       # Add the connection manually via Settings → Connections in the UI (see CLAUDE.md).
@@ -24,7 +30,9 @@ services:
     labels:
       ai.ecosystem.stack: open
     ports:
-      - "5678:5678"
+      # Loopback only: this is an admin UI that holds COOPER_API_KEY and can
+      # run arbitrary workflows. Nothing needs it remotely.
+      - "127.0.0.1:5678:5678"
     environment:
       - N8N_RESTRICT_FILE_ACCESS_TO=/files
       # Step 14g scheduler: the job-runner calls are authenticated with COOPER's
@@ -46,7 +54,10 @@ services:
     labels:
       ai.ecosystem.stack: open
     ports:
-      - "4000:4000"
+      # Loopback only: this proxy holds the cloud provider keys, and
+      # cooper-core reaches it as http://litellm:4000 over the compose
+      # network, never through this host port.
+      - "127.0.0.1:4000:4000"
     command: --config /app/config.yaml --detailed_debug
     env_file:
       - ../litellm/.env.local
@@ -94,7 +105,8 @@ services:
     labels:
       ai.ecosystem.stack: open
     ports:
-      - "8001:8000"
+      - "127.0.0.1:8001:8000"
+      - "${COOPER_TAILNET_IP:-127.0.0.2}:8001:8000"
     environment:
       - WORKSHOP=open
       - OPENAI_BASE_URL=http://litellm:4000/v1

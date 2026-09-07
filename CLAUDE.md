@@ -90,6 +90,15 @@ there would only ever be empty.
 | 5678 | n8n | Open |
 | 8080 | signal-cli REST API (loopback only) | Open |
 
+**Binding (owner decision 2026-09-06):** no service binds `0.0.0.0`. Everything is on
+`127.0.0.1`; the Open stack's cooper-core and Open WebUI additionally bind this machine's
+**tailnet** address, so the owner's own devices reach them from anywhere while nothing on a
+joined Wi-Fi can. `install-cooper.sh` detects `tailscale0`'s IP at launch and exports
+`COOPER_TAILNET_IP`; set it explicitly to override, and with no tailnet it falls back to a
+second loopback address (local only). Private, n8n and LiteLLM are loopback-only — Private
+is the local-only workshop, and the other two hold the COOPER key and the cloud provider
+keys respectively.
+
 ### Status / health
 
 ```bash

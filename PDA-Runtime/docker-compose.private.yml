@@ -56,7 +56,9 @@ services:
     labels:
       ai.ecosystem.stack: private
     ports:
-      - "8000:8000"
+      # Loopback only. Private is the LOCAL-ONLY workshop -- it has no business
+      # being reachable from any network at all (owner decision 2026-09-06).
+      - "127.0.0.1:8000:8000"
     environment:
       - WORKSHOP=private
       - OLLAMA_HOST=http://private-ollama:11434

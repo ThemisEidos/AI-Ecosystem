@@ -52,6 +52,22 @@ if [[ "$STACK" == "open" ]]; then
     docker volume create open-webui >/dev/null
 fi
 say "Starting the $STACK stack…"
+# Step 15i / owner decision 2026-09-06: COOPER binds loopback plus ONE non-loopback
+# address -- this machine's tailnet IP -- so the owner's own devices reach it from
+# anywhere while nothing on a joined Wi-Fi can. Detected at launch rather than
+# written into .env, so it survives the address changing and needs no secrets edit.
+# An explicit COOPER_TAILNET_IP in the environment or PDA-Runtime/.env wins; with
+# no tailnet present it falls back to a second loopback address, i.e. local only.
+if [ -z "${COOPER_TAILNET_IP:-}" ]; then
+    COOPER_TAILNET_IP="$(ip -4 addr show tailscale0 2>/dev/null | awk '/inet /{split($2,a,"/"); print a[1]; exit}')"
+    export COOPER_TAILNET_IP="${COOPER_TAILNET_IP:-127.0.0.2}"
+fi
+if [ "$COOPER_TAILNET_IP" = "127.0.0.2" ]; then
+    echo "[cooper] no tailnet detected — binding loopback only (this machine)."
+else
+    echo "[cooper] binding loopback + tailnet $COOPER_TAILNET_IP (not the local Wi-Fi)."
+fi
+
 docker compose -f "$COMPOSE_FILE" up -d
 
 # 5. Health poll (cooper-core answers /health without auth)
